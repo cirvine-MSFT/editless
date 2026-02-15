@@ -177,6 +177,16 @@
           "default": true,
           "description": "Enable desktop notifications for squad events"
         },
+        "editless.notifications.inbox": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable notifications for inbox items (new decisions, pending work)"
+        },
+        "editless.notifications.updates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable notifications for CLI update availability"
+        },
         "editless.scanDebounceMs": {
           "type": "number",
           "default": 500,

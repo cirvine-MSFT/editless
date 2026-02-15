@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { execSync, exec } from 'child_process';
+import { isNotificationEnabled } from './notifications';
 
 export interface CliProvider {
   name: string;
@@ -137,6 +138,7 @@ function recordPrompt(context: vscode.ExtensionContext, providerName: string, ve
 }
 
 function checkSingleProviderUpdate(context: vscode.ExtensionContext, provider: CliProvider): void {
+  if (!isNotificationEnabled('updates')) return;
   if (shouldSkipPrompt(context, provider.name, provider.version!)) return;
 
   const displayName = provider.name.charAt(0).toUpperCase() + provider.name.slice(1);
