@@ -11,6 +11,7 @@ How to decide who handles what.
 | CI/CD & release | Birdperson | GitHub Actions, VSIX packaging, branch strategy, release automation |
 | Testing & quality | Meeseeks | Unit tests, integration tests, vitest, edge cases |
 | Docs & UX design | Summer | README, user guides, extension metadata, UX decisions, information architecture |
+| External integrations | Unity | API clients, GitHub/ADO connectivity, data adapters, cross-platform abstractions, marketplace APIs, chat panel plumbing |
 | Code review | Rick | Review PRs, check quality, suggest improvements |
 | Scope & priorities | Rick | What to build next, trade-offs, decisions |
 | Async issue work (bugs, tests, small features) | @copilot 🤖 | Well-defined tasks matching capability profile |
@@ -26,6 +27,7 @@ How to decide who handles what.
 | `squad:birdperson` | CI/CD, release, pipeline tasks | Birdperson |
 | `squad:meeseeks` | Testing tasks | Meeseeks |
 | `squad:summer` | Docs, UX, design tasks | Summer |
+| `squad:unity` | Integration, API, connectivity tasks | Unity |
 | `squad:copilot` | Assign to @copilot for autonomous work (if enabled) | @copilot 🤖 |
 
 ### How Issue Assignment Works
