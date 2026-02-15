@@ -5,6 +5,8 @@ import type { AgentTeamConfig } from './types';
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------
 
+export type SessionState = 'active' | 'idle' | 'stale' | 'needs-attention' | 'orphaned';
+
 export interface TerminalInfo {
   id: string;
   labelKey: string;
@@ -216,6 +218,28 @@ export class TerminalManager implements vscode.Disposable {
 
   persist(): void {
     this._persist();
+  }
+
+  // -- Public API: state detection ------------------------------------------
+
+  getSessionState(terminalOrId: vscode.Terminal | string): SessionState | undefined {
+    // TDD stub — Morty will implement
+    throw new Error('Not implemented');
+  }
+
+  getStateIcon(state: SessionState): vscode.ThemeIcon {
+    // TDD stub — Morty will implement
+    throw new Error('Not implemented');
+  }
+
+  getStateDescription(state: SessionState, info: PersistedTerminalInfo | TerminalInfo): string {
+    // TDD stub — Morty will implement
+    throw new Error('Not implemented');
+  }
+
+  setSquadInboxCount(squadId: string, count: number): void {
+    // TDD stub — Morty will implement
+    throw new Error('Not implemented');
   }
 
   // -- Persistence & reconciliation -----------------------------------------
