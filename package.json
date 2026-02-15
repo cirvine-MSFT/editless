@@ -126,6 +126,18 @@
         "command": "editless.showAllAgents",
         "title": "Show All Agents",
         "category": "EditLess"
+      },
+      {
+        "command": "editless.addAgent",
+        "title": "Add Agent",
+        "category": "EditLess",
+        "icon": "$(add)"
+      },
+      {
+        "command": "editless.addSquad",
+        "title": "Add Squad",
+        "category": "EditLess",
+        "icon": "$(file-directory-create)"
       }
     ],
     "keybindings": [
@@ -154,7 +166,9 @@
       "view/title": [
         { "command": "editless.updateAgency", "when": "view == editlessTree", "group": "navigation@1" },
         { "command": "editless.upgradeAllSquads", "when": "view == editlessTree", "group": "navigation@2" },
-        { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@3" }
+        { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@3" },
+        { "command": "editless.addAgent", "when": "view == editlessTree", "group": "navigation@4" },
+        { "command": "editless.addSquad", "when": "view == editlessTree", "group": "navigation@5" }
       ],
       "view/item/context": [
         { "command": "editless.upgradeSquad", "when": "view == editlessTree && viewItem == squad", "group": "inline@1" },
