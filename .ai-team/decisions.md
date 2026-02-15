@@ -66,3 +66,8 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 **By:** Casey Irvine (user directive)
 **What:** The entire "tented" concept is removed from EditLess. No tented terms, no tented detection, no tented guards, no tented field on config types. Remove `TENTED_TERMS`, `isTentedSquadPath()`, the `tented: boolean` field from the config type, and all conditional branches that check `config.tented`. Remove all associated test cases and fixtures. This includes stripping all references to "openai" and "redacted" from the codebase.
 **Why:** Tented feature was Microsoft-internal. Hardcoded sensitive terms and internal project names cannot ship in a potentially public repo. The feature itself has no value outside Microsoft's context.
+
+### 2026-02-15: Branch naming convention — `cirvine/{feature}`
+**By:** Casey Irvine (user directive)
+**What:** Feature branches use `cirvine/{feature-name}` (alias/feature). No `users/` prefix on this project. Example: `cirvine/cli-provider`, `cirvine/task-view`. Worktrees go in `editless.wt/{branch-name}/`.
+**Why:** Simpler convention for a solo-dev project. The `users/` prefix adds noise when there's one contributor.
