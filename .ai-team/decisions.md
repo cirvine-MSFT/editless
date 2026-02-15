@@ -96,3 +96,38 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 **By:** Casey Irvine (planning session), Squad Coordinator
 **What:** `area:{theme}` labels group related issues by topic without implying parent-child hierarchy. Color: `#0969DA` (blue). NOT mutually exclusive — issues can have multiple `area:` labels. Created ad-hoc as clusters emerge, deleted when the cluster is resolved. Not enforced in `squad-label-enforce.yml` (no exclusivity) or `sync-squad-labels.yml` (not a fixed set). **GitHub-only** — ADO has native grouping concepts that should be used instead.
 **Why:** `type:epic` implies parent-child hierarchy which doesn't fit ad-hoc clusters. `area:` is lightweight, widely understood (Kubernetes, VS Code use similar patterns), and lets agents and humans see at a glance which issues are related.
+
+### 2025-07-18: Git worktrees required — never switch branches in the main working directory
+**By:** Casey Irvine (user directive)
+**What:** All feature branch work MUST use git worktrees. The main working directory (`editless/`) stays on `master` at all times. Create a worktree for each feature branch (e.g., `git worktree add ../editless-wt-batch-c squad/batch-c`), do all work there, push, merge back to master from the main directory, then clean up the worktree. Never run `git checkout <branch>` in the main directory.
+**Why:** Multiple concurrent sessions (planning, coding, coordinator) share the same repo directory. Switching branches in the main directory disrupts all other sessions. Worktrees give each branch an isolated directory so sessions don't interfere with each other.
+
+### 2026-02-15: Generalized provider update infrastructure
+**By:** Morty (Extension Dev), issue #14
+**What:** CLI update checking is now driven by optional fields on `CliProvider` (`updateCommand`, `upToDatePattern`, `updateRunCommand`). To add update support for a new CLI provider, populate these fields in `KNOWN_PROFILES` — no new code paths needed. The startup loop (`checkProviderUpdatesOnStartup`) iterates all detected providers with `updateCommand` set, and cache keys are scoped per-provider.
+**Why:** Avoids duplicating update logic per CLI. When we discover how `copilot` or `claude` check for updates, we just add the fields to their profile entries.
+
+### 2026-02-15: EditLess brand taglines and tone
+**By:** Casey Irvine (via Copilot)
+**What:** Approved taglines for docs, marketing, and README: "Leave the editor for your mind." / "Microsoft Teams is the IDE of the future." / "Give yourself a promotion, manage your teams of AI agents." / "Join the editorless software development revolution." / "Edit less, effortless." Previously captured: "Plan, delegate, and review your AI team's work."
+**Why:** User request — establishing the voice and tone for EditLess branding and documentation.
+
+### 2026-02-15: Dictation input — expect Handy transcription artifacts
+**By:** Casey Irvine (via Copilot)
+**What:** Casey dictates using Handy, which sometimes produces repeated words or misspellings. Don't second-guess — ask if something is unclear.
+**Why:** User request — captured for team memory.
+
+### 2026-02-15: Multi-repo workflow philosophy — don't open repos, open a workspace
+**By:** Casey Irvine (via Copilot)
+**What:** The EditLess philosophy is: don't open VS Code in a repo. Open it in a central folder and work across multiple repos simultaneously. Think in terms of working with agents, not in terms of an editor tied to one repo. This should be a core part of the documentation and philosophy sections.
+**Why:** User directive — this is a fundamental EditLess workflow pattern that changes how people think about their dev environment.
+
+### 2026-02-15: Acknowledge rapid tooling evolution in docs
+**By:** Casey Irvine (via Copilot)
+**What:** Documentation should acknowledge that AI dev tools are changing rapidly and EditLess may need to evolve quickly. Be honest with users that this space moves fast.
+**Why:** User request — sets expectations and builds trust with users.
+
+### 2026-02-15: Recommend Squad as the starting point for new vibe coders
+**By:** Casey Irvine (via Copilot)
+**What:** Documentation should recommend Squad as the entry point for people new to vibe coding or feeling overwhelmed by the agent landscape. Squad makes it easy and fun. This goes in the recommendations/philosophy docs — if you're new, start with Squad.
+**Why:** User directive — many people reaching out are intimidated by the agent landscape. Squad lowers the barrier.
