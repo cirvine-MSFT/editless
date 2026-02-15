@@ -99,6 +99,16 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // --- Config change listener — re-scan when discovery.scanPaths changes ----
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('editless.discovery.scanPaths') || 
+          e.affectsConfiguration('editless.discoveryDir')) {
+        checkDiscoveryOnStartup(context, registry);
+      }
+    }),
+  );
+
   // --- Status bar ----------------------------------------------------------
   const statusBar = new EditlessStatusBar(registry, terminalManager);
   context.subscriptions.push(statusBar);
