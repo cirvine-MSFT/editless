@@ -20,6 +20,7 @@ import { scanSquad } from './scanner';
 import { WorkItemsTreeProvider, WorkItemsTreeItem } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
+import { getEdition } from './vscode-compat';
 
 const execFileAsync = promisify(execFile);
 
@@ -660,7 +661,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  output.appendLine('EditLess activated');
+  output.appendLine(`EditLess activated (${getEdition()})`);
 }
 
 export function deactivate(): void {
