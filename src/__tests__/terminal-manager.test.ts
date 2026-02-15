@@ -11,10 +11,12 @@ type CloseListener = (terminal: vscode.Terminal) => void;
 const {
   mockCreateTerminal,
   mockOnDidCloseTerminal,
+  mockOnDidOpenTerminal,
   mockTerminals,
 } = vi.hoisted(() => ({
   mockCreateTerminal: vi.fn(),
   mockOnDidCloseTerminal: vi.fn(),
+  mockOnDidOpenTerminal: vi.fn(),
   mockTerminals: [] as vscode.Terminal[],
 }));
 
@@ -22,6 +24,7 @@ vi.mock('vscode', () => ({
   window: {
     createTerminal: mockCreateTerminal,
     onDidCloseTerminal: mockOnDidCloseTerminal,
+    onDidOpenTerminal: mockOnDidOpenTerminal,
     get terminals() { return mockTerminals; },
   },
   EventEmitter: class {
@@ -127,6 +130,10 @@ beforeEach(() => {
     return { dispose: vi.fn() };
   });
 
+  mockOnDidOpenTerminal.mockImplementation(() => {
+    return { dispose: vi.fn() };
+  });
+
   mockCreateTerminal.mockImplementation((opts: { name: string }) => {
     return makeMockTerminal(opts.name);
   });
@@ -199,9 +206,9 @@ describe('TerminalManager', () => {
     });
   });
 
-  describe('reconcile skips unmatched saved entries', () => {
-    it('should clean up saved entries that have no matching live terminal', () => {
-      // No live terminals — the saved entry is orphaned
+  describe('reconcile preserves unmatched saved entries', () => {
+    it('should keep saved entries when no matching live terminal exists yet', () => {
+      // No live terminals — saved entry should be preserved for later matching
       const saved = [makePersistedEntry({ terminalName: '🧪 Ghost #1' })];
       const ctx = makeMockContext(saved);
       const mgr = new TerminalManager(ctx);
@@ -209,9 +216,7 @@ describe('TerminalManager', () => {
       mgr.reconcile();
 
       expect(mgr.getAllTerminals()).toHaveLength(0);
-      // _persist was called — the orphan was cleaned out
-      const lastCall = vi.mocked(ctx.workspaceState.update).mock.calls.at(-1);
-      expect(lastCall![1]).toEqual([]);
+      // Saved entry is NOT deleted — it's kept for retry via onDidOpenTerminal
     });
   });
 

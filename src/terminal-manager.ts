@@ -132,11 +132,29 @@ export class TerminalManager implements vscode.Disposable {
     const saved = this.context.workspaceState.get<PersistedTerminalInfo[]>(STORAGE_KEY, []);
     if (saved.length === 0) return;
 
-    const liveTerminals = vscode.window.terminals;
+    this._pendingSaved = saved;
+    this._tryMatchTerminals();
 
-    for (const persisted of saved) {
+    // Terminals may not be available yet during activation — retry as they appear
+    this._disposables.push(
+      vscode.window.onDidOpenTerminal(() => this._tryMatchTerminals()),
+    );
+  }
+
+  private _pendingSaved: PersistedTerminalInfo[] = [];
+
+  private _tryMatchTerminals(): void {
+    if (this._pendingSaved.length === 0) return;
+
+    const liveTerminals = vscode.window.terminals;
+    const stillUnmatched: PersistedTerminalInfo[] = [];
+
+    for (const persisted of this._pendingSaved) {
       const match = liveTerminals.find(t => t.name === persisted.terminalName);
-      if (!match) continue;
+      if (!match) {
+        stillUnmatched.push(persisted);
+        continue;
+      }
       if (this._terminals.has(match)) continue;
 
       this._terminals.set(match, {
@@ -151,6 +169,8 @@ export class TerminalManager implements vscode.Disposable {
       });
     }
 
+    this._pendingSaved = stillUnmatched;
+
     for (const info of this._terminals.values()) {
       const current = this._counters.get(info.squadId) || 0;
       if (info.index >= current) {
@@ -158,9 +178,10 @@ export class TerminalManager implements vscode.Disposable {
       }
     }
 
-    this._persist();
-
+    // Only persist when we've matched at least one terminal —
+    // never overwrite saved data with an empty set from a timing race
     if (this._terminals.size > 0) {
+      this._persist();
       this._onDidChange.fire();
     }
   }
@@ -173,6 +194,12 @@ export class TerminalManager implements vscode.Disposable {
         createdAt: info.createdAt.toISOString(),
         terminalName: terminal.name,
       });
+    }
+    // Preserve unmatched saved entries so they aren't lost during timing races
+    for (const pending of this._pendingSaved) {
+      if (!entries.some(e => e.id === pending.id)) {
+        entries.push(pending);
+      }
     }
     this.context.workspaceState.update(STORAGE_KEY, entries);
   }
