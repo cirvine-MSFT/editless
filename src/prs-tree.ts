@@ -79,6 +79,10 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       if (this._repos.length === 0) {
         const item = new PRsTreeItem('Configure GitHub repos in settings');
         item.iconPath = new vscode.ThemeIcon('info');
+        item.command = {
+          command: 'editless.configureRepos',
+          title: 'Configure GitHub Repos',
+        };
         return [item];
       }
 

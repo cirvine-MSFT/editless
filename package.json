@@ -224,7 +224,7 @@
     ],
     "menus": {
       "view/title": [
-        { "command": "editless.updateAgency", "when": "view == editlessTree", "group": "navigation@1" },
+        { "command": "editless.updateAgency", "when": "view == editlessTree && editless.agencyUpdateAvailable", "group": "navigation@1" },
         { "command": "editless.upgradeAllSquads", "when": "view == editlessTree", "group": "navigation@2" },
         { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "1_visibility" },
         { "command": "editless.addNew", "when": "view == editlessTree", "group": "navigation@4" },

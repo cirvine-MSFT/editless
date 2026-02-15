@@ -85,6 +85,10 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       if (this._repos.length === 0) {
         const item = new WorkItemsTreeItem('Configure GitHub repos in settings');
         item.iconPath = new vscode.ThemeIcon('info');
+        item.command = {
+          command: 'editless.configureRepos',
+          title: 'Configure GitHub Repos',
+        };
         return [item];
       }
 
