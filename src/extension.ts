@@ -447,6 +447,33 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // Launch from Work Item (context menu on work items)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.launchFromWorkItem', async (item?: WorkItemsTreeItem) => {
+      const issue = item?.issue;
+      if (!issue) return;
+
+      const squads = registry.loadSquads();
+      if (squads.length === 0) {
+        vscode.window.showWarningMessage('No agents registered.');
+        return;
+      }
+
+      const pick = await vscode.window.showQuickPick(
+        squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, squad: s })),
+        { placeHolder: `Launch agent for #${issue.number} ${issue.title}` },
+      );
+      if (!pick) return;
+
+      const cfg = pick.squad;
+      const terminalName = `#${issue.number} ${issue.title}`;
+      terminalManager.launchTerminal(cfg, terminalName);
+
+      await vscode.env.clipboard.writeText(issue.url);
+      vscode.window.showInformationMessage(`Copied ${issue.url} to clipboard`);
+    }),
+  );
+
   // --- GitHub repo detection & data loading ---
   initGitHubIntegration(workItemsProvider, prsProvider);
 
