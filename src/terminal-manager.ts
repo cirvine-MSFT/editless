@@ -16,7 +16,7 @@ export interface TerminalInfo {
   createdAt: Date;
 }
 
-interface PersistedTerminalInfo {
+export interface PersistedTerminalInfo {
   id: string;
   labelKey: string;
   displayName: string;
@@ -26,6 +26,8 @@ interface PersistedTerminalInfo {
   index: number;
   createdAt: string;
   terminalName: string;
+  lastSeenAt: number;
+  rebootCount: number;
 }
 
 const STORAGE_KEY = 'editless.terminalSessions';
@@ -134,13 +136,65 @@ export class TerminalManager implements vscode.Disposable {
     terminal.dispose();
   }
 
+  // -- Public API: orphan management ----------------------------------------
+
+  getOrphanedSessions(): PersistedTerminalInfo[] {
+    return [...this._pendingSaved];
+  }
+
+  relaunchSession(entry: PersistedTerminalInfo): vscode.Terminal {
+    const terminal = vscode.window.createTerminal({ name: entry.displayName });
+    terminal.show();
+
+    this._terminals.set(terminal, {
+      id: entry.id,
+      labelKey: entry.labelKey,
+      displayName: entry.displayName,
+      squadId: entry.squadId,
+      squadName: entry.squadName,
+      squadIcon: entry.squadIcon,
+      index: entry.index,
+      createdAt: new Date(),
+    });
+
+    this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
+    this._persist();
+    this._onDidChange.fire();
+    return terminal;
+  }
+
+  dismissOrphan(entry: PersistedTerminalInfo): void {
+    this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
+    this._persist();
+    this._onDidChange.fire();
+  }
+
+  relaunchAllOrphans(): vscode.Terminal[] {
+    const orphans = [...this._pendingSaved];
+    return orphans.map(entry => this.relaunchSession(entry));
+  }
+
+  persist(): void {
+    this._persist();
+  }
+
   // -- Persistence & reconciliation -----------------------------------------
+
+  private static readonly MAX_REBOOT_COUNT = 2;
 
   reconcile(): void {
     const saved = this.context.workspaceState.get<PersistedTerminalInfo[]>(STORAGE_KEY, []);
     if (saved.length === 0) return;
 
-    this._pendingSaved = saved;
+    // Increment rebootCount for unmatched entries; evict entries that exceeded TTL
+    this._pendingSaved = saved
+      .map(entry => ({
+        ...entry,
+        lastSeenAt: entry.lastSeenAt ?? Date.now(),
+        rebootCount: (entry.rebootCount ?? 0) + 1,
+      }))
+      .filter(entry => entry.rebootCount < TerminalManager.MAX_REBOOT_COUNT);
+
     this._tryMatchTerminals();
 
     // Terminals may not be available yet during activation — retry as they appear
@@ -195,12 +249,15 @@ export class TerminalManager implements vscode.Disposable {
   }
 
   private _persist(): void {
+    const now = Date.now();
     const entries: PersistedTerminalInfo[] = [];
     for (const [terminal, info] of this._terminals) {
       entries.push({
         ...info,
         createdAt: info.createdAt.toISOString(),
         terminalName: terminal.name,
+        lastSeenAt: now,
+        rebootCount: 0,
       });
     }
     // Preserve unmatched saved entries so they aren't lost during timing races
