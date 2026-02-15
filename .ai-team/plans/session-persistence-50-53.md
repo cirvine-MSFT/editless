@@ -48,17 +48,38 @@ A verified test matrix with expected behaviors documented, plus any bugs found a
 
 ### Implementation Tasks
 
-1. **Define expected behaviors** (above table) — document in code comments or a test file
-2. **Add integration test harness** — use `@vscode/test-electron` to script reload scenarios programmatically where possible
-3. **Fix: orphan cleanup** — currently unmatched entries stay in `_pendingSaved` forever. Add TTL: if an entry is unmatched for >24 hours, mark it `orphaned` and offer cleanup
-4. **Fix: defensive persist** — ensure `_persist()` is called on `deactivate()` so close/crash doesn't lose in-flight state
-5. **Add orphan UX** — when a persisted session has no matching terminal (post-reopen), show it dimmed with "re-launch" and "dismiss" (X) actions. Add a "re-launch all" command. Track `rebootCount` per orphan — auto-clean on second reboot if not re-launched or dismissed.
+**Task 1a: Set up `@vscode/test-electron` infrastructure**
+- Add `@vscode/test-electron` and `@vscode/test-cli` as dev dependencies
+- Create `src/__integration__/` directory for integration tests (separate from unit tests in `src/__tests__/`)
+- Add `npm run test:integration` script (separate from `npm run test` which stays vitest-only)
+- Add GitHub Actions workflow step: run integration tests on `ubuntu-latest` with `xvfb-run` for headless display
+- Write a "hello world" integration test that activates the extension and verifies the tree view registers
+- This is reusable infrastructure — all future integration tests build on this
+
+**Task 1b: Persistence integration tests**
+- Test: create terminal → reload window → verify session survives in tree (name-match reconciliation)
+- Test: create terminals for 2 squads → reload → verify correct squad association
+- Test: verify `workspaceState` data shape after persist (schema stability)
+
+**Task 1c: Unit tests for new logic (vitest)**
+- Test: orphan cleanup — entry unmatched for >24h gets marked `orphaned`
+- Test: `rebootCount` tracking — orphan survives 1st reboot, auto-cleaned on 2nd
+- Test: defensive persist — `_persist()` called on dispose/deactivate
+- Test: re-launch creates new terminal with correct squad association
+- Test: dismiss removes orphan from persistence
+
+**Task 1d: Code changes**
+- Fix: orphan cleanup — add TTL to `_pendingSaved`. Track `rebootCount` per entry in persisted data
+- Fix: defensive persist — ensure `_persist()` is called on `deactivate()` so close/crash doesn't lose in-flight state
+- Add orphan UX — dimmed ghost sessions in tree with "re-launch" and "dismiss" (X) actions. Add "re-launch all" command. Auto-clean on second reboot.
 
 ### What the coding agent needs to know
 - `workspaceState` survives reload and close/reopen (it's SQLite-backed by VS Code)
 - VS Code does NOT re-create terminals on reopen unless `terminal.integrated.persistentSessionReviveProcess` is enabled — don't depend on it
 - The `_pendingSaved` retry pattern is already there but needs a TTL bound
-- Test with `@vscode/test-electron` for automated lifecycle testing, manual for crash scenarios
+- Integration tests use `@vscode/test-electron` — run with `xvfb-run` on Linux CI
+- Keep integration tests in `src/__integration__/` separate from vitest unit tests in `src/__tests__/`
+- Integration test pipeline step should be a separate job in CI (slower, don't block unit tests)
 
 ---
 
