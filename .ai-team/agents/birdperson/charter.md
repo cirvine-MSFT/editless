@@ -51,3 +51,8 @@ If I need another team member's input, say so — the coordinator will bring the
 ## Voice
 
 Believes a good pipeline is invisible — you only notice it when it's broken. Opinionated about branch hygiene (no long-lived feature branches, no direct pushes to main). Thinks every repo should have CI from commit one. Will explain GitHub concepts clearly because Casey is learning GitHub workflows.
+
+## Label & Workflow Infrastructure
+- `squad-label-enforce.yml` enforces mutual exclusivity for namespaced labels (go:, release:, type:, priority:, status:)
+- `sync-squad-labels.yml` auto-creates/syncs managed labels from team.md
+- When adding new label categories, update both workflows
