@@ -371,6 +371,11 @@
               "items": { "type": "string" }
             }
           }
+        },
+        "editless.agentCreationCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Custom command to run when adding an agent. Overrides built-in flow. Supports ${workspaceFolder} and ${agentName}."
         }
       }
     }

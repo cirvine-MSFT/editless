@@ -584,7 +584,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
-  // Add Agent — create a .github/agents/{name}.agent.md template
+  // Add Agent — create a .github/agents/{name}.agent.md template or run custom command
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.addAgent', async () => {
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -603,6 +603,20 @@ export function activate(context: vscode.ExtensionContext): void {
         },
       });
       if (!name) return;
+
+      const customCommand = vscode.workspace.getConfiguration('editless').get<string>('agentCreationCommand');
+      if (customCommand?.trim()) {
+        const command = customCommand
+          .replace(/\$\{workspaceFolder\}/g, workspaceFolder.uri.fsPath)
+          .replace(/\$\{agentName\}/g, name.trim());
+        const terminal = vscode.window.createTerminal({
+          name: `Add Agent: ${name.trim()}`,
+          cwd: workspaceFolder.uri.fsPath,
+        });
+        terminal.show();
+        terminal.sendText(command);
+        return;
+      }
 
       const agentsDir = path.join(workspaceFolder.uri.fsPath, '.github', 'agents');
       await vscode.workspace.fs.createDirectory(vscode.Uri.file(agentsDir));
