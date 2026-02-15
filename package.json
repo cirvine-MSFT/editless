@@ -4,6 +4,10 @@
   "description": "Plan, delegate, and review your AI team's work — the editorless development panel",
   "publisher": "cirvine-MSFT",
   "version": "0.1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cirvine-MSFT/editless"
+  },
   "type": "commonjs",
   "engines": {
     "vscode": "^1.100.0"
