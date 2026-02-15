@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { execSync } from 'child_process';
+import { execSync, exec } from 'child_process';
 
 export interface CliProvider {
   name: string;
@@ -76,8 +76,7 @@ function runAgencyUpdate(): void {
     },
     () =>
       new Promise<void>((resolve) => {
-        const { exec } = require('child_process');
-        exec('agency update', (err: Error | null, _stdout: string, stderr: string) => {
+        exec('agency update', (err, _stdout, stderr) => {
           if (err) {
             const msg = stderr?.trim() || err.message;
             vscode.window.showErrorMessage(`Agency update failed: ${msg}`);
@@ -101,26 +100,51 @@ export function registerAgencyUpdateCommand(context: vscode.ExtensionContext): v
   });
 }
 
-export function checkAgencyOnStartup(_context: vscode.ExtensionContext): void {
-  const agencyProvider = _providers.find(p => p.name === 'agency');
-  if (!agencyProvider?.detected) return;
+interface AgencyPromptCache {
+  promptedVersion: string;
+  timestamp: number;
+}
 
-  try {
-    const output = execSync('agency update', { encoding: 'utf-8', timeout: 10000 });
-    const updateAvailable = !output.includes('up to date');
-    if (updateAvailable && agencyProvider.version) {
-      vscode.window
-        .showInformationMessage(
-          `🔄 Agency update available (current: ${agencyProvider.version}). Update now?`,
-          'Update',
-        )
-        .then(selection => {
-          if (selection === 'Update') {
-            runAgencyUpdate();
-          }
-        });
-    }
-  } catch {
-    // agency update check failed silently
-  }
+const AGENCY_PROMPT_KEY = 'editless.agencyUpdatePrompt';
+const PROMPT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
+function shouldSkipPrompt(context: vscode.ExtensionContext, currentVersion: string): boolean {
+  const cached = context.globalState.get<AgencyPromptCache>(AGENCY_PROMPT_KEY);
+  if (!cached) return false;
+  return cached.promptedVersion === currentVersion
+    && (Date.now() - cached.timestamp) < PROMPT_COOLDOWN_MS;
+}
+
+function recordPrompt(context: vscode.ExtensionContext, version: string): void {
+  context.globalState.update(AGENCY_PROMPT_KEY, {
+    promptedVersion: version,
+    timestamp: Date.now(),
+  } satisfies AgencyPromptCache);
+}
+
+export function checkAgencyOnStartup(context: vscode.ExtensionContext): void {
+  const agencyProvider = _providers.find(p => p.name === 'agency');
+  if (!agencyProvider?.detected || !agencyProvider.version) return;
+
+  if (shouldSkipPrompt(context, agencyProvider.version)) return;
+
+  exec('agency update', { encoding: 'utf-8', timeout: 10000 }, (err, stdout) => {
+    if (err) return;
+
+    const updateAvailable = !stdout.includes('up to date');
+    if (!updateAvailable) return;
+
+    recordPrompt(context, agencyProvider.version!);
+
+    vscode.window
+      .showInformationMessage(
+        `🔄 Agency update available (current: ${agencyProvider.version}). Update now?`,
+        'Update',
+      )
+      .then(selection => {
+        if (selection === 'Update') {
+          runAgencyUpdate();
+        }
+      });
+  });
 }
