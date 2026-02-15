@@ -19,13 +19,14 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "icon": "icons/icon.png",
   "contributes": {
     "viewsContainers": {
       "activitybar": [
         {
           "id": "editless-dashboard",
           "title": "EditLess",
-          "icon": "$(terminal)"
+          "icon": "icons/icon-mono.svg"
         }
       ]
     },
