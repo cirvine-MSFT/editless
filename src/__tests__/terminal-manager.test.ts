@@ -95,6 +95,7 @@ function makePersistedEntry(overrides: Partial<PersistedTerminalInfo> = {}): Per
     index: 1,
     createdAt: '2026-02-16T00:00:00.000Z',
     terminalName: '🧪 Test Squad #1',
+    originalName: '🧪 Test Squad #1',
     lastSeenAt: Date.now(),
     rebootCount: 0,
     ...overrides,
@@ -618,6 +619,194 @@ describe('TerminalManager', () => {
       expect(persisted).toBeDefined();
       expect(persisted!.find(e => e.id === 'orphan-dismiss-2')).toBeUndefined();
       expect(persisted!.find(e => e.id === 'active-keep-1')).toBeDefined();
+      expect(mgr.getAllTerminals()).toHaveLength(1);
+    });
+  });
+
+  // =========================================================================
+  // TDD — Reconciliation bug fixes: name matching, collision, reconnect (#84)
+  // Tests written before implementation (Morty is fixing in parallel).
+  // =========================================================================
+
+  describe('multi-signal name matching (#84 bug 1)', () => {
+    it('should reconcile when terminal.name matches persisted.terminalName (exact match)', () => {
+      const entry = makePersistedEntry({
+        id: 'signal-exact-1',
+        terminalName: '🧪 Test Squad #1',
+      });
+      const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const all = mgr.getAllTerminals();
+      expect(all).toHaveLength(1);
+      expect(all[0].terminal).toBe(liveTerminal);
+      expect(all[0].info.id).toBe('signal-exact-1');
+    });
+
+    it('should reconcile when terminal.name matches persisted.displayName but not terminalName', () => {
+      const entry = makePersistedEntry({
+        id: 'signal-display-1',
+        terminalName: 'cli-modified-name',
+        displayName: '🧪 Test Squad #1',
+      });
+      const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const all = mgr.getAllTerminals();
+      expect(all).toHaveLength(1);
+      expect(all[0].terminal).toBe(liveTerminal);
+      expect(all[0].info.id).toBe('signal-display-1');
+    });
+
+    it('should reconcile when terminal.name matches persisted.originalName', () => {
+      const entry = makePersistedEntry({
+        id: 'signal-original-1',
+        terminalName: 'cli-modified',
+        displayName: 'cli-modified',
+        originalName: '🧪 Test Squad #1',
+      });
+      const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const all = mgr.getAllTerminals();
+      expect(all).toHaveLength(1);
+      expect(all[0].terminal).toBe(liveTerminal);
+      expect(all[0].info.id).toBe('signal-original-1');
+    });
+
+    it('should reconcile via contains-match when terminal name is substring', () => {
+      const entry = makePersistedEntry({
+        id: 'signal-contains-1',
+        terminalName: 'no-match',
+        displayName: 'no-match',
+        originalName: '🧪 Test Squad #1',
+      });
+      const liveTerminal = makeMockTerminal('bash: 🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const all = mgr.getAllTerminals();
+      expect(all).toHaveLength(1);
+      expect(all[0].terminal).toBe(liveTerminal);
+      expect(all[0].info.id).toBe('signal-contains-1');
+    });
+
+    it('should NOT match terminals that have no signal overlap', () => {
+      const entry = makePersistedEntry({
+        id: 'signal-nomatch-1',
+        terminalName: 'Squad A',
+        displayName: 'Squad A',
+        originalName: 'Squad A',
+      });
+      const liveTerminal = makeMockTerminal('Completely Different');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      expect(mgr.getAllTerminals()).toHaveLength(0);
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.find(e => e.id === 'signal-nomatch-1')).toBeDefined();
+    });
+  });
+
+  describe('name collision handling (#84 bug 2)', () => {
+    it('should not silently drop entries when multiple persisted sessions match same terminal name', () => {
+      const entries = [
+        makePersistedEntry({ id: 'collision-1', terminalName: '🧪 Test Squad', displayName: '🧪 Test Squad' }),
+        makePersistedEntry({ id: 'collision-2', terminalName: '🧪 Test Squad', displayName: '🧪 Test Squad' }),
+        makePersistedEntry({ id: 'collision-3', terminalName: '🧪 Test Squad', displayName: '🧪 Test Squad' }),
+      ];
+      const liveTerminal = makeMockTerminal('🧪 Test Squad');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext(entries);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      expect(mgr.getAllTerminals()).toHaveLength(1);
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans).toHaveLength(2);
+    });
+
+    it('should match multiple live terminals to multiple persisted entries when names differ', () => {
+      const entries = [
+        makePersistedEntry({ id: 'multi-1', terminalName: '🧪 Alpha #1', displayName: '🧪 Alpha #1' }),
+        makePersistedEntry({ id: 'multi-2', terminalName: '🧪 Beta #1', displayName: '🧪 Beta #1' }),
+        makePersistedEntry({ id: 'multi-3', terminalName: '🧪 Gamma #1', displayName: '🧪 Gamma #1' }),
+      ];
+      mockTerminals.push(
+        makeMockTerminal('🧪 Alpha #1'),
+        makeMockTerminal('🧪 Beta #1'),
+        makeMockTerminal('🧪 Gamma #1'),
+      );
+
+      const ctx = makeMockContext(entries);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      expect(mgr.getAllTerminals()).toHaveLength(3);
+      expect(mgr.getOrphanedSessions()).toHaveLength(0);
+    });
+  });
+
+  describe('reconnect before relaunch (#84 bug 3)', () => {
+    it('should reconnect to existing live terminal instead of creating new one when calling relaunchSession', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'reconnect-1',
+        terminalName: '🧪 Test Squad #1',
+        displayName: '🧪 Test Squad #1',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      expect(mgr.getOrphanedSessions()).toHaveLength(1);
+
+      const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+      mockCreateTerminal.mockClear();
+
+      mgr.relaunchSession(orphanEntry);
+
+      expect(mockCreateTerminal).not.toHaveBeenCalled();
+      expect(mgr.getAllTerminals()).toHaveLength(1);
+      expect(mgr.getAllTerminals()[0].terminal).toBe(liveTerminal);
+      expect(mgr.getOrphanedSessions()).toHaveLength(0);
+    });
+
+    it('should create new terminal when no live terminal matches during relaunchSession', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'reconnect-2',
+        terminalName: '🧪 Test Squad #1',
+        displayName: '🧪 Test Squad #1',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      expect(mgr.getOrphanedSessions()).toHaveLength(1);
+      mockCreateTerminal.mockClear();
+
+      mgr.relaunchSession(orphanEntry);
+
+      expect(mockCreateTerminal).toHaveBeenCalled();
       expect(mgr.getAllTerminals()).toHaveLength(1);
     });
   });
