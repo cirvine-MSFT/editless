@@ -1,0 +1,27 @@
+name: Internal Terms Scan
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan for internal terms
+        run: |
+          found=0
+          while IFS= read -r term || [ -n "$term" ]; do
+            # Skip empty lines and comments
+            [[ -z "$term" || "$term" == \#* ]] && continue
+            if grep -rni "$term" src/ docs/ --include='*.ts' --include='*.md' --include='*.json'; then
+              echo "::error::Found internal term: $term"
+              found=1
+            fi
+          done < .github/internal-terms.txt
+          if [ "$found" -eq 1 ]; then
+            echo "::error::Internal terms detected! Remove them before merging."
+            exit 1
+          fi
+          echo "✅ No internal terms found."

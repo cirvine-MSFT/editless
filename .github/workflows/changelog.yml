@@ -1,0 +1,70 @@
+name: Generate Changelog
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.2.0)'
+        required: true
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Generate changelog
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+          else
+            RANGE="${PREV_TAG}..HEAD"
+          fi
+
+          echo "# Changelog" > CHANGELOG.new.md
+          echo "" >> CHANGELOG.new.md
+          echo "## ${VERSION} ($(date +%Y-%m-%d))" >> CHANGELOG.new.md
+          echo "" >> CHANGELOG.new.md
+
+          # Features
+          FEATS=$(git log $RANGE --pretty=format:"%s" | grep "^feat:" | sed 's/^feat: /- /' || true)
+          if [ -n "$FEATS" ]; then
+            echo "### Features" >> CHANGELOG.new.md
+            echo "$FEATS" >> CHANGELOG.new.md
+            echo "" >> CHANGELOG.new.md
+          fi
+
+          # Fixes
+          FIXES=$(git log $RANGE --pretty=format:"%s" | grep "^fix:" | sed 's/^fix: /- /' || true)
+          if [ -n "$FIXES" ]; then
+            echo "### Bug Fixes" >> CHANGELOG.new.md
+            echo "$FIXES" >> CHANGELOG.new.md
+            echo "" >> CHANGELOG.new.md
+          fi
+
+          # Chores/CI
+          CHORES=$(git log $RANGE --pretty=format:"%s" | grep -E "^(chore|ci|docs):" | sed 's/^[a-z]*: /- /' || true)
+          if [ -n "$CHORES" ]; then
+            echo "### Other Changes" >> CHANGELOG.new.md
+            echo "$CHORES" >> CHANGELOG.new.md
+            echo "" >> CHANGELOG.new.md
+          fi
+
+          # Append existing changelog if present
+          if [ -f CHANGELOG.md ]; then
+            tail -n +2 CHANGELOG.md >> CHANGELOG.new.md
+          fi
+
+          mv CHANGELOG.new.md CHANGELOG.md
+          cat CHANGELOG.md
+      - name: Commit changelog
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for ${{ github.event.inputs.version }}" || echo "No changes"
+          git push
