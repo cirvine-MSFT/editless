@@ -78,6 +78,10 @@ export function getAllProviders(): CliProvider[] {
 
 // --- Provider updates (conditional on provider having updateCommand) -------
 
+function setAgencyUpdateAvailable(available: boolean): void {
+  vscode.commands.executeCommand('setContext', 'editless.agencyUpdateAvailable', available);
+}
+
 function runProviderUpdate(provider: CliProvider): void {
   const displayName = provider.name.charAt(0).toUpperCase() + provider.name.slice(1);
   vscode.window.withProgress(
@@ -93,6 +97,7 @@ function runProviderUpdate(provider: CliProvider): void {
             const msg = stderr?.trim() || err.message;
             vscode.window.showErrorMessage(`${displayName} update failed: ${msg}`);
           } else {
+            if (provider.name === 'agency') setAgencyUpdateAvailable(false);
             vscode.window.showInformationMessage(`🔄 ${displayName} updated.`);
           }
           resolve();
@@ -148,6 +153,7 @@ function checkSingleProviderUpdate(context: vscode.ExtensionContext, provider: C
     if (err) return;
 
     const upToDate = stdout.includes(pattern);
+    if (provider.name === 'agency') setAgencyUpdateAvailable(!upToDate);
     if (upToDate) return;
 
     recordPrompt(context, provider.name, provider.version!);

@@ -302,6 +302,62 @@ describe('TerminalManager', () => {
     });
   });
 
+  describe('renameSession preserves icon', () => {
+    it('should update displayName and persist when renaming', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+
+      const terminal = mgr.launchTerminal(config);
+
+      // Clear call history from launch
+      vi.mocked(ctx.workspaceState.update).mockClear();
+
+      mgr.renameSession(terminal, 'My Custom Name');
+
+      const info = mgr.getTerminalInfo(terminal);
+      expect(info).toBeDefined();
+      expect(info!.displayName).toBe('My Custom Name');
+      // squadIcon must be preserved
+      expect(info!.squadIcon).toBe('🧪');
+
+      expect(ctx.workspaceState.update).toHaveBeenCalledWith(
+        'editless.terminalSessions',
+        expect.arrayContaining([
+          expect.objectContaining({
+            displayName: 'My Custom Name',
+            squadIcon: '🧪',
+          }),
+        ]),
+      );
+    });
+
+    it('should fire onDidChange when renaming', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+
+      const terminal = mgr.launchTerminal(config);
+
+      const changeSpy = vi.fn();
+      mgr.onDidChange(changeSpy);
+
+      mgr.renameSession(terminal, 'Renamed');
+      expect(changeSpy).toHaveBeenCalledOnce();
+    });
+
+    it('should be a no-op for an untracked terminal', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const untracked = makeMockTerminal('random');
+
+      vi.mocked(ctx.workspaceState.update).mockClear();
+
+      mgr.renameSession(untracked, 'Renamed');
+      expect(ctx.workspaceState.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('multiple terminals for same squad', () => {
     it('should persist and reconcile multiple terminals for the same squad', () => {
       const live1 = makeMockTerminal('🧪 Test Squad #1');
