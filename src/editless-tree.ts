@@ -2,7 +2,8 @@ import * as vscode from 'vscode';
 import { EditlessRegistry } from './registry';
 import { scanSquad } from './scanner';
 import { getLocalSquadVersion } from './squad-upgrader';
-import type { TerminalManager, PersistedTerminalInfo } from './terminal-manager';
+import { getStateIcon, getStateDescription } from './terminal-manager';
+import type { TerminalManager, PersistedTerminalInfo, SessionState } from './terminal-manager';
 import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
 import type { AgentTeamConfig, SquadState, AgentInfo, DecisionEntry, RecentActivity, SessionContext } from './types';
@@ -16,8 +17,6 @@ import type { AgentVisibilityManager } from './visibility';
 export type TreeItemType = 'squad' | 'category' | 'agent' | 'decision' | 'activity' | 'terminal' | 'discovered-agent' | 'orphanedSession';
 type CategoryKind = 'roster' | 'decisions' | 'activity';
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
-const SESSION_ACTIVE_WINDOW_MS = 10 * 60 * 1000;
-const SESSION_IDLE_WINDOW_MS = 60 * 60 * 1000;
 
 function normalizeSquadDisplayName(name: string, fallback: string): string {
   const trimmed = name.trim();
@@ -246,9 +245,11 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       const sessionCtx = this.sessionContextResolver && state.config.path
         ? this.sessionContextResolver.resolveForSquad(state.config.path)
         : null;
-      const sessionState = this._deriveSessionState(sessionCtx);
 
       for (const { terminal, info } of this.terminalManager.getTerminalsForSquad(squadId)) {
+        const sessionState = this.terminalManager.getSessionState(terminal, state.inboxCount);
+        const lastActivityAt = this.terminalManager['_lastActivityAt'].get(terminal);
+
         const elapsed = Date.now() - info.createdAt.getTime();
         const mins = Math.floor(elapsed / 60_000);
         const relative = mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`;
@@ -259,10 +260,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         const title = customLabel ? `🏷️ ${customLabel}` : fallbackTitle;
         const item = new EditlessTreeItem(title, 'terminal');
         item.terminal = terminal;
-        item.description = this._buildTerminalDescription(null, relative, sessionCtx, sessionState);
-        item.iconPath = new vscode.ThemeIcon('terminal');
+        item.description = this._buildTerminalDescription(null, relative, sessionCtx, sessionState, lastActivityAt);
+        item.iconPath = getStateIcon(sessionState);
         item.contextValue = 'terminal';
-        item.tooltip = this._buildTerminalTooltip(info.displayName, relative, sessionCtx, sessionState);
+        item.tooltip = this._buildTerminalTooltip(info.displayName, relative, sessionCtx, sessionState, lastActivityAt);
         item.command = {
           command: 'editless.focusTerminal',
           title: 'Focus',
@@ -407,11 +408,14 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     terminalName: string | null,
     relative: string,
     ctx: SessionContext | null,
-    sessionState: string,
+    sessionState: SessionState,
+    lastActivityAt?: number,
   ): string {
     const parts: string[] = [];
     if (terminalName) parts.push(terminalName);
-    parts.push(`state: ${sessionState}`);
+    
+    const stateDesc = getStateDescription(sessionState, lastActivityAt);
+    if (stateDesc) parts.push(stateDesc);
 
     if (ctx) {
       if (ctx.summary) {
@@ -432,11 +436,13 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     terminalName: string,
     relative: string,
     ctx: SessionContext | null,
-    sessionState: string,
+    sessionState: SessionState,
+    lastActivityAt?: number,
   ): vscode.MarkdownString | string {
-    if (!ctx) return `${terminalName} — state: ${sessionState} — started ${relative}`;
+    const stateDesc = getStateDescription(sessionState, lastActivityAt);
+    if (!ctx) return `${terminalName} — ${stateDesc} — started ${relative}`;
 
-    const lines: string[] = [`**${terminalName}**`, `State: ${sessionState}`, `Started: ${relative}`];
+    const lines: string[] = [`**${terminalName}**`, `State: ${stateDesc}`, `Started: ${relative}`];
     if (ctx.summary) lines.push(`Summary: ${ctx.summary}`);
     if (ctx.branch) lines.push(`Branch: \`${ctx.branch}\``);
     if (ctx.references.length > 0) {
@@ -445,25 +451,5 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     if (ctx.createdAt) lines.push(`Session created: ${ctx.createdAt}`);
     if (ctx.updatedAt) lines.push(`Session updated: ${ctx.updatedAt}`);
     return new vscode.MarkdownString(lines.join('\n\n'));
-  }
-
-  private _deriveSessionState(ctx: SessionContext | null): string {
-    if (!ctx?.updatedAt) {
-      return 'unknown';
-    }
-
-    const updatedAtMs = Date.parse(ctx.updatedAt);
-    if (Number.isNaN(updatedAtMs)) {
-      return 'unknown';
-    }
-
-    const ageMs = Date.now() - updatedAtMs;
-    if (ageMs <= SESSION_ACTIVE_WINDOW_MS) {
-      return 'active';
-    }
-    if (ageMs <= SESSION_IDLE_WINDOW_MS) {
-      return 'idle';
-    }
-    return 'stale';
   }
 }

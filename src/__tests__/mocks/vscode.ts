@@ -19,6 +19,12 @@ export const window = {
   onDidCloseTerminal: (listener: any) => ({
     dispose: () => {},
   }),
+  onDidStartTerminalShellExecution: (listener: any) => ({
+    dispose: () => {},
+  }),
+  onDidEndTerminalShellExecution: (listener: any) => ({
+    dispose: () => {},
+  }),
   showInformationMessage: async (message: string, ...items: any[]) => undefined,
   showQuickPick: async (items: any[], options?: any) => undefined,
   showInputBox: async (options?: any) => undefined,

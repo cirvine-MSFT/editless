@@ -12,11 +12,15 @@ const {
   mockCreateTerminal,
   mockOnDidCloseTerminal,
   mockOnDidOpenTerminal,
+  mockOnDidStartTerminalShellExecution,
+  mockOnDidEndTerminalShellExecution,
   mockTerminals,
 } = vi.hoisted(() => ({
   mockCreateTerminal: vi.fn(),
   mockOnDidCloseTerminal: vi.fn(),
   mockOnDidOpenTerminal: vi.fn(),
+  mockOnDidStartTerminalShellExecution: vi.fn(),
+  mockOnDidEndTerminalShellExecution: vi.fn(),
   mockTerminals: [] as vscode.Terminal[],
 }));
 
@@ -25,6 +29,8 @@ vi.mock('vscode', () => ({
     createTerminal: mockCreateTerminal,
     onDidCloseTerminal: mockOnDidCloseTerminal,
     onDidOpenTerminal: mockOnDidOpenTerminal,
+    onDidStartTerminalShellExecution: mockOnDidStartTerminalShellExecution,
+    onDidEndTerminalShellExecution: mockOnDidEndTerminalShellExecution,
     get terminals() { return mockTerminals; },
   },
   EventEmitter: class {
@@ -125,6 +131,14 @@ beforeEach(() => {
   });
 
   mockOnDidOpenTerminal.mockImplementation(() => {
+    return { dispose: vi.fn() };
+  });
+
+  mockOnDidStartTerminalShellExecution.mockImplementation(() => {
+    return { dispose: vi.fn() };
+  });
+
+  mockOnDidEndTerminalShellExecution.mockImplementation(() => {
     return { dispose: vi.fn() };
   });
 

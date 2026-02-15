@@ -5,6 +5,8 @@ import type { AgentTeamConfig } from './types';
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------
 
+export type SessionState = 'active' | 'idle' | 'stale' | 'needs-attention' | 'orphaned';
+
 export interface TerminalInfo {
   id: string;
   labelKey: string;
@@ -33,6 +35,8 @@ export interface PersistedTerminalInfo {
 }
 
 const STORAGE_KEY = 'editless.terminalSessions';
+const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
+const STALE_THRESHOLD_MS = 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // TerminalManager
@@ -41,6 +45,8 @@ const STORAGE_KEY = 'editless.terminalSessions';
 export class TerminalManager implements vscode.Disposable {
   private readonly _terminals = new Map<vscode.Terminal, TerminalInfo>();
   private readonly _counters = new Map<string, number>();
+  private readonly _shellExecutionActive = new Map<vscode.Terminal, boolean>();
+  private readonly _lastActivityAt = new Map<vscode.Terminal, number>();
 
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange: vscode.Event<void> = this._onDidChange.event;
@@ -50,10 +56,22 @@ export class TerminalManager implements vscode.Disposable {
   constructor(private readonly context: vscode.ExtensionContext) {
     this._disposables.push(
       vscode.window.onDidCloseTerminal(terminal => {
+        this._shellExecutionActive.delete(terminal);
+        this._lastActivityAt.delete(terminal);
         if (this._terminals.delete(terminal)) {
           this._persist();
           this._onDidChange.fire();
         }
+      }),
+      vscode.window.onDidStartTerminalShellExecution(e => {
+        this._shellExecutionActive.set(e.terminal, true);
+        this._lastActivityAt.set(e.terminal, Date.now());
+        this._onDidChange.fire();
+      }),
+      vscode.window.onDidEndTerminalShellExecution(e => {
+        this._shellExecutionActive.set(e.terminal, false);
+        this._lastActivityAt.set(e.terminal, Date.now());
+        this._onDidChange.fire();
       }),
     );
   }
@@ -218,6 +236,31 @@ export class TerminalManager implements vscode.Disposable {
     this._persist();
   }
 
+  getSessionState(terminal: vscode.Terminal, inboxCount: number = 0): SessionState {
+    const isExecuting = this._shellExecutionActive.get(terminal);
+    if (isExecuting) {
+      return 'active';
+    }
+
+    if (inboxCount > 0 && !isExecuting) {
+      return 'needs-attention';
+    }
+
+    const lastActivity = this._lastActivityAt.get(terminal);
+    if (!lastActivity) {
+      return 'idle';
+    }
+
+    const ageMs = Date.now() - lastActivity;
+    if (ageMs < IDLE_THRESHOLD_MS) {
+      return 'active';
+    }
+    if (ageMs < STALE_THRESHOLD_MS) {
+      return 'idle';
+    }
+    return 'stale';
+  }
+
   // -- Persistence & reconciliation -----------------------------------------
 
   private static readonly MAX_REBOOT_COUNT = 2;
@@ -332,5 +375,52 @@ export class TerminalManager implements vscode.Disposable {
       d.dispose();
     }
     this._onDidChange.dispose();
+  }
+}
+
+// -- Exported helpers for tree view and testability -------------------------
+
+export function getStateIcon(state: SessionState): vscode.ThemeIcon {
+  switch (state) {
+    case 'active':
+      return new vscode.ThemeIcon('debug-start');
+    case 'needs-attention':
+      return new vscode.ThemeIcon('warning');
+    case 'orphaned':
+      return new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('disabledForeground'));
+    case 'stale':
+    case 'idle':
+    default:
+      return new vscode.ThemeIcon('terminal');
+  }
+}
+
+export function getStateDescription(state: SessionState, lastActivityAt?: number): string {
+  switch (state) {
+    case 'active':
+      return '· active';
+    case 'needs-attention':
+      return '· needs attention';
+    case 'orphaned':
+      return '· orphaned — re-launch?';
+    case 'stale':
+      return '· stale — re-launch?';
+    case 'idle': {
+      if (!lastActivityAt) {
+        return '· idle';
+      }
+      const ageMs = Date.now() - lastActivityAt;
+      const mins = Math.floor(ageMs / 60_000);
+      if (mins < 1) {
+        return '· idle just now';
+      }
+      if (mins < 60) {
+        return `· idle ${mins}m`;
+      }
+      const hours = Math.floor(mins / 60);
+      return `· idle ${hours}h`;
+    }
+    default:
+      return '';
   }
 }
