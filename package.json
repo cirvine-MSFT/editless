@@ -10,7 +10,7 @@
   },
   "type": "commonjs",
   "engines": {
-    "vscode": "^1.93.0"
+    "vscode": "^1.100.0"
   },
   "categories": [
     "Other"
