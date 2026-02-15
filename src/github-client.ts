@@ -1,7 +1,7 @@
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface GitHubIssue {
   number: number;
@@ -31,9 +31,10 @@ export interface GitHubRepo {
 
 export async function fetchAssignedIssues(repo: string): Promise<GitHubIssue[]> {
   try {
-    const { stdout } = await execAsync(
-      `gh issue list --repo ${repo} --assignee @me --state open --json number,title,state,url,labels,assignees --limit 50`,
-    );
+    const { stdout } = await execFileAsync('gh', [
+      'issue', 'list', '--repo', repo, '--assignee', '@me', '--state', 'open',
+      '--json', 'number,title,state,url,labels,assignees', '--limit', '50',
+    ]);
     const raw: unknown[] = JSON.parse(stdout);
     return raw.map((i) => {
       const rec = i as Record<string, unknown>;
@@ -54,9 +55,10 @@ export async function fetchAssignedIssues(repo: string): Promise<GitHubIssue[]> 
 
 export async function fetchMyPRs(repo: string): Promise<GitHubPR[]> {
   try {
-    const { stdout } = await execAsync(
-      `gh pr list --repo ${repo} --author @me --state open --json number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision --limit 50`,
-    );
+    const { stdout } = await execFileAsync('gh', [
+      'pr', 'list', '--repo', repo, '--author', '@me', '--state', 'open',
+      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision', '--limit', '50',
+    ]);
     const raw: unknown[] = JSON.parse(stdout);
     return raw.map((p) => {
       const rec = p as Record<string, unknown>;
@@ -79,7 +81,7 @@ export async function fetchMyPRs(repo: string): Promise<GitHubPR[]> {
 
 export async function isGhAvailable(): Promise<boolean> {
   try {
-    await execAsync('gh auth status');
+    await execFileAsync('gh', ['auth', 'status']);
     return true;
   } catch {
     return false;
