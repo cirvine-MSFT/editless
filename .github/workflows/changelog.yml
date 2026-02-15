@@ -15,8 +15,13 @@ jobs:
         with:
           fetch-depth: 0
       - name: Generate changelog
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
-          VERSION="${{ github.event.inputs.version }}"
+          if ! echo "$VERSION" | grep -qE '^v[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::error::Invalid version format. Expected vX.Y.Z"
+            exit 1
+          fi
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
           if [ -z "$PREV_TAG" ]; then
@@ -62,9 +67,11 @@ jobs:
           mv CHANGELOG.new.md CHANGELOG.md
           cat CHANGELOG.md
       - name: Commit changelog
+        env:
+          VERSION: ${{ github.event.inputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add CHANGELOG.md
-          git commit -m "docs: update changelog for ${{ github.event.inputs.version }}" || echo "No changes"
+          git commit -m "docs: update changelog for ${VERSION}" || echo "No changes"
           git push
