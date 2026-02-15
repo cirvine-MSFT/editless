@@ -65,7 +65,8 @@
       {
         "command": "editless.refresh",
         "title": "Refresh",
-        "category": "EditLess"
+        "category": "EditLess",
+        "icon": "$(refresh)"
       },
       {
         "command": "editless.openRegistry",
@@ -243,10 +244,12 @@
     ],
     "menus": {
       "view/title": [
-        { "command": "editless.updateAgency", "when": "view == editlessTree && editless.agencyUpdateAvailable", "group": "navigation@1" },
-        { "command": "editless.upgradeAllSquads", "when": "view == editlessTree", "group": "navigation@2" },
-        { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "1_visibility" },
-        { "command": "editless.addNew", "when": "view == editlessTree", "group": "navigation@4" },
+        { "command": "editless.refresh", "when": "view == editlessTree", "group": "navigation@1" },
+        { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@2" },
+        { "command": "editless.addNew", "when": "view == editlessTree", "group": "navigation@3" },
+        { "command": "editless.addSquad", "when": "view == editlessTree", "group": "navigation@4" },
+        { "command": "editless.updateAgency", "when": "view == editlessTree && editless.agencyUpdateAvailable", "group": "1_updates" },
+        { "command": "editless.upgradeAllSquads", "when": "view == editlessTree", "group": "1_updates" },
         { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation" },
         { "command": "editless.refreshPRs", "when": "view == editlessPRs", "group": "navigation" }
       ],
