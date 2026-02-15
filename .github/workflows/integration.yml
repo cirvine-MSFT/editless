@@ -1,20 +1,32 @@
 name: Integration Tests
 
+# Runs VS Code integration tests in a separate workflow from CI.
+# These are slower (need a real VS Code instance) and don't block the main CI pipeline.
+
 on:
   push:
-    branches: [master]
+    branches: [main, master]
   pull_request:
-    branches: [master]
+    branches: [main, master]
 
 jobs:
   integration:
+    name: VS Code Integration Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
+
       - run: npm ci
+
+      # Integration tests import the bundled extension, so we need a fresh build
       - run: npm run build
+
+      # xvfb-run provides a virtual display — VS Code integration tests
+      # launch a real Electron window and fail without a display server.
+      # The -a flag picks an unused display number automatically.
       - run: xvfb-run -a npm run test:integration
