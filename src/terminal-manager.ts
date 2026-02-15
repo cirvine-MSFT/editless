@@ -236,29 +236,47 @@ export class TerminalManager implements vscode.Disposable {
     this._persist();
   }
 
-  getSessionState(terminal: vscode.Terminal, inboxCount: number = 0): SessionState {
-    const isExecuting = this._shellExecutionActive.get(terminal);
-    if (isExecuting) {
-      return 'active';
+  // -- Public API: state detection ------------------------------------------
+
+  private readonly _squadInboxCounts = new Map<string, number>();
+
+  getSessionState(terminalOrId: vscode.Terminal | string): SessionState | undefined {
+    if (typeof terminalOrId === 'string') {
+      const orphan = this._pendingSaved.find(e => e.id === terminalOrId);
+      return orphan ? 'orphaned' : undefined;
     }
 
-    if (inboxCount > 0 && !isExecuting) {
-      return 'needs-attention';
-    }
+    const terminal = terminalOrId;
+    const info = this._terminals.get(terminal);
+    if (!info) { return undefined; }
+
+    const isExecuting = this._shellExecutionActive.get(terminal);
+    if (isExecuting) { return 'active'; }
+
+    const inboxCount = this._squadInboxCounts.get(info.squadId) ?? 0;
+    if (inboxCount > 0) { return 'needs-attention'; }
 
     const lastActivity = this._lastActivityAt.get(terminal);
-    if (!lastActivity) {
-      return 'idle';
-    }
+    if (!lastActivity) { return 'idle'; }
 
     const ageMs = Date.now() - lastActivity;
-    if (ageMs < IDLE_THRESHOLD_MS) {
-      return 'active';
-    }
-    if (ageMs < STALE_THRESHOLD_MS) {
-      return 'idle';
-    }
+    if (ageMs < IDLE_THRESHOLD_MS) { return 'active'; }
+    if (ageMs < STALE_THRESHOLD_MS) { return 'idle'; }
     return 'stale';
+  }
+
+  getStateIcon(state: SessionState): vscode.ThemeIcon {
+    return getStateIcon(state);
+  }
+
+  getStateDescription(state: SessionState, info: PersistedTerminalInfo | TerminalInfo): string {
+    const lastActivityAt = 'lastSeenAt' in info ? (info as PersistedTerminalInfo).lastSeenAt : undefined;
+    return getStateDescription(state, lastActivityAt);
+  }
+
+  setSquadInboxCount(squadId: string, count: number): void {
+    this._squadInboxCounts.set(squadId, count);
+    this._onDidChange.fire();
   }
 
   // -- Persistence & reconciliation -----------------------------------------
@@ -308,6 +326,10 @@ export class TerminalManager implements vscode.Disposable {
         index: persisted.index,
         createdAt: new Date(persisted.createdAt),
       });
+      // Seed activity timestamp so state detection reflects persisted history
+      if (persisted.lastSeenAt) {
+        this._lastActivityAt.set(match, persisted.lastSeenAt);
+      }
     };
 
     const runPass = (matcher: (t: vscode.Terminal, p: PersistedTerminalInfo) => boolean): void => {
@@ -383,11 +405,10 @@ export class TerminalManager implements vscode.Disposable {
 export function getStateIcon(state: SessionState): vscode.ThemeIcon {
   switch (state) {
     case 'active':
-      return new vscode.ThemeIcon('debug-start');
+      return new vscode.ThemeIcon('terminal-active');
     case 'needs-attention':
       return new vscode.ThemeIcon('warning');
     case 'orphaned':
-      return new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('disabledForeground'));
     case 'stale':
     case 'idle':
     default:
