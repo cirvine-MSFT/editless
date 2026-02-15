@@ -7,6 +7,7 @@ import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
 import type { AgentTeamConfig, SquadState, AgentInfo, DecisionEntry, RecentActivity, SessionContext } from './types';
 import type { DiscoveredAgent } from './agent-discovery';
+import type { AgentVisibilityManager } from './visibility';
 
 // ---------------------------------------------------------------------------
 // Tree item types
@@ -76,6 +77,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     private readonly terminalManager?: TerminalManager,
     private readonly labelManager?: SessionLabelManager,
     private readonly sessionContextResolver?: SessionContextResolver,
+    private readonly _visibility?: AgentVisibilityManager,
   ) {
     if (terminalManager) {
       this._terminalSub = terminalManager.onDidChange(() => this._onDidChangeTreeData.fire());
@@ -123,9 +125,12 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private getRootItems(): EditlessTreeItem[] {
     const squads = this.registry.loadSquads();
-    const items = squads.map(cfg => this.buildSquadItem(cfg));
+    const items = squads
+      .filter(cfg => !this._visibility?.isHidden(cfg.id))
+      .map(cfg => this.buildSquadItem(cfg));
 
-    if (this._discoveredAgents.length > 0) {
+    const visibleAgents = this._discoveredAgents.filter(a => !this._visibility?.isHidden(a.id));
+    if (visibleAgents.length > 0) {
       const header = new EditlessTreeItem(
         'Discovered Agents',
         'category',
@@ -134,9 +139,19 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       header.iconPath = new vscode.ThemeIcon('search');
       items.push(header);
 
-      for (const agent of this._discoveredAgents) {
+      for (const agent of visibleAgents) {
         items.push(this.buildDiscoveredAgentItem(agent));
       }
+    }
+
+    if (items.length === 0) {
+      const msg = new EditlessTreeItem(
+        'All agents hidden — use Show Hidden to restore',
+        'category',
+        vscode.TreeItemCollapsibleState.None,
+      );
+      msg.iconPath = new vscode.ThemeIcon('eye-closed');
+      items.push(msg);
     }
 
     return items;
@@ -329,6 +344,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private buildDiscoveredAgentItem(agent: DiscoveredAgent): EditlessTreeItem {
     const item = new EditlessTreeItem(agent.name, 'discovered-agent');
+    item.id = `discovered:${agent.id}`;
     item.description = agent.description ?? agent.source;
     item.iconPath = new vscode.ThemeIcon('hubot');
     item.tooltip = new vscode.MarkdownString(
