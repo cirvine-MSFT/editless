@@ -150,7 +150,8 @@
       {
         "command": "editless.runCustomCommand",
         "title": "Run Custom Command",
-        "category": "EditLess"
+        "category": "EditLess",
+        "icon": "$(play)"
       },
       {
         "command": "editless.refreshWorkItems",
