@@ -14,12 +14,18 @@
     </linearGradient>
   </defs>
   
-  <!-- Back bubble (purple) -->
+  <!-- Back bubble (purple) with terminal prompt -->
   <path d="M 18 45 C 18 37 24 31 32 31 L 62 31 C 70 31 76 37 76 45 L 76 72 C 76 80 70 86 62 86 L 42 86 L 28 98 L 28 86 L 32 86 C 24 86 18 80 18 72 Z" fill="url(#gradB1)"/>
+  <path d="M 28 54 L 38 60 L 28 66" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.85"/>
+  <rect x="42" y="62" width="14" height="3" rx="1.5" fill="white" opacity="0.85"/>
   
-  <!-- Middle bubble (blue) -->
+  <!-- Middle bubble (blue) with terminal prompt -->
   <path d="M 34 28 C 34 20 40 14 48 14 L 80 14 C 88 14 94 20 94 28 L 94 56 C 94 64 88 70 80 70 L 58 70 L 44 82 L 44 70 L 48 70 C 40 70 34 64 34 56 Z" fill="url(#gradB2)"/>
+  <path d="M 44 36 L 54 42 L 44 48" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/>
+  <rect x="58" y="44" width="16" height="3" rx="1.5" fill="white" opacity="0.9"/>
   
-  <!-- Front bubble (cyan) -->
+  <!-- Front bubble (cyan) with terminal prompt -->
   <path d="M 52 38 C 52 30 58 24 66 24 L 98 24 C 106 24 112 30 112 38 L 112 66 C 112 74 106 80 98 80 L 76 80 L 62 92 L 62 80 L 66 80 C 58 80 52 74 52 66 Z" fill="url(#gradB3)"/>
+  <path d="M 62 46 L 72 52 L 62 58" fill="none" stroke="white" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/>
+  <rect x="76" y="54" width="16" height="3" rx="1.5" fill="white" opacity="0.95"/>
 </svg>
