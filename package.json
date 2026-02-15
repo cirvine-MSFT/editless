@@ -1,0 +1,188 @@
+{
+  "name": "editless",
+  "displayName": "EditLess",
+  "description": "Plan, delegate, and review your AI team's work — the editorless development panel",
+  "publisher": "cirvine-MSFT",
+  "version": "0.1.0",
+  "type": "commonjs",
+  "engines": {
+    "vscode": "^1.100.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "editless-dashboard",
+          "title": "EditLess",
+          "icon": "$(terminal)"
+        }
+      ]
+    },
+    "views": {
+      "editless-dashboard": [
+        {
+          "id": "editlessTree",
+          "name": "Squads"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "editless.launchSession",
+        "title": "EditLess: Launch Session"
+      },
+      {
+        "command": "editless.focusSession",
+        "title": "EditLess: Focus Session"
+      },
+      {
+        "command": "editless.renameSession",
+        "title": "EditLess: Rename Session"
+      },
+      {
+        "command": "editless.refresh",
+        "title": "EditLess: Refresh"
+      },
+      {
+        "command": "editless.openRegistry",
+        "title": "EditLess: Open Squad Registry"
+      },
+      {
+        "command": "editless.discoverSquads",
+        "title": "EditLess: Discover Squads"
+      },
+      {
+        "command": "editless.updateAgency",
+        "title": "EditLess: Update Agency",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "editless.upgradeSquad",
+        "title": "EditLess: Upgrade Squad",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "editless.upgradeAllSquads",
+        "title": "EditLess: Upgrade All Squads",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "editless.renameSquad",
+        "title": "Rename"
+      },
+      {
+        "command": "editless.goToSquadSettings",
+        "title": "Go to Settings"
+      },
+      {
+        "command": "editless.changeModel",
+        "title": "Change Model"
+      },
+      {
+        "command": "editless.focusTerminal",
+        "title": "EditLess: Focus Terminal"
+      },
+      {
+        "command": "editless.closeTerminal",
+        "title": "EditLess: Close Terminal"
+      },
+      {
+        "command": "editless.clearSessionLabel",
+        "title": "EditLess: Clear Session Label"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "editless.focusSession",
+        "key": "ctrl+shift+s",
+        "mac": "cmd+shift+s"
+      },
+      {
+        "command": "editless.renameSession",
+        "key": "f2",
+        "when": "focusedView == editlessTree && viewItem == terminal"
+      },
+      {
+        "command": "editless.renameSquad",
+        "key": "f2",
+        "when": "focusedView == editlessTree && viewItem == squad"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        { "command": "editless.updateAgency", "when": "view == editlessTree", "group": "navigation@1" },
+        { "command": "editless.upgradeAllSquads", "when": "view == editlessTree", "group": "navigation@2" }
+      ],
+      "view/item/context": [
+        { "command": "editless.upgradeSquad", "when": "view == editlessTree && viewItem == squad", "group": "inline@1" },
+        { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem == squad", "group": "squad@1" },
+        { "command": "editless.changeModel", "when": "view == editlessTree && viewItem == squad", "group": "squad@2" },
+        { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem == squad", "group": "squad@3" },
+        { "command": "editless.closeTerminal", "when": "viewItem == terminal" },
+        { "command": "editless.renameSession", "when": "viewItem == terminal" },
+        { "command": "editless.clearSessionLabel", "when": "viewItem == terminal" }
+      ],
+      "commandPalette": [
+        { "command": "editless.focusTerminal", "when": "false" },
+        { "command": "editless.closeTerminal", "when": "false" },
+        { "command": "editless.clearSessionLabel", "when": "false" },
+        { "command": "editless.renameSquad", "when": "false" },
+        { "command": "editless.changeModel", "when": "false" },
+        { "command": "editless.goToSquadSettings", "when": "false" }
+      ]
+    },
+    "configuration": {
+      "title": "EditLess",
+      "properties": {
+        "editless.registryPath": {
+          "type": "string",
+          "default": "./squad-registry.json",
+          "description": "Path to the squad registry JSON file"
+        },
+        "editless.discoveryDir": {
+          "type": "string",
+          "default": "",
+          "description": "Directory to scan for squad projects"
+        },
+        "editless.notifications.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable desktop notifications for squad events"
+        },
+        "editless.scanDebounceMs": {
+          "type": "number",
+          "default": 500,
+          "description": "Debounce interval in milliseconds for file system scanning"
+        },
+        "editless.cli.provider": {
+          "type": "string",
+          "default": "copilot",
+          "enum": ["copilot", "agency", "claude", "custom"],
+          "description": "CLI provider for agent sessions. Auto-detected on startup."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.mjs",
+    "watch": "node esbuild.mjs --watch",
+    "package": "vsce package",
+    "lint": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.100.0",
+    "@vscode/vsce": "^3.3.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "agents": {
+    "rick": {
+      "persistent_name": "Rick",
+      "universe": "Rick and Morty",
+      "created_at": "2026-02-15T11:25:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "morty": {
+      "persistent_name": "Morty",
+      "universe": "Rick and Morty",
+      "created_at": "2026-02-15T11:25:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "birdperson": {
+      "persistent_name": "Birdperson",
+      "universe": "Rick and Morty",
+      "created_at": "2026-02-15T11:25:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "meeseeks": {
+      "persistent_name": "Meeseeks",
+      "universe": "Rick and Morty",
+      "created_at": "2026-02-15T11:25:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "summer": {
+      "persistent_name": "Summer",
+      "universe": "Rick and Morty",
+      "created_at": "2026-02-15T11:25:00Z",
+      "legacy_named": false,
+      "status": "active"
+    }
+  }
+}
