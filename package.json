@@ -40,41 +40,50 @@
     "commands": [
       {
         "command": "editless.launchSession",
-        "title": "EditLess: Launch Session"
+        "title": "Launch Session",
+        "category": "EditLess"
       },
       {
         "command": "editless.focusSession",
-        "title": "EditLess: Focus Session"
+        "title": "Focus Session",
+        "category": "EditLess"
       },
       {
         "command": "editless.renameSession",
-        "title": "EditLess: Rename Session"
+        "title": "Rename Session",
+        "category": "EditLess"
       },
       {
         "command": "editless.refresh",
-        "title": "EditLess: Refresh"
+        "title": "Refresh",
+        "category": "EditLess"
       },
       {
         "command": "editless.openRegistry",
-        "title": "EditLess: Open Squad Registry"
+        "title": "Open Squad Registry",
+        "category": "EditLess"
       },
       {
         "command": "editless.discoverSquads",
-        "title": "EditLess: Discover Squads"
+        "title": "Discover Squads",
+        "category": "EditLess"
       },
       {
         "command": "editless.updateAgency",
-        "title": "EditLess: Update Agency",
+        "title": "Update Agency",
+        "category": "EditLess",
         "icon": "$(cloud-download)"
       },
       {
         "command": "editless.upgradeSquad",
-        "title": "EditLess: Upgrade Squad",
+        "title": "Upgrade Squad",
+        "category": "EditLess",
         "icon": "$(arrow-up)"
       },
       {
         "command": "editless.upgradeAllSquads",
-        "title": "EditLess: Upgrade All Squads",
+        "title": "Upgrade All Squads",
+        "category": "EditLess",
         "icon": "$(arrow-up)"
       },
       {
@@ -91,15 +100,18 @@
       },
       {
         "command": "editless.focusTerminal",
-        "title": "EditLess: Focus Terminal"
+        "title": "Focus Terminal",
+        "category": "EditLess"
       },
       {
         "command": "editless.closeTerminal",
-        "title": "EditLess: Close Terminal"
+        "title": "Close Terminal",
+        "category": "EditLess"
       },
       {
         "command": "editless.clearSessionLabel",
-        "title": "EditLess: Clear Session Label"
+        "title": "Clear Session Label",
+        "category": "EditLess"
       }
     ],
     "keybindings": [
@@ -117,6 +129,11 @@
         "command": "editless.renameSquad",
         "key": "f2",
         "when": "focusedView == editlessTree && viewItem == squad"
+      },
+      {
+        "command": "editless.renameSession",
+        "key": "f2",
+        "when": "terminalFocus"
       }
     ],
     "menus": {
