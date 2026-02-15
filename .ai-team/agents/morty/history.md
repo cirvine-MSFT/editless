@@ -11,3 +11,8 @@
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+
+📌 **Team update (2026-02-15):** Command category pattern standardized — all commands use `"category": "EditLess"` instead of title prefix to clean context menus while preserving command palette discoverability. This is now a team decision. — decided by Casey Irvine
+
+- **Command category pattern:** Use `"category": "EditLess"` on commands instead of prefixing titles with "EditLess: ". VS Code shows the category in the command palette but omits it in context menus — clean context menus without losing discoverability.
+- **F2 rename from terminal:** Clicking a tree terminal item intentionally focuses the terminal (`terminal.show()`). A second F2 keybinding with `"when": "terminalFocus"` covers the rename flow after focus moves. The `renameSession` handler falls back to `vscode.window.activeTerminal` when no arg is provided so the keybinding resolves the right terminal without a QuickPick.
