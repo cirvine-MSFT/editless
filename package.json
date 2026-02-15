@@ -309,6 +309,25 @@
           "items": {
             "type": "string"
           }
+        },
+        "editless.github.issueFilter": {
+          "type": "object",
+          "default": {},
+          "description": "Filter GitHub issues by labels",
+          "properties": {
+            "includeLabels": {
+              "type": "array",
+              "default": [],
+              "description": "Only show issues with at least one of these labels (empty = show all)",
+              "items": { "type": "string" }
+            },
+            "excludeLabels": {
+              "type": "array",
+              "default": [],
+              "description": "Hide issues with any of these labels",
+              "items": { "type": "string" }
+            }
+          }
         }
       }
     }

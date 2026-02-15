@@ -11,6 +11,7 @@ export interface GitHubIssue {
   labels: string[];
   assignees: string[];
   repository: string;
+  milestone: string;
 }
 
 export interface GitHubPR {
@@ -33,7 +34,7 @@ export async function fetchAssignedIssues(repo: string): Promise<GitHubIssue[]> 
   try {
     const { stdout } = await execFileAsync('gh', [
       'issue', 'list', '--repo', repo, '--assignee', '@me', '--state', 'open',
-      '--json', 'number,title,state,url,labels,assignees', '--limit', '50',
+      '--json', 'number,title,state,url,labels,assignees,milestone', '--limit', '50',
     ]);
     const raw: unknown[] = JSON.parse(stdout);
     return raw.map((i) => {
@@ -45,6 +46,7 @@ export async function fetchAssignedIssues(repo: string): Promise<GitHubIssue[]> 
         url: rec.url as string,
         labels: (rec.labels as Array<{ name: string }>).map((l) => l.name),
         assignees: (rec.assignees as Array<{ login: string }>).map((a) => a.login),
+        milestone: (rec.milestone as { title: string } | null)?.title ?? '',
         repository: repo,
       };
     });

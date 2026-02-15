@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockIsGhAvailable = vi.fn<() => Promise<boolean>>().mockResolvedValue(false);
 const mockFetchAssignedIssues = vi.fn().mockResolvedValue([]);
 const mockFetchMyPRs = vi.fn().mockResolvedValue([]);
+let mockIssueFilterConfig: Record<string, unknown> = {};
 
 vi.mock('vscode', () => {
   const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
@@ -47,6 +48,12 @@ vi.mock('vscode', () => {
   return {
     TreeItem, TreeItemCollapsibleState, ThemeIcon, MarkdownString, EventEmitter,
     Uri: { parse: (s: string) => ({ toString: () => s }) },
+    workspace: {
+      getConfiguration: () => ({
+        get: (key: string, defaultValue?: unknown) =>
+          key === 'github.issueFilter' ? mockIssueFilterConfig : defaultValue,
+      }),
+    },
   };
 });
 
@@ -62,6 +69,7 @@ import { PRsTreeProvider, PRsTreeItem } from '../prs-tree';
 beforeEach(() => {
   vi.clearAllMocks();
   mockIsGhAvailable.mockResolvedValue(false);
+  mockIssueFilterConfig = {};
 });
 
 // ---------------------------------------------------------------------------
@@ -107,6 +115,90 @@ describe('WorkItemsTreeProvider', () => {
     const result = provider.getTreeItem(item);
 
     expect(result).toBe(item);
+  });
+
+  it('should filter out issues with excluded labels', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      { number: 1, title: 'Bug', state: 'OPEN', url: 'u', labels: ['bug'], assignees: [], repository: 'r', milestone: '' },
+      { number: 2, title: 'Wontfix', state: 'OPEN', url: 'u', labels: ['wontfix'], assignees: [], repository: 'r', milestone: '' },
+    ]);
+    mockIssueFilterConfig = { excludeLabels: ['wontfix'] };
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['r']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+    const children = provider.getChildren();
+    expect(children).toHaveLength(1);
+    expect(children[0].label).toContain('#1');
+  });
+
+  it('should only show issues with included labels', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      { number: 1, title: 'Feature', state: 'OPEN', url: 'u', labels: ['feature'], assignees: [], repository: 'r', milestone: '' },
+      { number: 2, title: 'Bug', state: 'OPEN', url: 'u', labels: ['bug'], assignees: [], repository: 'r', milestone: '' },
+    ]);
+    mockIssueFilterConfig = { includeLabels: ['feature'] };
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['r']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+    const children = provider.getChildren();
+    expect(children).toHaveLength(1);
+    expect(children[0].label).toContain('#1');
+  });
+
+  it('should group issues by milestone when milestones are present', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      { number: 1, title: 'A', state: 'OPEN', url: 'u', labels: [], assignees: [], repository: 'r', milestone: 'v1.0' },
+      { number: 2, title: 'B', state: 'OPEN', url: 'u', labels: [], assignees: [], repository: 'r', milestone: 'v1.0' },
+      { number: 3, title: 'C', state: 'OPEN', url: 'u', labels: [], assignees: [], repository: 'r', milestone: '' },
+    ]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['r']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(2);
+    expect(roots[0].label).toBe('v1.0');
+    expect(roots[0].description).toBe('2 issues');
+    expect(roots[0].contextValue).toBe('milestone-group');
+    expect(roots[1].label).toBe('No Milestone');
+
+    const msChildren = provider.getChildren(roots[0]);
+    expect(msChildren).toHaveLength(2);
+
+    const noMsChildren = provider.getChildren(roots[1]);
+    expect(noMsChildren).toHaveLength(1);
+  });
+
+  it('should show flat list when no milestones are present', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      { number: 1, title: 'A', state: 'OPEN', url: 'u', labels: [], assignees: [], repository: 'r', milestone: '' },
+      { number: 2, title: 'B', state: 'OPEN', url: 'u', labels: [], assignees: [], repository: 'r', milestone: '' },
+    ]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['r']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+    const children = provider.getChildren();
+    expect(children).toHaveLength(2);
+    expect(children[0].contextValue).toBe('work-item');
   });
 });
 
