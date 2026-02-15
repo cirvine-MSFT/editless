@@ -1,0 +1,17 @@
+<svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
+  <!-- Back bubble -->
+  <path d="M 2 9 C 2 7.3 3.3 6 5 6 L 11 6 C 12.7 6 14 7.3 14 9 L 14 14 C 14 15.7 12.7 17 11 17 L 7.5 17 L 4.5 19.5 L 4.5 17 L 5 17 C 3.3 17 2 15.7 2 14 Z" opacity="0.4"/>
+  <!-- Back prompt -->
+  <path d="M 4.5 11 L 6.5 12.5 L 4.5 14" fill="none" stroke="white" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.7"/>
+
+  <!-- Middle bubble -->
+  <path d="M 5 5 C 5 3.3 6.3 2 8 2 L 14.5 2 C 16.2 2 17.5 3.3 17.5 5 L 17.5 10.5 C 17.5 12.2 16.2 13.5 14.5 13.5 L 10.5 13.5 L 7.5 16 L 7.5 13.5 L 8 13.5 C 6.3 13.5 5 12.2 5 10.5 Z" opacity="0.65"/>
+  <!-- Middle prompt -->
+  <path d="M 7.5 6.5 L 9.5 8 L 7.5 9.5" fill="none" stroke="white" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+
+  <!-- Front bubble -->
+  <path d="M 9 7.5 C 9 5.8 10.3 4.5 12 4.5 L 19 4.5 C 20.7 4.5 22 5.8 22 7.5 L 22 13 C 22 14.7 20.7 16 19 16 L 14.5 16 L 11.5 18.5 L 11.5 16 L 12 16 C 10.3 16 9 14.7 9 13 Z" opacity="0.9"/>
+  <!-- Front prompt -->
+  <path d="M 11.5 9.5 L 13.5 11 L 11.5 12.5" fill="none" stroke="white" stroke-width="0.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.95"/>
+  <rect x="14.5" y="11.5" width="3.5" height="0.8" rx="0.4" fill="white" opacity="0.95"/>
+</svg>

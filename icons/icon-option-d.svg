@@ -1,0 +1,14 @@
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradD" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#F59E0B;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#FBBF24;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Minimal geometric chat bubble (just outline + tail) -->
+  <path d="M 32 24 L 96 24 C 104.8 24 112 31.2 112 40 L 112 76 C 112 84.8 104.8 92 96 92 L 60 92 L 40 112 L 40 92 L 32 92 C 23.2 92 16 84.8 16 76 L 16 40 C 16 31.2 23.2 24 32 24 Z" fill="none" stroke="url(#gradD)" stroke-width="8" stroke-linejoin="round"/>
+  
+  <!-- Single centered dot (minimal conversation indicator) -->
+  <circle cx="64" cy="58" r="6" fill="url(#gradD)"/>
+</svg>
