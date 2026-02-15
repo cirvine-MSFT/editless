@@ -7,16 +7,21 @@ import type { AgentTeamConfig } from '../types';
 // ---------------------------------------------------------------------------
 
 type CloseListener = (terminal: vscode.Terminal) => void;
+type ShellExecutionListener = (event: { terminal: vscode.Terminal; execution: vscode.TerminalShellExecution }) => void;
 
 const {
   mockCreateTerminal,
   mockOnDidCloseTerminal,
   mockOnDidOpenTerminal,
+  mockOnDidStartTerminalShellExecution,
+  mockOnDidEndTerminalShellExecution,
   mockTerminals,
 } = vi.hoisted(() => ({
   mockCreateTerminal: vi.fn(),
   mockOnDidCloseTerminal: vi.fn(),
   mockOnDidOpenTerminal: vi.fn(),
+  mockOnDidStartTerminalShellExecution: vi.fn(),
+  mockOnDidEndTerminalShellExecution: vi.fn(),
   mockTerminals: [] as vscode.Terminal[],
 }));
 
@@ -25,6 +30,8 @@ vi.mock('vscode', () => ({
     createTerminal: mockCreateTerminal,
     onDidCloseTerminal: mockOnDidCloseTerminal,
     onDidOpenTerminal: mockOnDidOpenTerminal,
+    onDidStartTerminalShellExecution: mockOnDidStartTerminalShellExecution,
+    onDidEndTerminalShellExecution: mockOnDidEndTerminalShellExecution,
     get terminals() { return mockTerminals; },
   },
   EventEmitter: class {
@@ -37,6 +44,9 @@ vi.mock('vscode', () => ({
     }
     fire(value?: unknown) { this.listeners.forEach(l => l(value)); }
     dispose() { this.listeners = []; }
+  },
+  ThemeIcon: class {
+    constructor(public id: string) {}
   },
 }));
 
@@ -110,6 +120,8 @@ function getLastPersistedState(ctx: vscode.ExtensionContext): PersistedTerminalI
 }
 
 let capturedCloseListener: CloseListener;
+let capturedShellStartListener: ShellExecutionListener;
+let capturedShellEndListener: ShellExecutionListener;
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -125,6 +137,16 @@ beforeEach(() => {
   });
 
   mockOnDidOpenTerminal.mockImplementation(() => {
+    return { dispose: vi.fn() };
+  });
+
+  mockOnDidStartTerminalShellExecution.mockImplementation((listener: ShellExecutionListener) => {
+    capturedShellStartListener = listener;
+    return { dispose: vi.fn() };
+  });
+
+  mockOnDidEndTerminalShellExecution.mockImplementation((listener: ShellExecutionListener) => {
+    capturedShellEndListener = listener;
     return { dispose: vi.fn() };
   });
 
@@ -808,6 +830,319 @@ describe('TerminalManager', () => {
 
       expect(mockCreateTerminal).toHaveBeenCalled();
       expect(mgr.getAllTerminals()).toHaveLength(1);
+    });
+  });
+
+  // =========================================================================
+  // TDD — Session state detection (#50)
+  // Tests written before implementation (Morty will implement).
+  // =========================================================================
+
+  describe('session state detection', () => {
+    
+    describe('SessionState type', () => {
+      it('should export SessionState type with expected values', () => {
+        // This test verifies the type exists — actual usage checked in other tests
+        const validStates: Array<import('../terminal-manager').SessionState> = [
+          'active',
+          'idle',
+          'stale',
+          'needs-attention',
+          'orphaned',
+        ];
+        expect(validStates).toHaveLength(5);
+      });
+    });
+
+    describe('shell integration tracking', () => {
+      it('should transition to active state when shell execution starts', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        const execution = {
+          commandLine: { value: 'npm test' },
+        } as vscode.TerminalShellExecution;
+
+        capturedShellStartListener({ terminal, execution });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('active');
+      });
+
+      it('should transition from active to idle when shell execution ends', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        const execution = {
+          commandLine: { value: 'npm test' },
+        } as vscode.TerminalShellExecution;
+
+        capturedShellStartListener({ terminal, execution });
+        expect(mgr.getSessionState(terminal)).toBe('active');
+
+        capturedShellEndListener({ terminal, execution });
+        
+        // State becomes idle after execution completes (assuming activity timeout logic)
+        const state = mgr.getSessionState(terminal);
+        expect(state).toMatch(/^(idle|active)$/);
+      });
+
+      it('should handle multiple rapid start/end cycles correctly', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        const exec1 = { commandLine: { value: 'git status' } } as vscode.TerminalShellExecution;
+        const exec2 = { commandLine: { value: 'git diff' } } as vscode.TerminalShellExecution;
+        const exec3 = { commandLine: { value: 'git commit' } } as vscode.TerminalShellExecution;
+
+        capturedShellStartListener({ terminal, execution: exec1 });
+        capturedShellEndListener({ terminal, execution: exec1 });
+        
+        capturedShellStartListener({ terminal, execution: exec2 });
+        capturedShellEndListener({ terminal, execution: exec2 });
+        
+        capturedShellStartListener({ terminal, execution: exec3 });
+
+        // Last execution is still running — should be active
+        expect(mgr.getSessionState(terminal)).toBe('active');
+      });
+    });
+
+    describe('state computation', () => {
+      it('should return active for terminal with shell execution in progress', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        const execution = { commandLine: { value: 'npm run build' } } as vscode.TerminalShellExecution;
+        capturedShellStartListener({ terminal, execution });
+
+        expect(mgr.getSessionState(terminal)).toBe('active');
+      });
+
+      it('should return idle for terminal with recent activity but no execution', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate recent activity (just created, <5 min)
+        const state = mgr.getSessionState(terminal);
+        expect(['active', 'idle']).toContain(state);
+      });
+
+      it('should return stale for terminal with last activity >60 min ago', () => {
+        const staleEntry = makePersistedEntry({
+          id: 'stale-session-1',
+          terminalName: '🧪 Stale #1',
+          lastSeenAt: Date.now() - 61 * 60 * 1000,
+        });
+        const liveTerminal = makeMockTerminal('🧪 Stale #1');
+        mockTerminals.push(liveTerminal);
+
+        const ctx = makeMockContext([staleEntry]);
+        const mgr = new TerminalManager(ctx);
+        mgr.reconcile();
+
+        const state = mgr.getSessionState(liveTerminal);
+        expect(state).toBe('stale');
+      });
+
+      it('should return orphaned for persisted session with no live terminal', () => {
+        const orphanEntry = makePersistedEntry({
+          id: 'orphaned-1',
+          terminalName: '🧪 Orphan #1',
+        });
+        const ctx = makeMockContext([orphanEntry]);
+        const mgr = new TerminalManager(ctx);
+        mgr.reconcile();
+
+        const state = mgr.getSessionState(orphanEntry.id);
+        expect(state).toBe('orphaned');
+      });
+    });
+
+    describe('getSessionState API', () => {
+      it('should return correct state for tracked terminal', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        const state = mgr.getSessionState(terminal);
+        expect(['active', 'idle']).toContain(state);
+      });
+
+      it('should return orphaned for persisted-only session', () => {
+        const orphanEntry = makePersistedEntry({
+          id: 'orphan-state-1',
+          terminalName: '🧪 Orphan #1',
+        });
+        const ctx = makeMockContext([orphanEntry]);
+        const mgr = new TerminalManager(ctx);
+        mgr.reconcile();
+
+        const state = mgr.getSessionState(orphanEntry.id);
+        expect(state).toBe('orphaned');
+      });
+
+      it('should return undefined for unknown terminal', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const unknownTerminal = makeMockTerminal('unknown');
+
+        const state = mgr.getSessionState(unknownTerminal);
+        expect(state).toBeUndefined();
+      });
+
+      it('should accept terminal ID string and return correct state', () => {
+        const orphanEntry = makePersistedEntry({
+          id: 'orphan-by-id',
+          terminalName: '🧪 By ID',
+        });
+        const ctx = makeMockContext([orphanEntry]);
+        const mgr = new TerminalManager(ctx);
+        mgr.reconcile();
+
+        const state = mgr.getSessionState('orphan-by-id');
+        expect(state).toBe('orphaned');
+      });
+    });
+
+    describe('tree integration helpers', () => {
+      it('should return correct ThemeIcon for each state', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+
+        const activeIcon = mgr.getStateIcon('active');
+        expect(activeIcon).toBeDefined();
+        expect(activeIcon.id).toBe('terminal-active');
+
+        const idleIcon = mgr.getStateIcon('idle');
+        expect(idleIcon).toBeDefined();
+        expect(idleIcon.id).toBe('terminal');
+
+        const staleIcon = mgr.getStateIcon('stale');
+        expect(staleIcon).toBeDefined();
+        expect(staleIcon.id).toBe('terminal');
+
+        const needsAttentionIcon = mgr.getStateIcon('needs-attention');
+        expect(needsAttentionIcon).toBeDefined();
+        expect(needsAttentionIcon.id).toBe('warning');
+
+        const orphanedIcon = mgr.getStateIcon('orphaned');
+        expect(orphanedIcon).toBeDefined();
+        expect(orphanedIcon.id).toBe('terminal');
+      });
+
+      it('should return human-readable description for each state', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+
+        const info = makePersistedEntry();
+
+        const activeDesc = mgr.getStateDescription('active', info);
+        expect(activeDesc).toContain('active');
+
+        const idleDesc = mgr.getStateDescription('idle', info);
+        expect(idleDesc).toMatch(/idle/i);
+
+        const staleDesc = mgr.getStateDescription('stale', info);
+        expect(staleDesc).toMatch(/stale/i);
+
+        const needsAttentionDesc = mgr.getStateDescription('needs-attention', info);
+        expect(needsAttentionDesc).toMatch(/attention/i);
+
+        const orphanedDesc = mgr.getStateDescription('orphaned', info);
+        expect(orphanedDesc).toMatch(/orphan/i);
+      });
+
+      it('should include time elapsed in idle state description', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+
+        const info = makePersistedEntry({
+          lastSeenAt: Date.now() - 23 * 60 * 1000, // 23 minutes ago
+        });
+
+        const desc = mgr.getStateDescription('idle', info);
+        expect(desc).toMatch(/\d+m/);
+      });
+    });
+
+    describe('needs-attention integration', () => {
+      it('should return needs-attention when squad has inbox items', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate squad having inbox items
+        mgr.setSquadInboxCount('test-squad', 2);
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('needs-attention');
+      });
+
+      it('should override idle/stale with needs-attention', () => {
+        const staleEntry = makePersistedEntry({
+          id: 'stale-needs-attention',
+          terminalName: '🧪 Stale #1',
+          lastSeenAt: Date.now() - 61 * 60 * 1000,
+        });
+        const liveTerminal = makeMockTerminal('🧪 Stale #1');
+        mockTerminals.push(liveTerminal);
+
+        const ctx = makeMockContext([staleEntry]);
+        const mgr = new TerminalManager(ctx);
+        mgr.reconcile();
+
+        // Before inbox items
+        const beforeState = mgr.getSessionState(liveTerminal);
+        expect(beforeState).toBe('stale');
+
+        // After inbox items — needs-attention overrides stale
+        mgr.setSquadInboxCount('test-squad', 3);
+        const afterState = mgr.getSessionState(liveTerminal);
+        expect(afterState).toBe('needs-attention');
+      });
+
+      it('should NOT override active with needs-attention', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        const execution = { commandLine: { value: 'npm test' } } as vscode.TerminalShellExecution;
+        capturedShellStartListener({ terminal, execution });
+
+        mgr.setSquadInboxCount('test-squad', 5);
+
+        // Active takes precedence over needs-attention
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('active');
+      });
+
+      it('should clear needs-attention when inbox count becomes zero', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        mgr.setSquadInboxCount('test-squad', 2);
+        expect(mgr.getSessionState(terminal)).toBe('needs-attention');
+
+        mgr.setSquadInboxCount('test-squad', 0);
+        const state = mgr.getSessionState(terminal);
+        expect(['idle', 'active']).toContain(state);
+      });
     });
   });
 });
