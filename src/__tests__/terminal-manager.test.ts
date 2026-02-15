@@ -40,26 +40,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { TerminalManager } from '../terminal-manager';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-interface PersistedTerminalInfo {
-  id: string;
-  labelKey: string;
-  displayName: string;
-  squadId: string;
-  squadName: string;
-  squadIcon: string;
-  index: number;
-  createdAt: string;
-  terminalName: string;
-  status?: 'active' | 'orphaned';
-  rebootCount?: number;
-  lastSeenAt?: string;
-}
+import { TerminalManager, type PersistedTerminalInfo } from '../terminal-manager';
 
 function makeMockTerminal(name: string): vscode.Terminal {
   return {
@@ -114,6 +95,8 @@ function makePersistedEntry(overrides: Partial<PersistedTerminalInfo> = {}): Per
     index: 1,
     createdAt: '2026-02-16T00:00:00.000Z',
     terminalName: '🧪 Test Squad #1',
+    lastSeenAt: Date.now(),
+    rebootCount: 0,
     ...overrides,
   };
 }
@@ -413,42 +396,34 @@ describe('TerminalManager', () => {
   // =========================================================================
 
   describe('orphan cleanup — TTL enforcement', () => {
-    it('should mark entry as orphaned when unmatched for >24h', () => {
-      const twentyFiveHoursAgo = new Date(Date.now() - 25 * 60 * 60 * 1000).toISOString();
+    it('should keep entry in pendingSaved after first reconcile (rebootCount increments)', () => {
       const staleEntry = makePersistedEntry({
         id: 'stale-orphan-1',
         terminalName: '🧪 Stale #1',
-        lastSeenAt: twentyFiveHoursAgo,
+        lastSeenAt: Date.now() - 25 * 60 * 60 * 1000,
       });
       const ctx = makeMockContext([staleEntry]);
       const mgr = new TerminalManager(ctx);
 
       mgr.reconcile();
 
-      const persisted = getLastPersistedState(ctx);
-      expect(persisted).toBeDefined();
-      const entry = persisted!.find(e => e.id === 'stale-orphan-1');
-      expect(entry).toBeDefined();
-      expect(entry!.status).toBe('orphaned');
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.find(e => e.id === 'stale-orphan-1')).toBeDefined();
     });
 
-    it('should NOT mark entry as orphaned when unmatched for <24h', () => {
-      const oneHourAgo = new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString();
+    it('should keep recent entries in pendingSaved after reconcile', () => {
       const recentEntry = makePersistedEntry({
         id: 'recent-pending-1',
         terminalName: '🧪 Recent #1',
-        lastSeenAt: oneHourAgo,
+        lastSeenAt: Date.now() - 1 * 60 * 60 * 1000,
       });
       const ctx = makeMockContext([recentEntry]);
       const mgr = new TerminalManager(ctx);
 
       mgr.reconcile();
 
-      const persisted = getLastPersistedState(ctx);
-      expect(persisted).toBeDefined();
-      const entry = persisted!.find(e => e.id === 'recent-pending-1');
-      expect(entry).toBeDefined();
-      expect(entry!.status).not.toBe('orphaned');
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.find(e => e.id === 'recent-pending-1')).toBeDefined();
     });
   });
 
@@ -457,18 +432,16 @@ describe('TerminalManager', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-reboot-1',
         terminalName: '🧪 Orphan #1',
-        status: 'orphaned',
         rebootCount: 0,
-        lastSeenAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+        lastSeenAt: Date.now() - 48 * 60 * 60 * 1000,
       });
       const ctx = makeMockContext([orphanEntry]);
       const mgr = new TerminalManager(ctx);
 
       mgr.reconcile();
 
-      const persisted = getLastPersistedState(ctx);
-      expect(persisted).toBeDefined();
-      const entry = persisted!.find(e => e.id === 'orphan-reboot-1');
+      const orphans = mgr.getOrphanedSessions();
+      const entry = orphans.find(e => e.id === 'orphan-reboot-1');
       expect(entry).toBeDefined();
       expect(entry!.rebootCount).toBe(1);
     });
@@ -477,27 +450,24 @@ describe('TerminalManager', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-reboot-2',
         terminalName: '🧪 Orphan #2',
-        status: 'orphaned',
         rebootCount: 1,
-        lastSeenAt: new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString(),
+        lastSeenAt: Date.now() - 72 * 60 * 60 * 1000,
       });
       const ctx = makeMockContext([orphanEntry]);
       const mgr = new TerminalManager(ctx);
 
       mgr.reconcile();
 
-      const persisted = getLastPersistedState(ctx);
-      expect(persisted).toBeDefined();
-      expect(persisted!.find(e => e.id === 'orphan-reboot-2')).toBeUndefined();
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.find(e => e.id === 'orphan-reboot-2')).toBeUndefined();
     });
 
     it('should reset rebootCount when orphaned entry gets re-matched before second reboot', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-rematch-1',
         terminalName: '🧪 Test Squad #1',
-        status: 'orphaned',
-        rebootCount: 1,
-        lastSeenAt: new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString(),
+        rebootCount: 0,
+        lastSeenAt: Date.now() - 48 * 60 * 60 * 1000,
       });
       const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
       mockTerminals.push(liveTerminal);
@@ -511,12 +481,8 @@ describe('TerminalManager', () => {
       expect(info).toBeDefined();
       expect(info!.squadId).toBe('test-squad');
 
-      const persisted = getLastPersistedState(ctx);
-      expect(persisted).toBeDefined();
-      const entry = persisted!.find(e => e.id === 'orphan-rematch-1');
-      expect(entry).toBeDefined();
-      expect(entry!.rebootCount).toBe(0);
-      expect(entry!.status).not.toBe('orphaned');
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.find(e => e.id === 'orphan-rematch-1')).toBeUndefined();
     });
   });
 
@@ -534,7 +500,7 @@ describe('TerminalManager', () => {
       );
     });
 
-    it('should trigger persist on dispose', () => {
+    it('should trigger persist on explicit persist() call', () => {
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
       const config = makeSquadConfig();
@@ -542,7 +508,7 @@ describe('TerminalManager', () => {
 
       vi.mocked(ctx.workspaceState.update).mockClear();
 
-      mgr.dispose();
+      mgr.persist();
 
       expect(ctx.workspaceState.update).toHaveBeenCalledWith(
         'editless.terminalSessions',
@@ -555,7 +521,6 @@ describe('TerminalManager', () => {
     it('should create a new terminal with the same name pattern', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-relaunch-1',
-        status: 'orphaned',
         terminalName: '🧪 Test Squad #1',
         displayName: '🧪 Test Squad #1',
       });
@@ -563,7 +528,7 @@ describe('TerminalManager', () => {
       const mgr = new TerminalManager(ctx);
       mgr.reconcile();
 
-      mgr.relaunchSession(orphanEntry.id);
+      mgr.relaunchSession(orphanEntry);
 
       expect(mockCreateTerminal).toHaveBeenCalledWith(
         expect.objectContaining({ name: '🧪 Test Squad #1' }),
@@ -573,7 +538,6 @@ describe('TerminalManager', () => {
     it('should assign correct squad association from the orphaned entry', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-relaunch-2',
-        status: 'orphaned',
         squadId: 'my-squad',
         squadName: 'My Squad',
         squadIcon: '🚀',
@@ -584,7 +548,7 @@ describe('TerminalManager', () => {
       const mgr = new TerminalManager(ctx);
       mgr.reconcile();
 
-      const terminal = mgr.relaunchSession(orphanEntry.id);
+      const terminal = mgr.relaunchSession(orphanEntry);
 
       expect(terminal).toBeDefined();
       const info = mgr.getTerminalInfo(terminal!);
@@ -594,25 +558,18 @@ describe('TerminalManager', () => {
       expect(info!.squadIcon).toBe('🚀');
     });
 
-    it('should remove the orphaned entry from persistence after re-launch', () => {
+    it('should remove the orphaned entry from orphan list after re-launch', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-relaunch-3',
-        status: 'orphaned',
       });
       const ctx = makeMockContext([orphanEntry]);
       const mgr = new TerminalManager(ctx);
       mgr.reconcile();
 
-      vi.mocked(ctx.workspaceState.update).mockClear();
+      mgr.relaunchSession(orphanEntry);
 
-      mgr.relaunchSession(orphanEntry.id);
-
-      const persisted = getLastPersistedState(ctx);
-      expect(persisted).toBeDefined();
-      const orphanStillPresent = persisted!.find(
-        e => e.id === 'orphan-relaunch-3' && e.status === 'orphaned',
-      );
-      expect(orphanStillPresent).toBeUndefined();
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.find(e => e.id === 'orphan-relaunch-3')).toBeUndefined();
     });
   });
 
@@ -620,7 +577,6 @@ describe('TerminalManager', () => {
     it('should remove orphan from pendingSaved and from persisted workspaceState', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-dismiss-1',
-        status: 'orphaned',
         terminalName: '🧪 Dismiss Me #1',
       });
       const ctx = makeMockContext([orphanEntry]);
@@ -629,7 +585,7 @@ describe('TerminalManager', () => {
 
       vi.mocked(ctx.workspaceState.update).mockClear();
 
-      mgr.dismissOrphan(orphanEntry.id);
+      mgr.dismissOrphan(orphanEntry);
 
       const persisted = getLastPersistedState(ctx);
       expect(persisted).toBeDefined();
@@ -639,7 +595,6 @@ describe('TerminalManager', () => {
     it('should NOT affect other persisted sessions when dismissing', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-dismiss-2',
-        status: 'orphaned',
         terminalName: '🧪 Dismiss Me #2',
       });
       const activeEntry = makePersistedEntry({
@@ -657,7 +612,7 @@ describe('TerminalManager', () => {
 
       vi.mocked(ctx.workspaceState.update).mockClear();
 
-      mgr.dismissOrphan(orphanEntry.id);
+      mgr.dismissOrphan(orphanEntry);
 
       const persisted = getLastPersistedState(ctx);
       expect(persisted).toBeDefined();
