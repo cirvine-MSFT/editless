@@ -93,6 +93,13 @@ jobs:
               { name: 'priority:p2', color: 'FBCA04', description: 'Next sprint' }
             ];
 
+            const STATUS_LABELS = [
+              { name: 'status:needs-plan', color: 'D876E3', description: 'Needs design/planning before implementation' },
+              { name: 'status:planned', color: '0E8A16', description: 'Plan complete, ready for execution' },
+              { name: 'status:in-progress', color: 'FBCA04', description: 'Agent actively working' },
+              { name: 'status:review', color: 'D93F0B', description: 'Needs HUMAN review — blocks downstream' }
+            ];
+
             // Ensure the base "squad" triage label exists
             const labels = [
               { name: 'squad', color: SQUAD_COLOR, description: 'Squad triage inbox — Lead will assign to a member' }
@@ -120,6 +127,7 @@ jobs:
             labels.push(...RELEASE_LABELS);
             labels.push(...TYPE_LABELS);
             labels.push(...PRIORITY_LABELS);
+            labels.push(...STATUS_LABELS);
 
             // Sync labels (create or update)
             for (const label of labels) {
