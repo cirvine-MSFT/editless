@@ -56,9 +56,9 @@ export class TerminalManager implements vscode.Disposable {
 
   // -- Public API -----------------------------------------------------------
 
-  launchTerminal(config: AgentTeamConfig): vscode.Terminal {
+  launchTerminal(config: AgentTeamConfig, customName?: string): vscode.Terminal {
     const index = this._counters.get(config.id) || 1;
-    const displayName = `${config.icon} ${config.name} #${index}`;
+    const displayName = customName ?? `${config.icon} ${config.name} #${index}`;
     const id = `${config.id}-${Date.now()}-${index}`;
     const labelKey = `terminal:${id}`;
 

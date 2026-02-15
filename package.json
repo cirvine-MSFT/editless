@@ -175,6 +175,12 @@
         "title": "Open in Browser",
         "category": "EditLess",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "editless.launchFromWorkItem",
+        "title": "Launch with Agent",
+        "category": "EditLess",
+        "icon": "$(play)"
       }
     ],
     "keybindings": [
@@ -221,6 +227,7 @@
         { "command": "editless.clearSessionLabel", "when": "viewItem == terminal" },
         { "command": "editless.runCustomCommand", "when": "viewItem == terminal", "group": "inline@2" },
         { "command": "editless.openInBrowser", "when": "viewItem == work-item", "group": "inline" },
+        { "command": "editless.launchFromWorkItem", "when": "viewItem == work-item", "group": "work-item@1" },
         { "command": "editless.openInBrowser", "when": "viewItem == pull-request", "group": "inline" }
       ],
       "commandPalette": [
@@ -233,7 +240,8 @@
         { "command": "editless.hideAgent", "when": "false" },
         { "command": "editless.refreshWorkItems", "when": "false" },
         { "command": "editless.refreshPRs", "when": "false" },
-        { "command": "editless.openInBrowser", "when": "false" }
+        { "command": "editless.openInBrowser", "when": "false" },
+        { "command": "editless.launchFromWorkItem", "when": "false" }
       ]
     },
     "configuration": {

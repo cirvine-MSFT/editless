@@ -112,15 +112,26 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   private buildIssueItem(issue: GitHubIssue): WorkItemsTreeItem {
-    const item = new WorkItemsTreeItem(`#${issue.number} ${issue.title}`);
+    const hasPlan = issue.labels.some(l =>
+      ['has plan', 'has-plan', 'plan', 'planned'].includes(l.toLowerCase()),
+    );
+
+    const planIndicator = hasPlan ? '📋' : '❓';
+    const item = new WorkItemsTreeItem(`${planIndicator} #${issue.number} ${issue.title}`);
     item.issue = issue;
-    item.description = issue.labels.join(', ');
+
+    const labelText = issue.labels.join(', ');
+    item.description = hasPlan
+      ? `✓ planned · ${labelText}`
+      : `needs plan · ${labelText}`;
+
     item.iconPath = new vscode.ThemeIcon('issues');
     item.contextValue = 'work-item';
     item.tooltip = new vscode.MarkdownString(
       [
         `**#${issue.number} ${issue.title}**`,
-        `Labels: ${issue.labels.join(', ') || 'none'}`,
+        `Plan: ${hasPlan ? '✓ planned' : '❓ needs plan'}`,
+        `Labels: ${labelText || 'none'}`,
         `Assignees: ${issue.assignees.join(', ')}`,
       ].join('\n\n'),
     );
