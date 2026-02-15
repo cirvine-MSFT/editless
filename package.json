@@ -136,6 +136,12 @@
         "category": "EditLess"
       },
       {
+        "command": "editless.addNew",
+        "title": "Add...",
+        "category": "EditLess",
+        "icon": "$(add)"
+      },
+      {
         "command": "editless.addAgent",
         "title": "Add Agent",
         "category": "EditLess",
@@ -220,9 +226,8 @@
       "view/title": [
         { "command": "editless.updateAgency", "when": "view == editlessTree", "group": "navigation@1" },
         { "command": "editless.upgradeAllSquads", "when": "view == editlessTree", "group": "navigation@2" },
-        { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@3" },
-        { "command": "editless.addAgent", "when": "view == editlessTree", "group": "navigation@4" },
-        { "command": "editless.addSquad", "when": "view == editlessTree", "group": "navigation@5" },
+        { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "1_visibility" },
+        { "command": "editless.addNew", "when": "view == editlessTree", "group": "navigation@4" },
         { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation" },
         { "command": "editless.refreshPRs", "when": "view == editlessPRs", "group": "navigation" }
       ],
@@ -255,7 +260,9 @@
         { "command": "editless.openInBrowser", "when": "false" },
         { "command": "editless.launchFromWorkItem", "when": "false" },
         { "command": "editless.openFilePreview", "when": "false" },
-        { "command": "editless.goToPR", "when": "false" }
+        { "command": "editless.goToPR", "when": "false" },
+        { "command": "editless.configureRepos", "when": "false" },
+        { "command": "editless.addNew", "when": "false" }
       ]
     },
     "configuration": {
