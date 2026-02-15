@@ -153,3 +153,14 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 **By:** Casey Irvine (user directive)
 **What:** Never use `git rebase` or `git commit --amend`. Use merge commits (`git merge`) for integrating branches. If a mistake is made, fix it with a new commit on top — don't rewrite history. Fast-forward merges are fine (they don't rewrite anything). These rules apply to all agents and sessions.
 **Why:** Rebases are destructive and create conflict headaches across concurrent sessions. Amend commits cause push failures when branches are already upstream. With multiple sessions working in parallel, history rewriting is too risky.
+
+### 2026-02-15: PR workflow — CI gates before merge, no more direct-to-master
+**By:** Casey Irvine (user directive)
+**What:** Stop merging feature branches directly to master. New flow:
+1. Agent pushes to feature branch (unchanged)
+2. Open a **ready-for-review PR** (not draft) with `gh pr create`
+3. **If no human review needed:** Add `--auto --squash` flag so PR auto-merges when CI passes. If CI fails, fix and push — auto-merge will trigger again.
+4. **If human review needed** (🟡 flagged, design-sensitive, or uncertain): Create PR without `--auto`, tag as needs-review, and notify Casey. Do NOT merge until Casey approves.
+5. After merge, continue with build/package/install as before.
+**Why:** We now have real CI gates (lint, build, test, integration). Direct merges bypass them. This ensures every change passes gates before hitting master. Draft PRs aren't needed — it's just Casey, so the draft→publish step adds no value. The `--auto` flag makes routine work zero-friction while still gated.
+**Supersedes:** The "all PRs start as drafts" convention is retired for this project.
