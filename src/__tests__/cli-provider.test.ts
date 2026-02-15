@@ -152,7 +152,7 @@ describe('checkAgencyOnStartup', () => {
     checkAgencyOnStartup(makeContext());
 
     expect(mockShowInformationMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Agency update available'),
+      expect.stringContaining('Agency CLI update available'),
       'Update',
     );
   });
@@ -170,7 +170,7 @@ describe('checkAgencyOnStartup', () => {
     checkAgencyOnStartup(context);
 
     expect(mockShowInformationMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Agency update available'),
+      expect.stringContaining('Agency CLI update available'),
       'Update',
     );
   });
@@ -188,7 +188,7 @@ describe('checkAgencyOnStartup', () => {
     checkAgencyOnStartup(context);
 
     expect(mockShowInformationMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Agency update available'),
+      expect.stringContaining('Agency CLI update available'),
       'Update',
     );
   });
@@ -338,7 +338,7 @@ describe('checkProviderUpdatesOnStartup — generalized provider updates', () =>
     checkProviderUpdatesOnStartup(makeContext());
 
     expect(mockShowInformationMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Agency update available'),
+      expect.stringContaining('Agency CLI update available'),
       'Update',
     );
   });
@@ -353,7 +353,7 @@ describe('checkProviderUpdatesOnStartup — generalized provider updates', () =>
     checkProviderUpdatesOnStartup(makeContext());
 
     expect(mockShowInformationMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Agency update available'),
+      expect.stringContaining('Agency CLI update available'),
       'Update',
     );
   });
