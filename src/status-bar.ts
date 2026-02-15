@@ -47,7 +47,7 @@ export class EditlessStatusBar implements vscode.Disposable {
   }
 
   private _render(squadCount: number, sessionCount: number, inboxCount: number): void {
-    let text = `$(terminal) ${squadCount} squads · ${sessionCount} sessions`;
+    let text = `$(terminal) ${squadCount} agents · ${sessionCount} sessions`;
     if (inboxCount > 0) {
       text += ` · 📥 ${inboxCount}`;
     }

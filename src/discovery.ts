@@ -100,7 +100,7 @@ export async function promptAndAddSquads(
   registry: EditlessRegistry,
 ): Promise<void> {
   if (discovered.length === 0) {
-    vscode.window.showInformationMessage('No new squads found.');
+    vscode.window.showInformationMessage('No new agents found.');
     return;
   }
 
@@ -114,13 +114,13 @@ export async function promptAndAddSquads(
 
   const selected = await vscode.window.showQuickPick(items, {
     canPickMany: true,
-    placeHolder: 'Select squads to add to registry',
+    placeHolder: 'Select agents to add to registry',
   });
 
   if (!selected || selected.length === 0) { return; }
 
   registry.addSquads(selected.map(i => i.squad));
-  vscode.window.showInformationMessage(`Added ${selected.length} squad(s) to registry.`);
+  vscode.window.showInformationMessage(`Added ${selected.length} agent(s) to registry.`);
 }
 
 export function registerDiscoveryCommand(
@@ -140,7 +140,7 @@ export function registerDiscoveryCommand(
         canSelectFolders: true,
         canSelectFiles: false,
         canSelectMany: false,
-        openLabel: 'Select directory to scan for squads',
+        openLabel: 'Select directory to scan for agents',
       });
       dirPath = uris?.[0]?.fsPath;
     }
@@ -172,7 +172,7 @@ export function checkDiscoveryOnStartup(
 
   vscode.window
     .showInformationMessage(
-      `Found ${discovered.length} new squad(s) in discovery directory. Add them?`,
+      `Found ${discovered.length} new agent(s) in discovery directory. Add them?`,
       'Add',
       'Dismiss',
     )
