@@ -16,6 +16,7 @@ All labels use `prefix:value` syntax. Labels are mutually exclusive within their
 | `squad:` | Agent assignment | No (can have multiple) | `squad:morty` |
 | `release:` | When it ships | Yes | `release:v0.5.0` |
 | `go:` | Decision gate | Yes | `go:yes` |
+| `area:` | Topic grouping | No (can have multiple) | `area:toolbar-ux` |
 
 Standalone: `duplicate` (no namespace)
 

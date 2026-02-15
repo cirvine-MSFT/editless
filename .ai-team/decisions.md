@@ -91,3 +91,8 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 **By:** Casey Irvine (planning session), Squad Coordinator
 **What:** `status:`, `squad:`, and `go:` labels are portable across GitHub and ADO (colons allowed in ADO tags). `type:` and `priority:` are GitHub-only — ADO handles these natively via Work Item Type and Priority field. Users should use the portable labels identically on both platforms for a consistent experience.
 **Why:** EditLess supports both GitHub and ADO. A consistent labeling story means users don't have to learn two systems. Portable labels enable cross-platform workflow automation.
+
+### 2025-07-18: Area labels for lightweight issue grouping (GitHub-only)
+**By:** Casey Irvine (planning session), Squad Coordinator
+**What:** `area:{theme}` labels group related issues by topic without implying parent-child hierarchy. Color: `#0969DA` (blue). NOT mutually exclusive — issues can have multiple `area:` labels. Created ad-hoc as clusters emerge, deleted when the cluster is resolved. Not enforced in `squad-label-enforce.yml` (no exclusivity) or `sync-squad-labels.yml` (not a fixed set). **GitHub-only** — ADO has native grouping concepts that should be used instead.
+**Why:** `type:epic` implies parent-child hierarchy which doesn't fit ad-hoc clusters. `area:` is lightweight, widely understood (Kubernetes, VS Code use similar patterns), and lets agents and humans see at a glance which issues are related.
