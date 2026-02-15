@@ -4,7 +4,7 @@ import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand } from './squad-upgrader';
-import { registerAgencyUpdateCommand, checkAgencyOnStartup, probeAllProviders, resolveActiveProvider } from './cli-provider';
+import { registerAgencyUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider } from './cli-provider';
 import { registerDiscoveryCommand, checkDiscoveryOnStartup } from './discovery';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
@@ -79,8 +79,8 @@ export function activate(context: vscode.ExtensionContext): void {
   // Agency update command
   context.subscriptions.push(registerAgencyUpdateCommand(context));
 
-  // Check for agency updates on startup
-  checkAgencyOnStartup(context);
+  // Check for CLI provider updates on startup
+  checkProviderUpdatesOnStartup(context);
 
   // Squad discovery command
   context.subscriptions.push(registerDiscoveryCommand(context, registry));

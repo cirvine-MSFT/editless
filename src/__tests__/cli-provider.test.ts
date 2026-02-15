@@ -32,7 +32,7 @@ vi.mock('vscode', () => ({
   ProgressLocation: { Notification: 15 },
 }));
 
-import { probeAllProviders, checkAgencyOnStartup } from '../cli-provider';
+import { probeAllProviders, checkAgencyOnStartup, checkProviderUpdatesOnStartup } from '../cli-provider';
 
 // ---------------------------------------------------------------------------
 // Helpers
