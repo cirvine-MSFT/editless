@@ -69,7 +69,7 @@ export async function runSquadUpgrade(config: AgentTeamConfig): Promise<void> {
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: `${config.icon} Upgrading ${config.name}…`,
+      title: `${config.icon} Upgrading Squad package: ${config.name}…`,
       cancellable: false,
     },
     () =>
@@ -77,9 +77,9 @@ export async function runSquadUpgrade(config: AgentTeamConfig): Promise<void> {
         exec('npx github:bradygaster/squad upgrade', { cwd: config.path }, (err, stdout, stderr) => {
           if (err) {
             const msg = stderr?.trim() || err.message;
-            vscode.window.showErrorMessage(`${config.icon} Upgrade failed for ${config.name}: ${msg}`);
+            vscode.window.showErrorMessage(`${config.icon} Squad upgrade failed for ${config.name}: ${msg}`);
           } else {
-            vscode.window.showInformationMessage(`${config.icon} ${config.name} upgraded.`);
+            vscode.window.showInformationMessage(`${config.icon} Squad package upgraded: ${config.name}`);
           }
           resolve();
         });
@@ -173,7 +173,7 @@ export function registerSquadUpgradeAllCommand(
     }
 
     vscode.window.showInformationMessage(
-      `Upgrading ${squads.length} squad${squads.length === 1 ? '' : 's'}…`,
+      `Upgrading ${squads.length} Squad package${squads.length === 1 ? '' : 's'}…`,
     );
   });
 }
