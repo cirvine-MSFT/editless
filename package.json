@@ -181,6 +181,17 @@
         "title": "Launch with Agent",
         "category": "EditLess",
         "icon": "$(play)"
+      },
+      {
+        "command": "editless.openFilePreview",
+        "title": "Preview File",
+        "category": "EditLess"
+      },
+      {
+        "command": "editless.goToPR",
+        "title": "Go to PR",
+        "category": "EditLess",
+        "icon": "$(git-pull-request)"
       }
     ],
     "keybindings": [
@@ -227,6 +238,7 @@
         { "command": "editless.clearSessionLabel", "when": "viewItem == terminal" },
         { "command": "editless.runCustomCommand", "when": "viewItem == terminal", "group": "inline@2" },
         { "command": "editless.openInBrowser", "when": "viewItem == work-item", "group": "inline" },
+        { "command": "editless.goToPR", "when": "viewItem == work-item", "group": "work-item@2" },
         { "command": "editless.launchFromWorkItem", "when": "viewItem == work-item", "group": "work-item@1" },
         { "command": "editless.openInBrowser", "when": "viewItem == pull-request", "group": "inline" }
       ],
@@ -241,7 +253,9 @@
         { "command": "editless.refreshWorkItems", "when": "false" },
         { "command": "editless.refreshPRs", "when": "false" },
         { "command": "editless.openInBrowser", "when": "false" },
-        { "command": "editless.launchFromWorkItem", "when": "false" }
+        { "command": "editless.launchFromWorkItem", "when": "false" },
+        { "command": "editless.openFilePreview", "when": "false" },
+        { "command": "editless.goToPR", "when": "false" }
       ]
     },
     "configuration": {

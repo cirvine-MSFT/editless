@@ -19,6 +19,7 @@ import { SessionContextResolver } from './session-context';
 import { scanSquad } from './scanner';
 import { WorkItemsTreeProvider, WorkItemsTreeItem } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
+import { fetchLinkedPRs } from './github-client';
 
 const execFileAsync = promisify(execFile);
 
@@ -476,6 +477,36 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- GitHub repo detection & data loading ---
   initGitHubIntegration(workItemsProvider, prsProvider);
+
+  // Open file in markdown preview
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.openFilePreview', (uri: vscode.Uri) => {
+      vscode.commands.executeCommand('markdown.showPreview', uri);
+    }),
+  );
+
+  // Go to PR (context menu on work items)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.goToPR', async (item?: WorkItemsTreeItem) => {
+      const issue = item?.issue;
+      if (!issue) return;
+
+      const prs = await fetchLinkedPRs(issue.repository, issue.number);
+      if (prs.length === 0) {
+        vscode.window.showInformationMessage(`No linked PRs found for #${issue.number}`);
+        return;
+      }
+      if (prs.length === 1) {
+        await vscode.env.openExternal(vscode.Uri.parse(prs[0].url));
+        return;
+      }
+      const pick = await vscode.window.showQuickPick(
+        prs.map(p => ({ label: `#${p.number} ${p.title}`, description: p.state, url: p.url })),
+        { placeHolder: 'Select a PR to open' },
+      );
+      if (pick) await vscode.env.openExternal(vscode.Uri.parse(pick.url));
+    }),
+  );
 
   // Show all agents
   context.subscriptions.push(
