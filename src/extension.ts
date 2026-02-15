@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs';
 import { createRegistry, watchRegistry } from './registry';
 import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
@@ -408,6 +410,85 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('editless.showAllAgents', () => {
       visibilityManager.showAll();
       treeProvider.refresh();
+    }),
+  );
+
+  // Add Agent — create a .github/agents/{name}.agent.md template
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.addAgent', async () => {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      if (!workspaceFolder) {
+        vscode.window.showWarningMessage('No workspace folder open.');
+        return;
+      }
+
+      const name = await vscode.window.showInputBox({
+        prompt: 'Agent name',
+        placeHolder: 'my-agent',
+        validateInput: v => {
+          if (!v.trim()) return 'Name cannot be empty';
+          if (!/^[a-zA-Z0-9_-]+$/.test(v.trim())) return 'Use only letters, numbers, hyphens, underscores';
+          return undefined;
+        },
+      });
+      if (!name) return;
+
+      const agentsDir = path.join(workspaceFolder.uri.fsPath, '.github', 'agents');
+      await vscode.workspace.fs.createDirectory(vscode.Uri.file(agentsDir));
+
+      const filePath = path.join(agentsDir, `${name.trim()}.agent.md`);
+      if (fs.existsSync(filePath)) {
+        vscode.window.showWarningMessage(`Agent file already exists: ${filePath}`);
+        return;
+      }
+
+      const template = [
+        '---',
+        `description: "${name.trim()} agent"`,
+        '---',
+        '',
+        `# ${name.trim()}`,
+        '',
+        '> Describe what this agent does',
+        '',
+        '## Instructions',
+        '',
+        'Add your agent instructions here.',
+        '',
+      ].join('\n');
+
+      fs.writeFileSync(filePath, template, 'utf-8');
+      const doc = await vscode.workspace.openTextDocument(filePath);
+      await vscode.window.showTextDocument(doc);
+
+      discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
+      treeProvider.setDiscoveredAgents(discoveredAgents);
+    }),
+  );
+
+  // Add Squad — open a folder picker, git init, and run squad init in a terminal
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.addSquad', async () => {
+      const uris = await vscode.window.showOpenDialog({
+        canSelectFolders: true,
+        canSelectFiles: false,
+        canSelectMany: false,
+        openLabel: 'Select directory for new squad',
+      });
+      if (!uris || uris.length === 0) return;
+
+      const dirPath = uris[0].fsPath;
+
+      const terminal = vscode.window.createTerminal({
+        name: `Squad Init: ${path.basename(dirPath)}`,
+        cwd: dirPath,
+      });
+      terminal.show();
+      terminal.sendText('git init && npx github:bradygaster/squad init');
+
+      vscode.window.showInformationMessage(
+        `Squad initialization started in ${path.basename(dirPath)}. After it completes, use "Discover Squads" to add it to the registry.`,
+      );
     }),
   );
 
