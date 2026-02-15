@@ -7,6 +7,7 @@ import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand } from './s
 import { registerAgencyUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider } from './cli-provider';
 import { registerDiscoveryCommand, checkDiscoveryOnStartup } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
+import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
 import { NotificationManager } from './notifications';
@@ -38,8 +39,11 @@ export function activate(context: vscode.ExtensionContext): void {
   // --- Session context resolver -------------------------------------------
   const sessionContextResolver = new SessionContextResolver();
 
+  // --- Visibility manager ------------------------------------------------
+  const visibilityManager = new AgentVisibilityManager(context);
+
   // --- Tree view ---------------------------------------------------------
-  const treeProvider = new EditlessTreeProvider(registry, terminalManager, labelManager, sessionContextResolver);
+  const treeProvider = new EditlessTreeProvider(registry, terminalManager, labelManager, sessionContextResolver, visibilityManager);
   const treeView = vscode.window.registerTreeDataProvider('editlessTree', treeProvider);
   context.subscriptions.push(treeView);
 
@@ -47,13 +51,13 @@ export function activate(context: vscode.ExtensionContext): void {
   terminalManager.reconcile();
 
   // --- Agent discovery — workspace .agent.md files -------------------------
-  const discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
+  let discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
   treeProvider.setDiscoveredAgents(discoveredAgents);
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
-      const agents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
-      treeProvider.setDiscoveredAgents(agents);
+      discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
+      treeProvider.setDiscoveredAgents(discoveredAgents);
     }),
   );
 
@@ -351,6 +355,59 @@ export function activate(context: vscode.ExtensionContext): void {
       const registryPath = registry.registryPath;
       const doc = await vscode.workspace.openTextDocument(registryPath);
       await vscode.window.showTextDocument(doc);
+    }),
+  );
+
+  // Hide agent (context menu)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.hideAgent', (item?: EditlessTreeItem) => {
+      if (!item) return;
+      const id = item.squadId ?? item.id;
+      if (!id) return;
+      visibilityManager.hide(id);
+      treeProvider.refresh();
+    }),
+  );
+
+  // Show hidden agents (QuickPick)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.showHiddenAgents', async () => {
+      const hiddenIds = visibilityManager.getHiddenIds();
+      if (hiddenIds.length === 0) {
+        vscode.window.showInformationMessage('No hidden agents.');
+        return;
+      }
+
+      const picks = hiddenIds.map(id => {
+        const squad = registry.getSquad(id);
+        if (squad) {
+          return { label: `${squad.icon} ${squad.name}`, description: squad.universe, id };
+        }
+        const agent = discoveredAgents.find(a => a.id === id);
+        if (agent) {
+          return { label: agent.name, description: agent.source, id };
+        }
+        return { label: id, description: 'unknown', id };
+      });
+
+      const selected = await vscode.window.showQuickPick(picks, {
+        placeHolder: 'Select agents to show',
+        canPickMany: true,
+      });
+      if (selected) {
+        for (const pick of selected) {
+          visibilityManager.show(pick.id);
+        }
+        treeProvider.refresh();
+      }
+    }),
+  );
+
+  // Show all agents
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.showAllAgents', () => {
+      visibilityManager.showAll();
+      treeProvider.refresh();
     }),
   );
 
