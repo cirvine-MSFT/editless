@@ -11,3 +11,5 @@
 ## Learnings
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+
+- **2026-02-16 — cli-provider.test.ts (#11):** `checkAgencyOnStartup` uses callback-based `exec`, so mocking with synchronous callback invocation works fine for most tests. For the "does not block" assertion, capture the callback without calling it to prove the function returns first. Use `vi.hoisted()` to define mock fns referenced by `vi.mock` factories — vitest hoists `vi.mock` above `const` declarations. The vscode mock in `src/__tests__/mocks/vscode.ts` doesn't have `globalState`; building a bespoke context mock with a `Map`-backed store is simpler and more flexible.

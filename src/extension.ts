@@ -269,7 +269,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.renameSession', async (arg?: vscode.Terminal | EditlessTreeItem) => {
       const previousTerminal = vscode.window.activeTerminal;
-      const terminal = resolveTerminal(arg);
+      const terminal = resolveTerminal(arg) ?? vscode.window.activeTerminal;
       if (terminal) {
         terminal.show(true);
         const labelKey = terminalManager.getLabelKey(terminal);
