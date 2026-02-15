@@ -7,10 +7,12 @@ import type * as vscode from 'vscode';
 
 type ExecCallback = (error: Error | null, stdout: string, stderr: string) => void;
 
-const { mockExecSync, mockExec, mockShowInformationMessage } = vi.hoisted(() => ({
+const { mockExecSync, mockExec, mockShowInformationMessage, mockWithProgress, mockShowErrorMessage } = vi.hoisted(() => ({
   mockExecSync: vi.fn(),
   mockExec: vi.fn(),
   mockShowInformationMessage: vi.fn().mockResolvedValue(undefined as string | undefined),
+  mockWithProgress: vi.fn(),
+  mockShowErrorMessage: vi.fn(),
 }));
 
 vi.mock('child_process', () => ({
@@ -26,13 +28,13 @@ vi.mock('vscode', () => ({
   },
   window: {
     showInformationMessage: mockShowInformationMessage,
-    showErrorMessage: vi.fn(),
-    withProgress: vi.fn(),
+    showErrorMessage: mockShowErrorMessage,
+    withProgress: mockWithProgress,
   },
   ProgressLocation: { Notification: 15 },
 }));
 
-import { probeAllProviders, checkAgencyOnStartup, checkProviderUpdatesOnStartup } from '../cli-provider';
+import { probeAllProviders, checkAgencyOnStartup, checkProviderUpdatesOnStartup, getAllProviders } from '../cli-provider';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -246,5 +248,129 @@ describe('checkAgencyOnStartup', () => {
       expect.stringContaining('3.5.7'),
       'Update',
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Generalized provider update infrastructure (#14)
+// ---------------------------------------------------------------------------
+
+describe('checkProviderUpdatesOnStartup — generalized provider updates', () => {
+  beforeEach(() => {
+    mockExecSync.mockReset();
+    mockExec.mockReset();
+    mockShowInformationMessage.mockReset();
+    mockShowInformationMessage.mockResolvedValue(undefined as string | undefined);
+    mockWithProgress.mockReset();
+    mockShowErrorMessage.mockReset();
+  });
+
+  function setupAllProvidersDetected(): void {
+    mockExecSync.mockImplementation((cmd: string) => {
+      if (cmd === 'agency --version') return '1.0.0';
+      if (cmd === 'copilot --version') return '2.0.0';
+      if (cmd === 'claude --version') return '3.0.0';
+      throw new Error('not found');
+    });
+    probeAllProviders();
+  }
+
+  it('should skip providers without updateCommand', () => {
+    setupAllProvidersDetected();
+    mockExecSuccess('New version available');
+
+    checkProviderUpdatesOnStartup(makeContext());
+
+    expect(mockExec).toHaveBeenCalledTimes(1);
+    expect(mockExec).toHaveBeenCalledWith(
+      'agency update',
+      expect.any(Object),
+      expect.any(Function),
+    );
+  });
+
+  it('should check all providers with updateCommand set', () => {
+    setupAllProvidersDetected();
+    const copilot = getAllProviders().find(p => p.name === 'copilot')!;
+    copilot.updateCommand = 'copilot update';
+    copilot.upToDatePattern = 'already current';
+
+    mockExecSuccess('New version available');
+
+    checkProviderUpdatesOnStartup(makeContext());
+
+    expect(mockExec).toHaveBeenCalledTimes(2);
+    expect(mockExec).toHaveBeenCalledWith('agency update', expect.any(Object), expect.any(Function));
+    expect(mockExec).toHaveBeenCalledWith('copilot update', expect.any(Object), expect.any(Function));
+  });
+
+  it('should isolate cache per provider', () => {
+    setupAllProvidersDetected();
+    const copilot = getAllProviders().find(p => p.name === 'copilot')!;
+    copilot.updateCommand = 'copilot update';
+
+    const context = makeContext({
+      'editless.agencyUpdatePrompt': {
+        promptedVersion: '1.0.0',
+        timestamp: Date.now() - 1_000,
+      },
+    });
+
+    mockExecSuccess('New version available');
+
+    checkProviderUpdatesOnStartup(context);
+
+    // Agency cached and skipped; copilot has no cache and gets checked
+    expect(mockExec).toHaveBeenCalledTimes(1);
+    expect(mockExec).toHaveBeenCalledWith('copilot update', expect.any(Object), expect.any(Function));
+  });
+
+  it('should include provider display name in toast message', () => {
+    setupAgencyDetected('1.0.0');
+    mockExecSuccess('New version available');
+
+    checkProviderUpdatesOnStartup(makeContext());
+
+    expect(mockShowInformationMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Agency update available'),
+      'Update',
+    );
+  });
+
+  it('should use default pattern when upToDatePattern is undefined', () => {
+    setupAgencyDetected('1.0.0');
+    const agency = getAllProviders().find(p => p.name === 'agency')!;
+    agency.upToDatePattern = undefined;
+
+    mockExecSuccess('version 2.0.0 available for download');
+
+    checkProviderUpdatesOnStartup(makeContext());
+
+    expect(mockShowInformationMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Agency update available'),
+      'Update',
+    );
+  });
+
+  it('should use updateRunCommand when user clicks Update', async () => {
+    setupAgencyDetected('1.0.0');
+    const agency = getAllProviders().find(p => p.name === 'agency')!;
+    agency.updateRunCommand = 'agency update --force';
+
+    mockExec.mockImplementation((...args: unknown[]) => {
+      const cb = args[args.length - 1] as ExecCallback;
+      cb(null, 'version 2.0.0 available', '');
+    });
+    mockShowInformationMessage.mockResolvedValue('Update');
+    mockWithProgress.mockImplementation(
+      (_opts: unknown, task: () => Promise<void>) => task(),
+    );
+
+    checkProviderUpdatesOnStartup(makeContext());
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(mockExec).toHaveBeenCalledTimes(2);
+    expect(mockExec.mock.calls[1][0]).toBe('agency update --force');
   });
 });
