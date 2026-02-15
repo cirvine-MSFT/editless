@@ -1,0 +1,16 @@
+<svg viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="gradA" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#007ACC;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00A8FF;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Chat bubble -->
+  <path d="M 24 32 C 24 21.5 32.5 13 43 13 L 85 13 C 95.5 13 104 21.5 104 32 L 104 70 C 104 80.5 95.5 89 85 89 L 55 89 L 36 105 L 36 89 L 43 89 C 32.5 89 24 80.5 24 70 Z" fill="url(#gradA)"/>
+  
+  <!-- Typing indicator dots -->
+  <circle cx="50" cy="51" r="5" fill="white" opacity="0.9"/>
+  <circle cx="64" cy="51" r="5" fill="white" opacity="0.9"/>
+  <circle cx="78" cy="51" r="5" fill="white" opacity="0.9"/>
+</svg>
