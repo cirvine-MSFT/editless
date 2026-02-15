@@ -1,21 +1,37 @@
 name: CI
 
+# Runs on every push to main/master and on PRs targeting those branches.
+# This is the primary quality gate — all steps must pass before merge.
+
 on:
   push:
-    branches: [master]
+    branches: [main, master]
   pull_request:
-    branches: [master]
+    branches: [main, master]
 
 jobs:
   build:
+    name: Lint, Build & Test
     runs-on: ubuntu-latest
+    # Target: <5 minutes. Single job keeps things simple and fast.
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 22 is the current LTS release
+          node-version: 22
+          # Caches ~/.npm so subsequent runs skip downloading packages
           cache: npm
+
+      # npm ci installs from the lockfile exactly — no surprise version bumps
       - run: npm ci
+
+      # Type-check only (tsc --noEmit) — catches type errors without emitting files
       - run: npm run lint
+
+      # Bundle the extension with esbuild
       - run: npm run build
+
+      # Unit tests via vitest
       - run: npm run test
