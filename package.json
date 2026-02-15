@@ -301,6 +301,14 @@
           "default": "",
           "description": "Directory to scan for squad projects"
         },
+        "editless.discovery.scanPaths": {
+          "type": "array",
+          "default": [],
+          "description": "Additional directories to scan for agents and squads on launch and config change",
+          "items": {
+            "type": "string"
+          }
+        },
         "editless.notifications.enabled": {
           "type": "boolean",
           "default": true,

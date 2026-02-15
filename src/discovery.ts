@@ -95,6 +95,55 @@ export function discoverAgentTeams(dirPath: string, existingSquads: AgentTeamCon
   return discovered;
 }
 
+export function discoverAgentTeamsInMultiplePaths(
+  scanPaths: string[],
+  existingSquads: AgentTeamConfig[],
+): AgentTeamConfig[] {
+  const discovered: AgentTeamConfig[] = [];
+  const seenIds = new Set<string>();
+  const existingPaths = new Set(existingSquads.map(s => s.path.toLowerCase()));
+
+  for (const scanPath of scanPaths) {
+    if (!scanPath.trim()) { continue; }
+
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(scanPath, { withFileTypes: true });
+    } catch {
+      continue;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) { continue; }
+
+      const folderPath = path.resolve(scanPath, entry.name);
+      const teamMdPath = path.join(folderPath, '.ai-team', 'team.md');
+
+      if (!fs.existsSync(teamMdPath)) { continue; }
+      if (existingPaths.has(folderPath.toLowerCase())) { continue; }
+
+      const id = toKebabCase(entry.name);
+      if (seenIds.has(id)) { continue; }
+      seenIds.add(id);
+
+      const content = fs.readFileSync(teamMdPath, 'utf-8');
+      const parsed = parseTeamMd(content, entry.name);
+
+      discovered.push({
+        id,
+        name: parsed.name,
+        description: parsed.description,
+        path: folderPath,
+        icon: '🔷',
+        universe: parsed.universe,
+        launchCommand: 'agency copilot --agent squad --yolo -s',
+      });
+    }
+  }
+
+  return discovered;
+}
+
 export async function promptAndAddSquads(
   discovered: AgentTeamConfig[],
   registry: EditlessRegistry,
@@ -162,11 +211,14 @@ export function checkDiscoveryOnStartup(
 ): void {
   const config = vscode.workspace.getConfiguration('editless');
   const discoveryDir = config.get<string>('discoveryDir', '');
-
-  if (!discoveryDir) { return; }
+  const scanPaths = config.get<string[]>('discovery.scanPaths', []);
 
   const existing = registry.loadSquads();
-  const discovered = discoverAgentTeams(discoveryDir, existing);
+  const pathsToScan = [discoveryDir, ...scanPaths].filter(p => p.trim());
+
+  if (pathsToScan.length === 0) { return; }
+
+  const discovered = discoverAgentTeamsInMultiplePaths(pathsToScan, existing);
 
   if (discovered.length === 0) { return; }
 
