@@ -80,19 +80,19 @@
       },
       {
         "command": "editless.updateAgency",
-        "title": "Update Agency",
+        "title": "Update Agency CLI",
         "category": "EditLess",
         "icon": "$(cloud-download)"
       },
       {
         "command": "editless.upgradeSquad",
-        "title": "Upgrade Squad",
+        "title": "Upgrade Squad Package",
         "category": "EditLess",
         "icon": "$(arrow-up)"
       },
       {
         "command": "editless.upgradeAllSquads",
-        "title": "Upgrade All Squads",
+        "title": "Upgrade All Squad Packages",
         "category": "EditLess",
         "icon": "$(arrow-up)"
       },
