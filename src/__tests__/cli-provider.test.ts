@@ -7,12 +7,13 @@ import type * as vscode from 'vscode';
 
 type ExecCallback = (error: Error | null, stdout: string, stderr: string) => void;
 
-const { mockExecSync, mockExec, mockShowInformationMessage, mockWithProgress, mockShowErrorMessage } = vi.hoisted(() => ({
+const { mockExecSync, mockExec, mockShowInformationMessage, mockWithProgress, mockShowErrorMessage, mockExecuteCommand } = vi.hoisted(() => ({
   mockExecSync: vi.fn(),
   mockExec: vi.fn(),
   mockShowInformationMessage: vi.fn().mockResolvedValue(undefined as string | undefined),
   mockWithProgress: vi.fn(),
   mockShowErrorMessage: vi.fn(),
+  mockExecuteCommand: vi.fn(),
 }));
 
 vi.mock('child_process', () => ({
@@ -30,6 +31,9 @@ vi.mock('vscode', () => ({
     showInformationMessage: mockShowInformationMessage,
     showErrorMessage: mockShowErrorMessage,
     withProgress: mockWithProgress,
+  },
+  commands: {
+    executeCommand: mockExecuteCommand,
   },
   ProgressLocation: { Notification: 15 },
 }));
@@ -101,6 +105,7 @@ describe('checkAgencyOnStartup', () => {
     mockExec.mockReset();
     mockShowInformationMessage.mockReset();
     mockShowInformationMessage.mockResolvedValue(undefined as string | undefined);
+    mockExecuteCommand.mockReset();
   });
 
   it('should not show toast when agency is not detected', () => {
@@ -263,6 +268,7 @@ describe('checkProviderUpdatesOnStartup — generalized provider updates', () =>
     mockShowInformationMessage.mockResolvedValue(undefined as string | undefined);
     mockWithProgress.mockReset();
     mockShowErrorMessage.mockReset();
+    mockExecuteCommand.mockReset();
   });
 
   function setupAllProvidersDetected(): void {
