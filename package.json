@@ -164,6 +164,17 @@
         "title": "Refresh PRs",
         "category": "EditLess",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "editless.configureRepos",
+        "title": "Configure GitHub Repos",
+        "category": "EditLess"
+      },
+      {
+        "command": "editless.openInBrowser",
+        "title": "Open in Browser",
+        "category": "EditLess",
+        "icon": "$(link-external)"
       }
     ],
     "keybindings": [
@@ -208,7 +219,9 @@
         { "command": "editless.closeTerminal", "when": "viewItem == terminal" },
         { "command": "editless.renameSession", "when": "viewItem == terminal" },
         { "command": "editless.clearSessionLabel", "when": "viewItem == terminal" },
-        { "command": "editless.runCustomCommand", "when": "viewItem == terminal", "group": "inline@2" }
+        { "command": "editless.runCustomCommand", "when": "viewItem == terminal", "group": "inline@2" },
+        { "command": "editless.openInBrowser", "when": "viewItem == work-item", "group": "inline" },
+        { "command": "editless.openInBrowser", "when": "viewItem == pull-request", "group": "inline" }
       ],
       "commandPalette": [
         { "command": "editless.focusTerminal", "when": "false" },
@@ -219,7 +232,8 @@
         { "command": "editless.goToSquadSettings", "when": "false" },
         { "command": "editless.hideAgent", "when": "false" },
         { "command": "editless.refreshWorkItems", "when": "false" },
-        { "command": "editless.refreshPRs", "when": "false" }
+        { "command": "editless.refreshPRs", "when": "false" },
+        { "command": "editless.openInBrowser", "when": "false" }
       ]
     },
     "configuration": {
@@ -278,6 +292,14 @@
               }
             },
             "required": ["label", "command"]
+          }
+        },
+        "editless.github.repos": {
+          "type": "array",
+          "default": [],
+          "description": "GitHub repositories to show work items and PRs from (e.g., ['owner/repo1', 'owner/repo2']). If empty, auto-detects from current workspace.",
+          "items": {
+            "type": "string"
           }
         }
       }

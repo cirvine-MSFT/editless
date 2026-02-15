@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 import { createRegistry, watchRegistry } from './registry';
 import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
@@ -15,8 +17,10 @@ import { EditlessStatusBar } from './status-bar';
 import { NotificationManager } from './notifications';
 import { SessionContextResolver } from './session-context';
 import { scanSquad } from './scanner';
-import { WorkItemsTreeProvider } from './work-items-tree';
-import { PRsTreeProvider } from './prs-tree';
+import { WorkItemsTreeProvider, WorkItemsTreeItem } from './work-items-tree';
+import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
+
+const execAsync = promisify(exec);
 
 interface CustomCommandEntry {
   label: string;
@@ -426,6 +430,26 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('editless.refreshPRs', () => prsProvider.refresh()),
   );
 
+  // Configure GitHub repos (opens settings)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.configureRepos', async () => {
+      await vscode.commands.executeCommand('workbench.action.openSettings', 'editless.github.repos');
+    }),
+  );
+
+  // Open in Browser (context menu for work items and PRs)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.openInBrowser', async (arg: WorkItemsTreeItem | PRsTreeItem) => {
+      const url = (arg as WorkItemsTreeItem).issue?.url ?? (arg as PRsTreeItem).pr?.url;
+      if (url) {
+        await vscode.env.openExternal(vscode.Uri.parse(url));
+      }
+    }),
+  );
+
+  // --- GitHub repo detection & data loading ---
+  initGitHubIntegration(workItemsProvider, prsProvider);
+
   // Show all agents
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.showAllAgents', () => {
@@ -557,4 +581,28 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {
   // cleanup
+}
+
+async function initGitHubIntegration(
+  workItemsProvider: WorkItemsTreeProvider,
+  prsProvider: PRsTreeProvider,
+): Promise<void> {
+  const config = vscode.workspace.getConfiguration('editless');
+  let repos = config.get<string[]>('github.repos', []);
+
+  if (repos.length === 0) {
+    try {
+      const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      if (cwd) {
+        const { stdout } = await execAsync('gh repo view --json nameWithOwner -q .nameWithOwner', { cwd });
+        const detected = stdout.trim();
+        if (detected) repos = [detected];
+      }
+    } catch {
+      // gh not available or not in a repo
+    }
+  }
+
+  workItemsProvider.setRepos(repos);
+  prsProvider.setRepos(repos);
 }
