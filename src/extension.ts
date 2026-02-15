@@ -6,6 +6,7 @@ import { SessionLabelManager, promptClearLabel } from './session-labels';
 import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand } from './squad-upgrader';
 import { registerAgencyUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider } from './cli-provider';
 import { registerDiscoveryCommand, checkDiscoveryOnStartup } from './discovery';
+import { discoverAllAgents } from './agent-discovery';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
 import { NotificationManager } from './notifications';
@@ -44,6 +45,17 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Reconcile persisted terminal sessions with live terminals after reload
   terminalManager.reconcile();
+
+  // --- Agent discovery — workspace .agent.md files -------------------------
+  const discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
+  treeProvider.setDiscoveredAgents(discoveredAgents);
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeWorkspaceFolders(() => {
+      const agents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
+      treeProvider.setDiscoveredAgents(agents);
+    }),
+  );
 
   // --- Status bar ----------------------------------------------------------
   const statusBar = new EditlessStatusBar(registry, terminalManager);

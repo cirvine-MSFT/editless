@@ -6,12 +6,13 @@ import type { TerminalManager } from './terminal-manager';
 import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
 import type { AgentTeamConfig, SquadState, AgentInfo, DecisionEntry, RecentActivity, SessionContext } from './types';
+import type { DiscoveredAgent } from './agent-discovery';
 
 // ---------------------------------------------------------------------------
 // Tree item types
 // ---------------------------------------------------------------------------
 
-export type TreeItemType = 'squad' | 'category' | 'agent' | 'decision' | 'activity' | 'terminal';
+export type TreeItemType = 'squad' | 'category' | 'agent' | 'decision' | 'activity' | 'terminal' | 'discovered-agent';
 type CategoryKind = 'roster' | 'decisions' | 'activity';
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 const SESSION_ACTIVE_WINDOW_MS = 10 * 60 * 1000;
@@ -66,6 +67,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private _cache = new Map<string, SquadState>();
+  private _discoveredAgents: DiscoveredAgent[] = [];
 
   private readonly _terminalSub: vscode.Disposable | undefined;
 
@@ -85,6 +87,11 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   refresh(): void {
     this._cache.clear();
+    this._onDidChangeTreeData.fire();
+  }
+
+  setDiscoveredAgents(agents: DiscoveredAgent[]): void {
+    this._discoveredAgents = agents;
     this._onDidChangeTreeData.fire();
   }
 
@@ -116,7 +123,23 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private getRootItems(): EditlessTreeItem[] {
     const squads = this.registry.loadSquads();
-    return squads.map(cfg => this.buildSquadItem(cfg));
+    const items = squads.map(cfg => this.buildSquadItem(cfg));
+
+    if (this._discoveredAgents.length > 0) {
+      const header = new EditlessTreeItem(
+        'Discovered Agents',
+        'category',
+        vscode.TreeItemCollapsibleState.None,
+      );
+      header.iconPath = new vscode.ThemeIcon('search');
+      items.push(header);
+
+      for (const agent of this._discoveredAgents) {
+        items.push(this.buildDiscoveredAgentItem(agent));
+      }
+    }
+
+    return items;
   }
 
   private buildSquadItem(cfg: AgentTeamConfig): EditlessTreeItem {
@@ -301,6 +324,21 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const item = new EditlessTreeItem(`${activity.agent}: ${activity.task}`, 'activity');
     item.description = activity.outcome;
     item.iconPath = new vscode.ThemeIcon('pulse');
+    return item;
+  }
+
+  private buildDiscoveredAgentItem(agent: DiscoveredAgent): EditlessTreeItem {
+    const item = new EditlessTreeItem(agent.name, 'discovered-agent');
+    item.description = agent.description ?? agent.source;
+    item.iconPath = new vscode.ThemeIcon('hubot');
+    item.tooltip = new vscode.MarkdownString(
+      [`**🤖 ${agent.name}**`, `Source: ${agent.source}`, `File: \`${agent.filePath}\``].join('\n\n'),
+    );
+    item.command = {
+      command: 'vscode.open',
+      title: 'Open Agent File',
+      arguments: [vscode.Uri.file(agent.filePath)],
+    };
     return item;
   }
 
