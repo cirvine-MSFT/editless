@@ -205,6 +205,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       }
     }
     item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
+    item.iconPath = new vscode.ThemeIcon('organization');
 
     item.command = {
       command: 'editless.launchSession',
