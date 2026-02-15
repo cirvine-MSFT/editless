@@ -1,24 +1,78 @@
 name: Release
 
+# Triggers on semver tags (v1.0.0, v0.2.0-beta.1, etc.) or manual dispatch.
+# Manual dispatch builds from the current branch using the package.json version.
+
 on:
   push:
-    tags: ['v*']
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+# Write permission is required to create GitHub Releases and upload assets
+permissions:
+  contents: write
 
 jobs:
   release:
+    name: Build, Test & Release
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
+
       - run: npm ci
+
+      # Full quality gate — lint and test must pass before we package a release
+      - run: npm run lint
       - run: npm run build
+      - run: npm run test
+
+      # Version comes from package.json — single source of truth.
+      # The git tag should match, but package.json wins if they diverge.
+      - name: Read version from package.json
+        id: version
+        run: |
+          VERSION=$(node -e "console.log(require('./package.json').version)")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # Set release metadata based on how the workflow was triggered.
+      # Tag push: use the tag name. Manual dispatch: synthesize from version + SHA.
+      - name: Determine release metadata
+        id: meta
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="v${{ steps.version.outputs.version }}"
+            NAME="v${{ steps.version.outputs.version }} (${GITHUB_SHA::7})"
+          else
+            TAG="${GITHUB_REF_NAME}"
+            NAME="${GITHUB_REF_NAME}"
+          fi
+
+          # Tags containing alpha/beta/rc are marked as pre-release in GitHub
+          if echo "$TAG" | grep -qiE '(alpha|beta|rc)'; then
+            PRERELEASE="true"
+          else
+            PRERELEASE="false"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+
+      # vsce package produces editless-{version}.vsix in the repo root
       - run: npm run package
+
+      # Creates a GitHub Release, attaches the VSIX, and auto-generates release notes.
+      # softprops/action-gh-release will create the tag if it doesn't exist yet
+      # (which happens on workflow_dispatch since no tag was pushed).
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.meta.outputs.tag }}
+          name: ${{ steps.meta.outputs.name }}
           files: '*.vsix'
+          prerelease: ${{ steps.meta.outputs.prerelease == 'true' }}
           generate_release_notes: true
