@@ -71,3 +71,8 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 **By:** Casey Irvine (user directive)
 **What:** Feature branches use `cirvine/{feature-name}` (alias/feature). No `users/` prefix on this project. Example: `cirvine/cli-provider`, `cirvine/task-view`. Worktrees go in `editless.wt/{branch-name}/`.
 **Why:** Simpler convention for a solo-dev project. The `users/` prefix adds noise when there's one contributor.
+
+### 2026-02-15: Command category pattern — clean context menus with discoverability
+**By:** Casey Irvine (user request), Morty (implementation pattern)
+**What:** Commands use `"category": "EditLess"` instead of "EditLess: " title prefix. VS Code displays `Category: Title` in the command palette (preserving discoverability) but shows only the title in context menus (clean UX). All commands should follow this pattern: set `"category": "EditLess"` on the command and keep the title clean and action-focused.
+**Why:** Context menus are already extension-scoped — the prefix adds noise. Using the `category` field is a VS Code API convention that gives both discoverability and brevity.
