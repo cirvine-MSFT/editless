@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import { GitHubIssue, fetchAssignedIssues, isGhAvailable } from './github-client';
 
+interface IssueFilter {
+  includeLabels?: string[];
+  excludeLabels?: string[];
+}
+
 export class WorkItemsTreeItem extends vscode.TreeItem {
   public issue?: GitHubIssue;
 
@@ -50,8 +55,9 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     await Promise.all(
       this._repos.map(async (repo) => {
         const issues = await fetchAssignedIssues(repo);
-        if (issues.length > 0) {
-          this._issues.set(repo, issues);
+        const filtered = this.filterIssues(issues);
+        if (filtered.length > 0) {
+          this._issues.set(repo, filtered);
         }
       }),
     );
@@ -88,6 +94,11 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         return [item];
       }
 
+      const milestoneItems = this.buildMilestoneGroups();
+      if (milestoneItems) {
+        return milestoneItems;
+      }
+
       if (this._issues.size === 1) {
         const [, issues] = [...this._issues.entries()][0];
         return issues.map((i) => this.buildIssueItem(i));
@@ -103,12 +114,72 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       });
     }
 
+    if (element.contextValue === 'milestone-group') {
+      const msName = element.id?.replace('ms:', '') ?? '';
+      const allIssues = [...this._issues.values()].flat();
+      const filtered = msName === '__none__'
+        ? allIssues.filter((i) => !i.milestone)
+        : allIssues.filter((i) => i.milestone === msName);
+      return filtered.map((i) => this.buildIssueItem(i));
+    }
+
     const repoId = element.id?.replace('wi:', '');
     if (repoId && this._issues.has(repoId)) {
       return this._issues.get(repoId)!.map((i) => this.buildIssueItem(i));
     }
 
     return [];
+  }
+
+  private filterIssues(issues: GitHubIssue[]): GitHubIssue[] {
+    const config = vscode.workspace.getConfiguration('editless');
+    const filter = config.get<IssueFilter>('github.issueFilter', {});
+
+    const include = filter.includeLabels ?? [];
+    const exclude = filter.excludeLabels ?? [];
+
+    return issues.filter((issue) => {
+      if (exclude.length > 0 && issue.labels.some((l) => exclude.includes(l))) { return false; }
+      if (include.length > 0 && !issue.labels.some((l) => include.includes(l))) { return false; }
+      return true;
+    });
+  }
+
+  private buildMilestoneGroups(): WorkItemsTreeItem[] | undefined {
+    const allIssues = [...this._issues.values()].flat();
+    const milestones = new Map<string, GitHubIssue[]>();
+    const noMilestone: GitHubIssue[] = [];
+
+    for (const issue of allIssues) {
+      if (issue.milestone) {
+        const existing = milestones.get(issue.milestone) ?? [];
+        existing.push(issue);
+        milestones.set(issue.milestone, existing);
+      } else {
+        noMilestone.push(issue);
+      }
+    }
+
+    if (milestones.size === 0) { return undefined; }
+
+    const items: WorkItemsTreeItem[] = [];
+    for (const [ms, issues] of milestones) {
+      const msItem = new WorkItemsTreeItem(ms, vscode.TreeItemCollapsibleState.Expanded);
+      msItem.iconPath = new vscode.ThemeIcon('milestone');
+      msItem.description = `${issues.length} issue${issues.length === 1 ? '' : 's'}`;
+      msItem.contextValue = 'milestone-group';
+      msItem.id = `ms:${ms}`;
+      items.push(msItem);
+    }
+    if (noMilestone.length > 0) {
+      const noMsItem = new WorkItemsTreeItem('No Milestone', vscode.TreeItemCollapsibleState.Collapsed);
+      noMsItem.iconPath = new vscode.ThemeIcon('milestone');
+      noMsItem.description = `${noMilestone.length} issue${noMilestone.length === 1 ? '' : 's'}`;
+      noMsItem.contextValue = 'milestone-group';
+      noMsItem.id = 'ms:__none__';
+      items.push(noMsItem);
+    }
+    return items;
   }
 
   private buildIssueItem(issue: GitHubIssue): WorkItemsTreeItem {
