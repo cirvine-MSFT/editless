@@ -358,11 +358,16 @@
     "watch": "node esbuild.mjs --watch",
     "package": "vsce package",
     "lint": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pretest:integration": "tsc -p tsconfig.integration.json",
+    "test:integration": "vscode-test"
   },
   "devDependencies": {
+    "@types/mocha": "^10.0.0",
     "@types/node": "^22.0.0",
     "@types/vscode": "^1.100.0",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.3.0",
     "esbuild": "^0.25.0",
     "typescript": "^5.7.0",
