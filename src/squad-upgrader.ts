@@ -2,8 +2,35 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
+import { promisify } from 'util';
 import type { AgentTeamConfig } from './types';
 import { EditlessRegistry } from './registry';
+
+const execAsync = promisify(exec);
+
+export async function checkNpxAvailable(): Promise<boolean> {
+  try {
+    await execAsync('npx --version');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function promptInstallNode(): Promise<void> {
+  const choice = await vscode.window.showInformationMessage(
+    'Squad requires npx (comes with Node.js). Install Node.js to use squad features.',
+    'Open Node.js Download Page',
+  );
+  
+  if (choice === 'Open Node.js Download Page') {
+    vscode.env.openExternal(vscode.Uri.parse('https://nodejs.org/'));
+  }
+}
+
+export function isSquadInitialized(squadPath: string): boolean {
+  return fs.existsSync(path.join(squadPath, '.ai-team'));
+}
 
 export function getLocalSquadVersion(squadPath: string): string | null {
   try {
@@ -32,8 +59,14 @@ export function getLocalSquadVersion(squadPath: string): string | null {
   }
 }
 
-export function runSquadUpgrade(config: AgentTeamConfig): void {
-  vscode.window.withProgress(
+export async function runSquadUpgrade(config: AgentTeamConfig): Promise<void> {
+  const npxAvailable = await checkNpxAvailable();
+  if (!npxAvailable) {
+    await promptInstallNode();
+    return;
+  }
+
+  await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
       title: `${config.icon} Upgrading ${config.name}…`,
