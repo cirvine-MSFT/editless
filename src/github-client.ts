@@ -81,6 +81,32 @@ export async function fetchMyPRs(repo: string): Promise<GitHubPR[]> {
   }
 }
 
+export async function fetchLinkedPRs(repo: string, issueNumber: number): Promise<GitHubPR[]> {
+  try {
+    const { stdout } = await execFileAsync('gh', [
+      'pr', 'list', '--repo', repo, '--search', `${issueNumber}`, '--state', 'all',
+      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision', '--limit', '10',
+    ]);
+    const raw: unknown[] = JSON.parse(stdout);
+    return raw.map((p) => {
+      const rec = p as Record<string, unknown>;
+      return {
+        number: rec.number as number,
+        title: rec.title as string,
+        state: rec.state as string,
+        isDraft: rec.isDraft as boolean,
+        url: rec.url as string,
+        headRef: rec.headRefName as string,
+        baseRef: rec.baseRefName as string,
+        repository: repo,
+        reviewDecision: (rec.reviewDecision as string) ?? '',
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
 export async function isGhAvailable(): Promise<boolean> {
   try {
     await execFileAsync('gh', ['auth', 'status']);

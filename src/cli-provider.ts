@@ -152,11 +152,14 @@ function checkSingleProviderUpdate(context: vscode.ExtensionContext, provider: C
 
     recordPrompt(context, provider.name, provider.version!);
 
+    const availableMatch = stdout.match(/([\d]+\.[\d]+[\d.]*)/);
+    const available = availableMatch?.[1];
+    const msg = available
+      ? `🔄 ${displayName} update available: ${provider.version} → ${available}. Update now?`
+      : `🔄 ${displayName} update available (current: ${provider.version}). Update now?`;
+
     vscode.window
-      .showInformationMessage(
-        `🔄 ${displayName} update available (current: ${provider.version}). Update now?`,
-        'Update',
-      )
+      .showInformationMessage(msg, 'Update')
       .then(selection => {
         if (selection === 'Update') {
           runProviderUpdate(provider);

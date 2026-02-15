@@ -350,11 +350,20 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     item.tooltip = new vscode.MarkdownString(
       [`**🤖 ${agent.name}**`, `Source: ${agent.source}`, `File: \`${agent.filePath}\``].join('\n\n'),
     );
-    item.command = {
-      command: 'vscode.open',
-      title: 'Open Agent File',
-      arguments: [vscode.Uri.file(agent.filePath)],
-    };
+    const uri = vscode.Uri.file(agent.filePath);
+    if (agent.filePath.endsWith('.md')) {
+      item.command = {
+        command: 'editless.openFilePreview',
+        title: 'Preview Agent File',
+        arguments: [uri],
+      };
+    } else {
+      item.command = {
+        command: 'vscode.open',
+        title: 'Open Agent File',
+        arguments: [uri],
+      };
+    }
     return item;
   }
 
