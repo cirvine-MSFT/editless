@@ -33,6 +33,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(output);
 
   // --- CLI provider detection ---------------------------------------------
+  vscode.commands.executeCommand('setContext', 'editless.agencyUpdateAvailable', false);
   probeAllProviders();
   resolveActiveProvider();
 
@@ -513,6 +514,25 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('editless.showAllAgents', () => {
       visibilityManager.showAll();
       treeProvider.refresh();
+    }),
+  );
+
+  // Add New — QuickPick to choose between Agent or Squad
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.addNew', async () => {
+      const pick = await vscode.window.showQuickPick(
+        [
+          { label: '$(file-code) Agent', description: 'Create an agent template file', value: 'agent' as const },
+          { label: '$(rocket) Squad', description: 'Initialize a new Squad project', value: 'squad' as const },
+        ],
+        { placeHolder: 'What would you like to add?' },
+      );
+      if (!pick) return;
+      if (pick.value === 'agent') {
+        await vscode.commands.executeCommand('editless.addAgent');
+      } else {
+        await vscode.commands.executeCommand('editless.addSquad');
+      }
     }),
   );
 
