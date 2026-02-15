@@ -1,0 +1,54 @@
+# EditLess Settings
+
+All settings are accessible through VS Code's Settings UI (**Ctrl+,**) or directly in your `settings.json`. Each setting is prefixed with `editless.`.
+
+## General
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `editless.registryPath` | `string` | `"./squad-registry.json"` | Path to the squad registry JSON file |
+| `editless.discoveryDir` | `string` | `""` | Directory to scan for squad projects |
+| `editless.scanDebounceMs` | `number` | `500` | Debounce interval in milliseconds for file system scanning |
+
+## CLI
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `editless.cli.provider` | `string` | `"copilot"` | CLI provider for agent sessions. Auto-detected on startup. Allowed values: `"copilot"`, `"agency"`, `"claude"`, `"custom"` |
+| `editless.customCommands` | `array` | `[]` | Custom commands that can be sent to terminal sessions via context menu. Each item has a `label` (display name) and `command` (text to send) |
+
+**Example — custom commands:**
+
+```jsonc
+"editless.customCommands": [
+  { "label": "Run Tests", "command": "npm test" },
+  { "label": "Lint Fix", "command": "npm run lint -- --fix" }
+]
+```
+
+## GitHub Integration
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `editless.github.repos` | `string[]` | `[]` | GitHub repositories to show work items and PRs from (e.g., `["owner/repo"]`). If empty, auto-detects from current workspace |
+| `editless.github.issueFilter` | `object` | `{}` | Filter GitHub issues by labels (see below) |
+| `editless.github.issueFilter.includeLabels` | `string[]` | `[]` | Only show issues with at least one of these labels. Empty means show all |
+| `editless.github.issueFilter.excludeLabels` | `string[]` | `[]` | Hide issues with any of these labels |
+
+**Example — issue filtering:**
+
+```jsonc
+"editless.github.repos": ["myorg/frontend", "myorg/backend"],
+"editless.github.issueFilter": {
+  "includeLabels": ["squad:backend", "bug"],
+  "excludeLabels": ["wontfix"]
+}
+```
+
+## Notifications
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `editless.notifications.enabled` | `boolean` | `true` | Enable desktop notifications for squad events |
+| `editless.notifications.inbox` | `boolean` | `true` | Enable notifications for inbox items (new decisions, pending work) |
+| `editless.notifications.updates` | `boolean` | `true` | Enable notifications for CLI update availability |
