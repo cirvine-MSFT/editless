@@ -3,16 +3,13 @@
     "target": "ES2022",
     "module": "commonjs",
     "lib": ["ES2022"],
-    "outDir": "./dist",
-    "rootDir": "./src",
+    "outDir": "./out/integration",
+    "rootDir": "./src/__integration__",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true,
-    "sourceMap": true,
-    "declaration": true
+    "sourceMap": true
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/__integration__"]
+  "include": ["src/__integration__/**/*"]
 }
