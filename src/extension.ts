@@ -15,6 +15,13 @@ import { EditlessStatusBar } from './status-bar';
 import { NotificationManager } from './notifications';
 import { SessionContextResolver } from './session-context';
 import { scanSquad } from './scanner';
+import { WorkItemsTreeProvider } from './work-items-tree';
+import { PRsTreeProvider } from './prs-tree';
+
+interface CustomCommandEntry {
+  label: string;
+  command: string;
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel('EditLess');
@@ -48,6 +55,14 @@ export function activate(context: vscode.ExtensionContext): void {
   const treeProvider = new EditlessTreeProvider(registry, terminalManager, labelManager, sessionContextResolver, visibilityManager);
   const treeView = vscode.window.registerTreeDataProvider('editlessTree', treeProvider);
   context.subscriptions.push(treeView);
+
+  // --- Work Items tree view ------------------------------------------------
+  const workItemsProvider = new WorkItemsTreeProvider();
+  context.subscriptions.push(vscode.window.registerTreeDataProvider('editlessWorkItems', workItemsProvider));
+
+  // --- PRs tree view -------------------------------------------------------
+  const prsProvider = new PRsTreeProvider();
+  context.subscriptions.push(vscode.window.registerTreeDataProvider('editlessPRs', prsProvider));
 
   // Reconcile persisted terminal sessions with live terminals after reload
   terminalManager.reconcile();
@@ -405,6 +420,12 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // Refresh work items / PRs
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.refreshWorkItems', () => workItemsProvider.refresh()),
+    vscode.commands.registerCommand('editless.refreshPRs', () => prsProvider.refresh()),
+  );
+
   // Show all agents
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.showAllAgents', () => {
@@ -489,6 +510,45 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.window.showInformationMessage(
         `Squad initialization started in ${path.basename(dirPath)}. After it completes, use "Discover Squads" to add it to the registry.`,
       );
+    }),
+  );
+
+  // Run custom command (context menu on terminal items)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.runCustomCommand', async (arg?: vscode.Terminal | EditlessTreeItem) => {
+      const terminal = resolveTerminal(arg) ?? vscode.window.activeTerminal;
+      if (!terminal) {
+        vscode.window.showWarningMessage('No terminal session selected.');
+        return;
+      }
+
+      const config = vscode.workspace.getConfiguration('editless');
+      const commands = config.get<CustomCommandEntry[]>('customCommands', []);
+
+      if (commands.length === 0) {
+        const action = await vscode.window.showInformationMessage(
+          'No custom commands configured. Add them in Settings → EditLess → Custom Commands.',
+          'Open Settings',
+        );
+        if (action === 'Open Settings') {
+          await vscode.commands.executeCommand('workbench.action.openSettings', 'editless.customCommands');
+        }
+        return;
+      }
+
+      const pick = await vscode.window.showQuickPick(
+        commands.map(c => ({
+          label: c.label,
+          description: c.command,
+          command: c.command,
+        })),
+        { placeHolder: 'Select a command to run' },
+      );
+
+      if (pick) {
+        terminal.show(false);
+        terminal.sendText(pick.command);
+      }
     }),
   );
 

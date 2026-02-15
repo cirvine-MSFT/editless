@@ -34,6 +34,14 @@
         {
           "id": "editlessTree",
           "name": "Agents"
+        },
+        {
+          "id": "editlessWorkItems",
+          "name": "Work Items"
+        },
+        {
+          "id": "editlessPRs",
+          "name": "PRs"
         }
       ]
     },
@@ -138,6 +146,23 @@
         "title": "Add Squad",
         "category": "EditLess",
         "icon": "$(file-directory-create)"
+      },
+      {
+        "command": "editless.runCustomCommand",
+        "title": "Run Custom Command",
+        "category": "EditLess"
+      },
+      {
+        "command": "editless.refreshWorkItems",
+        "title": "Refresh Work Items",
+        "category": "EditLess",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "editless.refreshPRs",
+        "title": "Refresh PRs",
+        "category": "EditLess",
+        "icon": "$(refresh)"
       }
     ],
     "keybindings": [
@@ -168,7 +193,9 @@
         { "command": "editless.upgradeAllSquads", "when": "view == editlessTree", "group": "navigation@2" },
         { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@3" },
         { "command": "editless.addAgent", "when": "view == editlessTree", "group": "navigation@4" },
-        { "command": "editless.addSquad", "when": "view == editlessTree", "group": "navigation@5" }
+        { "command": "editless.addSquad", "when": "view == editlessTree", "group": "navigation@5" },
+        { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation" },
+        { "command": "editless.refreshPRs", "when": "view == editlessPRs", "group": "navigation" }
       ],
       "view/item/context": [
         { "command": "editless.upgradeSquad", "when": "view == editlessTree && viewItem == squad", "group": "inline@1" },
@@ -179,7 +206,8 @@
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal" },
         { "command": "editless.renameSession", "when": "viewItem == terminal" },
-        { "command": "editless.clearSessionLabel", "when": "viewItem == terminal" }
+        { "command": "editless.clearSessionLabel", "when": "viewItem == terminal" },
+        { "command": "editless.runCustomCommand", "when": "viewItem == terminal", "group": "inline@2" }
       ],
       "commandPalette": [
         { "command": "editless.focusTerminal", "when": "false" },
@@ -188,7 +216,9 @@
         { "command": "editless.renameSquad", "when": "false" },
         { "command": "editless.changeModel", "when": "false" },
         { "command": "editless.goToSquadSettings", "when": "false" },
-        { "command": "editless.hideAgent", "when": "false" }
+        { "command": "editless.hideAgent", "when": "false" },
+        { "command": "editless.refreshWorkItems", "when": "false" },
+        { "command": "editless.refreshPRs", "when": "false" }
       ]
     },
     "configuration": {
@@ -229,6 +259,25 @@
           "default": "copilot",
           "enum": ["copilot", "agency", "claude", "custom"],
           "description": "CLI provider for agent sessions. Auto-detected on startup."
+        },
+        "editless.customCommands": {
+          "type": "array",
+          "default": [],
+          "description": "Custom commands that can be sent to terminal sessions via context menu",
+          "items": {
+            "type": "object",
+            "properties": {
+              "label": {
+                "type": "string",
+                "description": "Display name for the command"
+              },
+              "command": {
+                "type": "string",
+                "description": "Text to send to the terminal"
+              }
+            },
+            "required": ["label", "command"]
+          }
         }
       }
     }
