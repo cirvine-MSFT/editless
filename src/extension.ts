@@ -185,7 +185,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('editless.launchSession', async (squadId?: string) => {
       const squads = registry.loadSquads();
       if (squads.length === 0) {
-        vscode.window.showWarningMessage('No squads registered yet.');
+        vscode.window.showWarningMessage('No agents registered yet.');
         return;
       }
 
@@ -193,7 +193,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!chosen) {
         const pick = await vscode.window.showQuickPick(
           squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, id: s.id })),
-          { placeHolder: 'Select a squad to launch' },
+          { placeHolder: 'Select an agent to launch' },
         );
         chosen = pick?.id;
       }
