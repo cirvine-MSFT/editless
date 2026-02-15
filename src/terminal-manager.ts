@@ -9,6 +9,7 @@ export interface TerminalInfo {
   id: string;
   labelKey: string;
   displayName: string;
+  originalName: string;
   squadId: string;
   squadName: string;
   squadIcon: string;
@@ -20,6 +21,7 @@ export interface PersistedTerminalInfo {
   id: string;
   labelKey: string;
   displayName: string;
+  originalName?: string;
   squadId: string;
   squadName: string;
   squadIcon: string;
@@ -76,6 +78,7 @@ export class TerminalManager implements vscode.Disposable {
       id,
       labelKey,
       displayName,
+      originalName: displayName,
       squadId: config.id,
       squadName: config.name,
       squadIcon: config.icon,
@@ -142,7 +145,43 @@ export class TerminalManager implements vscode.Disposable {
     return [...this._pendingSaved];
   }
 
+  reconnectSession(entry: PersistedTerminalInfo): vscode.Terminal | undefined {
+    const liveTerminals = vscode.window.terminals;
+    const orig = entry.originalName ?? entry.displayName;
+
+    const unclaimed = (t: vscode.Terminal): boolean => !this._terminals.has(t);
+    const match = liveTerminals.find(t => unclaimed(t) && t.name === entry.terminalName)
+      ?? liveTerminals.find(t => unclaimed(t) && t.name === orig)
+      ?? liveTerminals.find(t => unclaimed(t) && t.name === entry.displayName)
+      ?? liveTerminals.find(t => unclaimed(t) && (t.name.includes(orig) || entry.terminalName.includes(t.name)));
+
+    if (!match) return undefined;
+
+    this._terminals.set(match, {
+      id: entry.id,
+      labelKey: entry.labelKey,
+      displayName: entry.displayName,
+      originalName: orig,
+      squadId: entry.squadId,
+      squadName: entry.squadName,
+      squadIcon: entry.squadIcon,
+      index: entry.index,
+      createdAt: new Date(entry.createdAt),
+    });
+
+    this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
+    this._persist();
+    this._onDidChange.fire();
+    return match;
+  }
+
   relaunchSession(entry: PersistedTerminalInfo): vscode.Terminal {
+    const reconnected = this.reconnectSession(entry);
+    if (reconnected) {
+      reconnected.show();
+      return reconnected;
+    }
+
     const terminal = vscode.window.createTerminal({ name: entry.displayName });
     terminal.show();
 
@@ -150,6 +189,7 @@ export class TerminalManager implements vscode.Disposable {
       id: entry.id,
       labelKey: entry.labelKey,
       displayName: entry.displayName,
+      originalName: entry.originalName ?? entry.displayName,
       squadId: entry.squadId,
       squadName: entry.squadName,
       squadIcon: entry.squadIcon,
@@ -209,29 +249,47 @@ export class TerminalManager implements vscode.Disposable {
     if (this._pendingSaved.length === 0) return;
 
     const liveTerminals = vscode.window.terminals;
-    const stillUnmatched: PersistedTerminalInfo[] = [];
+    const claimed = new Set<vscode.Terminal>();
+    let unmatched = [...this._pendingSaved];
 
-    for (const persisted of this._pendingSaved) {
-      const match = liveTerminals.find(t => t.name === persisted.terminalName);
-      if (!match) {
-        stillUnmatched.push(persisted);
-        continue;
-      }
-      if (this._terminals.has(match)) continue;
-
+    const claimMatch = (match: vscode.Terminal, persisted: PersistedTerminalInfo): void => {
+      claimed.add(match);
       this._terminals.set(match, {
         id: persisted.id,
         labelKey: persisted.labelKey,
         displayName: persisted.displayName,
+        originalName: persisted.originalName ?? persisted.displayName,
         squadId: persisted.squadId,
         squadName: persisted.squadName,
         squadIcon: persisted.squadIcon,
         index: persisted.index,
         createdAt: new Date(persisted.createdAt),
       });
-    }
+    };
 
-    this._pendingSaved = stillUnmatched;
+    const runPass = (matcher: (t: vscode.Terminal, p: PersistedTerminalInfo) => boolean): void => {
+      const stillUnmatched: PersistedTerminalInfo[] = [];
+      for (const persisted of unmatched) {
+        const match = liveTerminals.find(t => !claimed.has(t) && !this._terminals.has(t) && matcher(t, persisted));
+        if (!match) {
+          stillUnmatched.push(persisted);
+          continue;
+        }
+        claimMatch(match, persisted);
+      }
+      unmatched = stillUnmatched;
+    };
+
+    // Multi-signal matching: each stage only considers unclaimed terminals
+    runPass((t, p) => t.name === p.terminalName);
+    runPass((t, p) => t.name === (p.originalName ?? p.displayName));
+    runPass((t, p) => t.name === p.displayName);
+    runPass((t, p) => {
+      const orig = p.originalName ?? p.displayName;
+      return t.name.includes(orig) || p.terminalName.includes(t.name);
+    });
+
+    this._pendingSaved = unmatched;
 
     for (const info of this._terminals.values()) {
       const current = this._counters.get(info.squadId) || 0;
@@ -240,8 +298,6 @@ export class TerminalManager implements vscode.Disposable {
       }
     }
 
-    // Only persist when we've matched at least one terminal —
-    // never overwrite saved data with an empty set from a timing race
     if (this._terminals.size > 0) {
       this._persist();
       this._onDidChange.fire();
