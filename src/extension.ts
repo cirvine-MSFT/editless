@@ -61,7 +61,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- Tree view ---------------------------------------------------------
   const treeProvider = new EditlessTreeProvider(registry, terminalManager, labelManager, sessionContextResolver, visibilityManager);
-  const treeView = vscode.window.registerTreeDataProvider('editlessTree', treeProvider);
+  const treeView = vscode.window.createTreeView('editlessTree', { treeDataProvider: treeProvider });
   context.subscriptions.push(treeView);
 
   // --- Work Items tree view ------------------------------------------------
@@ -74,6 +74,19 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // Reconcile persisted terminal sessions with live terminals after reload
   terminalManager.reconcile();
+
+  // Sync tree selection when switching terminals via tab bar
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTerminal(terminal => {
+      if (!terminal) return;
+      const info = terminalManager.getTerminalInfo(terminal);
+      if (!info) return;
+      const matchingItem = treeProvider.findTerminalItem(terminal);
+      if (matchingItem) {
+        treeView.reveal(matchingItem, { select: true, focus: false });
+      }
+    }),
+  );
 
   // --- Agent discovery — workspace .agent.md files -------------------------
   let discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);

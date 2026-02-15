@@ -103,6 +103,14 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     this._onDidChangeTreeData.fire();
   }
 
+  findTerminalItem(terminal: vscode.Terminal): EditlessTreeItem | undefined {
+    const info = this.terminalManager?.getTerminalInfo(terminal);
+    if (!info) return undefined;
+    
+    const squadChildren = this.getSquadChildren(info.squadId);
+    return squadChildren.find(item => item.type === 'terminal' && item.terminal === terminal);
+  }
+
   // -- TreeDataProvider implementation -------------------------------------
 
   getTreeItem(element: EditlessTreeItem): vscode.TreeItem {
