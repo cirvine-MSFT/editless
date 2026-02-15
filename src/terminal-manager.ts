@@ -16,6 +16,20 @@ export interface TerminalInfo {
   createdAt: Date;
 }
 
+interface PersistedTerminalInfo {
+  id: string;
+  labelKey: string;
+  displayName: string;
+  squadId: string;
+  squadName: string;
+  squadIcon: string;
+  index: number;
+  createdAt: string;
+  terminalName: string;
+}
+
+const STORAGE_KEY = 'editless.terminalSessions';
+
 // ---------------------------------------------------------------------------
 // TerminalManager
 // ---------------------------------------------------------------------------
@@ -29,10 +43,11 @@ export class TerminalManager implements vscode.Disposable {
 
   private readonly _disposables: vscode.Disposable[] = [];
 
-  constructor() {
+  constructor(private readonly context: vscode.ExtensionContext) {
     this._disposables.push(
       vscode.window.onDidCloseTerminal(terminal => {
         if (this._terminals.delete(terminal)) {
+          this._persist();
           this._onDidChange.fire();
         }
       }),
@@ -67,6 +82,7 @@ export class TerminalManager implements vscode.Disposable {
     });
 
     this._counters.set(config.id, index + 1);
+    this._persist();
     this._onDidChange.fire();
 
     return terminal;
@@ -108,6 +124,57 @@ export class TerminalManager implements vscode.Disposable {
 
   closeTerminal(terminal: vscode.Terminal): void {
     terminal.dispose();
+  }
+
+  // -- Persistence & reconciliation -----------------------------------------
+
+  reconcile(): void {
+    const saved = this.context.workspaceState.get<PersistedTerminalInfo[]>(STORAGE_KEY, []);
+    if (saved.length === 0) return;
+
+    const liveTerminals = vscode.window.terminals;
+
+    for (const persisted of saved) {
+      const match = liveTerminals.find(t => t.name === persisted.terminalName);
+      if (!match) continue;
+      if (this._terminals.has(match)) continue;
+
+      this._terminals.set(match, {
+        id: persisted.id,
+        labelKey: persisted.labelKey,
+        displayName: persisted.displayName,
+        squadId: persisted.squadId,
+        squadName: persisted.squadName,
+        squadIcon: persisted.squadIcon,
+        index: persisted.index,
+        createdAt: new Date(persisted.createdAt),
+      });
+    }
+
+    for (const info of this._terminals.values()) {
+      const current = this._counters.get(info.squadId) || 0;
+      if (info.index >= current) {
+        this._counters.set(info.squadId, info.index + 1);
+      }
+    }
+
+    this._persist();
+
+    if (this._terminals.size > 0) {
+      this._onDidChange.fire();
+    }
+  }
+
+  private _persist(): void {
+    const entries: PersistedTerminalInfo[] = [];
+    for (const [terminal, info] of this._terminals) {
+      entries.push({
+        ...info,
+        createdAt: info.createdAt.toISOString(),
+        terminalName: terminal.name,
+      });
+    }
+    this.context.workspaceState.update(STORAGE_KEY, entries);
   }
 
   // -- Disposable -----------------------------------------------------------

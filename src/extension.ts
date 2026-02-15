@@ -25,7 +25,7 @@ export function activate(context: vscode.ExtensionContext): void {
   registry.loadSquads();
 
   // --- Terminal manager --------------------------------------------------
-  const terminalManager = new TerminalManager();
+  const terminalManager = new TerminalManager(context);
   context.subscriptions.push(terminalManager);
 
   // --- Session label manager ---------------------------------------------
@@ -41,6 +41,9 @@ export function activate(context: vscode.ExtensionContext): void {
   const treeProvider = new EditlessTreeProvider(registry, terminalManager, labelManager, sessionContextResolver);
   const treeView = vscode.window.registerTreeDataProvider('editlessTree', treeProvider);
   context.subscriptions.push(treeView);
+
+  // Reconcile persisted terminal sessions with live terminals after reload
+  terminalManager.reconcile();
 
   // --- Status bar ----------------------------------------------------------
   const statusBar = new EditlessStatusBar(registry, terminalManager);
