@@ -1,0 +1,5 @@
+# Internal terms list for CI scanning.
+# Add one term per line. Lines starting with # are comments.
+# The terms scanner will fail the build if any of these terms
+# appear in src/ or docs/ files.
+INTERNAL_TERM_PLACEHOLDER
