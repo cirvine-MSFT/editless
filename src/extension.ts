@@ -44,6 +44,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   // --- Terminal manager --------------------------------------------------
   const terminalManager = new TerminalManager(context);
+  _terminalManagerRef = terminalManager;
   context.subscriptions.push(terminalManager);
 
   // --- Session label manager ---------------------------------------------
@@ -524,6 +525,33 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
   );
 
+  // Re-launch orphaned session
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.relaunchSession', (arg?: EditlessTreeItem) => {
+      const entry = arg?.persistedEntry;
+      if (entry) {
+        terminalManager.relaunchSession(entry);
+      }
+    }),
+  );
+
+  // Dismiss orphaned session
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.dismissOrphan', (arg?: EditlessTreeItem) => {
+      const entry = arg?.persistedEntry;
+      if (entry) {
+        terminalManager.dismissOrphan(entry);
+      }
+    }),
+  );
+
+  // Re-launch all orphaned sessions
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.relaunchAllOrphans', () => {
+      terminalManager.relaunchAllOrphans();
+    }),
+  );
+
   // Add New — QuickPick to choose between Agent or Squad
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.addNew', async () => {
@@ -665,8 +693,11 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {
-  // cleanup
+  // Flush in-flight state — workspaceState is SQLite-backed and survives crash
+  _terminalManagerRef?.persist();
 }
+
+let _terminalManagerRef: TerminalManager | undefined;
 
 async function initGitHubIntegration(
   workItemsProvider: WorkItemsTreeProvider,

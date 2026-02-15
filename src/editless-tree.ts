@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { EditlessRegistry } from './registry';
 import { scanSquad } from './scanner';
 import { getLocalSquadVersion } from './squad-upgrader';
-import type { TerminalManager } from './terminal-manager';
+import type { TerminalManager, PersistedTerminalInfo } from './terminal-manager';
 import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
 import type { AgentTeamConfig, SquadState, AgentInfo, DecisionEntry, RecentActivity, SessionContext } from './types';
@@ -13,7 +13,7 @@ import type { AgentVisibilityManager } from './visibility';
 // Tree item types
 // ---------------------------------------------------------------------------
 
-export type TreeItemType = 'squad' | 'category' | 'agent' | 'decision' | 'activity' | 'terminal' | 'discovered-agent';
+export type TreeItemType = 'squad' | 'category' | 'agent' | 'decision' | 'activity' | 'terminal' | 'discovered-agent' | 'orphanedSession';
 type CategoryKind = 'roster' | 'decisions' | 'activity';
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 const SESSION_ACTIVE_WINDOW_MS = 10 * 60 * 1000;
@@ -43,6 +43,7 @@ function normalizeSquadDisplayName(name: string, fallback: string): string {
 
 export class EditlessTreeItem extends vscode.TreeItem {
   public terminal?: vscode.Terminal;
+  public persistedEntry?: PersistedTerminalInfo;
 
   constructor(
     label: string,
@@ -261,6 +262,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         };
         children.push(item);
       }
+
+      for (const orphan of this.terminalManager.getOrphanedSessions().filter(o => o.squadId === squadId)) {
+        children.push(this._buildOrphanItem(orphan));
+      }
     }
 
     // Roster
@@ -365,6 +370,26 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         arguments: [uri],
       };
     }
+    return item;
+  }
+
+  // -- Orphan item builder --------------------------------------------------
+
+  private _buildOrphanItem(entry: PersistedTerminalInfo): EditlessTreeItem {
+    const item = new EditlessTreeItem(entry.displayName, 'orphanedSession');
+    item.id = `orphan:${entry.id}`;
+    item.persistedEntry = entry;
+    item.description = '· orphaned — re-launch?';
+    item.iconPath = new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('disabledForeground'));
+    item.contextValue = 'orphanedSession';
+    item.tooltip = new vscode.MarkdownString(
+      [`**👻 ${entry.displayName}**`, `Squad: ${entry.squadName}`, 'This session has no live terminal. Re-launch or dismiss it.'].join('\n\n'),
+    );
+    item.command = {
+      command: 'editless.relaunchSession',
+      title: 'Re-launch Session',
+      arguments: [item],
+    };
     return item;
   }
 

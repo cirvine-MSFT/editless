@@ -198,6 +198,24 @@
         "title": "Go to PR",
         "category": "EditLess",
         "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "editless.relaunchSession",
+        "title": "Re-launch Session",
+        "category": "EditLess",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "editless.dismissOrphan",
+        "title": "Dismiss Orphan",
+        "category": "EditLess",
+        "icon": "$(close)"
+      },
+      {
+        "command": "editless.relaunchAllOrphans",
+        "title": "Re-launch All Orphans",
+        "category": "EditLess",
+        "icon": "$(debug-restart)"
       }
     ],
     "keybindings": [
@@ -245,7 +263,9 @@
         { "command": "editless.openInBrowser", "when": "viewItem == work-item", "group": "inline" },
         { "command": "editless.goToPR", "when": "viewItem == work-item", "group": "work-item@2" },
         { "command": "editless.launchFromWorkItem", "when": "viewItem == work-item", "group": "work-item@1" },
-        { "command": "editless.openInBrowser", "when": "viewItem == pull-request", "group": "inline" }
+        { "command": "editless.openInBrowser", "when": "viewItem == pull-request", "group": "inline" },
+        { "command": "editless.relaunchSession", "when": "viewItem == orphanedSession", "group": "inline@1" },
+        { "command": "editless.dismissOrphan", "when": "viewItem == orphanedSession", "group": "inline@2" }
       ],
       "commandPalette": [
         { "command": "editless.focusTerminal", "when": "false" },
@@ -262,7 +282,9 @@
         { "command": "editless.openFilePreview", "when": "false" },
         { "command": "editless.goToPR", "when": "false" },
         { "command": "editless.configureRepos", "when": "false" },
-        { "command": "editless.addNew", "when": "false" }
+        { "command": "editless.addNew", "when": "false" },
+        { "command": "editless.relaunchSession", "when": "false" },
+        { "command": "editless.dismissOrphan", "when": "false" }
       ]
     },
     "configuration": {
