@@ -321,11 +321,11 @@ export function activate(context: vscode.ExtensionContext): void {
           value: current,
         });
         if (value !== undefined && value.length > 0) {
-          labelManager.setLabel(labelKey, value);
           const info = terminalManager.getTerminalInfo(terminal);
           const iconPrefix = info?.squadIcon ? `${info.squadIcon} ` : '';
-          terminalManager.renameSession(terminal, value);
           await renameTerminalTab(terminal, `${iconPrefix}${value}`);
+          labelManager.setLabel(labelKey, value);
+          terminalManager.renameSession(terminal, value);
         }
         if (previousTerminal && previousTerminal !== terminal) {
           previousTerminal.show(false);
@@ -355,11 +355,11 @@ export function activate(context: vscode.ExtensionContext): void {
           value: current,
         });
         if (value !== undefined && value.length > 0) {
-          labelManager.setLabel(pick.labelKey, value);
           const info = terminalManager.getTerminalInfo(pick.terminal);
           const iconPrefix = info?.squadIcon ? `${info.squadIcon} ` : '';
-          terminalManager.renameSession(pick.terminal, value);
           await renameTerminalTab(pick.terminal, `${iconPrefix}${value}`);
+          labelManager.setLabel(pick.labelKey, value);
+          terminalManager.renameSession(pick.terminal, value);
         }
         if (previousTerminal && previousTerminal !== pick.terminal) {
           previousTerminal.show(false);
