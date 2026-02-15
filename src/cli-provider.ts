@@ -87,7 +87,7 @@ function runProviderUpdate(provider: CliProvider): void {
   vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: `🔄 Updating ${displayName}…`,
+      title: `🔄 Updating ${displayName} CLI…`,
       cancellable: false,
     },
     () =>
@@ -95,10 +95,10 @@ function runProviderUpdate(provider: CliProvider): void {
         exec(provider.updateRunCommand || provider.updateCommand!, (err, _stdout, stderr) => {
           if (err) {
             const msg = stderr?.trim() || err.message;
-            vscode.window.showErrorMessage(`${displayName} update failed: ${msg}`);
+            vscode.window.showErrorMessage(`${displayName} CLI update failed: ${msg}`);
           } else {
             if (provider.name === 'agency') setAgencyUpdateAvailable(false);
-            vscode.window.showInformationMessage(`🔄 ${displayName} updated.`);
+            vscode.window.showInformationMessage(`🔄 ${displayName} CLI updated.`);
           }
           resolve();
         });
@@ -161,8 +161,8 @@ function checkSingleProviderUpdate(context: vscode.ExtensionContext, provider: C
     const availableMatch = stdout.match(/([\d]+\.[\d]+[\d.]*)/);
     const available = availableMatch?.[1];
     const msg = available
-      ? `🔄 ${displayName} update available: ${provider.version} → ${available}. Update now?`
-      : `🔄 ${displayName} update available (current: ${provider.version}). Update now?`;
+      ? `🔄 ${displayName} CLI update available: ${provider.version} → ${available}. Update now?`
+      : `🔄 ${displayName} CLI update available (current: ${provider.version}). Update now?`;
 
     vscode.window
       .showInformationMessage(msg, 'Update')
