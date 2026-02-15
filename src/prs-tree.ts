@@ -29,10 +29,16 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     this.fetchAll();
   }
 
+  private _pendingRefresh = false;
+
   private async fetchAll(): Promise<void> {
-    if (this._loading) return;
+    if (this._loading) {
+      this._pendingRefresh = true;
+      return;
+    }
     this._loading = true;
     this._prs.clear();
+    this._onDidChangeTreeData.fire();
 
     const ghOk = await isGhAvailable();
     if (!ghOk) {
@@ -52,6 +58,10 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
     this._loading = false;
     this._onDidChangeTreeData.fire();
+    if (this._pendingRefresh) {
+      this._pendingRefresh = false;
+      this.fetchAll();
+    }
   }
 
   getTreeItem(element: PRsTreeItem): vscode.TreeItem {

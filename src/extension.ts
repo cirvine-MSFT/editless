@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
-import { exec } from 'child_process';
+import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { createRegistry, watchRegistry } from './registry';
 import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
@@ -20,7 +20,7 @@ import { scanSquad } from './scanner';
 import { WorkItemsTreeProvider, WorkItemsTreeItem } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 interface CustomCommandEntry {
   label: string;
@@ -594,7 +594,7 @@ async function initGitHubIntegration(
     try {
       const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
       if (cwd) {
-        const { stdout } = await execAsync('gh repo view --json nameWithOwner -q .nameWithOwner', { cwd });
+        const { stdout } = await execFileAsync('gh', ['repo', 'view', '--json', 'nameWithOwner', '-q', '.nameWithOwner'], { cwd });
         const detected = stdout.trim();
         if (detected) repos = [detected];
       }
