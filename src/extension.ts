@@ -654,6 +654,14 @@ export function activate(context: vscode.ExtensionContext): void {
   // Add Squad — open a folder picker, git init, and run squad init in a terminal
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.addSquad', async () => {
+      const { checkNpxAvailable, promptInstallNode, isSquadInitialized } = await import('./squad-upgrader');
+      
+      const npxAvailable = await checkNpxAvailable();
+      if (!npxAvailable) {
+        await promptInstallNode();
+        return;
+      }
+
       const uris = await vscode.window.showOpenDialog({
         canSelectFolders: true,
         canSelectFiles: false,
@@ -663,16 +671,23 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!uris || uris.length === 0) return;
 
       const dirPath = uris[0].fsPath;
+      const squadExists = isSquadInitialized(dirPath);
+      const command = squadExists 
+        ? 'npx github:bradygaster/squad upgrade'
+        : 'git init && npx github:bradygaster/squad init';
+      const action = squadExists ? 'Upgrade' : 'Init';
 
       const terminal = vscode.window.createTerminal({
-        name: `Squad Init: ${path.basename(dirPath)}`,
+        name: `Squad ${action}: ${path.basename(dirPath)}`,
         cwd: dirPath,
       });
       terminal.show();
-      terminal.sendText('git init && npx github:bradygaster/squad init');
+      terminal.sendText(command);
 
       vscode.window.showInformationMessage(
-        `Squad initialization started in ${path.basename(dirPath)}. After it completes, use "Discover Squads" to add it to the registry.`,
+        squadExists
+          ? `Squad upgrade started in ${path.basename(dirPath)}.`
+          : `Squad initialization started in ${path.basename(dirPath)}. After it completes, use "Discover Squads" to add it to the registry.`,
       );
     }),
   );
