@@ -146,6 +146,78 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 **Impact:** `PersistedTerminalInfo` gains `lastSeenAt` (timestamp, for future diagnostics) and `rebootCount` (integer, for eviction logic). Existing persisted data without these fields is safely handled via nullish coalescing defaults. The `MAX_REBOOT_COUNT` constant (2) is a static on `TerminalManager` — easy to make configurable later if needed.
 
 
+### 2025-07-18: Label taxonomy — namespaced `prefix:value` scheme
+**By:** Casey Irvine (planning session), Squad Coordinator
+**What:** All labels use `prefix:value` syntax within 6 namespaced categories: `type:` (bug, feature, spike, chore, docs, epic), `priority:` (p0, p1, p2), `status:` (needs-plan, planned, in-progress, review), `squad:` (agent assignment), `release:` (version targeting), `go:` (decision gate). Labels are mutually exclusive within their namespace. Only standalone label is `duplicate`. Old GitHub defaults and duplicates (bug, enhancement, docs, etc.) are deleted.
+**Why:** Eliminates duplication (41→30 labels), makes agent parsing unambiguous, and ensures consistent tagging across the team. Agents can reliably parse `prefix:` syntax for routing and workflow automation.
+
+
+### 2025-07-18: Plan→Execute→Review workflow with label lifecycle
+**By:** Casey Irvine (planning session), Squad Coordinator
+**What:** Issues follow: `status:needs-plan` → `status:planned` → `status:in-progress` → close (via PR merge). Complex PRs get `status:review` for human gate. Planning session owns `needs-plan → planned` transitions. Coding session owns `planned → in-progress → close`. Agent reviewer can flag `status:review` when human attention needed. Plans are linked files (not issue comments). No `done` label — closing the issue IS done. `release:backlog` takes precedence over `status:planned` (don't pick up backlog items).
+**Why:** Gives agents a clear, automatable workflow. The human gate (`status:review`) keeps Casey in the loop for complex decisions without creating bottlenecks on routine work.
+
+
+### 2025-07-18: Cross-platform label compatibility (GitHub ↔ ADO)
+**By:** Casey Irvine (planning session), Squad Coordinator
+**What:** `status:`, `squad:`, and `go:` labels are portable across GitHub and ADO (colons allowed in ADO tags). `type:` and `priority:` are GitHub-only — ADO handles these natively via Work Item Type and Priority field. Users should use the portable labels identically on both platforms for a consistent experience.
+**Why:** EditLess supports both GitHub and ADO. A consistent labeling story means users don't have to learn two systems. Portable labels enable cross-platform workflow automation.
+
+
+### 2025-07-18: Area labels for lightweight issue grouping (GitHub-only)
+**By:** Casey Irvine (planning session), Squad Coordinator
+**What:** `area:{theme}` labels group related issues by topic without implying parent-child hierarchy. Color: `#0969DA` (blue). NOT mutually exclusive — issues can have multiple `area:` labels. Created ad-hoc as clusters emerge, deleted when the cluster is resolved. Not enforced in `squad-label-enforce.yml` (no exclusivity) or `sync-squad-labels.yml` (not a fixed set). **GitHub-only** — ADO has native grouping concepts that should be used instead.
+**Why:** `type:epic` implies parent-child hierarchy which doesn't fit ad-hoc clusters. `area:` is lightweight, widely understood (Kubernetes, VS Code use similar patterns), and lets agents and humans see at a glance which issues are related.
+
+
+### 2025-07-18: ⛔ CRITICAL — Git worktrees required — NEVER checkout a branch in the main clone
+**By:** Casey Irvine (user directive, reinforced 2026-02-16)
+**What:** **ABSOLUTE RULE — NO EXCEPTIONS.** The main clone (`C:\Users\cirvine\code\work\editless`) stays on `master` at ALL times. `git checkout <any-branch>` in the main clone is FORBIDDEN. All feature branch work MUST use git worktrees (`git worktree add ../editless-wt-{name} squad/{branch}`). `.ai-team/` changes that need to be committed go on master locally, then get PR'd from a separate worktree if needed. The main clone is pull-only — you fetch and pull, never push or checkout branches from it.
+**Why:** Multiple concurrent sessions share the main clone. Checking out a branch there breaks every other session. This has been violated repeatedly despite being documented — agents keep checking out branches on the main clone instead of using worktrees. This directive must be treated as a hard constraint, not a suggestion. Any agent that runs `git checkout <branch>` in the main clone directory is violating a critical user directive.
+**Reinforced 2026-02-16:** Agent spawned for #213 violated this rule by checking out a branch directly on the main clone, breaking Casey's working state. This pattern has repeated multiple times. Casey is escalating this from documentation to a hard constraint enforced through code reviews.
+
+
+### 2026-02-15: Generalized provider update infrastructure
+**By:** Morty (Extension Dev), issue #14
+**What:** CLI update checking is now driven by optional fields on `CliProvider` (`updateCommand`, `upToDatePattern`, `updateRunCommand`). To add update support for a new CLI provider, populate these fields in `KNOWN_PROFILES` — no new code paths needed. The startup loop (`checkProviderUpdatesOnStartup`) iterates all detected providers with `updateCommand` set, and cache keys are scoped per-provider.
+**Why:** Avoids duplicating update logic per CLI. When we discover how `copilot` or `claude` check for updates, we just add the fields to their profile entries.
+
+
+### 2026-02-15: EditLess brand taglines and tone
+**By:** Casey Irvine (via Copilot)
+**What:** Approved taglines for docs, marketing, and README: "Leave the editor for your mind." / "Microsoft Teams is the IDE of the future." / "Give yourself a promotion, manage your teams of AI agents." / "Join the editorless software development revolution." / "Edit less, effortless." Previously captured: "Plan, delegate, and review your AI team's work."
+**Why:** User request — establishing the voice and tone for EditLess branding and documentation.
+
+
+### 2026-02-15: Dictation input — expect Handy transcription artifacts
+**By:** Casey Irvine (via Copilot)
+**What:** Casey dictates using Handy, which sometimes produces repeated words or misspellings. Don't second-guess — ask if something is unclear.
+**Why:** User request — captured for team memory.
+
+
+### 2026-02-15: Multi-repo workflow philosophy — don't open repos, open a workspace
+**By:** Casey Irvine (via Copilot)
+**What:** The EditLess philosophy is: don't open VS Code in a repo. Open it in a central folder and work across multiple repos simultaneously. Think in terms of working with agents, not in terms of an editor tied to one repo. This should be a core part of the documentation and philosophy sections.
+**Why:** User directive — this is a fundamental EditLess workflow pattern that changes how people think about their dev environment.
+
+
+### 2026-02-15: Acknowledge rapid tooling evolution in docs
+**By:** Casey Irvine (via Copilot)
+**What:** Documentation should acknowledge that AI dev tools are changing rapidly and EditLess may need to evolve quickly. Be honest with users that this space moves fast.
+**Why:** User request — sets expectations and builds trust with users.
+
+
+### 2026-02-15: Recommend Squad as the starting point for new vibe coders
+**By:** Casey Irvine (via Copilot)
+**What:** Documentation should recommend Squad as the entry point for people new to vibe coding or feeling overwhelmed by the agent landscape. Squad makes it easy and fun. This goes in the recommendations/philosophy docs — if you're new, start with Squad.
+**Why:** User directive — many people reaching out are intimidated by the agent landscape. Squad lowers the barrier.
+
+
+### 2025-07-18: Git safety — no rebases, no amend commits
+**By:** Casey Irvine (user directive)
+**What:** Never use `git rebase` or `git commit --amend`. Use merge commits (`git merge`) for integrating branches. If a mistake is made, fix it with a new commit on top — don't rewrite history. Fast-forward merges are fine (they don't rewrite anything). These rules apply to all agents and sessions.
+**Why:** Rebases are destructive and create conflict headaches across concurrent sessions. Amend commits cause push failures when branches are already upstream. With multiple sessions working in parallel, history rewriting is too risky.
+
 
 ### 2026-02-15: PR workflow — CI gates before merge, no more direct-to-master
 **By:** Casey Irvine (user directive)
@@ -840,7 +912,14 @@ Replaced binary planned/not-planned with **ternary** status:
 **What stays:** `editless.agentCreationCommand` is a separate feature and was preserved.
 
 
+### 2026-02-16: Session State — `waiting-on-input` Misclassification (Design Issue)
+**By:** Morty (Extension Dev)
+**Type:** Design Issue Investigation
+**Severity:** P2 — cosmetic but misleading UX
+**Filed:** Investigation session 2026-02-16
 
+**Problem:**
+Terminal sessions display `waiting-on-input` (bell-dot icon, "waiting on input" description) when they are actually idle. This happens for **every session** within 5 minutes of any command finishing.
 
 ### 2026-02-17: Session persistence — launchCommand stored in PersistedTerminalInfo
 **By:** Morty (coding agent)
@@ -876,6 +955,44 @@ Replaced binary planned/not-planned with **ternary** status:
 - ⚠️ TreeProvider has disposable leaks (see #116)
 
 **Verdict:** Conditional go-live. Fix the 3 🔴 items and this ships clean. The `execSync` blocker is most critical — it's the only user-visible hang risk.
+**Root Cause:**
+`getSessionState()` in `src/terminal-manager.ts:336-365` uses a heuristic that conflates "recent activity" with "waiting for user input." The logic:
+1. `_shellExecutionActive = true` → `working` ✅
+2. No `_lastActivityAt` → `idle` ✅
+3. `_lastActivityAt` within 5 min → **`waiting-on-input`** ← wrong default
+4. `_lastActivityAt` 5–60 min → `idle`
+5. `_lastActivityAt` > 60 min → `stale`
+
+The `_lastActivityAt` timestamp is set by both `onDidStartTerminalShellExecution` (line 83) and `onDidEndTerminalShellExecution` (line 88). When a command completes normally, `_shellExecutionActive` becomes `false` and `_lastActivityAt` becomes `Date.now()` — which satisfies the "within 5 min" condition, returning `waiting-on-input` for up to 5 minutes after every command.
+
+**Why It's a Design Issue (Not a Bug):**
+The VS Code shell integration API (`onDidEndTerminalShellExecution`) signals that a command finished — it does **not** signal whether the process is now waiting for user input or sitting at an idle prompt. Both scenarios produce identical signals:
+- `_shellExecutionActive = false`
+- `_lastActivityAt = recent`
+
+There is no positive signal for "the agent is asking a question." The heuristic assumes recent activity without execution means input is needed, but it actually just means a command recently finished.
+
+**Additional Trigger: Persistence Restore**
+On reconcile (line 449), `_lastActivityAt` is restored from `persisted.lastActivityAt ?? persisted.lastSeenAt`. Since `lastSeenAt` is always `Date.now()` at persist time (line 500), a session that was persisted within the periodic 30s interval and then restored will show `waiting-on-input` until the 5-minute window expires.
+
+**Recommended Fix:**
+**Default to `idle` after execution ends; only show `waiting-on-input` when a positive signal exists.**
+
+Options (pick one):
+1. **Invert the default:** Change line 358 from `'waiting-on-input'` to `'idle'`. Then introduce a separate `_waitingOnInput` signal set by scanner/session-context when the agent is genuinely asking a question.
+2. **Terminal output parsing:** Extend the scanner to detect prompt patterns (e.g., `? `, `(y/n)`, `Press Enter`) in recent terminal output and only then return `waiting-on-input`.
+3. **Reduce the window:** Shrink `IDLE_THRESHOLD_MS` to 10–30 seconds. This is a band-aid — it shrinks the false-positive window but doesn't eliminate it.
+
+Option 1 is the cleanest. The tests at lines 939-956 would need updating — they currently assert `waiting-on-input` immediately after execution ends.
+
+**Files Involved:**
+- `src/terminal-manager.ts:336-365` — `getSessionState()` logic
+- `src/terminal-manager.ts:81-90` — shell execution event handlers
+- `src/terminal-manager.ts:447-449` — reconcile `_lastActivityAt` restore
+- `src/__tests__/terminal-manager.test.ts:939-956` — test that codifies the current (wrong) behavior
+- `src/editless-tree.ts:278-294` — tree items that display the state
+
+**Status:** Filed as issue #226 for Casey to triage.
 
 
 
