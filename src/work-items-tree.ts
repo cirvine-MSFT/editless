@@ -195,25 +195,33 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   private buildIssueItem(issue: GitHubIssue): WorkItemsTreeItem {
-    const hasPlan = issue.labels.some(l =>
-      ['has plan', 'has-plan', 'plan', 'planned'].includes(l.toLowerCase()),
+    const lowered = issue.labels.map(l => l.toLowerCase());
+    const hasPlan = lowered.some(l =>
+      ['has plan', 'has-plan', 'plan', 'planned', 'status:planned'].includes(l),
+    );
+    const needsPlan = !hasPlan && lowered.some(l =>
+      ['status:needs-plan', 'needs-plan', 'needs plan'].includes(l),
     );
 
-    const planIndicator = hasPlan ? '📋' : '❓';
+    const planIndicator = hasPlan ? '📋' : needsPlan ? '❓' : '—';
     const item = new WorkItemsTreeItem(`${planIndicator} #${issue.number} ${issue.title}`);
     item.issue = issue;
 
     const labelText = issue.labels.join(', ');
     item.description = hasPlan
       ? `✓ planned · ${labelText}`
-      : `needs plan · ${labelText}`;
+      : needsPlan
+        ? `needs plan · ${labelText}`
+        : labelText;
 
     item.iconPath = new vscode.ThemeIcon('issues');
     item.contextValue = 'work-item';
+
+    const planStatus = hasPlan ? '✓ planned' : needsPlan ? '❓ needs plan' : 'no status';
     item.tooltip = new vscode.MarkdownString(
       [
         `**#${issue.number} ${issue.title}**`,
-        `Plan: ${hasPlan ? '✓ planned' : '❓ needs plan'}`,
+        `Plan: ${planStatus}`,
         `Labels: ${labelText || 'none'}`,
         `Assignees: ${issue.assignees.join(', ')}`,
       ].join('\n\n'),
