@@ -34,7 +34,7 @@ New to agentic development? Start here — install EditLess, add a squad, and le
 - 🌳 **Agent tree view** — see all discovered agents in your workspace
 - 📋 **Work items** — view GitHub issues and Azure DevOps work items with label filtering
 - 🔀 **Pull requests** — track PRs across repos, jump to linked issues
-- 💻 **Terminal integration** — launch agent sessions from a work item, PR, or agent — get to work on what you care about faster, label and organize your sessions, and never lose track of what a session was for
+- 💻 **Terminal integration** — launch agent sessions from a work item, pull request, or agent — get to work on what you care about faster, label and organize your sessions, and never lose track of what a session was for
 - 🔔 **Notifications** — keep track of what your sessions are doing at a glance, so you never miss a call to action or leave a session idle
 - 🔍 **Auto-detection** — discovers agents in your workspace automatically
 - 🔄 **Keep your tools up to date** — EditLess lets you know when updates are available for [GitHub Copilot CLI](https://github.com/github/gh-copilot) and [Squad](https://github.com/bradygaster/squad), so you're always running the latest
