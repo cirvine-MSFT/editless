@@ -284,6 +284,7 @@
       ],
       "view/item/context": [
         { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent$/", "group": "inline@0" },
+        { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent|discovered-agent$/", "group": "session@0" },
         { "command": "editless.upgradeSquad", "when": "view == editlessTree && viewItem == squad-upgradeable", "group": "inline@1" },
         { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@1" },
         { "command": "editless.changeModel", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@2" },
