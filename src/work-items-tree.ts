@@ -214,7 +214,11 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         ? `needs plan · ${labelText}`
         : labelText;
 
-    item.iconPath = new vscode.ThemeIcon('issues');
+    item.iconPath = hasPlan
+      ? new vscode.ThemeIcon('pass', new vscode.ThemeColor('testing.iconPassed'))
+      : needsPlan
+        ? new vscode.ThemeIcon('question', new vscode.ThemeColor('editorWarning.foreground'))
+        : new vscode.ThemeIcon('issues');
     item.contextValue = 'work-item';
 
     const planStatus = hasPlan ? '✓ planned' : needsPlan ? '❓ needs plan' : 'no status';
