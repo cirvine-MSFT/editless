@@ -153,7 +153,7 @@ vi.mock('vscode', () => {
       showWarningMessage: mockShowWarningMessage,
       showInformationMessage: mockShowInformationMessage,
       createOutputChannel: () => ({ appendLine: vi.fn(), dispose: vi.fn() }),
-      createTreeView: () => ({ reveal: vi.fn(), dispose: vi.fn() }),
+      createTreeView: () => ({ reveal: vi.fn(), dispose: vi.fn(), description: undefined }),
       registerTreeDataProvider: () => ({ dispose: vi.fn() }),
       onDidChangeActiveTerminal: vi.fn(() => ({ dispose: vi.fn() })),
       onDidOpenTerminal: vi.fn(() => ({ dispose: vi.fn() })),
@@ -186,6 +186,7 @@ vi.mock('vscode', () => {
       onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     },
     ProgressLocation: { Notification: 15 },
+    QuickPickItemKind: { Separator: -1, Default: 0 },
   };
 });
 
@@ -321,6 +322,13 @@ vi.mock('../work-items-tree', () => ({
     return {
       setRepos: vi.fn(),
       refresh: mockWorkItemsRefresh,
+      setTreeView: vi.fn(),
+      setFilter: vi.fn(),
+      clearFilter: vi.fn(),
+      filter: { repos: [], labels: [], states: [] },
+      isFiltered: false,
+      getAllRepos: vi.fn().mockReturnValue([]),
+      getAllLabels: vi.fn().mockReturnValue([]),
     };
   }),
   WorkItemsTreeItem: class {},
