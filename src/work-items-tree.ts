@@ -87,6 +87,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   private _filter: WorkItemsFilter = { repos: [], labels: [], states: [] };
   private _treeView?: vscode.TreeView<WorkItemsTreeItem>;
   private _planIndex: PlanFileIndex = new Map();
+  private _allLabels = new Set<string>();
 
   setRepos(repos: string[]): void {
     this._repos = repos;
@@ -143,12 +144,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   getAllLabels(): string[] {
-    const labels = new Set<string>();
-    for (const issues of this._issues.values()) {
-      for (const issue of issues) {
-        for (const label of issue.labels) labels.add(label);
-      }
-    }
+    const labels = new Set(this._allLabels);
     for (const wi of this._adoItems) {
       for (const tag of wi.tags) labels.add(tag);
     }
@@ -174,6 +170,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     }
     this._loading = true;
     this._issues.clear();
+    this._allLabels.clear();
     this._onDidChangeTreeData.fire();
 
     const ghOk = await isGhAvailable();
@@ -186,6 +183,9 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     await Promise.all(
       this._repos.map(async (repo) => {
         const issues = await fetchAssignedIssues(repo);
+        for (const issue of issues) {
+          for (const label of issue.labels) this._allLabels.add(label);
+        }
         const filtered = this.filterIssues(issues);
         if (filtered.length > 0) {
           this._issues.set(repo, filtered);
