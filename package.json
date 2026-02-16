@@ -416,6 +416,14 @@
           "scope": "resource",
           "order": 33
         },
+        "editless.restoreTerminalLayout": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically maximize the terminal panel when all editor tabs are closed",
+          "markdownDescription": "Automatically maximize the terminal panel when all editor tabs are closed. This restores the full-screen terminal workflow after peeking at a file.\n\nDisable this if you prefer to manage panel layout manually.",
+          "scope": "window",
+          "order": 4
+        },
         "editless.agentCreationCommand": {
           "type": "string",
           "default": "",
