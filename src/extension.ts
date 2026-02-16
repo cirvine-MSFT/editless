@@ -62,6 +62,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   const treeProvider = new EditlessTreeProvider(registry, terminalManager, labelManager, sessionContextResolver, visibilityManager);
   const treeView = vscode.window.createTreeView('editlessTree', { treeDataProvider: treeProvider });
   context.subscriptions.push(treeView);
+  context.subscriptions.push(treeProvider);
 
   // --- Work Items tree view ------------------------------------------------
   const workItemsProvider = new WorkItemsTreeProvider();
