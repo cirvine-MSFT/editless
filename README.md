@@ -70,6 +70,14 @@ That's it. One extension, one sidebar, one conversation. You'll go from zero to 
 
 No experience with agentic development required. No complex setup. Just install, point, and let the AI do the heavy lifting. The editorless revolution starts with a single click.
 
+## 💡 Quick Tips
+
+- **Try squads without touching your team's repo.** You don't need to add [Squad](https://github.com/bradygaster/squad) to your work project to try it out. Create a personal repo, add a squad there, and tell your agents to work across your other repos. It's a great way to experiment without changing anything in your team's workspace.
+
+- **Talk to your agents.** Supercharge the conversational workflow with a speech-to-text tool like [Handy](https://handy.computer/) — it's free, open-source, and runs offline. Or use the built-in dictation on Windows (`Win + H`) or macOS. Once you start talking directly to your AI team instead of typing, you'll never go back.
+
+- **Use [SquadUI](https://marketplace.visualstudio.com/items?itemName=csharpfritz.squadui) for a richer dashboard.** It adds team visualization, skill management, and a squad dashboard right in VS Code. EditLess integrates with it — you'll see "Open in Squad UI" in your context menus.
+
 ## Documentation
 
 - [The EditLess Story](docs/philosophy.md) — Why EditLess exists and the editorless philosophy
