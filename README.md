@@ -20,11 +20,15 @@ EditLess is currently distributed via GitHub Releases.
 ## Features
 
 - 🌳 **Agent tree view** — see all discovered agent teams in your workspace
-- 💻 **Terminal integration** — launch and manage agent sessions
-- 🔄 **Squad upgrader** — keep Squad CLI teams up to date
+- 💻 **Terminal integration** — launch and manage agent sessions with session state tracking
+- 📋 **Work items** — view GitHub issues and Azure DevOps work items with label filtering
+- 🔀 **Pull requests** — track PRs across repos, jump to linked issues
+- 🔔 **Notifications** — desktop alerts for inbox items and CLI updates
+- 🔄 **Auto-refresh** — work items and PRs poll on a configurable interval
 - 🔍 **Auto-detection** — discovers CLI tools and agent teams automatically
 - 📊 **Status bar** — quick glance at inbox items and agent status
 - 🏷️ **Session labels** — organize and tag your sessions
+- 🔄 **Squad upgrader** — keep Squad CLI teams up to date
 
 ## Development
 
