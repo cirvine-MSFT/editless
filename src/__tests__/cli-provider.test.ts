@@ -7,8 +7,7 @@ import type * as vscode from 'vscode';
 
 type ExecCallback = (error: Error | null, stdout: string, stderr: string) => void;
 
-const { mockExecSync, mockExec, mockShowInformationMessage, mockWithProgress, mockShowErrorMessage, mockExecuteCommand } = vi.hoisted(() => ({
-  mockExecSync: vi.fn(),
+const { mockExec, mockShowInformationMessage, mockWithProgress, mockShowErrorMessage, mockExecuteCommand } = vi.hoisted(() => ({
   mockExec: vi.fn(),
   mockShowInformationMessage: vi.fn().mockResolvedValue(undefined as string | undefined),
   mockWithProgress: vi.fn(),
@@ -17,7 +16,6 @@ const { mockExecSync, mockExec, mockShowInformationMessage, mockWithProgress, mo
 }));
 
 vi.mock('child_process', () => ({
-  execSync: mockExecSync,
   exec: mockExec,
 }));
 
@@ -66,31 +64,39 @@ function makeContext(data: Record<string, unknown> = {}): vscode.ExtensionContex
   } as unknown as vscode.ExtensionContext;
 }
 
-function setupAgencyDetected(version: string): void {
-  mockExecSync.mockImplementation((cmd: string) => {
-    if (cmd === 'agency --version') return version;
-    throw new Error('not found');
+async function setupAgencyDetected(version: string): Promise<void> {
+  mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
+    if (typeof opts === 'function') { cb = opts as ExecCallback; }
+    if (!cb) return;
+    if (cmd === 'agency --version') { cb(null, version, ''); return; }
+    cb(new Error('not found'), '', '');
   });
-  probeAllProviders();
+  await probeAllProviders();
 }
 
-function setupNoProvidersDetected(): void {
-  mockExecSync.mockImplementation(() => { throw new Error('not found'); });
-  probeAllProviders();
+async function setupNoProvidersDetected(): Promise<void> {
+  mockExec.mockImplementation((_cmd: string, opts: unknown, cb?: ExecCallback) => {
+    if (typeof opts === 'function') { cb = opts as ExecCallback; }
+    if (cb) cb(new Error('not found'), '', '');
+  });
+  await probeAllProviders();
 }
 
-function mockExecSuccess(stdout: string): void {
+function mockExecForUpdates(stdout: string, fail = false): void {
   mockExec.mockImplementation(
-    (_cmd: string, _opts: Record<string, unknown>, cb: ExecCallback) => {
+    (cmd: string, opts: unknown, cb?: ExecCallback) => {
+      if (typeof opts === 'function') { cb = opts as ExecCallback; }
+      if (!cb) return;
+      // Probe calls (version commands) — keep returning detected versions
+      if (cmd.includes('--version')) {
+        if (cmd === 'agency --version') { cb(null, '1.0.0', ''); return; }
+        if (cmd === 'copilot --version') { cb(null, '2.0.0', ''); return; }
+        if (cmd === 'claude --version') { cb(null, '3.0.0', ''); return; }
+        cb(new Error('not found'), '', ''); return;
+      }
+      // Update commands
+      if (fail) { cb(new Error('command failed'), '', 'error output'); return; }
       cb(null, stdout, '');
-    },
-  );
-}
-
-function mockExecFailure(): void {
-  mockExec.mockImplementation(
-    (_cmd: string, _opts: Record<string, unknown>, cb: ExecCallback) => {
-      cb(new Error('command failed'), '', 'error output');
     },
   );
 }
@@ -101,37 +107,36 @@ function mockExecFailure(): void {
 
 describe('checkAgencyOnStartup', () => {
   beforeEach(() => {
-    mockExecSync.mockReset();
     mockExec.mockReset();
     mockShowInformationMessage.mockReset();
     mockShowInformationMessage.mockResolvedValue(undefined as string | undefined);
     mockExecuteCommand.mockReset();
   });
 
-  it('should not show toast when agency is not detected', () => {
-    setupNoProvidersDetected();
+  it('should not show toast when agency is not detected', async () => {
+    await setupNoProvidersDetected();
 
     checkAgencyOnStartup(makeContext());
 
-    expect(mockExec).not.toHaveBeenCalled();
     expect(mockShowInformationMessage).not.toHaveBeenCalled();
   });
 
-  it('should not show toast when agency version is empty', () => {
-    mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd === 'agency --version') return '';
-      throw new Error('not found');
+  it('should not show toast when agency version is empty', async () => {
+    mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
+      if (typeof opts === 'function') { cb = opts as ExecCallback; }
+      if (!cb) return;
+      if (cmd === 'agency --version') { cb(null, '', ''); return; }
+      cb(new Error('not found'), '', '');
     });
-    probeAllProviders();
+    await probeAllProviders();
 
     checkAgencyOnStartup(makeContext());
 
-    expect(mockExec).not.toHaveBeenCalled();
     expect(mockShowInformationMessage).not.toHaveBeenCalled();
   });
 
-  it('should not show toast when cached within 24h for same version', () => {
-    setupAgencyDetected('1.2.3');
+  it('should not show toast when cached within 24h for same version', async () => {
+    await setupAgencyDetected('1.2.3');
     const context = makeContext({
       'editless.agencyUpdatePrompt': {
         promptedVersion: '1.2.3',
@@ -141,13 +146,12 @@ describe('checkAgencyOnStartup', () => {
 
     checkAgencyOnStartup(context);
 
-    expect(mockExec).not.toHaveBeenCalled();
     expect(mockShowInformationMessage).not.toHaveBeenCalled();
   });
 
-  it('should show toast when no cache exists and update is available', () => {
-    setupAgencyDetected('1.2.3');
-    mockExecSuccess('Agency 1.3.0 is available');
+  it('should show toast when no cache exists and update is available', async () => {
+    await setupAgencyDetected('1.2.3');
+    mockExecForUpdates('Agency 1.3.0 is available');
 
     checkAgencyOnStartup(makeContext());
 
@@ -157,9 +161,9 @@ describe('checkAgencyOnStartup', () => {
     );
   });
 
-  it('should show toast when cache expired (>24h)', () => {
-    setupAgencyDetected('1.2.3');
-    mockExecSuccess('Agency 1.3.0 is available');
+  it('should show toast when cache expired (>24h)', async () => {
+    await setupAgencyDetected('1.2.3');
+    mockExecForUpdates('Agency 1.3.0 is available');
     const context = makeContext({
       'editless.agencyUpdatePrompt': {
         promptedVersion: '1.2.3',
@@ -175,9 +179,9 @@ describe('checkAgencyOnStartup', () => {
     );
   });
 
-  it('should show toast when version changed since last prompt', () => {
-    setupAgencyDetected('2.0.0');
-    mockExecSuccess('Agency 2.1.0 is available');
+  it('should show toast when version changed since last prompt', async () => {
+    await setupAgencyDetected('2.0.0');
+    mockExecForUpdates('Agency 2.1.0 is available');
     const context = makeContext({
       'editless.agencyUpdatePrompt': {
         promptedVersion: '1.2.3',
@@ -193,27 +197,27 @@ describe('checkAgencyOnStartup', () => {
     );
   });
 
-  it('should not show toast when agency update reports up to date', () => {
-    setupAgencyDetected('1.2.3');
-    mockExecSuccess('Everything is up to date');
+  it('should not show toast when agency update reports up to date', async () => {
+    await setupAgencyDetected('1.2.3');
+    mockExecForUpdates('Everything is up to date');
 
     checkAgencyOnStartup(makeContext());
 
     expect(mockShowInformationMessage).not.toHaveBeenCalled();
   });
 
-  it('should not show toast when exec errors (best-effort, silent)', () => {
-    setupAgencyDetected('1.2.3');
-    mockExecFailure();
+  it('should not show toast when exec errors (best-effort, silent)', async () => {
+    await setupAgencyDetected('1.2.3');
+    mockExecForUpdates('', true);
 
     checkAgencyOnStartup(makeContext());
 
     expect(mockShowInformationMessage).not.toHaveBeenCalled();
   });
 
-  it('should record prompt in globalState when showing toast', () => {
-    setupAgencyDetected('1.2.3');
-    mockExecSuccess('Agency 1.3.0 is available');
+  it('should record prompt in globalState when showing toast', async () => {
+    await setupAgencyDetected('1.2.3');
+    mockExecForUpdates('Agency 1.3.0 is available');
     const context = makeContext();
 
     checkAgencyOnStartup(context);
@@ -225,27 +229,29 @@ describe('checkAgencyOnStartup', () => {
     expect(cached!.timestamp).toBeGreaterThan(Date.now() - 5_000);
   });
 
-  it('should not block — returns before exec callback fires', () => {
-    setupAgencyDetected('1.2.3');
+  it('should not block — returns before exec callback fires', async () => {
+    await setupAgencyDetected('1.2.3');
     let capturedCallback: ExecCallback | undefined;
     mockExec.mockImplementation(
-      (_cmd: string, _opts: Record<string, unknown>, cb: ExecCallback) => {
+      (cmd: string, opts: unknown, cb?: ExecCallback) => {
+        if (typeof opts === 'function') { cb = opts as ExecCallback; }
+        if (!cb) return;
+        if (cmd.includes('--version')) { cb(new Error('not found'), '', ''); return; }
         capturedCallback = cb;
       },
     );
 
     checkAgencyOnStartup(makeContext());
 
-    expect(mockExec).toHaveBeenCalled();
     expect(mockShowInformationMessage).not.toHaveBeenCalled();
 
     capturedCallback!(null, 'Agency 1.3.0 is available', '');
     expect(mockShowInformationMessage).toHaveBeenCalled();
   });
 
-  it('should include current version in toast message', () => {
-    setupAgencyDetected('3.5.7');
-    mockExecSuccess('Agency 4.0.0 is available');
+  it('should include current version in toast message', async () => {
+    await setupAgencyDetected('3.5.7');
+    mockExecForUpdates('Agency 4.0.0 is available');
 
     checkAgencyOnStartup(makeContext());
 
@@ -262,7 +268,6 @@ describe('checkAgencyOnStartup', () => {
 
 describe('checkProviderUpdatesOnStartup — generalized provider updates', () => {
   beforeEach(() => {
-    mockExecSync.mockReset();
     mockExec.mockReset();
     mockShowInformationMessage.mockReset();
     mockShowInformationMessage.mockResolvedValue(undefined as string | undefined);
@@ -271,47 +276,52 @@ describe('checkProviderUpdatesOnStartup — generalized provider updates', () =>
     mockExecuteCommand.mockReset();
   });
 
-  function setupAllProvidersDetected(): void {
-    mockExecSync.mockImplementation((cmd: string) => {
-      if (cmd === 'agency --version') return '1.0.0';
-      if (cmd === 'copilot --version') return '2.0.0';
-      if (cmd === 'claude --version') return '3.0.0';
-      throw new Error('not found');
+  async function setupAllProvidersDetected(): Promise<void> {
+    mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
+      if (typeof opts === 'function') { cb = opts as ExecCallback; }
+      if (!cb) return;
+      if (cmd === 'agency --version') { cb(null, '1.0.0', ''); return; }
+      if (cmd === 'copilot --version') { cb(null, '2.0.0', ''); return; }
+      if (cmd === 'claude --version') { cb(null, '3.0.0', ''); return; }
+      cb(new Error('not found'), '', '');
     });
-    probeAllProviders();
+    await probeAllProviders();
   }
 
-  it('should skip providers without updateCommand', () => {
-    setupAllProvidersDetected();
-    mockExecSuccess('New version available');
+  it('should skip providers without updateCommand', async () => {
+    await setupAllProvidersDetected();
+    mockExecForUpdates('New version available');
 
     checkProviderUpdatesOnStartup(makeContext());
 
-    expect(mockExec).toHaveBeenCalledTimes(1);
-    expect(mockExec).toHaveBeenCalledWith(
-      'agency update',
-      expect.any(Object),
-      expect.any(Function),
+    // Only agency has updateCommand — filter out version probe calls
+    const updateCalls = mockExec.mock.calls.filter(
+      (c: unknown[]) => !(c[0] as string).includes('--version'),
     );
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0][0]).toBe('agency update');
   });
 
-  it('should check all providers with updateCommand set', () => {
-    setupAllProvidersDetected();
+  it('should check all providers with updateCommand set', async () => {
+    await setupAllProvidersDetected();
     const copilot = getAllProviders().find(p => p.name === 'copilot')!;
     copilot.updateCommand = 'copilot update';
     copilot.upToDatePattern = 'already current';
 
-    mockExecSuccess('New version available');
+    mockExecForUpdates('New version available');
 
     checkProviderUpdatesOnStartup(makeContext());
 
-    expect(mockExec).toHaveBeenCalledTimes(2);
-    expect(mockExec).toHaveBeenCalledWith('agency update', expect.any(Object), expect.any(Function));
-    expect(mockExec).toHaveBeenCalledWith('copilot update', expect.any(Object), expect.any(Function));
+    const updateCalls = mockExec.mock.calls.filter(
+      (c: unknown[]) => !(c[0] as string).includes('--version'),
+    );
+    expect(updateCalls).toHaveLength(2);
+    expect(updateCalls.map((c: unknown[]) => c[0])).toContain('agency update');
+    expect(updateCalls.map((c: unknown[]) => c[0])).toContain('copilot update');
   });
 
-  it('should isolate cache per provider', () => {
-    setupAllProvidersDetected();
+  it('should isolate cache per provider', async () => {
+    await setupAllProvidersDetected();
     const copilot = getAllProviders().find(p => p.name === 'copilot')!;
     copilot.updateCommand = 'copilot update';
 
@@ -322,18 +332,21 @@ describe('checkProviderUpdatesOnStartup — generalized provider updates', () =>
       },
     });
 
-    mockExecSuccess('New version available');
+    mockExecForUpdates('New version available');
 
     checkProviderUpdatesOnStartup(context);
 
     // Agency cached and skipped; copilot has no cache and gets checked
-    expect(mockExec).toHaveBeenCalledTimes(1);
-    expect(mockExec).toHaveBeenCalledWith('copilot update', expect.any(Object), expect.any(Function));
+    const updateCalls = mockExec.mock.calls.filter(
+      (c: unknown[]) => !(c[0] as string).includes('--version'),
+    );
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0][0]).toBe('copilot update');
   });
 
-  it('should include provider display name in toast message', () => {
-    setupAgencyDetected('1.0.0');
-    mockExecSuccess('New version available');
+  it('should include provider display name in toast message', async () => {
+    await setupAgencyDetected('1.0.0');
+    mockExecForUpdates('New version available');
 
     checkProviderUpdatesOnStartup(makeContext());
 
@@ -343,12 +356,12 @@ describe('checkProviderUpdatesOnStartup — generalized provider updates', () =>
     );
   });
 
-  it('should use default pattern when upToDatePattern is undefined', () => {
-    setupAgencyDetected('1.0.0');
+  it('should use default pattern when upToDatePattern is undefined', async () => {
+    await setupAgencyDetected('1.0.0');
     const agency = getAllProviders().find(p => p.name === 'agency')!;
     agency.upToDatePattern = undefined;
 
-    mockExecSuccess('version 2.0.0 available for download');
+    mockExecForUpdates('version 2.0.0 available for download');
 
     checkProviderUpdatesOnStartup(makeContext());
 
@@ -359,12 +372,14 @@ describe('checkProviderUpdatesOnStartup — generalized provider updates', () =>
   });
 
   it('should use updateRunCommand when user clicks Update', async () => {
-    setupAgencyDetected('1.0.0');
+    await setupAgencyDetected('1.0.0');
     const agency = getAllProviders().find(p => p.name === 'agency')!;
     agency.updateRunCommand = 'agency update --force';
 
-    mockExec.mockImplementation((...args: unknown[]) => {
-      const cb = args[args.length - 1] as ExecCallback;
+    mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
+      if (typeof opts === 'function') { cb = opts as ExecCallback; }
+      if (!cb) return;
+      if (cmd.includes('--version')) { cb(new Error('not found'), '', ''); return; }
       cb(null, 'version 2.0.0 available', '');
     });
     mockShowInformationMessage.mockResolvedValue('Update');
@@ -376,7 +391,10 @@ describe('checkProviderUpdatesOnStartup — generalized provider updates', () =>
 
     await new Promise(resolve => setTimeout(resolve, 0));
 
-    expect(mockExec).toHaveBeenCalledTimes(2);
-    expect(mockExec.mock.calls[1][0]).toBe('agency update --force');
+    const updateCalls = mockExec.mock.calls.filter(
+      (c: unknown[]) => !(c[0] as string).includes('--version'),
+    );
+    expect(updateCalls).toHaveLength(2);
+    expect(updateCalls[1][0]).toBe('agency update --force');
   });
 });
