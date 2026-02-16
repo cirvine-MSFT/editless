@@ -70,6 +70,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private _cache = new Map<string, SquadState>();
   private _discoveredAgents: DiscoveredAgent[] = [];
+  private _upgradeAvailable = new Map<string, boolean>();
 
   private readonly _terminalSub: vscode.Disposable | undefined;
   private readonly _labelSub: vscode.Disposable | undefined;
@@ -102,6 +103,11 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   setDiscoveredAgents(agents: DiscoveredAgent[]): void {
     this._discoveredAgents = agents;
+    this._onDidChangeTreeData.fire();
+  }
+
+  setUpgradeAvailable(squadId: string, available: boolean): void {
+    this._upgradeAvailable.set(squadId, available);
     this._onDidChangeTreeData.fire();
   }
 
@@ -207,7 +213,16 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       }
     }
 
+    const upgradeAvailable = this._upgradeAvailable.get(cfg.id) ?? false;
+    if (upgradeAvailable) {
+      descParts.push('upgrade available');
+    }
+
     item.description = descParts.join(' · ');
+
+    if (upgradeAvailable) {
+      item.contextValue = 'squad-upgradeable';
+    }
 
     const tooltipLines = [
       `**${cfg.icon} ${displayName}**`,

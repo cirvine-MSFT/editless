@@ -7,7 +7,7 @@ import { createRegistry, watchRegistry } from './registry';
 import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
-import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand } from './squad-upgrader';
+import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand, checkSquadUpgradesOnStartup, clearLatestVersionCache } from './squad-upgrader';
 import { registerAgencyUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider } from './cli-provider';
 import { registerDiscoveryCommand, checkDiscoveryOnStartup } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
@@ -140,14 +140,24 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- Commands ----------------------------------------------------------
 
   // Squad upgrade commands
-  context.subscriptions.push(registerSquadUpgradeCommand(context, registry));
-  context.subscriptions.push(registerSquadUpgradeAllCommand(context, registry));
+  const onUpgradeComplete = (squadId: string): void => {
+    clearLatestVersionCache();
+    treeProvider.setUpgradeAvailable(squadId, false);
+    treeProvider.invalidate(squadId);
+  };
+  context.subscriptions.push(registerSquadUpgradeCommand(context, registry, onUpgradeComplete));
+  context.subscriptions.push(registerSquadUpgradeAllCommand(context, registry, onUpgradeComplete));
 
   // Agency update command
   context.subscriptions.push(registerAgencyUpdateCommand(context));
 
   // Check for CLI provider updates on startup
   checkProviderUpdatesOnStartup(context);
+
+  // Check for squad upgrades on startup (async, non-blocking)
+  checkSquadUpgradesOnStartup(registry.loadSquads(), (squadId, available) => {
+    treeProvider.setUpgradeAvailable(squadId, available);
+  });
 
   // Squad discovery command
   context.subscriptions.push(registerDiscoveryCommand(context, registry));
