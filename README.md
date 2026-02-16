@@ -18,7 +18,11 @@ New to agentic development? Start here — install EditLess, add a squad, and le
 
 ## Installation
 
-EditLess is currently distributed via GitHub Releases.
+### VS Code Marketplace
+
+> 🚧 Coming soon — EditLess will be available directly from the [VS Code Marketplace](https://marketplace.visualstudio.com/).
+
+### Manual Install (VSIX)
 
 1. Download the `.vsix` file from the [latest release](https://github.com/cirvine-MSFT/editless/releases)
 2. In VS Code: `Ctrl+Shift+P` → **Extensions: Install from VSIX...**
