@@ -20,11 +20,15 @@ EditLess is currently distributed via GitHub Releases.
 ## Features
 
 - 🌳 **Agent tree view** — see all discovered agent teams in your workspace
-- 💻 **Terminal integration** — launch and manage agent sessions
-- 🔄 **Squad upgrader** — keep Squad CLI teams up to date
+- 💻 **Terminal integration** — launch and manage agent sessions with session state tracking
+- 📋 **Work items** — view GitHub issues and Azure DevOps work items with label filtering
+- 🔀 **Pull requests** — track PRs across repos, jump to linked issues
+- 🔔 **Notifications** — desktop alerts for inbox items and CLI updates
+- 🔄 **Auto-refresh** — work items and PRs poll on a configurable interval
 - 🔍 **Auto-detection** — discovers CLI tools and agent teams automatically
 - 📊 **Status bar** — quick glance at inbox items and agent status
 - 🏷️ **Session labels** — organize and tag your sessions
+- 🔄 **Squad upgrader** — keep Squad CLI teams up to date
 
 ## Development
 
@@ -36,8 +40,11 @@ npm run build
 # Press F5 in VS Code to launch Extension Development Host
 ```
 
-## Workflow Documentation
+## Documentation
 
+- [The EditLess Story](docs/philosophy.md) — Why EditLess exists and the editorless philosophy
+- [Getting Started](docs/getting-started.md) — New to vibe coding? Start here
+- [Multi-Repo Workflow](docs/multi-repo-workflow.md) — Working across multiple repos
 - [GitHub Workflow](docs/workflows/github-workflow.md) — Managing work with AI agents on GitHub
 - [ADO Workflow](docs/workflows/ado-workflow.md) — Managing work with AI agents on Azure DevOps
 

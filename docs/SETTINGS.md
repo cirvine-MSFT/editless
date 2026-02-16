@@ -6,7 +6,7 @@ All settings are accessible through VS Code's Settings UI (**Ctrl+,**) or direct
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `editless.registryPath` | `string` | `"./squad-registry.json"` | Path to the squad registry JSON file |
+| `editless.registryPath` | `string` | `"./agent-registry.json"` | Path to the agent registry JSON file |
 | `editless.discoveryDir` | `string` | `""` | Directory to scan for squad projects |
 | `editless.scanDebounceMs` | `number` | `500` | Debounce interval in milliseconds for file system scanning |
 | `editless.refreshInterval` | `number` | `5` | Auto-refresh interval in minutes for Work Items and PRs panels. Set to 0 to disable |

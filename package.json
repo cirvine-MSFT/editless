@@ -13,7 +13,16 @@
     "vscode": "^1.100.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "ai",
+    "agents",
+    "copilot",
+    "vibe-coding",
+    "terminal",
+    "squad"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -332,9 +341,9 @@
       "properties": {
         "editless.registryPath": {
           "type": "string",
-          "default": "./squad-registry.json",
-          "description": "Path to the squad registry JSON file",
-          "markdownDescription": "Path to the squad registry JSON file. The registry tracks which agent teams are available in this workspace and their configuration.\n\nAccepts absolute paths or paths relative to the workspace root.",
+          "default": "./agent-registry.json",
+          "description": "Path to the agent registry JSON file",
+          "markdownDescription": "Path to the agent registry JSON file. The registry tracks which agent teams and standalone agents are available in this workspace and their configuration.\n\nAccepts absolute paths or paths relative to the workspace root.",
           "scope": "resource",
           "order": 1
         },

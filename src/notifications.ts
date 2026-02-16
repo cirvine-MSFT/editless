@@ -16,9 +16,12 @@ export class NotificationManager {
     const currentCount = state.inboxCount;
 
     if (previousCount === 0 && currentCount > 0 && isNotificationEnabled('inbox')) {
-      vscode.window.showWarningMessage(
-        `${config.icon} ${config.name}: ${currentCount} decision(s) pending`,
-      );
+      const msg = `${config.icon} ${config.name}: ${currentCount} decision(s) pending review`;
+      vscode.window.showWarningMessage(msg, 'Review').then(choice => {
+        if (choice === 'Review') {
+          vscode.commands.executeCommand('editlessTree.focus');
+        }
+      });
     }
 
     this._previousCounts.set(config.id, currentCount);

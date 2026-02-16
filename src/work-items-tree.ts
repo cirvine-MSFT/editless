@@ -332,7 +332,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     if (!this.isFiltered) return issues;
     return issues.filter(issue => {
       if (this._filter.repos.length > 0 && !this._filter.repos.includes(issue.repository)) return false;
-      if (this._filter.labels.length > 0 && !issue.labels.some(l => this._filter.labels.includes(l))) return false;
+      if (this._filter.labels.length > 0 && !this._filter.labels.every(l => issue.labels.includes(l))) return false;
       if (this._filter.states.length > 0 && !this._filter.states.includes(mapGitHubState(issue))) return false;
       return true;
     });
@@ -342,7 +342,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     if (!this.isFiltered) return items;
     return items.filter(wi => {
       if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
-      if (this._filter.labels.length > 0 && !wi.tags.some(t => this._filter.labels.includes(t))) return false;
+      if (this._filter.labels.length > 0 && !this._filter.labels.every(l => wi.tags.includes(l))) return false;
       if (this._filter.states.length > 0 && !this._filter.states.includes(mapAdoState(wi.state))) return false;
       return true;
     });

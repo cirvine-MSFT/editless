@@ -241,7 +241,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         tooltipLines.push(`Last activity: ${cached.lastActivity}`);
       }
       if (cached.inboxCount > 0) {
-        tooltipLines.push(`Inbox: ${cached.inboxCount} item(s)`);
+        tooltipLines.push(`Inbox: ${cached.inboxCount} item(s) — agents have submitted decisions for your review`);
       }
     }
     item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
@@ -327,6 +327,9 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       'decisions',
     );
     decisionItem.iconPath = new vscode.ThemeIcon('law');
+    if (state.inboxCount > 0) {
+      decisionItem.description = `📥 ${state.inboxCount} pending review`;
+    }
     children.push(decisionItem);
 
     // Activity
