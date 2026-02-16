@@ -28,6 +28,12 @@ vi.mock('vscode', () => {
 
   class ThemeIcon {
     id: string;
+    color?: unknown;
+    constructor(id: string, color?: unknown) { this.id = id; this.color = color; }
+  }
+
+  class ThemeColor {
+    id: string;
     constructor(id: string) { this.id = id; }
   }
 
@@ -49,7 +55,7 @@ vi.mock('vscode', () => {
   }
 
   return {
-    TreeItem, TreeItemCollapsibleState, ThemeIcon, MarkdownString, EventEmitter,
+    TreeItem, TreeItemCollapsibleState, ThemeIcon, ThemeColor, MarkdownString, EventEmitter,
     Uri: { parse: (s: string) => ({ toString: () => s }) },
     workspace: {
       getConfiguration: () => ({
@@ -216,5 +222,26 @@ describe('WorkItemsTreeProvider — plan status indicators', () => {
       makeIssue({ number: 139, title: 'Fix icon bug', labels: ['status:planned'] }),
     ]);
     expect(items[0].label).toBe('📋 #139 Fix icon bug');
+  });
+
+  it('should use pass icon for planned items', async () => {
+    const items = await getIssueItems([makeIssue({ labels: ['status:planned'] })]);
+    const icon = items[0].iconPath as { id: string; color?: { id: string } };
+    expect(icon.id).toBe('pass');
+    expect(icon.color?.id).toBe('testing.iconPassed');
+  });
+
+  it('should use question icon for needs-plan items', async () => {
+    const items = await getIssueItems([makeIssue({ labels: ['status:needs-plan'] })]);
+    const icon = items[0].iconPath as { id: string; color?: { id: string } };
+    expect(icon.id).toBe('question');
+    expect(icon.color?.id).toBe('editorWarning.foreground');
+  });
+
+  it('should use issues icon for neutral items', async () => {
+    const items = await getIssueItems([makeIssue({ labels: ['bug'] })]);
+    const icon = items[0].iconPath as { id: string; color?: unknown };
+    expect(icon.id).toBe('issues');
+    expect(icon.color).toBeUndefined();
   });
 });
