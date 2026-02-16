@@ -29,7 +29,7 @@ interface CustomCommandEntry {
   command: string;
 }
 
-export function activate(context: vscode.ExtensionContext): void {
+export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {
   const output = vscode.window.createOutputChannel('EditLess');
   context.subscriptions.push(output);
 
@@ -746,6 +746,8 @@ export function activate(context: vscode.ExtensionContext): void {
   );
 
   output.appendLine(`EditLess activated (${getEdition()})`);
+
+  return { terminalManager, context };
 }
 
 export function deactivate(): void {
