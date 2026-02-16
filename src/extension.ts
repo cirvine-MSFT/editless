@@ -582,6 +582,38 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
+  // Configure Work Items (quick pick between GitHub and ADO)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.configureWorkItems', async () => {
+      const choice = await vscode.window.showQuickPick(
+        [
+          { label: 'GitHub', description: 'Configure GitHub repositories for work items', command: 'editless.configureRepos' },
+          { label: 'Azure DevOps', description: 'Configure Azure DevOps project and PAT', command: 'editless.configureAdo' },
+        ],
+        { placeHolder: 'Choose a provider to configure' },
+      );
+      if (choice) {
+        await vscode.commands.executeCommand(choice.command);
+      }
+    }),
+  );
+
+  // Configure PRs (quick pick between GitHub and ADO)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.configurePRs', async () => {
+      const choice = await vscode.window.showQuickPick(
+        [
+          { label: 'GitHub', description: 'Configure GitHub repositories for pull requests', command: 'editless.configureRepos' },
+          { label: 'Azure DevOps', description: 'Configure Azure DevOps project and PAT', command: 'editless.configureAdo' },
+        ],
+        { placeHolder: 'Choose a provider to configure' },
+      );
+      if (choice) {
+        await vscode.commands.executeCommand(choice.command);
+      }
+    }),
+  );
+
   // Set ADO PAT (stored in secret storage)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.setAdoPat', async () => {
