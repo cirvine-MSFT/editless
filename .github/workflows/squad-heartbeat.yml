@@ -5,15 +5,11 @@ on:
     # Every 30 minutes — adjust or remove if not needed
     - cron: '*/30 * * * *'
 
-  # React to completed work
+  # React to completed work and new squad work
   issues:
-    types: [closed]
+    types: [closed, labeled]
   pull_request:
     types: [closed]
-
-  # React to new squad work
-  issues:
-    types: [labeled]
 
   # Manual trigger
   workflow_dispatch:
@@ -113,16 +109,16 @@ jobs:
               }
             }
 
-            // 3. Find squad issues missing triage verdict (no go:* label)
-            const missingVerdict = squadIssues.filter(issue => {
+            // 3. Find squad issues missing status label
+            const missingStatus = squadIssues.filter(issue => {
               const labels = issue.labels.map(l => l.name);
-              return !labels.some(l => l.startsWith('go:'));
+              return !labels.some(l => l.startsWith('status:'));
             });
 
-            // 4. Find go:yes issues missing release target
-            const goYesIssues = squadIssues.filter(issue => {
+            // 4. Find planned issues missing release target
+            const missingRelease = squadIssues.filter(issue => {
               const labels = issue.labels.map(l => l.name);
-              return labels.includes('go:yes') && !labels.some(l => l.startsWith('release:'));
+              return labels.includes('status:planned') && !labels.some(l => l.startsWith('release:'));
             });
 
             // 4b. Find issues missing type: label
@@ -151,11 +147,11 @@ jobs:
             if (unstarted.length > 0) {
               summary.push(`🟡 **${unstarted.length} assigned issue(s)** have no assignee`);
             }
-            if (missingVerdict.length > 0) {
-              summary.push(`⚪ **${missingVerdict.length} issue(s)** missing triage verdict (no \`go:\` label)`);
+            if (missingStatus.length > 0) {
+              summary.push(`⚪ **${missingStatus.length} issue(s)** missing \`status:\` label`);
             }
-            if (goYesIssues.length > 0) {
-              summary.push(`⚪ **${goYesIssues.length} approved issue(s)** missing release target (no \`release:\` label)`);
+            if (missingRelease.length > 0) {
+              summary.push(`⚪ **${missingRelease.length} planned issue(s)** missing release target (no \`release:\` label)`);
             }
             if (missingType.length > 0) {
               summary.push(`⚪ **${missingType.length} issue(s)** missing \`type:\` label`);
