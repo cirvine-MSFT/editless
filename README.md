@@ -42,6 +42,8 @@ npm run build
 
 ## Workflow Documentation
 
+- [Getting Started](docs/getting-started.md) — New to vibe coding? Start here
+- [Multi-Repo Workflow](docs/multi-repo-workflow.md) — Working across multiple repos
 - [GitHub Workflow](docs/workflows/github-workflow.md) — Managing work with AI agents on GitHub
 - [ADO Workflow](docs/workflows/ado-workflow.md) — Managing work with AI agents on Azure DevOps
 
