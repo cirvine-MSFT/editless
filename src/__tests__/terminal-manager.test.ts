@@ -54,7 +54,7 @@ vi.mock('../cli-provider', () => ({
   getActiveProviderLaunchCommand: () => '',
 }));
 
-import { TerminalManager, type PersistedTerminalInfo } from '../terminal-manager';
+import { TerminalManager, type PersistedTerminalInfo, type SessionState } from '../terminal-manager';
 
 function makeMockTerminal(name: string): vscode.Terminal {
   return {
@@ -1096,11 +1096,11 @@ describe('TerminalManager', () => {
 
         const idleIcon = mgr.getStateIcon('idle');
         expect(idleIcon).toBeDefined();
-        expect(idleIcon.id).toBe('terminal');
+        expect(idleIcon.id).toBe('check');
 
         const staleIcon = mgr.getStateIcon('stale');
         expect(staleIcon).toBeDefined();
-        expect(staleIcon.id).toBe('terminal');
+        expect(staleIcon.id).toBe('clock');
 
         const needsAttentionIcon = mgr.getStateIcon('needs-attention');
         expect(needsAttentionIcon).toBeDefined();
@@ -1108,7 +1108,15 @@ describe('TerminalManager', () => {
 
         const orphanedIcon = mgr.getStateIcon('orphaned');
         expect(orphanedIcon).toBeDefined();
-        expect(orphanedIcon.id).toBe('terminal');
+        expect(orphanedIcon.id).toBe('debug-disconnect');
+      });
+
+      it('should return unique icons for all session states', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const states: SessionState[] = ['working', 'waiting-on-input', 'idle', 'stale', 'needs-attention', 'orphaned'];
+        const icons = states.map(s => mgr.getStateIcon(s).id);
+        expect(new Set(icons).size).toBe(states.length);
       });
 
       it('should return human-readable description for each state', () => {
