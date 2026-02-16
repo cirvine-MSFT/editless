@@ -12,7 +12,7 @@ Stop jumping between windows, terminals, and repos. Know where all your sessions
 
 The editorless AI development workflow puts your mind back in the work, not in navigation. Plan where you want, delegate across your AI team, and see it all come together in one place.
 
-EditLess integrates with GitHub Copilot CLI and includes native support for Squad, giving you a dedicated UI for creating, managing, and monitoring your AI teams.
+EditLess integrates with GitHub Copilot CLI and includes native support for [Squad](https://github.com/bradygaster/squad), giving you a dedicated UI for creating, managing, and monitoring your AI teams.
 
 New to agentic development? Start here — install EditLess, add a squad, and let the AI do the heavy lifting. You'll wonder how you ever worked without it.
 
@@ -36,7 +36,7 @@ EditLess is currently distributed via GitHub Releases.
 - 🔍 **Auto-detection** — discovers CLI tools and agent teams automatically
 - 📊 **Status bar** — quick glance at inbox items and agent status
 - 🏷️ **Session labels** — organize and tag your sessions
-- 🔄 **Squad upgrader** — keep Squad CLI teams up to date
+- 🔄 **Squad upgrader** — keep [Squad](https://github.com/bradygaster/squad) teams up to date
 
 ## Development
 
