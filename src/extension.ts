@@ -8,7 +8,7 @@ import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand, checkSquadUpgradesOnStartup, clearLatestVersionCache } from './squad-upgrader';
-import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider } from './cli-provider';
+import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider } from './cli-provider';
 import { registerDiscoveryCommand, checkDiscoveryOnStartup } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import { AgentVisibilityManager } from './visibility';
@@ -728,6 +728,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const pick = await vscode.window.showQuickPick(
         [
           { label: '$(file-code) Agent', description: 'Create an agent template file', value: 'agent' as const },
+          { label: '$(terminal) Session', description: 'Launch a new agent session', value: 'session' as const },
           { label: '$(rocket) Squad', description: 'Initialize a new Squad project', value: 'squad' as const },
         ],
         { placeHolder: 'What would you like to add?' },
@@ -735,13 +736,15 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!pick) return;
       if (pick.value === 'agent') {
         await vscode.commands.executeCommand('editless.addAgent');
+      } else if (pick.value === 'session') {
+        await vscode.commands.executeCommand('editless.launchSession');
       } else {
         await vscode.commands.executeCommand('editless.addSquad');
       }
     }),
   );
 
-  // Add Agent — create a .github/agents/{name}.agent.md template or run custom command
+  // Add Agent — choose mode (repo template or CLI provider), then create
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.addAgent', async () => {
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -762,9 +765,46 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!name) return;
 
       const customCommand = vscode.workspace.getConfiguration('editless').get<string>('agentCreationCommand');
-      if (customCommand?.trim()) {
+      if (typeof customCommand === 'string' && customCommand.trim()) {
         const command = customCommand
           .replace(/\$\{workspaceFolder\}/g, workspaceFolder.uri.fsPath)
+          .replace(/\$\{agentName\}/g, name.trim());
+        const terminal = vscode.window.createTerminal({
+          name: `Add Agent: ${name.trim()}`,
+          cwd: workspaceFolder.uri.fsPath,
+        });
+        terminal.show();
+        terminal.sendText(command);
+        return;
+      }
+
+      const provider = getActiveCliProvider();
+      const hasProviderCreate = !!provider?.createCommand?.trim();
+
+      type ModeValue = 'repo' | 'provider';
+      const modeItems: { label: string; description: string; value: ModeValue }[] = [
+        { label: '$(repo) Repo template', description: 'Create .github/agents/ markdown file', value: 'repo' },
+      ];
+      if (hasProviderCreate) {
+        modeItems.unshift({
+          label: `$(terminal) ${provider!.name}`,
+          description: `Create via ${provider!.name} CLI`,
+          value: 'provider',
+        });
+      }
+
+      let mode: ModeValue = 'repo';
+      if (modeItems.length > 1) {
+        const modePick = await vscode.window.showQuickPick(modeItems, {
+          placeHolder: 'How should the agent be created?',
+        });
+        if (!modePick) return;
+        mode = modePick.value;
+      }
+
+      if (mode === 'provider' && provider?.createCommand) {
+        const command = provider.createCommand
+          .replace(/\$\(agent\)/g, name.trim())
           .replace(/\$\{agentName\}/g, name.trim());
         const terminal = vscode.window.createTerminal({
           name: `Add Agent: ${name.trim()}`,
