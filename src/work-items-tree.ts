@@ -419,6 +419,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     const planIndicator = hasPlan ? '📋' : needsPlan ? '❓' : '—';
     const item = new WorkItemsTreeItem(`${planIndicator} #${issue.number} ${issue.title}`);
     item.issue = issue;
+    item.id = `issue:${issue.repository}:${issue.number}:f${this._filterSeq}`;
 
     const labelText = issue.labels.join(', ');
     item.description = hasPlan
@@ -459,6 +460,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     const label = planFile ? `📋 #${wi.id} ${wi.title}` : `${stateIcon} #${wi.id} ${wi.title}`;
     const item = new WorkItemsTreeItem(label);
     item.adoWorkItem = wi;
+    item.id = `ado:${wi.id}:f${this._filterSeq}`;
     item.description = planFile
       ? `✓ planned · ${wi.type} · ${wi.state}`
       : `${wi.type} · ${wi.state}`;

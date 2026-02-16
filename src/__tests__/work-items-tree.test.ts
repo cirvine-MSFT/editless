@@ -417,6 +417,21 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     );
   });
 
+  it('should use AND logic when multiple labels are selected (#194)', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['release:v0.1', 'priority:p1'] }),
+        makeIssue({ number: 2, labels: ['release:backlog', 'priority:p1'] }),
+        makeIssue({ number: 3, labels: ['release:v0.1'] }),
+        makeIssue({ number: 4, labels: ['priority:p1'] }),
+      ],
+      { labels: ['release:v0.1', 'priority:p1'] },
+    );
+    // Only issue #1 has BOTH labels
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+
   it('should collect all unique labels from issues', async () => {
     mockIsGhAvailable.mockResolvedValue(true);
     mockFetchAssignedIssues.mockResolvedValue([
