@@ -14,3 +14,5 @@
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
 📌 Team update (2026-02-16): Squad folder rename — `.squad/` support added with `.ai-team/` backward compatibility via `src/team-dir.ts` utility. Any future code that needs to locate the team directory must use `resolveTeamDir()` or `resolveTeamMd()` — never hardcode paths. — decided by Morty
+
+📌 Team update (2026-02-16): v0.1 Release Triage & Scope Lock — 7 P0 items locked (including session persistence #94), 8 P1 items prioritized. #101 (Generic CLI Provider) flagged for scope review — architectural dependency may require design decision. Scope lock after 15:00 UTC. — decided by Rick

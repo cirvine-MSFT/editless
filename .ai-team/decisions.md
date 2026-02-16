@@ -440,3 +440,40 @@ The Squad CLI (bradygaster/squad) is renaming `.ai-team/` to `.squad/`. EditLess
 **Impact:** Anyone referencing `editless.customCommands` in their settings.json will see it ignored. No migration needed — the setting was array-defaulting-to-empty, so existing installs degrade silently.
 
 **What stays:** `editless.agentCreationCommand` is a separate feature and was preserved.
+
+
+### 2025-07-24: Filter inbox count to .md files only
+**By:** Morty (Extension Dev)
+
+The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/inbox/` directory as inbox items, including `.gitkeep` files (which preserve empty directories in git but aren't decision content). The inbox count filter now requires files to end with `.md` in addition to being regular files, ensuring only actual decision documents are counted.
+
+**Why:** `.gitkeep` is a git convention, not content. Counting it inflates the inbox badge in the status bar and tree view, which is misleading. Filtering to `.md` is consistent with how the codebase treats decision files.
+
+### 2026-02-16: v0.1 Release Triage & Scope Lock
+**By:** Rick (Lead)
+**Date:** 2026-02-16
+
+Final pre-release triage of all 25 open issues. Deadline: Monday evening (~16 hours).
+
+**P0 — LOCKED (must ship):** 7 items ready or in progress
+1. **#148** (Session labels off by one) — NEW BUG, assigned to Morty. After dev reload, tree session labels map to wrong terminals (off by one). Likely edge case in terminal-manager.ts reconciliation.
+2. **#139** (Work Items tree icon bug) — Planned, ready
+3. **#94** (Session persistence across crashes) — Morty + Birdperson
+4. **#93** (.squad/.ai-team rename) — Breaking change, planned
+5. **#66** (Scribe auto-flush inbox) — Planned
+6. **#58** (ADO config for Work Items/PRs) — Planned
+7. **#53** (Session persistence test matrix) — Test coverage, planned
+
+**P1 — EXECUTE (important):** 8 items should ship if capacity allows
+- #132 (Work Items filtering), #125 (Unified Add flow), #103 (Auto-detect has-plan), #101 (Generic CLI Provider), #96 (Re-evaluate Agency), #49 (Squad inbox education), #48 (Multi-repo docs), #47 (Squad entry docs)
+- **Note:** #96 and #101 flagged for scope review — architectural dependency may require design decision
+
+**P2 — BACKLOG (post-v0.1):** 5 items cut
+- #36 (Squad UX education), #37 (EditLess philosophy), #38 (Squad UI integration — explicitly marked "future work" in issue), #42 (Marketplace publishing — internal process), #43 (GIFs/demos)
+
+**Also already on backlog (no change):** #35, #45, #46, #56, #76, #78, #100
+
+**Scope lock:** No new v0.1 items after 2026-02-16 15:00 UTC. Automatically P2/backlog.
+
+**Why:** All P0 items assigned and labeled. Squad can execute immediately. P1 items are important but not blocking. Docs/marketplace work can follow in patch/v0.2. #38 honors the issue author's explicit "future work" intent.
+
