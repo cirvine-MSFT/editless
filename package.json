@@ -297,12 +297,18 @@
         "editless.registryPath": {
           "type": "string",
           "default": "./squad-registry.json",
-          "description": "Path to the squad registry JSON file"
+          "description": "Path to the squad registry JSON file",
+          "markdownDescription": "Path to the squad registry JSON file. The registry tracks which agent teams are available in this workspace and their configuration.\n\nAccepts absolute paths or paths relative to the workspace root.",
+          "scope": "resource",
+          "order": 1
         },
         "editless.discoveryDir": {
           "type": "string",
           "default": "",
-          "description": "Directory to scan for squad projects"
+          "description": "Directory to scan for squad projects",
+          "markdownDescription": "Directory to scan for squad projects. EditLess watches this directory for folders containing `.ai-team/` structures and adds them to the Agents pane automatically.\n\n_This setting will be replaced by `#editless.discovery.scanPaths#` in a future release._",
+          "scope": "resource",
+          "order": 2
         },
         "editless.discovery.scanPaths": {
           "type": "array",
@@ -315,33 +321,58 @@
         "editless.notifications.enabled": {
           "type": "boolean",
           "default": true,
-          "description": "Enable desktop notifications for squad events"
+          "description": "Enable desktop notifications for squad events",
+          "markdownDescription": "Master toggle for all EditLess notifications. When disabled, **all** EditLess toasts are suppressed — including inbox and update notifications.",
+          "scope": "window",
+          "order": 10
         },
         "editless.notifications.inbox": {
           "type": "boolean",
           "default": true,
-          "description": "Enable notifications for inbox items (new decisions, pending work)"
+          "description": "Enable notifications for inbox items (new decisions, pending work)",
+          "markdownDescription": "Show notifications when new inbox items arrive (pending decisions, work items). A toast fires when the count transitions from 0 → N.\n\nRequires `#editless.notifications.enabled#` to be on.",
+          "scope": "window",
+          "order": 11
         },
         "editless.notifications.updates": {
           "type": "boolean",
           "default": true,
-          "description": "Enable notifications for CLI update availability"
+          "description": "Enable notifications for CLI update availability",
+          "markdownDescription": "Show notifications when a CLI provider update is available. EditLess checks each detected provider on startup and displays a toast with the installed and available versions.\n\nRequires `#editless.notifications.enabled#` to be on.",
+          "scope": "window",
+          "order": 12
         },
         "editless.scanDebounceMs": {
           "type": "number",
           "default": 500,
-          "description": "Debounce interval in milliseconds for file system scanning"
+          "description": "Debounce interval in milliseconds for file system scanning",
+          "markdownDescription": "Debounce interval in milliseconds for file-system scanning. Controls how long EditLess waits after a file change before re-scanning for agents.\n\nDefault: `500`. Increase this value if you experience excessive refreshes in large workspaces.",
+          "scope": "resource",
+          "order": 3
         },
         "editless.cli.provider": {
           "type": "string",
           "default": "copilot",
           "enum": ["copilot", "agency", "claude", "custom"],
-          "description": "CLI provider for agent sessions. Auto-detected on startup."
+          "enumDescriptions": [
+            "GitHub Copilot CLI — default, works out of the box",
+            "Agency CLI — auto-detected when installed",
+            "Anthropic Claude CLI",
+            "User-defined CLI — configure via custom commands"
+          ],
+          "enumItemLabels": ["Copilot", "Agency", "Claude", "Custom"],
+          "description": "CLI provider for agent sessions. Auto-detected on startup.",
+          "markdownDescription": "CLI provider for agent sessions. Auto-detected on startup — only change this if auto-detection picks the wrong provider.\n\nEach provider has built-in support for version checking and updates. Choose **Custom** to use a CLI not listed here.",
+          "scope": "window",
+          "order": 20
         },
         "editless.customCommands": {
           "type": "array",
           "default": [],
           "description": "Custom commands that can be sent to terminal sessions via context menu",
+          "markdownDescription": "Custom commands that appear in the terminal session context menu. Each entry needs a `label` (display name) and a `command` (text sent to the terminal).\n\nExample:\n```json\n[\n  { \"label\": \"Status\", \"command\": \"git status\" },\n  { \"label\": \"Run Tests\", \"command\": \"npm test\" }\n]\n```",
+          "scope": "resource",
+          "order": 22,
           "items": {
             "type": "object",
             "properties": {
@@ -361,6 +392,9 @@
           "type": "array",
           "default": [],
           "description": "GitHub repositories to show work items and PRs from (e.g., ['owner/repo1', 'owner/repo2']). If empty, auto-detects from current workspace.",
+          "markdownDescription": "GitHub repositories to show in the **Work Items** and **Pull Requests** panes. Use `\"owner/repo\"` format.\n\nIf empty, EditLess auto-detects repositories from the current workspace using `git remote`.\n\nExample: `[\"octocat/hello-world\", \"octocat/spoon-knife\"]`",
+          "scope": "resource",
+          "order": 30,
           "items": {
             "type": "string"
           }
@@ -369,6 +403,9 @@
           "type": "object",
           "default": {},
           "description": "Filter GitHub issues by labels",
+          "markdownDescription": "Filter which GitHub issues appear in the **Work Items** pane by label.\n\n- `includeLabels` — only show issues with at least one of these labels (empty = show all)\n- `excludeLabels` — hide issues that have any of these labels\n\nExample:\n```json\n{\n  \"includeLabels\": [\"type:bug\", \"type:feature\"],\n  \"excludeLabels\": [\"status:review\"]\n}\n```",
+          "scope": "resource",
+          "order": 31,
           "properties": {
             "includeLabels": {
               "type": "array",
@@ -387,7 +424,10 @@
         "editless.agentCreationCommand": {
           "type": "string",
           "default": "",
-          "description": "Custom command to run when adding an agent. Overrides built-in flow. Supports ${workspaceFolder} and ${agentName}."
+          "description": "Custom command to run when adding an agent. Overrides built-in flow. Supports ${workspaceFolder} and ${agentName}.",
+          "markdownDescription": "Custom command to run when adding an agent. Overrides the built-in agent creation flow.\n\nSupports variable substitution:\n- `${workspaceFolder}` — path to the current workspace\n- `${agentName}` — name entered by the user\n\nExample: `\"my-tool init --name ${agentName} --dir ${workspaceFolder}\"`",
+          "scope": "resource",
+          "order": 21
         }
       }
     }
