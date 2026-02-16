@@ -36,6 +36,7 @@ const {
   mockWorkItemsRefresh,
   mockPRsRefresh,
   mockOpenExternal,
+  mockGetActiveCliProvider,
   MockEditlessTreeItem,
 } = vi.hoisted(() => {
   class MockEditlessTreeItem {
@@ -88,6 +89,7 @@ const {
     mockWorkItemsRefresh: vi.fn(),
     mockPRsRefresh: vi.fn(),
     mockOpenExternal: vi.fn(),
+    mockGetActiveCliProvider: vi.fn(),
     MockEditlessTreeItem,
   };
 });
@@ -278,6 +280,7 @@ vi.mock('../cli-provider', () => ({
   checkProviderUpdatesOnStartup: vi.fn(),
   probeAllProviders: vi.fn(() => Promise.resolve()),
   resolveActiveProvider: vi.fn(),
+  getActiveCliProvider: mockGetActiveCliProvider,
 }));
 
 vi.mock('../discovery', () => ({
@@ -1005,6 +1008,99 @@ describe('extension command handlers', () => {
         'workbench.action.openSettings',
         'editless.ado',
       );
+    });
+  });
+
+  // --- editless.addNew --------------------------------------------------------
+
+  describe('editless.addNew', () => {
+    it('should show quickpick with Agent, Session, and Squad options', async () => {
+      mockShowQuickPick.mockResolvedValueOnce(undefined);
+      await getHandler('editless.addNew')();
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ value: 'agent' }),
+          expect.objectContaining({ value: 'session' }),
+          expect.objectContaining({ value: 'squad' }),
+        ]),
+        expect.any(Object),
+      );
+    });
+
+    it('should delegate to addAgent when agent is selected', async () => {
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'agent' });
+      await getHandler('editless.addNew')();
+      expect(mockExecuteCommand).toHaveBeenCalledWith('editless.addAgent');
+    });
+
+    it('should delegate to launchSession when session is selected', async () => {
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'session' });
+      await getHandler('editless.addNew')();
+      expect(mockExecuteCommand).toHaveBeenCalledWith('editless.launchSession');
+    });
+
+    it('should delegate to addSquad when squad is selected', async () => {
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'squad' });
+      await getHandler('editless.addNew')();
+      expect(mockExecuteCommand).toHaveBeenCalledWith('editless.addSquad');
+    });
+
+    it('should do nothing when quickpick is cancelled', async () => {
+      mockShowQuickPick.mockResolvedValueOnce(undefined);
+      await getHandler('editless.addNew')();
+      expect(mockExecuteCommand).not.toHaveBeenCalledWith('editless.addAgent');
+      expect(mockExecuteCommand).not.toHaveBeenCalledWith('editless.launchSession');
+      expect(mockExecuteCommand).not.toHaveBeenCalledWith('editless.addSquad');
+    });
+  });
+
+  // --- editless.addAgent -----------------------------------------------------
+
+  describe('editless.addAgent', () => {
+    it('should warn when no workspace folder is open', async () => {
+      const origFolders = (await import('vscode')).workspace.workspaceFolders;
+      Object.defineProperty((await import('vscode')).workspace, 'workspaceFolders', { value: undefined, configurable: true });
+      await getHandler('editless.addAgent')();
+      expect(mockShowWarningMessage).toHaveBeenCalledWith('No workspace folder open.');
+      Object.defineProperty((await import('vscode')).workspace, 'workspaceFolders', { value: origFolders, configurable: true });
+    });
+
+    it('should skip mode picker when no provider has createCommand', async () => {
+      mockGetActiveCliProvider.mockReturnValue(undefined);
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce('test-agent');
+      // Handler will try to write a file — catch that; we only care about QuickPick not being called
+      try { await getHandler('editless.addAgent')(); } catch { /* fs write expected to fail */ }
+      expect(mockShowQuickPick).not.toHaveBeenCalled();
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+    });
+
+    it('should show mode picker when provider has createCommand', async () => {
+      mockGetActiveCliProvider.mockReturnValue({ name: 'TestCLI', createCommand: 'test-cli create $(agent)' });
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce('test-agent');
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'provider' });
+      await getHandler('editless.addAgent')();
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ value: 'provider' }),
+          expect.objectContaining({ value: 'repo' }),
+        ]),
+        expect.any(Object),
+      );
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+    });
+
+    it('should do nothing when name input is cancelled', async () => {
+      mockShowInputBox.mockResolvedValueOnce(undefined);
+      await getHandler('editless.addAgent')();
+      expect(mockShowQuickPick).not.toHaveBeenCalled();
     });
   });
 
