@@ -1997,3 +1997,10 @@ editless/
 
 **Why:** VS Code's TreeView API doesn't support dynamic menu visibility based on tree contents — you can only use `view == <viewId>` (always visible) or `viewItem == <contextValue>` (per-item inline buttons). When a menu action should appear based on aggregate state (e.g., "any squad upgradeable"), a context key is the only option. This pattern should be used for other view-level actions that depend on computed state.
 
+
+
+### 2026-02-16: Meeseeks writes regression tests for every bug Casey discovers
+**By:** Casey Irvine (via Copilot)
+**What:** When Casey discovers a bug during usage, Meeseeks should write regression tests for that specific scenario BEFORE Morty fixes it. Tests-first approach for all user-discovered bugs.
+**Why:** User request — ensures bugs have proper test coverage and we know exactly what to verify when the fix lands.
+
