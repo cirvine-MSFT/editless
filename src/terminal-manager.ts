@@ -17,6 +17,8 @@ export interface TerminalInfo {
   squadIcon: string;
   index: number;
   createdAt: Date;
+  agentSessionId?: string;
+  launchCommand?: string;
 }
 
 export interface PersistedTerminalInfo {
@@ -32,6 +34,8 @@ export interface PersistedTerminalInfo {
   terminalName: string;
   lastSeenAt: number;
   rebootCount: number;
+  agentSessionId?: string;
+  launchCommand?: string;
 }
 
 const STORAGE_KEY = 'editless.terminalSessions';
@@ -102,6 +106,7 @@ export class TerminalManager implements vscode.Disposable {
       squadIcon: config.icon,
       index,
       createdAt: new Date(),
+      launchCommand: config.launchCommand,
     });
 
     this._counters.set(config.id, index + 1);
@@ -189,6 +194,8 @@ export class TerminalManager implements vscode.Disposable {
       squadIcon: entry.squadIcon,
       index: entry.index,
       createdAt: new Date(entry.createdAt),
+      agentSessionId: entry.agentSessionId,
+      launchCommand: entry.launchCommand,
     });
 
     this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
@@ -207,6 +214,14 @@ export class TerminalManager implements vscode.Disposable {
     const terminal = vscode.window.createTerminal({ name: entry.displayName });
     terminal.show();
 
+    if (entry.launchCommand) {
+      if (entry.agentSessionId) {
+        terminal.sendText(`${entry.launchCommand} --resume ${entry.agentSessionId}`);
+      } else {
+        terminal.sendText(entry.launchCommand);
+      }
+    }
+
     this._terminals.set(terminal, {
       id: entry.id,
       labelKey: entry.labelKey,
@@ -217,6 +232,8 @@ export class TerminalManager implements vscode.Disposable {
       squadIcon: entry.squadIcon,
       index: entry.index,
       createdAt: new Date(),
+      agentSessionId: entry.agentSessionId,
+      launchCommand: entry.launchCommand,
     });
 
     this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
@@ -238,6 +255,14 @@ export class TerminalManager implements vscode.Disposable {
 
   persist(): void {
     this._persist();
+  }
+
+  setAgentSessionId(terminal: vscode.Terminal, sessionId: string): void {
+    const info = this._terminals.get(terminal);
+    if (!info) return;
+    info.agentSessionId = sessionId;
+    this._persist();
+    this._onDidChange.fire();
   }
 
   // -- Public API: state detection ------------------------------------------
@@ -335,6 +360,8 @@ export class TerminalManager implements vscode.Disposable {
         squadIcon: persisted.squadIcon,
         index: persisted.index,
         createdAt: new Date(persisted.createdAt),
+        agentSessionId: persisted.agentSessionId,
+        launchCommand: persisted.launchCommand,
       });
       // Seed activity timestamp so state detection reflects persisted history
       if (persisted.lastSeenAt) {
@@ -389,6 +416,8 @@ export class TerminalManager implements vscode.Disposable {
         terminalName: terminal.name,
         lastSeenAt: now,
         rebootCount: 0,
+        agentSessionId: info.agentSessionId,
+        launchCommand: info.launchCommand,
       });
     }
     // Preserve unmatched saved entries so they aren't lost during timing races
