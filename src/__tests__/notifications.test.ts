@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 
-const { mockGet, mockShowWarningMessage } = vi.hoisted(() => ({
+const { mockGet, mockShowWarningMessage, mockExecuteCommand } = vi.hoisted(() => ({
   mockGet: vi.fn(),
-  mockShowWarningMessage: vi.fn(),
+  mockShowWarningMessage: vi.fn().mockResolvedValue(undefined),
+  mockExecuteCommand: vi.fn(),
 }));
 
 vi.mock('vscode', () => ({
@@ -13,6 +14,9 @@ vi.mock('vscode', () => ({
   },
   window: {
     showWarningMessage: mockShowWarningMessage,
+  },
+  commands: {
+    executeCommand: mockExecuteCommand,
   },
 }));
 
@@ -125,7 +129,8 @@ describe('NotificationManager.checkAndNotify', () => {
     manager.checkAndNotify(config, makeState({ inboxCount: 3 }));
 
     expect(mockShowWarningMessage).toHaveBeenCalledWith(
-      '🧪 Test Squad: 3 decision(s) pending',
+      '🧪 Test Squad: 3 decision(s) pending review',
+      'Review',
     );
   });
 
