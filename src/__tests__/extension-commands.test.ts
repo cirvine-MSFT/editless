@@ -1107,10 +1107,10 @@ describe('extension command handlers', () => {
   // --- editless.openFilePreview ---------------------------------------------
 
   describe('editless.openFilePreview', () => {
-    it('should delegate to markdown.showPreview', () => {
+    it('should delegate to markdown.showPreviewToSide', () => {
       const uri = { fsPath: '/test.md' };
       getHandler('editless.openFilePreview')(uri);
-      expect(mockExecuteCommand).toHaveBeenCalledWith('markdown.showPreview', uri);
+      expect(mockExecuteCommand).toHaveBeenCalledWith('markdown.showPreviewToSide', uri);
     });
   });
 });

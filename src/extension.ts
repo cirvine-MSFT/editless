@@ -643,7 +643,11 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!pick) return;
 
       const cfg = pick.squad;
-      const terminalName = `#${issue.number} ${issue.title}`;
+      const MAX_SESSION_NAME = 50;
+      const rawName = `#${issue.number} ${issue.title}`;
+      const terminalName = rawName.length <= MAX_SESSION_NAME
+        ? rawName
+        : rawName.slice(0, rawName.lastIndexOf(' ', MAX_SESSION_NAME)) + '…';
       terminalManager.launchTerminal(cfg, terminalName);
 
       await vscode.env.clipboard.writeText(issue.url);
@@ -660,7 +664,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Open file in markdown preview
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.openFilePreview', (uri: vscode.Uri) => {
-      vscode.commands.executeCommand('markdown.showPreview', uri);
+      vscode.commands.executeCommand('markdown.showPreviewToSide', uri);
     }),
   );
 
