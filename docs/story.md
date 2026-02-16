@@ -6,7 +6,7 @@
 
 EditLess was born after a particularly animated one-on-one with my boss.
 
-I had recently dove headfirst into agentic development and vibe coding as a philosophy — without even realizing that's what I was doing. I was ranting and raving about how my productivity had increased tenfold, but I could be *even more* productive if the tools kept up with how I wanted to work with my agents. I kept going on about how Microsoft Teams is going to be the IDE of the future. I wanted a world where I interacted with my agents through multiple chat windows — or even through a phone call in the car on the way to work. Just *talking* to my team and having things happen.
+I had recently dived headfirst into agentic development and vibe coding as a philosophy — without even realizing that's what I was doing. I was ranting and raving about how my productivity had increased tenfold, but I could be *even more* productive if the tools kept up with how I wanted to work with my agents. I kept going on about how Microsoft Teams is going to be the IDE of the future. I wanted a world where I interacted with my agents through multiple chat windows — or even through a phone call in the car on the way to work. Just *talking* to my team and having things happen.
 
 Meanwhile, my computer screen looked more like Dozer's terminal from *The Matrix* than a software development workspace.
 
@@ -30,7 +30,7 @@ I realized that if I wanted to keep my sanity and my productivity climbing, I wo
 
 My manager asked me how my workflow had changed. And the truth is: things that would have felt normal weeks ago now felt completely archaic and out of date.
 
-Repos? Editors? I hadn't thought about or touched either in weeks. I hadn't created a pull request or a work item myself in even longer. I was planning, executing, validating, reviewing, and merging work that would take me weeks before in a single day, all through chat with my agents.  I simply had a team of agents that knew how I wanted them to work, and they were executing my every command with a simple type (or speech-to-text).
+Repos? Editors? I hadn't thought about or touched either in weeks. I hadn't created a pull request or a work item myself in even longer. I was planning, executing, validating, reviewing, and merging work that would have taken me weeks before in a single day, all through chat with my agents. I simply had a team of agents that knew how I wanted them to work, and they were executing my every command with a simple type (or speech-to-text).
 
 ## Built in a Weekend
 
