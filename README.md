@@ -78,6 +78,8 @@ No experience with agentic development required. No complex setup. Just install,
 
 - **Use [SquadUI](https://marketplace.visualstudio.com/items?itemName=csharpfritz.squadui) for a richer dashboard.** It adds team visualization, skill management, and a squad dashboard right in VS Code. EditLess integrates with it — you'll see "Open in Squad UI" in your context menus.
 
+- **Use [git worktrees](https://git-scm.com/docs/git-worktree) for parallel agent work.** Worktrees let multiple agents work on the same repo simultaneously — each in its own branch, each in its own directory. No checkout conflicts, no stepping on each other's work. If you're running multiple sessions across the same project, worktrees are a game changer.
+
 ## Documentation
 
 - [The EditLess Story](docs/philosophy.md) — Why EditLess exists and the editorless philosophy
