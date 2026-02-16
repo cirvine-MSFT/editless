@@ -6,6 +6,8 @@ Plan work and delegate to AI agents across multiple repos and sessions, then mon
 
 ## What is EditLess?
 
+EditLess is a VS Code extension that gives you a single pane of glass for managing your multiple agents, creating new agent teams, multiple chat sessions, your work items, and pull requests. It's multitasking supercharged — everything you need, right in one place.
+
 Stop jumping between windows, terminals, and repos. Know where all your sessions are and what needs your attention. EditLess brings multi-session, multi-repo AI team management into VS Code's sidebar, letting you manage multiple agents — all without touching the editor.
 
 The editorless AI development workflow puts your mind back in the work, not in navigation. Plan where you want, delegate across your AI team, and see it all come together in one place. Leave the editor, free your mind.
