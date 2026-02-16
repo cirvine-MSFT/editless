@@ -180,6 +180,16 @@
         "category": "EditLess"
       },
       {
+        "command": "editless.setAdoPat",
+        "title": "Set Azure DevOps PAT",
+        "category": "EditLess"
+      },
+      {
+        "command": "editless.adoSignIn",
+        "title": "Sign in to Azure DevOps",
+        "category": "EditLess"
+      },
+      {
         "command": "editless.openInBrowser",
         "title": "Open in Browser",
         "category": "EditLess",
