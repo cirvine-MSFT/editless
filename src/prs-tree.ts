@@ -149,20 +149,31 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     }
   }
 
+  private hasConflicts(pr: GitHubPR): boolean {
+    return pr.mergeable === 'CONFLICTING';
+  }
+
   private buildPRItem(pr: GitHubPR): PRsTreeItem {
     const state = this.derivePRState(pr);
+    const conflicts = this.hasConflicts(pr);
     const item = new PRsTreeItem(`#${pr.number} ${pr.title}`);
     item.pr = pr;
-    item.description = `${state} · ${pr.headRef} → ${pr.baseRef}`;
-    item.iconPath = this.prStateIcon(state);
+    item.description = conflicts
+      ? `${state} · ⚠️ has conflicts · ${pr.headRef} → ${pr.baseRef}`
+      : `${state} · ${pr.headRef} → ${pr.baseRef}`;
+    item.iconPath = conflicts
+      ? new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground'))
+      : this.prStateIcon(state);
     item.contextValue = 'pull-request';
-    item.tooltip = new vscode.MarkdownString(
-      [
-        `**#${pr.number} ${pr.title}**`,
-        `State: ${state}`,
-        `Branch: \`${pr.headRef}\` → \`${pr.baseRef}\``,
-      ].join('\n\n'),
-    );
+    const tooltipLines = [
+      `**#${pr.number} ${pr.title}**`,
+      `State: ${state}`,
+      `Branch: \`${pr.headRef}\` → \`${pr.baseRef}\``,
+    ];
+    if (conflicts) {
+      tooltipLines.push('⚠️ **This PR has merge conflicts**');
+    }
+    item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
     item.command = {
       command: 'vscode.open',
       title: 'Open in Browser',
