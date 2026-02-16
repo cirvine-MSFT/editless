@@ -13,7 +13,16 @@
     "vscode": "^1.100.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Machine Learning"
+  ],
+  "keywords": [
+    "ai",
+    "agents",
+    "copilot",
+    "vibe-coding",
+    "terminal",
+    "squad"
   ],
   "activationEvents": [
     "onStartupFinished"
