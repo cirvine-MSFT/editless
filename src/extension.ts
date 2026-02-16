@@ -21,6 +21,7 @@ import { WorkItemsTreeProvider, WorkItemsTreeItem } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
+import { TerminalLayoutManager } from './terminal-layout';
 
 const execFileAsync = promisify(execFile);
 
@@ -707,6 +708,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       );
     }),
   );
+
+  // --- Terminal layout restore — maximize panel when editors close -----------
+  const terminalLayoutManager = new TerminalLayoutManager();
+  context.subscriptions.push(terminalLayoutManager);
 
   output.appendLine(`EditLess activated (${getEdition()})`);
 
