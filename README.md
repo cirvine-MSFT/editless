@@ -1,6 +1,6 @@
 # EditLess
 
-> Escape the editor. Command your AI teams from one pane of glass.
+> Escape the editor. Free your mind. Command your AI teams from one pane of glass.
 
 Plan work and delegate to AI agents across multiple repos and sessions, then monitor and review everything from one sidebar — no context switching required. One window. One view. Complete control — all without touching the editor. Join the editorless software development revolution!
 
@@ -10,7 +10,7 @@ EditLess is a VS Code extension that gives you a single pane of glass for creati
 
 Stop jumping between windows, terminals, and repos. Know where all your sessions are and what needs your attention. EditLess brings multi-session, multi-repo AI team management into VS Code's sidebar, letting you manage multiple agents — all without touching the editor.
 
-The editorless AI development workflow puts your mind back in the work, not in navigation. Plan where you want, delegate across your AI team, and see it all come together in one place. Leave the editor, free your mind.
+The editorless AI development workflow puts your mind back in the work, not in navigation. Plan where you want, delegate across your AI team, and see it all come together in one place.
 
 EditLess integrates with GitHub Copilot CLI and includes native support for Squad, giving you a dedicated UI for creating, managing, and monitoring your AI teams.
 
