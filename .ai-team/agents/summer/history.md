@@ -20,4 +20,11 @@
 📌 Team update (2026-02-16): Casey's voice in personal narratives — Conversational, enthusiastic, and authentic. Use short declarative sentences for impact and preserve casual phrasing. Edits should be light-touch—fixing grammar without changing the natural, personal tone. — decided by Summer
 
 📌 Documentation pattern (2026-02-16): Philosophy vs. Story docs — `docs/story.md` is Casey's personal narrative (how EditLess came to be). `docs/philosophy.md` is the "why" (why editorless development matters, what the shift looks like). Story is emotional/personal; Philosophy is intellectual/universal. Don't conflate them. Cross-reference them instead. — decided by Summer
+📌 Architecture (2026-02-16): EditLess activation is async and modular — CLI provider detection (`probeAllProviders`), registry loading, and discovery (`autoRegisterWorkspaceSquads`) all run non-blocking on startup. The TerminalManager is the hub for session state persistence (crashes safely via 30s interval). Three TreeDataProviders render sidebar views (Agents, Work Items, PRs) and subscribe to manager events for refreshes. Squad scanning is expensive; deferred via debounce (`scanDebounceMs`). — documented by Summer
+
+📌 Settings organization (2026-02-16): All `editless.*` settings use `workspace` or `window` scope appropriately. Registry/discovery are workspace. CLI providers, refresh intervals, and notifications are window. Settings are defined in `package.json` under `contributes.configuration` with full markdown descriptions and examples. — documented by Summer
+
+📌 Agent file format (2026-02-16): Standalone agents discovered from `.agent.md` files in workspace, `.github/agents/`, and `~/.copilot/`. Parser extracts name from H1 heading (or filename fallback), description from YAML `description:` field or blockquote. ID generated via kebab-case normalization from filename. Deduplication: workspace wins over system-wide. — documented by Summer
+
+📌 Developer documentation structure (2026-02-16): Created `docs/architecture.md` (system overview, components, data flows), `docs/SETTINGS.md` (complete reference), and `docs/agent-file-format.md` (file spec). These are for contributors, not end users. See PR #225. — created by Summer
 
