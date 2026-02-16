@@ -274,7 +274,7 @@ vi.mock('../squad-upgrader', () => ({
 }));
 
 vi.mock('../cli-provider', () => ({
-  registerAgencyUpdateCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  registerCliUpdateCommand: vi.fn(() => ({ dispose: vi.fn() })),
   checkProviderUpdatesOnStartup: vi.fn(),
   probeAllProviders: vi.fn(() => Promise.resolve()),
   resolveActiveProvider: vi.fn(),
@@ -381,7 +381,7 @@ function makeSquad(overrides: Record<string, unknown> = {}) {
     icon: '🚀',
     universe: 'test',
     path: '/squads/alpha',
-    launchCommand: 'agency copilot --model gpt-5',
+    launchCommand: 'copilot --agent squad --model gpt-5',
     ...overrides,
   };
 }
@@ -928,14 +928,14 @@ describe('extension command handlers', () => {
   describe('editless.changeModel', () => {
     it('should update launch command model and refresh tree', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      const squad = makeSquad({ launchCommand: 'agency copilot --model gpt-5' });
+      const squad = makeSquad({ launchCommand: 'copilot --agent squad --model gpt-5' });
       mockGetSquad.mockReturnValue(squad);
       mockShowQuickPick.mockResolvedValue({ label: 'claude-sonnet-4' });
 
       await getHandler('editless.changeModel')(item);
 
       expect(mockUpdateSquad).toHaveBeenCalledWith('squad-1', {
-        launchCommand: 'agency copilot --model claude-sonnet-4',
+        launchCommand: 'copilot --agent squad --model claude-sonnet-4',
       });
       expect(mockTreeRefresh).toHaveBeenCalled();
     });
@@ -964,7 +964,7 @@ describe('extension command handlers', () => {
 
     it('should no-op when selected model is same as current', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: 'agency copilot --model gpt-5' }));
+      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: 'copilot --agent squad --model gpt-5' }));
       mockShowQuickPick.mockResolvedValue({ label: 'gpt-5' });
 
       await getHandler('editless.changeModel')(item);
@@ -973,13 +973,13 @@ describe('extension command handlers', () => {
 
     it('should append --model when launch command has no model flag', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: 'agency copilot' }));
+      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: 'copilot --agent squad' }));
       mockShowQuickPick.mockResolvedValue({ label: 'claude-sonnet-4' });
 
       await getHandler('editless.changeModel')(item);
 
       expect(mockUpdateSquad).toHaveBeenCalledWith('squad-1', {
-        launchCommand: 'agency copilot --model claude-sonnet-4',
+        launchCommand: 'copilot --agent squad --model claude-sonnet-4',
       });
     });
   });

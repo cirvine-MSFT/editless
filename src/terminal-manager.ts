@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver } from './session-context';
+import { getActiveProviderLaunchCommand } from './cli-provider';
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
@@ -102,7 +103,7 @@ export class TerminalManager implements vscode.Disposable {
       cwd: config.path,
     });
 
-    terminal.sendText(config.launchCommand || 'agency copilot --agent squad --yolo -s');
+    terminal.sendText(config.launchCommand || getActiveProviderLaunchCommand());
     terminal.show();
 
     this._terminals.set(terminal, {
