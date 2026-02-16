@@ -51,6 +51,8 @@ npm run build
 # Press F5 in VS Code to launch Extension Development Host
 ```
 
+See [CONTRIBUTING.md](CONTRIBUTING.md) for code style, testing, PR conventions, and the full development guide.
+
 ## Documentation
 
 - [The EditLess Story](docs/philosophy.md) — Why EditLess exists and the editorless philosophy
