@@ -11,7 +11,7 @@ I had recently dove headfirst into agentic development and vibe coding as a phil
 Meanwhile, my computer screen looked more like Dozer's terminal from *The Matrix* than a software development workspace.
 
 <p align="center">
-  <img src="https://media.giphy.com/media/zXmbOaTpbY6mA/giphy.gif" alt="Dozer watching the Matrix code — my actual desktop, basically" width="480" />
+  <img src="https://tenor.com/bPPIL.gif" alt="Dozer watching the Matrix code — my actual desktop, basically" width="480" />
 </p>
 
 Multiple terminals on every screen, multiplexed to the max. And I kept losing track of them — what they were for, what they were working on. I'd have to stop and ask my agents what they were doing, which kind of defeats the purpose of having agents in the first place.
