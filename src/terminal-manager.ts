@@ -43,6 +43,7 @@ export interface PersistedTerminalInfo {
 }
 
 const STORAGE_KEY = 'editless.terminalSessions';
+const WORKING_THRESHOLD_MS = 30 * 1000;
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
 const STALE_THRESHOLD_MS = 60 * 60 * 1000;
 
@@ -134,7 +135,7 @@ export class TerminalManager implements vscode.Disposable {
         results.push({ terminal, info });
       }
     }
-    return results;
+    return results.sort((a, b) => a.info.index - b.info.index);
   }
 
   getAllTerminals(): { terminal: vscode.Terminal; info: TerminalInfo }[] {
@@ -353,6 +354,9 @@ export class TerminalManager implements vscode.Disposable {
     }
 
     const ageMs = Date.now() - lastActivity;
+    if (ageMs < WORKING_THRESHOLD_MS) {
+      return inboxCount > 0 ? 'needs-attention' : 'working';
+    }
     if (ageMs < IDLE_THRESHOLD_MS) {
       return inboxCount > 0 ? 'needs-attention' : 'waiting-on-input';
     }
@@ -444,10 +448,8 @@ export class TerminalManager implements vscode.Disposable {
         launchCommand: persisted.launchCommand,
         squadPath: persisted.squadPath,
       });
-      // Seed activity timestamp so state detection reflects persisted history
-      if (persisted.lastSeenAt) {
-        this._lastActivityAt.set(match, persisted.lastSeenAt);
-      }
+      // Seed activity with current time — terminal was just re-matched as alive
+      this._lastActivityAt.set(match, Date.now());
     };
 
     const runPass = (matcher: (t: vscode.Terminal, p: PersistedTerminalInfo) => boolean): void => {
