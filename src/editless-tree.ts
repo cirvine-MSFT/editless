@@ -43,6 +43,7 @@ function normalizeSquadDisplayName(name: string, fallback: string): string {
 export class EditlessTreeItem extends vscode.TreeItem {
   public terminal?: vscode.Terminal;
   public persistedEntry?: PersistedTerminalInfo;
+  public parent?: EditlessTreeItem;
 
   constructor(
     label: string,
@@ -105,8 +106,13 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   findTerminalItem(terminal: vscode.Terminal): EditlessTreeItem | undefined {
     const info = this.terminalManager?.getTerminalInfo(terminal);
     if (!info) return undefined;
-    
-    const squadChildren = this.getSquadChildren(info.squadId);
+
+    // Build the parent squad item so getParent() can traverse back to root
+    const rootItems = this.getRootItems();
+    const squadItem = rootItems.find(item => item.type === 'squad' && item.squadId === info.squadId);
+    if (!squadItem) return undefined;
+
+    const squadChildren = this.getSquadChildren(info.squadId, squadItem);
     return squadChildren.find(item => item.type === 'terminal' && item.terminal === terminal);
   }
 
@@ -116,15 +122,19 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     return element;
   }
 
+  getParent(element: EditlessTreeItem): EditlessTreeItem | undefined {
+    return element.parent;
+  }
+
   getChildren(element?: EditlessTreeItem): EditlessTreeItem[] {
     if (!element) {
       return this.getRootItems();
     }
     if (element.type === 'squad' && element.squadId) {
-      return this.getSquadChildren(element.squadId);
+      return this.getSquadChildren(element.squadId, element);
     }
     if (element.type === 'category' && element.squadId && element.categoryKind) {
-      return this.getCategoryChildren(element.squadId, element.categoryKind);
+      return this.getCategoryChildren(element.squadId, element.categoryKind, element);
     }
     return [];
   }
@@ -235,7 +245,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     return this._cache.get(squadId);
   }
 
-  private getSquadChildren(squadId: string): EditlessTreeItem[] {
+  private getSquadChildren(squadId: string, parentItem?: EditlessTreeItem): EditlessTreeItem[] {
     const state = this.getState(squadId);
     if (!state) return [];
 
@@ -316,23 +326,41 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     activityItem.iconPath = new vscode.ThemeIcon('pulse');
     children.push(activityItem);
 
+    if (parentItem) {
+      for (const child of children) {
+        child.parent = parentItem;
+      }
+    }
+
     return children;
   }
 
   // -- Category children --------------------------------------------------
 
-  private getCategoryChildren(squadId: string, kind: CategoryKind): EditlessTreeItem[] {
+  private getCategoryChildren(squadId: string, kind: CategoryKind, parentItem?: EditlessTreeItem): EditlessTreeItem[] {
     const state = this.getState(squadId);
     if (!state) return [];
 
+    let children: EditlessTreeItem[];
     switch (kind) {
       case 'roster':
-        return state.roster.map(a => this.buildAgentItem(a));
+        children = state.roster.map(a => this.buildAgentItem(a));
+        break;
       case 'decisions':
-        return state.recentDecisions.map(d => this.buildDecisionItem(d));
+        children = state.recentDecisions.map(d => this.buildDecisionItem(d));
+        break;
       case 'activity':
-        return state.recentActivity.map(a => this.buildActivityItem(a));
+        children = state.recentActivity.map(a => this.buildActivityItem(a));
+        break;
     }
+
+    if (parentItem) {
+      for (const child of children) {
+        child.parent = parentItem;
+      }
+    }
+
+    return children;
   }
 
   private buildAgentItem(agent: AgentInfo): EditlessTreeItem {

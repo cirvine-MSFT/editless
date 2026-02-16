@@ -83,7 +83,11 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!info) return;
       const matchingItem = treeProvider.findTerminalItem(terminal);
       if (matchingItem) {
-        treeView.reveal(matchingItem, { select: true, focus: false });
+        try {
+          treeView.reveal(matchingItem, { select: true, focus: false });
+        } catch {
+          // reveal() may fail if tree is not visible or item is stale
+        }
       }
     }),
   );
