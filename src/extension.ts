@@ -259,14 +259,16 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // Launch session
   context.subscriptions.push(
-    vscode.commands.registerCommand('editless.launchSession', async (squadId?: string) => {
+    vscode.commands.registerCommand('editless.launchSession', async (squadIdOrItem?: string | EditlessTreeItem) => {
       const squads = registry.loadSquads();
       if (squads.length === 0) {
         vscode.window.showWarningMessage('No agents registered yet.');
         return;
       }
 
-      let chosen: string | undefined = squadId;
+      let chosen: string | undefined = typeof squadIdOrItem === 'string'
+        ? squadIdOrItem
+        : squadIdOrItem?.squadId;
       if (!chosen) {
         const pick = await vscode.window.showQuickPick(
           squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, id: s.id })),
