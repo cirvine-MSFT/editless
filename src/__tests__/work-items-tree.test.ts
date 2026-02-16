@@ -433,6 +433,79 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     const labels = provider.getAllLabels();
     expect(labels).toEqual(['bug', 'feature', 'urgent']);
   });
+
+  it('should use OR logic within same label category', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['release:v0.1', 'type:bug'] }),
+        makeIssue({ number: 2, labels: ['release:backlog', 'type:bug'] }),
+        makeIssue({ number: 3, labels: ['release:v0.2', 'type:feature'] }),
+      ],
+      { labels: ['release:v0.1', 'release:backlog'] },
+    );
+    expect(items).toHaveLength(2);
+    expect(items.map(i => i.label)).toEqual(
+      expect.arrayContaining([expect.stringContaining('#1'), expect.stringContaining('#2')]),
+    );
+  });
+
+  it('should use AND logic across different label categories', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:docs', 'release:v0.1'] }),
+        makeIssue({ number: 2, labels: ['type:docs', 'release:backlog'] }),
+        makeIssue({ number: 3, labels: ['type:bug', 'release:v0.1'] }),
+        makeIssue({ number: 4, labels: ['type:docs'] }),
+      ],
+      { labels: ['type:docs', 'release:v0.1'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+
+  it('should combine OR within category and AND across categories', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:docs', 'release:v0.1'] }),
+        makeIssue({ number: 2, labels: ['type:docs', 'release:backlog'] }),
+        makeIssue({ number: 3, labels: ['type:bug', 'release:v0.1'] }),
+        makeIssue({ number: 4, labels: ['type:docs'] }),
+      ],
+      { labels: ['type:docs', 'release:v0.1', 'release:backlog'] },
+    );
+    expect(items).toHaveLength(2);
+    expect(items.map(i => i.label)).toEqual(
+      expect.arrayContaining([expect.stringContaining('#1'), expect.stringContaining('#2')]),
+    );
+  });
+
+  it('should handle labels without a prefix (empty prefix group)', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['urgent', 'type:bug'] }),
+        makeIssue({ number: 2, labels: ['nice-to-have', 'type:bug'] }),
+        makeIssue({ number: 3, labels: ['urgent', 'type:feature'] }),
+      ],
+      { labels: ['urgent', 'nice-to-have'] },
+    );
+    expect(items).toHaveLength(3);
+    expect(items.map(i => i.label)).toEqual(
+      expect.arrayContaining([expect.stringContaining('#1'), expect.stringContaining('#2'), expect.stringContaining('#3')]),
+    );
+  });
+
+  it('should handle mixed prefixed and unprefixed filters', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['urgent', 'type:bug'] }),
+        makeIssue({ number: 2, labels: ['nice-to-have', 'type:bug'] }),
+        makeIssue({ number: 3, labels: ['urgent', 'type:feature'] }),
+      ],
+      { labels: ['urgent', 'type:bug'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
 });
 
 // ---------------------------------------------------------------------------
