@@ -355,7 +355,7 @@ export class TerminalManager implements vscode.Disposable {
 
     const ageMs = Date.now() - lastActivity;
     if (ageMs < IDLE_THRESHOLD_MS) {
-      return inboxCount > 0 ? 'needs-attention' : 'waiting-on-input';
+      return inboxCount > 0 ? 'needs-attention' : 'idle';
     }
 
     if (inboxCount > 0) { return 'needs-attention'; }
