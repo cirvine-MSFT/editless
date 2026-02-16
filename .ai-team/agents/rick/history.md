@@ -16,6 +16,9 @@ Pre-release audit (issue #87) found EditLess is production-ready except for one 
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+### 2026-02-16: Full codebase quality review — 3 blockers, 5 cleanup items
+Pre-release code quality review of entire codebase (19 source files, 12 test suites, 200 tests). Three blockers found: (1) `execSync` in `probeCliVersion()` blocks the extension host activation for up to 15 seconds — must be made async. (2) The `custom` provider profile is STILL missing from `KNOWN_PROFILES` — was flagged in #87 audit but never patched. (3) `activate()` returns void instead of the test API object required by decisions.md. Five cleanup items: vitest picking up compiled integration test JS files (add `out/**` to exclude), private field access via bracket notation in editless-tree.ts, event listener leaks in EditlessTreeProvider (no Disposable implementation), dead prototype types (DashboardState, WebSocketMessage, LaunchRequest, TerminalSession never imported), and unused `promptRenameSession` export. Security scan clean — no openai/coeus references, no hardcoded URLs or tokens, test fixtures use generic names. Architecture is solid: clean dependency graph, no circular deps, strict TypeScript, all commands properly wired in package.json.
+
 ### 2026-02-15: Vitest mock type signature pattern
 Vitest `vi.fn()` does NOT use the `vi.fn<[args], return>` type syntax. Use `.mockResolvedValue()` or `.mockReturnValue()` to set the return type. Example: `vi.fn().mockResolvedValue(undefined as T)` for async mocks. This tripped up the cli-provider tests — the `<[string, ...string[]], Promise<string | undefined>>` syntax is invalid and causes TypeScript errors.
 
