@@ -116,11 +116,22 @@ export async function checkSquadUpgradesOnStartup(
 ): Promise<void> {
   const latest = await getLatestSquadVersion();
   if (!latest) return;
+  
+  let anyUpgradeAvailable = false;
   for (const squad of squads) {
     const local = getLocalSquadVersion(squad.path);
     if (!local) continue;
-    onResult(squad.id, isNewerVersion(latest, local));
+    const upgradeAvailable = isNewerVersion(latest, local);
+    onResult(squad.id, upgradeAvailable);
+    if (upgradeAvailable) {
+      anyUpgradeAvailable = true;
+    }
   }
+  
+  // VS Code TreeView doesn't support dynamic menu visibility based on tree state,
+  // so we set a context key that package.json can use in the "when" clause
+  const vscode = await import('vscode');
+  await vscode.commands.executeCommand('setContext', 'editless.squadUpgradeAvailable', anyUpgradeAvailable);
 }
 
 export async function runSquadUpgrade(config: AgentTeamConfig): Promise<void> {
@@ -236,11 +247,12 @@ export function registerSquadUpgradeAllCommand(
     }
 
     for (const squad of squads) {
-      runSquadUpgrade(squad).then(() => onUpgradeComplete?.(squad.id));
+      await runSquadUpgrade(squad);
+      onUpgradeComplete?.(squad.id);
     }
 
     vscode.window.showInformationMessage(
-      `Upgrading ${squads.length} Squad package${squads.length === 1 ? '' : 's'}…`,
+      `Upgraded ${squads.length} Squad package${squads.length === 1 ? '' : 's'}.`,
     );
   });
 }
