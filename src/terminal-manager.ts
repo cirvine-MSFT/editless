@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { AgentTeamConfig } from './types';
+import type { SessionContextResolver } from './session-context';
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
@@ -19,6 +20,7 @@ export interface TerminalInfo {
   createdAt: Date;
   agentSessionId?: string;
   launchCommand?: string;
+  squadPath?: string;
 }
 
 export interface PersistedTerminalInfo {
@@ -36,6 +38,7 @@ export interface PersistedTerminalInfo {
   rebootCount: number;
   agentSessionId?: string;
   launchCommand?: string;
+  squadPath?: string;
 }
 
 const STORAGE_KEY = 'editless.terminalSessions';
@@ -52,6 +55,8 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _shellExecutionActive = new Map<vscode.Terminal, boolean>();
   private readonly _lastActivityAt = new Map<vscode.Terminal, number>();
   private _matchTimer: ReturnType<typeof setTimeout> | undefined;
+  private _persistTimer: ReturnType<typeof setInterval> | undefined;
+  private _sessionResolver?: SessionContextResolver;
 
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange: vscode.Event<void> = this._onDidChange.event;
@@ -59,6 +64,9 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _disposables: vscode.Disposable[] = [];
 
   constructor(private readonly context: vscode.ExtensionContext) {
+    // Crash-safe periodic persist (30s)
+    this._persistTimer = setInterval(() => this._persist(), 30_000);
+
     this._disposables.push(
       vscode.window.onDidCloseTerminal(terminal => {
         this._shellExecutionActive.delete(terminal);
@@ -108,6 +116,7 @@ export class TerminalManager implements vscode.Disposable {
       index,
       createdAt: new Date(),
       launchCommand: config.launchCommand,
+      squadPath: config.path,
     });
 
     this._counters.set(config.id, index + 1);
@@ -197,6 +206,7 @@ export class TerminalManager implements vscode.Disposable {
       createdAt: new Date(entry.createdAt),
       agentSessionId: entry.agentSessionId,
       launchCommand: entry.launchCommand,
+      squadPath: entry.squadPath,
     });
 
     this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
@@ -212,7 +222,10 @@ export class TerminalManager implements vscode.Disposable {
       return reconnected;
     }
 
-    const terminal = vscode.window.createTerminal({ name: entry.displayName });
+    const terminal = vscode.window.createTerminal({
+      name: entry.displayName,
+      cwd: entry.squadPath,
+    });
     terminal.show();
 
     if (entry.launchCommand) {
@@ -235,6 +248,7 @@ export class TerminalManager implements vscode.Disposable {
       createdAt: new Date(),
       agentSessionId: entry.agentSessionId,
       launchCommand: entry.launchCommand,
+      squadPath: entry.squadPath,
     });
 
     this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
@@ -258,12 +272,59 @@ export class TerminalManager implements vscode.Disposable {
     this._persist();
   }
 
+  setSessionResolver(resolver: SessionContextResolver): void {
+    this._sessionResolver = resolver;
+  }
+
   setAgentSessionId(terminal: vscode.Terminal, sessionId: string): void {
     const info = this._terminals.get(terminal);
     if (!info) return;
     info.agentSessionId = sessionId;
     this._persist();
     this._onDidChange.fire();
+  }
+
+  /**
+   * For terminals missing an agentSessionId, try to detect the Copilot session
+   * by matching session-state directories whose cwd matches the terminal's squadPath.
+   */
+  detectSessionIds(): void {
+    if (!this._sessionResolver) return;
+
+    const squadPaths: string[] = [];
+    for (const info of this._terminals.values()) {
+      if (!info.agentSessionId && info.squadPath) {
+        squadPaths.push(info.squadPath);
+      }
+    }
+    if (squadPaths.length === 0) return;
+
+    const sessions = this._sessionResolver.resolveAll(squadPaths);
+    let changed = false;
+
+    for (const [terminal, info] of this._terminals) {
+      if (info.agentSessionId || !info.squadPath) continue;
+      const ctx = sessions.get(info.squadPath);
+      if (!ctx) continue;
+
+      // Only claim sessions created after the terminal was launched
+      const sessionCreated = new Date(ctx.createdAt).getTime();
+      if (sessionCreated < info.createdAt.getTime()) continue;
+
+      // Check this session ID isn't already claimed by another terminal
+      const alreadyClaimed = [...this._terminals.values()].some(
+        other => other !== info && other.agentSessionId === ctx.sessionId,
+      );
+      if (alreadyClaimed) continue;
+
+      info.agentSessionId = ctx.sessionId;
+      changed = true;
+    }
+
+    if (changed) {
+      this._persist();
+      this._onDidChange.fire();
+    }
   }
 
   // -- Public API: state detection ------------------------------------------
@@ -380,6 +441,7 @@ export class TerminalManager implements vscode.Disposable {
         createdAt: new Date(persisted.createdAt),
         agentSessionId: persisted.agentSessionId,
         launchCommand: persisted.launchCommand,
+        squadPath: persisted.squadPath,
       });
       // Seed activity timestamp so state detection reflects persisted history
       if (persisted.lastSeenAt) {
@@ -425,6 +487,9 @@ export class TerminalManager implements vscode.Disposable {
   }
 
   private _persist(): void {
+    // Run session ID detection before persisting
+    this.detectSessionIds();
+
     const now = Date.now();
     const entries: PersistedTerminalInfo[] = [];
     for (const [terminal, info] of this._terminals) {
@@ -436,6 +501,7 @@ export class TerminalManager implements vscode.Disposable {
         rebootCount: 0,
         agentSessionId: info.agentSessionId,
         launchCommand: info.launchCommand,
+        squadPath: info.squadPath,
       });
     }
     // Preserve unmatched saved entries so they aren't lost during timing races
@@ -452,6 +518,9 @@ export class TerminalManager implements vscode.Disposable {
   dispose(): void {
     if (this._matchTimer !== undefined) {
       clearTimeout(this._matchTimer);
+    }
+    if (this._persistTimer !== undefined) {
+      clearInterval(this._persistTimer);
     }
     for (const d of this._disposables) {
       d.dispose();
