@@ -5,7 +5,7 @@
 ### Added
 - Agent tree view with auto-discovery of `.ai-team/` directories
 - Terminal management for AI coding sessions
-- CLI provider system with auto-detection (Copilot, Claude, Agency)
+- CLI provider system with auto-detection (Copilot, Claude, and more)
 - Squad upgrader for Squad CLI teams
 - Status bar with inbox monitoring
 - Session context and labeling
