@@ -20,7 +20,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 const SKIP_DIRS = new Set([
   '.ai-team', '.ai-team-templates', 'node_modules', 'dist', 'out',
-  '__tests__', '__integration__', '.git', 'icons',
+  '__tests__', '__integration__', '.git', 'icons', '.vscode-test',
 ]);
 
 const TEXT_EXTENSIONS = new Set([

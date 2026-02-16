@@ -207,10 +207,53 @@ export function registerDiscoveryCommand(
   return disposable;
 }
 
+/**
+ * Auto-register squads found at workspace roots.
+ * If a workspace folder contains .ai-team/ or .squad/ with a team.md,
+ * silently add it to the registry so the tree view populates immediately.
+ */
+export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
+  const folders = vscode.workspace.workspaceFolders;
+  if (!folders || folders.length === 0) { return; }
+
+  const existing = registry.loadSquads();
+  const existingPaths = new Set(existing.map(s => s.path.toLowerCase()));
+
+  const toAdd: AgentTeamConfig[] = [];
+
+  for (const folder of folders) {
+    const folderPath = folder.uri.fsPath;
+    if (existingPaths.has(folderPath.toLowerCase())) { continue; }
+
+    const teamMdPath = resolveTeamMd(folderPath);
+    if (!teamMdPath) { continue; }
+
+    const content = fs.readFileSync(teamMdPath, 'utf-8');
+    const parsed = parseTeamMd(content, folder.name);
+
+    toAdd.push({
+      id: toKebabCase(folder.name),
+      name: parsed.name,
+      description: parsed.description,
+      path: folderPath,
+      icon: '🔷',
+      universe: parsed.universe,
+      launchCommand: getActiveProviderLaunchCommand(),
+    });
+  }
+
+  if (toAdd.length > 0) {
+    registry.addSquads(toAdd);
+  }
+}
+
 export function checkDiscoveryOnStartup(
   context: vscode.ExtensionContext,
   registry: EditlessRegistry,
 ): void {
+  // Auto-register workspace-root squads silently
+  autoRegisterWorkspaceSquads(registry);
+
   const config = vscode.workspace.getConfiguration('editless');
   const discoveryDir = config.get<string>('discoveryDir', '');
   const scanPaths = config.get<string[]>('discovery.scanPaths', []);
