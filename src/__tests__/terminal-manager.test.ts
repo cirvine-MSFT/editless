@@ -936,7 +936,7 @@ describe('TerminalManager', () => {
         expect(state).toBe('working');
       });
 
-      it('should show waiting-on-input immediately after shell execution ends', () => {
+      it('should show idle immediately after shell execution ends', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -951,9 +951,8 @@ describe('TerminalManager', () => {
 
         capturedShellEndListener({ terminal, execution });
         
-        // Immediately after ending: waiting-on-input (execution no longer active)
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('waiting-on-input');
+        expect(state).toBe('idle');
       });
 
       it('should handle multiple rapid start/end cycles correctly', () => {
@@ -1042,7 +1041,7 @@ describe('TerminalManager', () => {
         const terminal = mgr.launchTerminal(config);
 
         const state = mgr.getSessionState(terminal);
-        expect(['waiting-on-input', 'idle']).toContain(state);
+        expect(state).toBe('idle');
       });
 
       it('should return orphaned for persisted-only session', () => {
@@ -1221,7 +1220,77 @@ describe('TerminalManager', () => {
 
         mgr.setSquadInboxCount('test-squad', 0);
         const state = mgr.getSessionState(terminal);
-        expect(['idle', 'waiting-on-input']).toContain(state);
+        expect(state).toBe('idle');
+      });
+    });
+
+    describe('session state defaults (regression tests for #226)', () => {
+      it('should default to idle when no shell execution is active', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('idle');
+      });
+
+      it('should show idle after shell execution completes', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        const execution = { commandLine: { value: 'echo "test"' } } as vscode.TerminalShellExecution;
+        capturedShellStartListener({ terminal, execution });
+        expect(mgr.getSessionState(terminal)).toBe('working');
+
+        capturedShellEndListener({ terminal, execution });
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('idle');
+      });
+
+      it('should NOT default to waiting-on-input without positive signal', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // No shell execution, no inbox items — should be idle, not waiting-on-input
+        const state = mgr.getSessionState(terminal);
+        expect(state).not.toBe('waiting-on-input');
+        expect(state).toBe('idle');
+      });
+
+      it('should transition from idle to working when execution starts', () => {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        expect(mgr.getSessionState(terminal)).toBe('idle');
+
+        const execution = { commandLine: { value: 'npm test' } } as vscode.TerminalShellExecution;
+        capturedShellStartListener({ terminal, execution });
+        
+        expect(mgr.getSessionState(terminal)).toBe('working');
+      });
+
+      it('should transition to stale after idle threshold passes', () => {
+        const staleEntry = makePersistedEntry({
+          id: 'stale-test',
+          terminalName: '🧪 Stale Terminal',
+          lastSeenAt: Date.now() - 61 * 60 * 1000, // 61 minutes ago
+        });
+        const liveTerminal = makeMockTerminal('🧪 Stale Terminal');
+        mockTerminals.push(liveTerminal);
+
+        const ctx = makeMockContext([staleEntry]);
+        const mgr = new TerminalManager(ctx);
+        mgr.reconcile();
+
+        const state = mgr.getSessionState(liveTerminal);
+        expect(state).toBe('stale');
       });
     });
   });
