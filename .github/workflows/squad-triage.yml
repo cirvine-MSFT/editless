@@ -193,13 +193,16 @@ jobs:
               labels: [assignLabel]
             });
 
-            // Apply default triage verdict
-            await github.rest.issues.addLabels({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: issue.number,
-              labels: ['go:needs-research']
-            });
+            // Apply default status if no status: label exists yet
+            const hasStatusLabel = issue.labels.some(l => l.name.startsWith('status:'));
+            if (!hasStatusLabel) {
+              await github.rest.issues.addLabels({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                labels: ['status:needs-plan']
+              });
+            }
 
             // Auto-assign @copilot if enabled
             if (isCopilot && copilotAutoAssign) {

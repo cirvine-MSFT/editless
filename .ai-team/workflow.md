@@ -14,8 +14,7 @@ All labels use `prefix:value` syntax. Labels are mutually exclusive within their
 | `priority:` | How urgent | Yes | `priority:p0` |
 | `status:` | Workflow state | Yes | `status:planned` |
 | `squad:` | Agent assignment | No (can have multiple) | `squad:morty` |
-| `release:` | When it ships | Yes | `release:v0.5.0` |
-| `go:` | Decision gate | Yes | `go:yes` |
+| `release:` | When it ships | Yes | `release:v0.1` |
 | `area:` | Topic grouping | No (can have multiple) | `area:toolbar-ux` |
 
 Standalone: `duplicate` (no namespace)
@@ -63,5 +62,5 @@ No `done` label — closing the issue IS done.
 
 ## Cross-Platform (GitHub ↔ ADO)
 
-Portable labels (use identically on both): `status:`, `squad:`, `go:`
+Portable labels (use identically on both): `status:`, `squad:`
 GitHub-only (ADO has native equivalents): `type:`, `priority:`
