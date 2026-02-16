@@ -24,6 +24,8 @@ import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { TerminalLayoutManager } from './terminal-layout';
+import { getAdoToken, promptAdoSignIn } from './ado-auth';
+import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
 
 const execFileAsync = promisify(execFile);
 
@@ -505,10 +507,40 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
+  // Set ADO PAT (stored in secret storage)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.setAdoPat', async () => {
+      const pat = await vscode.window.showInputBox({
+        prompt: 'Enter your Azure DevOps Personal Access Token',
+        password: true,
+        placeHolder: 'Paste your PAT here',
+        ignoreFocusOut: true,
+      });
+      if (pat) {
+        await context.secrets.store('editless.ado.pat', pat);
+        vscode.window.showInformationMessage('ADO PAT saved. Refreshing work items...');
+        initAdoIntegration(context, workItemsProvider, prsProvider);
+      }
+    }),
+  );
+
+  // Sign in to ADO (triggers Microsoft auth flow)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.adoSignIn', async () => {
+      const token = await promptAdoSignIn();
+      if (token) {
+        vscode.window.showInformationMessage('Signed in to Azure DevOps. Refreshing...');
+        initAdoIntegration(context, workItemsProvider, prsProvider);
+      }
+    }),
+  );
+
   // Open in Browser (context menu for work items and PRs)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.openInBrowser', async (arg: WorkItemsTreeItem | PRsTreeItem) => {
-      const url = (arg as WorkItemsTreeItem).issue?.url ?? (arg as PRsTreeItem).pr?.url;
+      const wiItem = arg as WorkItemsTreeItem;
+      const prItem = arg as PRsTreeItem;
+      const url = wiItem.issue?.url ?? wiItem.adoWorkItem?.url ?? prItem.pr?.url ?? prItem.adoPR?.url;
       if (url) {
         await vscode.env.openExternal(vscode.Uri.parse(url));
       }
@@ -544,6 +576,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // --- GitHub repo detection & data loading ---
   initGitHubIntegration(workItemsProvider, prsProvider);
+
+  // --- ADO integration ---
+  initAdoIntegration(context, workItemsProvider, prsProvider);
 
   // Open file in markdown preview
   context.subscriptions.push(
@@ -775,4 +810,34 @@ async function initGitHubIntegration(
 
   workItemsProvider.setRepos(repos);
   prsProvider.setRepos(repos);
+}
+
+async function initAdoIntegration(
+  context: vscode.ExtensionContext,
+  workItemsProvider: WorkItemsTreeProvider,
+  prsProvider: PRsTreeProvider,
+): Promise<void> {
+  const config = vscode.workspace.getConfiguration('editless');
+  const org = config.get<string>('ado.organization', '').trim();
+  const project = config.get<string>('ado.project', '').trim();
+
+  if (!org || !project) {
+    return;
+  }
+
+  const token = await getAdoToken(context.secrets);
+  if (!token) {
+    return;
+  }
+
+  try {
+    const [workItems, prs] = await Promise.all([
+      fetchAdoWorkItems(org, project, token),
+      fetchAdoPRs(org, project, token),
+    ]);
+    workItemsProvider.setAdoItems(workItems);
+    prsProvider.setAdoPRs(prs);
+  } catch {
+    // ADO fetch failed silently — user can retry via refresh
+  }
 }

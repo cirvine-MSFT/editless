@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
 import { GitHubPR, fetchMyPRs, isGhAvailable } from './github-client';
+import type { AdoPR } from './ado-client';
 
 export class PRsTreeItem extends vscode.TreeItem {
   public pr?: GitHubPR;
+  public adoPR?: AdoPR;
 
   constructor(
     label: string,
@@ -18,11 +20,25 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
   private _repos: string[] = [];
   private _prs = new Map<string, GitHubPR[]>();
+  private _adoPRs: AdoPR[] = [];
+  private _adoConfigured = false;
   private _loading = false;
 
   setRepos(repos: string[]): void {
     this._repos = repos;
     this.fetchAll();
+  }
+
+  setAdoPRs(prs: AdoPR[]): void {
+    this._adoPRs = prs;
+    this._adoConfigured = true;
+    this._onDidChangeTreeData.fire();
+  }
+
+  clearAdo(): void {
+    this._adoPRs = [];
+    this._adoConfigured = false;
+    this._onDidChangeTreeData.fire();
   }
 
   refresh(): void {
@@ -76,7 +92,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
         return [item];
       }
 
-      if (this._repos.length === 0) {
+      if (this._repos.length === 0 && !this._adoConfigured) {
         const ghItem = new PRsTreeItem('Configure in GitHub');
         ghItem.iconPath = new vscode.ThemeIcon('github');
         ghItem.command = {
@@ -94,25 +110,51 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
         return [ghItem, adoItem];
       }
 
-      if (this._prs.size === 0) {
+      const hasGitHub = this._prs.size > 0;
+      const hasAdo = this._adoPRs.length > 0;
+
+      if (!hasGitHub && !hasAdo) {
         const item = new PRsTreeItem('No open PRs');
         item.iconPath = new vscode.ThemeIcon('check');
         return [item];
       }
 
-      if (this._prs.size === 1) {
-        const [, prs] = [...this._prs.entries()][0];
-        return prs.map((p) => this.buildPRItem(p));
+      const items: PRsTreeItem[] = [];
+
+      if (hasAdo) {
+        if (hasGitHub) {
+          const adoGroup = new PRsTreeItem('Azure DevOps', vscode.TreeItemCollapsibleState.Expanded);
+          adoGroup.iconPath = new vscode.ThemeIcon('azure');
+          adoGroup.description = `${this._adoPRs.length} PR${this._adoPRs.length === 1 ? '' : 's'}`;
+          adoGroup.contextValue = 'ado-pr-group';
+          adoGroup.id = 'pr:ado';
+          items.push(adoGroup);
+        } else {
+          return this._adoPRs.map(p => this.buildAdoPRItem(p));
+        }
       }
 
-      return [...this._prs.entries()].map(([repo, prs]) => {
-        const item = new PRsTreeItem(repo, vscode.TreeItemCollapsibleState.Expanded);
-        item.iconPath = new vscode.ThemeIcon('repo');
-        item.description = `${prs.length} PR${prs.length === 1 ? '' : 's'}`;
-        item.contextValue = 'repo-group';
-        item.id = `pr:${repo}`;
-        return item;
-      });
+      if (hasGitHub) {
+        if (this._prs.size === 1 && !hasAdo) {
+          const [, prs] = [...this._prs.entries()][0];
+          return prs.map((p) => this.buildPRItem(p));
+        }
+
+        for (const [repo, prs] of this._prs.entries()) {
+          const repoItem = new PRsTreeItem(repo, vscode.TreeItemCollapsibleState.Expanded);
+          repoItem.iconPath = new vscode.ThemeIcon('github');
+          repoItem.description = `${prs.length} PR${prs.length === 1 ? '' : 's'}`;
+          repoItem.contextValue = 'repo-group';
+          repoItem.id = `pr:${repo}`;
+          items.push(repoItem);
+        }
+      }
+
+      return items;
+    }
+
+    if (element.contextValue === 'ado-pr-group') {
+      return this._adoPRs.map(p => this.buildAdoPRItem(p));
     }
 
     const repoId = element.id?.replace('pr:', '');
@@ -174,6 +216,34 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       tooltipLines.push('⚠️ **This PR has merge conflicts**');
     }
     item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
+    item.command = {
+      command: 'vscode.open',
+      title: 'Open in Browser',
+      arguments: [vscode.Uri.parse(pr.url)],
+    };
+    return item;
+  }
+
+  private buildAdoPRItem(pr: AdoPR): PRsTreeItem {
+    const item = new PRsTreeItem(`#${pr.id} ${pr.title}`);
+    item.adoPR = pr;
+    const stateLabel = pr.isDraft ? 'draft' : pr.status;
+    item.description = `${stateLabel} · ${pr.sourceRef} → ${pr.targetRef}`;
+    item.iconPath = pr.isDraft
+      ? new vscode.ThemeIcon('git-pull-request-draft')
+      : pr.status === 'merged'
+        ? new vscode.ThemeIcon('git-merge')
+        : new vscode.ThemeIcon('git-pull-request');
+    item.contextValue = 'ado-pull-request';
+    item.tooltip = new vscode.MarkdownString(
+      [
+        `**#${pr.id} ${pr.title}**`,
+        `State: ${stateLabel}`,
+        `Branch: \`${pr.sourceRef}\` → \`${pr.targetRef}\``,
+        `Repo: ${pr.repository}`,
+        pr.reviewers.length > 0 ? `Reviewers: ${pr.reviewers.join(', ')}` : '',
+      ].filter(Boolean).join('\n\n'),
+    );
     item.command = {
       command: 'vscode.open',
       title: 'Open in Browser',

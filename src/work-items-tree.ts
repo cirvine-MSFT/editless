@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GitHubIssue, fetchAssignedIssues, isGhAvailable } from './github-client';
+import type { AdoWorkItem } from './ado-client';
 
 interface IssueFilter {
   includeLabels?: string[];
@@ -8,6 +9,7 @@ interface IssueFilter {
 
 export class WorkItemsTreeItem extends vscode.TreeItem {
   public issue?: GitHubIssue;
+  public adoWorkItem?: AdoWorkItem;
 
   constructor(
     label: string,
@@ -23,11 +25,25 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
 
   private _repos: string[] = [];
   private _issues = new Map<string, GitHubIssue[]>();
+  private _adoItems: AdoWorkItem[] = [];
+  private _adoConfigured = false;
   private _loading = false;
 
   setRepos(repos: string[]): void {
     this._repos = repos;
     this.fetchAll();
+  }
+
+  setAdoItems(items: AdoWorkItem[]): void {
+    this._adoItems = items;
+    this._adoConfigured = true;
+    this._onDidChangeTreeData.fire();
+  }
+
+  clearAdo(): void {
+    this._adoItems = [];
+    this._adoConfigured = false;
+    this._onDidChangeTreeData.fire();
   }
 
   refresh(): void {
@@ -82,7 +98,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         return [item];
       }
 
-      if (this._repos.length === 0) {
+      if (this._repos.length === 0 && !this._adoConfigured) {
         const ghItem = new WorkItemsTreeItem('Configure in GitHub');
         ghItem.iconPath = new vscode.ThemeIcon('github');
         ghItem.command = {
@@ -100,30 +116,59 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         return [ghItem, adoItem];
       }
 
-      if (this._issues.size === 0) {
+      const hasGitHub = this._issues.size > 0;
+      const hasAdo = this._adoItems.length > 0;
+
+      if (!hasGitHub && !hasAdo) {
         const item = new WorkItemsTreeItem('No assigned issues found');
         item.iconPath = new vscode.ThemeIcon('check');
         return [item];
       }
 
-      const milestoneItems = this.buildMilestoneGroups();
-      if (milestoneItems) {
-        return milestoneItems;
+      const items: WorkItemsTreeItem[] = [];
+
+      // ADO work items group
+      if (hasAdo) {
+        if (hasGitHub) {
+          const adoGroup = new WorkItemsTreeItem('Azure DevOps', vscode.TreeItemCollapsibleState.Expanded);
+          adoGroup.iconPath = new vscode.ThemeIcon('azure');
+          adoGroup.description = `${this._adoItems.length} item${this._adoItems.length === 1 ? '' : 's'}`;
+          adoGroup.contextValue = 'ado-group';
+          adoGroup.id = 'wi:ado';
+          items.push(adoGroup);
+        } else {
+          return this._adoItems.map(wi => this.buildAdoItem(wi));
+        }
       }
 
-      if (this._issues.size === 1) {
-        const [, issues] = [...this._issues.entries()][0];
-        return issues.map((i) => this.buildIssueItem(i));
+      // GitHub issues (existing logic)
+      if (hasGitHub) {
+        const milestoneItems = this.buildMilestoneGroups();
+        if (milestoneItems && !hasAdo) {
+          return milestoneItems;
+        }
+        if (milestoneItems && hasAdo) {
+          items.push(...milestoneItems);
+        } else if (this._issues.size === 1 && !hasAdo) {
+          const [, issues] = [...this._issues.entries()][0];
+          return issues.map((i) => this.buildIssueItem(i));
+        } else {
+          for (const [repo, issues] of this._issues.entries()) {
+            const repoItem = new WorkItemsTreeItem(repo, vscode.TreeItemCollapsibleState.Expanded);
+            repoItem.iconPath = new vscode.ThemeIcon('github');
+            repoItem.description = `${issues.length} issue${issues.length === 1 ? '' : 's'}`;
+            repoItem.contextValue = 'repo-group';
+            repoItem.id = `wi:${repo}`;
+            items.push(repoItem);
+          }
+        }
       }
 
-      return [...this._issues.entries()].map(([repo, issues]) => {
-        const item = new WorkItemsTreeItem(repo, vscode.TreeItemCollapsibleState.Expanded);
-        item.iconPath = new vscode.ThemeIcon('repo');
-        item.description = `${issues.length} issue${issues.length === 1 ? '' : 's'}`;
-        item.contextValue = 'repo-group';
-        item.id = `wi:${repo}`;
-        return item;
-      });
+      return items;
+    }
+
+    if (element.contextValue === 'ado-group') {
+      return this._adoItems.map(wi => this.buildAdoItem(wi));
     }
 
     if (element.contextValue === 'milestone-group') {
@@ -234,6 +279,30 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       command: 'vscode.open',
       title: 'Open in Browser',
       arguments: [vscode.Uri.parse(issue.url)],
+    };
+    return item;
+  }
+
+  private buildAdoItem(wi: AdoWorkItem): WorkItemsTreeItem {
+    const stateIcon = wi.state === 'Active' ? '🔵' : wi.state === 'New' ? '🟢' : '⚪';
+    const item = new WorkItemsTreeItem(`${stateIcon} #${wi.id} ${wi.title}`);
+    item.adoWorkItem = wi;
+    item.description = `${wi.type} · ${wi.state}`;
+    item.iconPath = new vscode.ThemeIcon('azure');
+    item.contextValue = 'ado-work-item';
+    item.tooltip = new vscode.MarkdownString(
+      [
+        `**#${wi.id} ${wi.title}**`,
+        `Type: ${wi.type}`,
+        `State: ${wi.state}`,
+        `Area: ${wi.areaPath}`,
+        wi.tags.length > 0 ? `Tags: ${wi.tags.join(', ')}` : '',
+      ].filter(Boolean).join('\n\n'),
+    );
+    item.command = {
+      command: 'vscode.open',
+      title: 'Open in Browser',
+      arguments: [vscode.Uri.parse(wi.url)],
     };
     return item;
   }
