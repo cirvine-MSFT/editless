@@ -13,6 +13,12 @@
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
 📌 Team update (2026-02-16): Squad folder rename — `.squad/` support added with `.ai-team/` backward compatibility via `src/team-dir.ts` utility. Any future code that needs to locate the team directory must use `resolveTeamDir()` or `resolveTeamMd()` — never hardcode paths. — decided by Morty
+
+📌 Team update (2026-02-16): Label taxonomy simplified — `go:` namespace (go:yes, go:no, go:needs-research) removed. Triage now applies `status:needs-plan` only when no existing `status:` label exists. Release labels limited to `release:v0.1` and `release:backlog`. When testing label workflows, focus on these retained labels and test that triage respects pre-existing status labels. — decided by Birdperson
+
+📌 Team update (2026-02-16): Casey's voice in personal narratives — Conversational, enthusiastic, and authentic. Use short declarative sentences for impact and preserve casual phrasing. Edits should be light-touch—fixing grammar without changing the natural, personal tone. — decided by Summer
+
+📌 Team update (2026-02-16): Squad folder rename — `.squad/` support added with `.ai-team/` backward compatibility via `src/team-dir.ts` utility. Any future code that needs to locate the team directory must use `resolveTeamDir()` or `resolveTeamMd()` — never hardcode paths. — decided by Morty
 📌 Team update (2026-02-16): Session persistence — `launchCommand` now persisted in `PersistedTerminalInfo` rather than looked up from config at relaunch. When `agentSessionId` is set, relaunch appends `--resume <sessionId>` to the persisted command (team convention for resume flag). — decided by Morty
 
 - **2026-02-16 — cli-provider.test.ts (#11):**`checkAgencyOnStartup` uses callback-based `exec`, so mocking with synchronous callback invocation works fine for most tests. For the "does not block" assertion, capture the callback without calling it to prove the function returns first. Use `vi.hoisted()` to define mock fns referenced by `vi.mock` factories — vitest hoists `vi.mock` above `const` declarations. The vscode mock in `src/__tests__/mocks/vscode.ts` doesn't have `globalState`; building a bespoke context mock with a `Map`-backed store is simpler and more flexible.

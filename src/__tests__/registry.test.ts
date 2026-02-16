@@ -158,6 +158,31 @@ describe('EditlessRegistry', () => {
       expect(written.squads[1].id).toBe('squad-c');
     });
 
+    it('skips squads whose id already exists in registry', () => {
+      const existing = [makeSquad({ id: 'squad-a' })];
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ version: '1.0', squads: existing }));
+
+      registry.addSquads([makeSquad({ id: 'squad-a', name: 'Duplicate' })]);
+
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
+    });
+
+    it('adds only non-duplicate squads from a mixed batch', () => {
+      const existing = [makeSquad({ id: 'squad-a' })];
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ version: '1.0', squads: existing }));
+
+      registry.addSquads([
+        makeSquad({ id: 'squad-a', name: 'Dup' }),
+        makeSquad({ id: 'squad-b', name: 'New' }),
+      ]);
+
+      expect(fs.writeFileSync).toHaveBeenCalledOnce();
+      const written = JSON.parse(vi.mocked(fs.writeFileSync).mock.calls[0][1] as string);
+      expect(written.squads).toHaveLength(2);
+      expect(written.squads[0].id).toBe('squad-a');
+      expect(written.squads[1].id).toBe('squad-b');
+    });
+
     it('creates file structure when registry file does not exist', () => {
       const err = new Error('ENOENT') as NodeJS.ErrnoException;
       err.code = 'ENOENT';
@@ -171,6 +196,27 @@ describe('EditlessRegistry', () => {
       const written = JSON.parse(vi.mocked(fs.writeFileSync).mock.calls[0][1] as string);
       expect(written.version).toBe('1.0');
       expect(written.squads.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // loadSquads dedup
+  // -------------------------------------------------------------------------
+
+  describe('loadSquads dedup', () => {
+    it('deduplicates squads by id, keeping first occurrence', () => {
+      const duped = [
+        makeSquad({ id: 'squad-a', name: 'First' }),
+        makeSquad({ id: 'squad-a', name: 'Second' }),
+        makeSquad({ id: 'squad-b', name: 'Unique' }),
+      ];
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ version: '1.0', squads: duped }));
+
+      const result = registry.loadSquads();
+
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe('First');
+      expect(result[1].id).toBe('squad-b');
     });
   });
 });
