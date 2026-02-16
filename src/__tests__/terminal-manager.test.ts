@@ -842,20 +842,20 @@ describe('TerminalManager', () => {
     
     describe('SessionState type', () => {
       it('should export SessionState type with expected values', () => {
-        // This test verifies the type exists — actual usage checked in other tests
         const validStates: Array<import('../terminal-manager').SessionState> = [
-          'active',
+          'working',
+          'waiting-on-input',
           'idle',
           'stale',
           'needs-attention',
           'orphaned',
         ];
-        expect(validStates).toHaveLength(5);
+        expect(validStates).toHaveLength(6);
       });
     });
 
     describe('shell integration tracking', () => {
-      it('should transition to active state when shell execution starts', () => {
+      it('should transition to working state when shell execution starts', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -868,10 +868,10 @@ describe('TerminalManager', () => {
         capturedShellStartListener({ terminal, execution });
 
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('active');
+        expect(state).toBe('working');
       });
 
-      it('should transition from active to idle when shell execution ends', () => {
+      it('should transition from working to waiting-on-input when shell execution ends', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -882,13 +882,12 @@ describe('TerminalManager', () => {
         } as vscode.TerminalShellExecution;
 
         capturedShellStartListener({ terminal, execution });
-        expect(mgr.getSessionState(terminal)).toBe('active');
+        expect(mgr.getSessionState(terminal)).toBe('working');
 
         capturedShellEndListener({ terminal, execution });
         
-        // State becomes idle after execution completes (assuming activity timeout logic)
         const state = mgr.getSessionState(terminal);
-        expect(state).toMatch(/^(idle|active)$/);
+        expect(state).toMatch(/^(waiting-on-input|idle)$/);
       });
 
       it('should handle multiple rapid start/end cycles correctly', () => {
@@ -909,13 +908,13 @@ describe('TerminalManager', () => {
         
         capturedShellStartListener({ terminal, execution: exec3 });
 
-        // Last execution is still running — should be active
-        expect(mgr.getSessionState(terminal)).toBe('active');
+        // Last execution is still running — should be working
+        expect(mgr.getSessionState(terminal)).toBe('working');
       });
     });
 
     describe('state computation', () => {
-      it('should return active for terminal with shell execution in progress', () => {
+      it('should return working for terminal with shell execution in progress', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -924,7 +923,7 @@ describe('TerminalManager', () => {
         const execution = { commandLine: { value: 'npm run build' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
 
-        expect(mgr.getSessionState(terminal)).toBe('active');
+        expect(mgr.getSessionState(terminal)).toBe('working');
       });
 
       it('should return idle for terminal with recent activity but no execution', () => {
@@ -935,7 +934,7 @@ describe('TerminalManager', () => {
 
         // Simulate recent activity (just created, <5 min)
         const state = mgr.getSessionState(terminal);
-        expect(['active', 'idle']).toContain(state);
+        expect(['waiting-on-input', 'idle']).toContain(state);
       });
 
       it('should return stale for terminal with last activity >60 min ago', () => {
@@ -977,7 +976,7 @@ describe('TerminalManager', () => {
         const terminal = mgr.launchTerminal(config);
 
         const state = mgr.getSessionState(terminal);
-        expect(['active', 'idle']).toContain(state);
+        expect(['waiting-on-input', 'idle']).toContain(state);
       });
 
       it('should return orphaned for persisted-only session', () => {
@@ -1021,9 +1020,13 @@ describe('TerminalManager', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
 
-        const activeIcon = mgr.getStateIcon('active');
-        expect(activeIcon).toBeDefined();
-        expect(activeIcon.id).toBe('terminal-active');
+        const workingIcon = mgr.getStateIcon('working');
+        expect(workingIcon).toBeDefined();
+        expect(workingIcon.id).toBe('loading~spin');
+
+        const waitingIcon = mgr.getStateIcon('waiting-on-input');
+        expect(waitingIcon).toBeDefined();
+        expect(waitingIcon.id).toBe('bell-dot');
 
         const idleIcon = mgr.getStateIcon('idle');
         expect(idleIcon).toBeDefined();
@@ -1048,8 +1051,11 @@ describe('TerminalManager', () => {
 
         const info = makePersistedEntry();
 
-        const activeDesc = mgr.getStateDescription('active', info);
-        expect(activeDesc).toContain('active');
+        const workingDesc = mgr.getStateDescription('working', info);
+        expect(workingDesc).toContain('working');
+
+        const waitingDesc = mgr.getStateDescription('waiting-on-input', info);
+        expect(waitingDesc).toContain('waiting');
 
         const idleDesc = mgr.getStateDescription('idle', info);
         expect(idleDesc).toMatch(/idle/i);
@@ -1114,7 +1120,7 @@ describe('TerminalManager', () => {
         expect(afterState).toBe('needs-attention');
       });
 
-      it('should NOT override active with needs-attention', () => {
+      it('should NOT override working with needs-attention', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -1125,9 +1131,9 @@ describe('TerminalManager', () => {
 
         mgr.setSquadInboxCount('test-squad', 5);
 
-        // Active takes precedence over needs-attention
+        // Working takes precedence over needs-attention
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('active');
+        expect(state).toBe('working');
       });
 
       it('should clear needs-attention when inbox count becomes zero', () => {
@@ -1141,7 +1147,7 @@ describe('TerminalManager', () => {
 
         mgr.setSquadInboxCount('test-squad', 0);
         const state = mgr.getSessionState(terminal);
-        expect(['idle', 'active']).toContain(state);
+        expect(['idle', 'waiting-on-input']).toContain(state);
       });
     });
   });

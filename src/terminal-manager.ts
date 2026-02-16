@@ -5,7 +5,7 @@ import type { AgentTeamConfig } from './types';
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------
 
-export type SessionState = 'active' | 'idle' | 'stale' | 'needs-attention' | 'orphaned';
+export type SessionState = 'working' | 'waiting-on-input' | 'idle' | 'stale' | 'needs-attention' | 'orphaned';
 
 export interface TerminalInfo {
   id: string;
@@ -255,16 +255,22 @@ export class TerminalManager implements vscode.Disposable {
     if (!info) { return undefined; }
 
     const isExecuting = this._shellExecutionActive.get(terminal);
-    if (isExecuting) { return 'active'; }
+    if (isExecuting) { return 'working'; }
 
     const inboxCount = this._squadInboxCounts.get(info.squadId) ?? 0;
-    if (inboxCount > 0) { return 'needs-attention'; }
 
     const lastActivity = this._lastActivityAt.get(terminal);
-    if (!lastActivity) { return 'idle'; }
+    if (!lastActivity) {
+      return inboxCount > 0 ? 'needs-attention' : 'idle';
+    }
 
     const ageMs = Date.now() - lastActivity;
-    if (ageMs < IDLE_THRESHOLD_MS) { return 'active'; }
+    if (ageMs < IDLE_THRESHOLD_MS) {
+      return inboxCount > 0 ? 'needs-attention' : 'waiting-on-input';
+    }
+
+    if (inboxCount > 0) { return 'needs-attention'; }
+
     if (ageMs < STALE_THRESHOLD_MS) { return 'idle'; }
     return 'stale';
   }
@@ -408,8 +414,10 @@ export class TerminalManager implements vscode.Disposable {
 
 export function getStateIcon(state: SessionState): vscode.ThemeIcon {
   switch (state) {
-    case 'active':
-      return new vscode.ThemeIcon('terminal-active');
+    case 'working':
+      return new vscode.ThemeIcon('loading~spin');
+    case 'waiting-on-input':
+      return new vscode.ThemeIcon('bell-dot');
     case 'needs-attention':
       return new vscode.ThemeIcon('warning');
     case 'orphaned':
@@ -422,8 +430,10 @@ export function getStateIcon(state: SessionState): vscode.ThemeIcon {
 
 export function getStateDescription(state: SessionState, lastActivityAt?: number): string {
   switch (state) {
-    case 'active':
-      return '· active';
+    case 'working':
+      return '· working';
+    case 'waiting-on-input':
+      return '· waiting on input';
     case 'needs-attention':
       return '· needs attention';
     case 'orphaned':
