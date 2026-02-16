@@ -35,7 +35,7 @@ New to agentic development? Start here — install EditLess, add a squad, and le
 - 📋 **Work items** — view GitHub issues and Azure DevOps work items with label filtering
 - 🔀 **Pull requests** — track PRs across repos, jump to linked issues
 - 💻 **Terminal integration** — launch agent sessions from a work item, PR, or agent — get to work on what you care about faster and never lose track of what a session was for
-- 🔔 **Notifications** — desktop alerts for inbox items and CLI updates
+- 🔔 **Notifications** — keep track of what your sessions are doing at a glance, so you never miss a call to action or leave a session idle
 - 🔄 **Auto-refresh** — work items and PRs poll on a configurable interval
 - 🔍 **Auto-detection** — discovers CLI tools and agent teams automatically
 - 📊 **Status bar** — quick glance at inbox items and agent status
