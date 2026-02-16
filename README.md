@@ -2,7 +2,7 @@
 
 > Escape the editor. Command your AI teams from one pane of glass.
 
-Plan work and delegate to AI agents across multiple repos and sessions, then monitor and review everything from one sidebar — no context switching required. One window. One view. Complete control.
+Plan work and delegate to AI agents across multiple repos and sessions, then monitor and review everything from one sidebar — no context switching required. One window. One view. Complete control — all without touching the editor.
 
 ## What is EditLess?
 
