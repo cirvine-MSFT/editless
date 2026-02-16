@@ -163,6 +163,7 @@ vi.mock('vscode', () => {
       onDidStartTerminalShellExecution: vi.fn(() => ({ dispose: vi.fn() })),
       onDidEndTerminalShellExecution: vi.fn(() => ({ dispose: vi.fn() })),
       onDidChangeVisibleTextEditors: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidChangeWindowState: vi.fn(() => ({ dispose: vi.fn() })),
       visibleTextEditors: [],
       get activeTerminal() { return mockActiveTerminalRef.current; },
       createTerminal: vi.fn(() => ({ show: vi.fn(), sendText: vi.fn(), dispose: vi.fn() })),

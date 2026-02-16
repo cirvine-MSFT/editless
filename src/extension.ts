@@ -661,6 +661,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- ADO integration ---
   initAdoIntegration(context, workItemsProvider, prsProvider);
 
+  // --- Auto-refresh for Work Items & PRs ---
+  const autoRefresh = initAutoRefresh(workItemsProvider, prsProvider);
+  context.subscriptions.push(autoRefresh);
+
   // Open file in markdown preview
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.openFilePreview', (uri: vscode.Uri) => {
@@ -908,6 +912,48 @@ export function deactivate(): void {
 }
 
 let _terminalManagerRef: TerminalManager | undefined;
+
+function initAutoRefresh(
+  workItemsProvider: WorkItemsTreeProvider,
+  prsProvider: PRsTreeProvider,
+): vscode.Disposable {
+  const disposables: vscode.Disposable[] = [];
+  let timer: ReturnType<typeof setInterval> | undefined;
+
+  function refreshAll(): void {
+    workItemsProvider.refresh();
+    prsProvider.refresh();
+  }
+
+  function startTimer(): void {
+    if (timer) clearInterval(timer);
+    const minutes = vscode.workspace.getConfiguration('editless').get<number>('refreshInterval', 5);
+    if (minutes > 0) {
+      timer = setInterval(refreshAll, minutes * 60_000);
+    }
+  }
+
+  startTimer();
+
+  disposables.push(
+    vscode.window.onDidChangeWindowState(state => {
+      if (state.focused) refreshAll();
+    }),
+  );
+
+  disposables.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('editless.refreshInterval')) startTimer();
+    }),
+  );
+
+  return {
+    dispose(): void {
+      if (timer) clearInterval(timer);
+      disposables.forEach(d => d.dispose());
+    },
+  };
+}
 
 async function initGitHubIntegration(
   workItemsProvider: WorkItemsTreeProvider,
