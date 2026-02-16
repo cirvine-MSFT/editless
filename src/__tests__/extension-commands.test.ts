@@ -967,11 +967,23 @@ describe('extension command handlers', () => {
   // --- editless.configureRepos ----------------------------------------------
 
   describe('editless.configureRepos', () => {
-    it('should open settings for editless.github.repos', async () => {
+    it('should open settings for editless.github', async () => {
       await getHandler('editless.configureRepos')();
       expect(mockExecuteCommand).toHaveBeenCalledWith(
         'workbench.action.openSettings',
-        'editless.github.repos',
+        'editless.github',
+      );
+    });
+  });
+
+  // --- editless.configureAdo -------------------------------------------------
+
+  describe('editless.configureAdo', () => {
+    it('should open settings for editless.ado', async () => {
+      await getHandler('editless.configureAdo')();
+      expect(mockExecuteCommand).toHaveBeenCalledWith(
+        'workbench.action.openSettings',
+        'editless.ado',
       );
     });
   });

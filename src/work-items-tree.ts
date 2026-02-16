@@ -83,13 +83,21 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       }
 
       if (this._repos.length === 0) {
-        const item = new WorkItemsTreeItem('Configure GitHub repos in settings');
-        item.iconPath = new vscode.ThemeIcon('info');
-        item.command = {
+        const ghItem = new WorkItemsTreeItem('Configure in GitHub');
+        ghItem.iconPath = new vscode.ThemeIcon('github');
+        ghItem.command = {
           command: 'editless.configureRepos',
           title: 'Configure GitHub Repos',
         };
-        return [item];
+
+        const adoItem = new WorkItemsTreeItem('Configure in ADO');
+        adoItem.iconPath = new vscode.ThemeIcon('azure');
+        adoItem.command = {
+          command: 'editless.configureAdo',
+          title: 'Configure Azure DevOps',
+        };
+
+        return [ghItem, adoItem];
       }
 
       if (this._issues.size === 0) {
