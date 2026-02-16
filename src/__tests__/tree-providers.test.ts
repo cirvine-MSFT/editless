@@ -63,8 +63,34 @@ vi.mock('../github-client', () => ({
   fetchMyPRs: (...args: unknown[]) => mockFetchMyPRs(...(args as [string])),
 }));
 
+vi.mock('../scanner', () => ({
+  scanSquad: vi.fn((cfg: unknown) => ({
+    config: cfg,
+    status: 'idle',
+    lastActivity: null,
+    recentDecisions: [{ title: 'Dec1', date: '2026-01-01', author: 'Rick', summary: '' }],
+    recentLogs: [],
+    recentOrchestration: [],
+    activeAgents: [],
+    inboxCount: 0,
+    roster: [{ name: 'Morty', role: 'Dev' }],
+    charter: '',
+    recentActivity: [{ agent: 'Morty', task: 'fix bug', outcome: 'done' }],
+  })),
+}));
+
+vi.mock('../squad-upgrader', () => ({
+  getLocalSquadVersion: vi.fn(() => null),
+}));
+
+vi.mock('../terminal-manager', () => ({
+  getStateIcon: vi.fn(() => undefined),
+  getStateDescription: vi.fn(() => ''),
+}));
+
 import { WorkItemsTreeProvider, WorkItemsTreeItem } from '../work-items-tree';
 import { PRsTreeProvider, PRsTreeItem } from '../prs-tree';
+import { EditlessTreeProvider, EditlessTreeItem } from '../editless-tree';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -245,5 +271,68 @@ describe('PRsTreeProvider', () => {
     const result = provider.getTreeItem(item);
 
     expect(result).toBe(item);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — getParent
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — getParent', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('should return undefined for root-level items', () => {
+    const registry = createMockRegistry([
+      { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
+    ]);
+    const provider = new EditlessTreeProvider(registry as never);
+    const roots = provider.getChildren();
+
+    expect(roots.length).toBeGreaterThan(0);
+    for (const root of roots) {
+      expect(provider.getParent(root)).toBeUndefined();
+    }
+  });
+
+  it('should return squad item as parent of category children', () => {
+    const registry = createMockRegistry([
+      { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
+    ]);
+    const provider = new EditlessTreeProvider(registry as never);
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad');
+    expect(squadItem).toBeDefined();
+
+    const squadChildren = provider.getChildren(squadItem!);
+    expect(squadChildren.length).toBeGreaterThan(0);
+    for (const child of squadChildren) {
+      expect(provider.getParent(child)).toBe(squadItem);
+    }
+  });
+
+  it('should return category item as parent of roster/decision/activity children', () => {
+    const registry = createMockRegistry([
+      { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
+    ]);
+    const provider = new EditlessTreeProvider(registry as never);
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    const squadChildren = provider.getChildren(squadItem);
+
+    const rosterCategory = squadChildren.find(c => c.categoryKind === 'roster');
+    expect(rosterCategory).toBeDefined();
+
+    const rosterChildren = provider.getChildren(rosterCategory!);
+    expect(rosterChildren.length).toBeGreaterThan(0);
+    for (const child of rosterChildren) {
+      expect(provider.getParent(child)).toBe(rosterCategory);
+    }
   });
 });
