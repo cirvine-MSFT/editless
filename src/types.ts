@@ -118,32 +118,6 @@ export interface RecentActivity {
   references: WorkReference[];
 }
 
-/** Terminal session metadata. */
-export interface TerminalSession {
-  /** Process ID of the pwsh.exe process */
-  pid: number;
-  /** Current working directory */
-  cwd: string;
-  /** Squad ID inferred from CWD or profile name */
-  squadId: string | null;
-  /** Windows Terminal profile name if detected */
-  profileName?: string;
-  /** Command line that started this process */
-  commandLine: string;
-  /** Process start time (ISO timestamp) */
-  startTime: string;
-  /** Last known window title (may be empty for pwsh in WT) */
-  windowTitle?: string;
-  /** Detected activity: 'idle', 'busy', 'running-command', 'copilot-session', 'waiting-for-input', 'orphan' */
-  activity?: string;
-  /** Brief human-readable description of what this session is doing */
-  summary?: string;
-  /** Copilot CLI session context if this is a copilot-session */
-  sessionContext?: SessionContext;
-  /** User-set label (overrides auto-generated summary when present) */
-  userLabel?: string;
-}
-
 // ---------------------------------------------------------------------------
 // Runtime State
 // ---------------------------------------------------------------------------
@@ -174,31 +148,4 @@ export interface SquadState {
   recentActivity: RecentActivity[];
 }
 
-/** Top-level state the frontend renders. */
-export interface DashboardState {
-  squads: SquadState[];
-  /** ISO timestamp — when the dashboard connected */
-  connectedAt: string;
-  /** ISO timestamp — last full refresh */
-  lastRefresh: string;
-  /** Active PowerShell terminal sessions */
-  terminalSessions: TerminalSession[];
-}
 
-// ---------------------------------------------------------------------------
-// WebSocket & API
-// ---------------------------------------------------------------------------
-
-/** Messages sent over WebSocket. */
-export interface WebSocketMessage {
-  type: 'full-refresh' | 'squad-update' | 'terminal-update' | 'error';
-  payload: DashboardState | SquadState | TerminalSession[] | { message: string };
-  timestamp: string;
-}
-
-/** POST body for launching a terminal session. */
-export interface LaunchRequest {
-  squadId: string;
-  /** Override Windows Terminal profile */
-  profileName?: string;
-}
