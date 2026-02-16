@@ -55,14 +55,18 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for code style, testing, PR conventions, 
 
 ## 🚀 Take the Challenge
 
-Never tried vibe coding? There's no better time to start. Here's the challenge:
+AI agents and models have gotten so good — and tools like MCPs have matured so much — that you don't actually need to be in an editor or bounce between web UIs to manage your work anymore. You can plan by asking an agent to summarize and visualize your backlog. You can create work items, open PRs, review code, and check on progress — all through conversation. The editor isn't the center of your workflow anymore. **The conversation is.**
+
+We believe chat will become the IDE of the future — where you manage multiple teams of agents directly through conversation. EditLess is a step along that path.
+
+**Here's the challenge:** break free from the habit of needing to be in an editor to get things done.
 
 1. **Install EditLess** and [GitHub Copilot CLI](https://github.com/github/gh-copilot)
 2. **Add a [Squad](https://github.com/bradygaster/squad)** to any project — even a brand new one
-3. **Give your AI team a task** and watch them work — right from the sidebar
-4. **Review the results** without ever opening another window
+3. **Let your agents create work items, open PRs, and review code for you** — all from a chat window
+4. **Review the results** without ever opening another tab, window, or web UI
 
-That's it. One extension, one sidebar, one workflow. You'll go from zero to managing AI agents in minutes — and you'll wonder why you ever did it any other way.
+That's it. One extension, one sidebar, one conversation. You'll go from zero to managing AI agents in minutes — and you'll wonder why you ever did it any other way.
 
 No experience with agentic development required. No complex setup. Just install, point, and let the AI do the heavy lifting. The editorless revolution starts with a single click.
 
