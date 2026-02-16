@@ -309,7 +309,7 @@
           "type": "string",
           "default": "",
           "description": "Directory to scan for squad projects",
-          "markdownDescription": "Directory to scan for squad projects. EditLess watches this directory for folders containing `.ai-team/` structures and adds them to the Agents pane automatically.\n\n_This setting will be replaced by `#editless.discovery.scanPaths#` in a future release._",
+          "markdownDescription": "Directory to scan for squad projects. EditLess watches this directory for folders containing `.squad/` (or `.ai-team/`) structures and adds them to the Agents pane automatically.\n\n_This setting will be replaced by `#editless.discovery.scanPaths#` in a future release._",
           "scope": "resource",
           "order": 2
         },
