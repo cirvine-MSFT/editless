@@ -256,11 +256,42 @@ describe('scanSquad', () => {
     };
   }
 
-  it('returns error state when .ai-team/ does not exist', () => {
+  it('returns error state when neither .squad/ nor .ai-team/ exists', () => {
     const state = scanSquad(makeConfig());
     expect(state.status).toBe('idle');
-    expect(state.error).toContain('.ai-team/ directory not found');
+    expect(state.error).toContain('.squad/ (or .ai-team/) directory not found');
     expect(state.roster).toEqual([]);
+  });
+
+  it('scans a fully populated .squad directory (new convention)', () => {
+    const squadDir = path.join(tmpDir, '.squad');
+    fs.mkdirSync(squadDir, { recursive: true });
+
+    writeFixture('.squad/team.md', `# Test Squad
+
+> A test squad for unit tests.
+
+## Members
+
+| Name | Role | Charter | Status |
+|------|------|---------|--------|
+| Tester | QA | charters/tester.md | active |
+`);
+
+    writeFixture('.squad/decisions.md', `### 2025-06-01: Use vitest
+**By:** Tester
+We chose vitest.
+`);
+
+    writeFixture('.squad/decisions/inbox/pending.md', 'Pending decision');
+
+    const state = scanSquad(makeConfig());
+
+    expect(state.error).toBeUndefined();
+    expect(state.roster).toHaveLength(1);
+    expect(state.roster[0].name).toBe('Tester');
+    expect(state.recentDecisions).toHaveLength(1);
+    expect(state.inboxCount).toBe(1);
   });
 
   it('scans a fully populated .ai-team directory', () => {

@@ -116,7 +116,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   terminalManager.onDidChange(() => statusBar.updateSessionsOnly());
 
-  // --- Squad file watcher — live .ai-team/ updates ----------------------
+  // --- Squad file watcher — live .squad/ (or .ai-team/) updates ----------
   const squadWatcher = new SquadWatcher(registry.loadSquads(), (squadId) => {
     const config = registry.getSquad(squadId);
     if (config) {

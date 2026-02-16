@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { AgentTeamConfig } from './types';
+import { TEAM_DIR_NAMES } from './team-dir';
+import * as fs from 'fs';
 
 export class SquadWatcher implements vscode.Disposable {
   private _watchers = new Map<string, vscode.FileSystemWatcher>();
@@ -26,8 +28,11 @@ export class SquadWatcher implements vscode.Disposable {
 
   private _createWatchers(squads: AgentTeamConfig[]): void {
     for (const squad of squads) {
+      const teamDirName = TEAM_DIR_NAMES.find(
+        name => fs.existsSync(path.join(squad.path, name)),
+      ) ?? TEAM_DIR_NAMES[0];
       const pattern = new vscode.RelativePattern(
-        vscode.Uri.file(path.join(squad.path, '.ai-team')),
+        vscode.Uri.file(path.join(squad.path, teamDirName)),
         '**/*',
       );
       const watcher = vscode.workspace.createFileSystemWatcher(pattern);

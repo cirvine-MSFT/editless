@@ -72,12 +72,16 @@ describe('checkNpxAvailable', () => {
 
 describe('isSquadInitialized', () => {
   it('should return true when .ai-team directory exists', () => {
-    mockExistsSync.mockReturnValue(true);
+    mockExistsSync.mockImplementation((p: string) => p === path.join('/some/path', '.squad') ? false : p === path.join('/some/path', '.ai-team') ? true : false);
     expect(isSquadInitialized('/some/path')).toBe(true);
-    expect(mockExistsSync).toHaveBeenCalledWith(path.join('/some/path', '.ai-team'));
   });
 
-  it('should return false when .ai-team directory does not exist', () => {
+  it('should return true when .squad directory exists', () => {
+    mockExistsSync.mockImplementation((p: string) => p === path.join('/some/path', '.squad') ? true : false);
+    expect(isSquadInitialized('/some/path')).toBe(true);
+  });
+
+  it('should return false when neither directory exists', () => {
     mockExistsSync.mockReturnValue(false);
     expect(isSquadInitialized('/some/path')).toBe(false);
   });

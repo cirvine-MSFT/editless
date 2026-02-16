@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { resolveTeamDir } from './team-dir';
 import type {
   AgentTeamConfig,
   SquadState,
@@ -309,12 +310,11 @@ export function determineStatus(lastActivity: Date | null, inboxCount: number): 
 }
 
 export function scanSquad(config: AgentTeamConfig): SquadState {
-  const aiTeamDir = path.join(config.path, '.ai-team');
-  const teamMdPath = path.join(aiTeamDir, 'team.md');
+  const aiTeamDir = resolveTeamDir(config.path);
+  const teamMdPath = aiTeamDir ? path.join(aiTeamDir, 'team.md') : null;
 
   try {
-    const stat = safeStat(aiTeamDir);
-    if (!stat) {
+    if (!aiTeamDir) {
       return {
         config,
         status: 'idle',
@@ -324,15 +324,15 @@ export function scanSquad(config: AgentTeamConfig): SquadState {
         recentOrchestration: [],
         activeAgents: [],
         inboxCount: 0,
-        error: `.ai-team/ directory not found at ${config.path}`,
+        error: `.squad/ (or .ai-team/) directory not found at ${config.path}`,
         roster: [],
         charter: '',
         recentActivity: [],
       };
     }
 
-    const roster = fs.existsSync(teamMdPath) ? parseRoster(teamMdPath) : [];
-    const charter = parseCharter(config, teamMdPath);
+    const roster = teamMdPath && fs.existsSync(teamMdPath) ? parseRoster(teamMdPath) : [];
+    const charter = teamMdPath ? parseCharter(config, teamMdPath) : '';
 
     const inboxDir = path.join(aiTeamDir, 'decisions', 'inbox');
     let inboxCount = 0;
