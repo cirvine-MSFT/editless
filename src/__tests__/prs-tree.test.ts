@@ -48,8 +48,13 @@ vi.mock('vscode', () => {
     dispose() { this.listeners = []; }
   }
 
+  class ThemeColor {
+    id: string;
+    constructor(id: string) { this.id = id; }
+  }
+
   return {
-    TreeItem, TreeItemCollapsibleState, ThemeIcon, MarkdownString, EventEmitter,
+    TreeItem, TreeItemCollapsibleState, ThemeIcon, ThemeColor, MarkdownString, EventEmitter,
     Uri: { parse: (s: string) => ({ toString: () => s }) },
   };
 });
@@ -83,6 +88,7 @@ function makePR(overrides: Partial<GitHubPR> = {}): GitHubPR {
     baseRef: 'main',
     repository: 'owner/repo',
     reviewDecision: '',
+    mergeable: '',
     ...overrides,
   };
 }
@@ -216,5 +222,61 @@ describe('PRsTreeProvider — loading & empty states', () => {
     const children = provider.getChildren();
     expect(children).toHaveLength(1);
     expect(children[0].label).toBe('Configure GitHub repos in settings');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Merge conflict indicator
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — merge conflict indicator', () => {
+  async function getPRItem(pr: GitHubPR): Promise<PRsTreeItem> {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([pr]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+    const children = provider.getChildren();
+    expect(children).toHaveLength(1);
+    return children[0];
+  }
+
+  it('should show conflict indicator when mergeable is CONFLICTING', async () => {
+    const item = await getPRItem(makePR({ mergeable: 'CONFLICTING' }));
+    expect(item.description).toContain('has conflicts');
+    expect((item.iconPath as { id: string }).id).toBe('warning');
+  });
+
+  it('should not show conflict indicator when mergeable is MERGEABLE', async () => {
+    const item = await getPRItem(makePR({ mergeable: 'MERGEABLE' }));
+    expect(item.description).not.toContain('has conflicts');
+    expect((item.iconPath as { id: string }).id).not.toBe('warning');
+  });
+
+  it('should not show conflict indicator when mergeable is UNKNOWN', async () => {
+    const item = await getPRItem(makePR({ mergeable: 'UNKNOWN' }));
+    expect(item.description).not.toContain('has conflicts');
+    expect((item.iconPath as { id: string }).id).not.toBe('warning');
+  });
+
+  it('should not show conflict indicator when mergeable is empty', async () => {
+    const item = await getPRItem(makePR({ mergeable: '' }));
+    expect(item.description).not.toContain('has conflicts');
+    expect((item.iconPath as { id: string }).id).not.toBe('warning');
+  });
+
+  it('should include conflict warning in tooltip for conflicting PRs', async () => {
+    const item = await getPRItem(makePR({ mergeable: 'CONFLICTING' }));
+    expect((item.tooltip as { value: string }).value).toContain('has merge conflicts');
+  });
+
+  it('should preserve PR state in description alongside conflict indicator', async () => {
+    const item = await getPRItem(makePR({ mergeable: 'CONFLICTING', reviewDecision: 'APPROVED' }));
+    expect(item.description).toContain('approved');
+    expect(item.description).toContain('has conflicts');
   });
 });

@@ -24,6 +24,7 @@ export interface GitHubPR {
   baseRef: string;
   repository: string;
   reviewDecision: string;
+  mergeable: string;
 }
 
 export interface GitHubRepo {
@@ -59,7 +60,7 @@ export async function fetchMyPRs(repo: string): Promise<GitHubPR[]> {
   try {
     const { stdout } = await execFileAsync('gh', [
       'pr', 'list', '--repo', repo, '--author', '@me', '--state', 'open',
-      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision', '--limit', '50',
+      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeable', '--limit', '50',
     ]);
     const raw: unknown[] = JSON.parse(stdout);
     return raw.map((p) => {
@@ -74,6 +75,7 @@ export async function fetchMyPRs(repo: string): Promise<GitHubPR[]> {
         baseRef: rec.baseRefName as string,
         repository: repo,
         reviewDecision: (rec.reviewDecision as string) ?? '',
+        mergeable: (rec.mergeable as string) ?? '',
       };
     });
   } catch {
@@ -85,7 +87,7 @@ export async function fetchLinkedPRs(repo: string, issueNumber: number): Promise
   try {
     const { stdout } = await execFileAsync('gh', [
       'pr', 'list', '--repo', repo, '--search', `${issueNumber}`, '--state', 'all',
-      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision', '--limit', '10',
+      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeable', '--limit', '10',
     ]);
     const raw: unknown[] = JSON.parse(stdout);
     return raw.map((p) => {
@@ -100,6 +102,7 @@ export async function fetchLinkedPRs(repo: string, issueNumber: number): Promise
         baseRef: rec.baseRefName as string,
         repository: repo,
         reviewDecision: (rec.reviewDecision as string) ?? '',
+        mergeable: (rec.mergeable as string) ?? '',
       };
     });
   } catch {
