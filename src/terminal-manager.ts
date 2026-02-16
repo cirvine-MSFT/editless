@@ -542,9 +542,12 @@ export function getStateIcon(state: SessionState): vscode.ThemeIcon {
       return new vscode.ThemeIcon('bell-dot');
     case 'needs-attention':
       return new vscode.ThemeIcon('warning');
-    case 'orphaned':
-    case 'stale':
     case 'idle':
+      return new vscode.ThemeIcon('check');
+    case 'stale':
+      return new vscode.ThemeIcon('clock');
+    case 'orphaned':
+      return new vscode.ThemeIcon('debug-disconnect');
     default:
       return new vscode.ThemeIcon('terminal');
   }
