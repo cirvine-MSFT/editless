@@ -1518,4 +1518,151 @@ describe('TerminalManager', () => {
       spy.mockRestore();
     });
   });
+
+  // =========================================================================
+  // detectSessionIds — auto-link sessions to terminals (#217)
+  // =========================================================================
+
+  describe('detectSessionIds', () => {
+    function makeResolver(sessions: Map<string, { sessionId: string; createdAt: string }>) {
+      return {
+        resolveAll: vi.fn((paths: string[]) => {
+          const result = new Map<string, { sessionId: string; createdAt: string }>();
+          for (const p of paths) {
+            const s = sessions.get(p);
+            if (s) result.set(p, s);
+          }
+          return result;
+        }),
+      };
+    }
+
+    it('should no-op when no session resolver is set', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ path: '/project' });
+      mgr.launchTerminal(config);
+
+      vi.mocked(ctx.workspaceState.update).mockClear();
+      mgr.detectSessionIds();
+      expect(ctx.workspaceState.update).not.toHaveBeenCalled();
+    });
+
+    it('should no-op when all terminals already have session IDs', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ path: '/project' });
+      const terminal = mgr.launchTerminal(config);
+      mgr.setAgentSessionId(terminal, 'existing-session');
+
+      const resolver = makeResolver(new Map());
+      mgr.setSessionResolver(resolver as unknown as import('../session-context').SessionContextResolver);
+
+      vi.mocked(ctx.workspaceState.update).mockClear();
+      mgr.detectSessionIds();
+      expect(resolver.resolveAll).not.toHaveBeenCalled();
+    });
+
+    it('should assign session ID when squad path matches a resolved session', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ path: '/project' });
+      const terminal = mgr.launchTerminal(config);
+
+      const now = new Date();
+      const sessions = new Map([
+        ['/project', { sessionId: 'detected-session-1', createdAt: new Date(now.getTime() + 1000).toISOString() }],
+      ]);
+      const resolver = makeResolver(sessions);
+      mgr.setSessionResolver(resolver as unknown as import('../session-context').SessionContextResolver);
+
+      mgr.detectSessionIds();
+
+      const info = mgr.getTerminalInfo(terminal);
+      expect(info?.agentSessionId).toBe('detected-session-1');
+    });
+
+    it('should not assign session created before terminal launch', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ path: '/project' });
+      const terminal = mgr.launchTerminal(config);
+
+      const sessions = new Map([
+        ['/project', { sessionId: 'old-session', createdAt: '2020-01-01T00:00:00.000Z' }],
+      ]);
+      const resolver = makeResolver(sessions);
+      mgr.setSessionResolver(resolver as unknown as import('../session-context').SessionContextResolver);
+
+      mgr.detectSessionIds();
+
+      const info = mgr.getTerminalInfo(terminal);
+      expect(info?.agentSessionId).toBeUndefined();
+    });
+
+    it('should not double-claim a session already assigned to another terminal', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ path: '/project' });
+
+      const terminal1 = mgr.launchTerminal(config);
+      const terminal2 = mgr.launchTerminal(config, 'Second');
+
+      const now = new Date();
+      const sessions = new Map([
+        ['/project', { sessionId: 'shared-session', createdAt: new Date(now.getTime() + 1000).toISOString() }],
+      ]);
+      const resolver = makeResolver(sessions);
+      mgr.setSessionResolver(resolver as unknown as import('../session-context').SessionContextResolver);
+
+      // First detect claims the session
+      mgr.detectSessionIds();
+      const info1 = mgr.getTerminalInfo(terminal1);
+      const info2 = mgr.getTerminalInfo(terminal2);
+
+      // Only one should have the session ID
+      const assigned = [info1?.agentSessionId, info2?.agentSessionId].filter(Boolean);
+      expect(assigned).toHaveLength(1);
+      expect(assigned[0]).toBe('shared-session');
+    });
+
+    it('should fire onDidChange and persist when sessions are detected', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ path: '/project' });
+      mgr.launchTerminal(config);
+
+      const changeSpy = vi.fn();
+      mgr.onDidChange(changeSpy);
+      changeSpy.mockClear();
+
+      const now = new Date();
+      const sessions = new Map([
+        ['/project', { sessionId: 'new-session', createdAt: new Date(now.getTime() + 1000).toISOString() }],
+      ]);
+      const resolver = makeResolver(sessions);
+      mgr.setSessionResolver(resolver as unknown as import('../session-context').SessionContextResolver);
+
+      vi.mocked(ctx.workspaceState.update).mockClear();
+      mgr.detectSessionIds();
+
+      expect(changeSpy).toHaveBeenCalled();
+      expect(ctx.workspaceState.update).toHaveBeenCalled();
+    });
+
+    it('should skip terminals without a squadPath', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      // Launch without path (squadPath will be undefined)
+      const config = makeSquadConfig({ path: undefined });
+      mgr.launchTerminal(config);
+
+      const resolver = makeResolver(new Map());
+      mgr.setSessionResolver(resolver as unknown as import('../session-context').SessionContextResolver);
+
+      mgr.detectSessionIds();
+      // resolveAll should not be called since there are no valid squad paths
+      expect(resolver.resolveAll).not.toHaveBeenCalled();
+    });
+  });
 });
