@@ -24,11 +24,6 @@ import { getEdition } from './vscode-compat';
 
 const execFileAsync = promisify(execFile);
 
-interface CustomCommandEntry {
-  label: string;
-  command: string;
-}
-
 export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {
   const output = vscode.window.createOutputChannel('EditLess');
   context.subscriptions.push(output);
@@ -703,45 +698,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
           ? `Squad upgrade started in ${path.basename(dirPath)}.`
           : `Squad initialization started in ${path.basename(dirPath)}. After it completes, use "Discover Squads" to add it to the registry.`,
       );
-    }),
-  );
-
-  // Run custom command (context menu on terminal items)
-  context.subscriptions.push(
-    vscode.commands.registerCommand('editless.runCustomCommand', async (arg?: vscode.Terminal | EditlessTreeItem) => {
-      const terminal = resolveTerminal(arg) ?? vscode.window.activeTerminal;
-      if (!terminal) {
-        vscode.window.showWarningMessage('No terminal session selected.');
-        return;
-      }
-
-      const config = vscode.workspace.getConfiguration('editless');
-      const commands = config.get<CustomCommandEntry[]>('customCommands', []);
-
-      if (commands.length === 0) {
-        const action = await vscode.window.showInformationMessage(
-          'No custom commands configured. Add them in Settings → EditLess → Custom Commands.',
-          'Open Settings',
-        );
-        if (action === 'Open Settings') {
-          await vscode.commands.executeCommand('workbench.action.openSettings', 'editless.customCommands');
-        }
-        return;
-      }
-
-      const pick = await vscode.window.showQuickPick(
-        commands.map(c => ({
-          label: c.label,
-          description: c.command,
-          command: c.command,
-        })),
-        { placeHolder: 'Select a command to run' },
-      );
-
-      if (pick) {
-        terminal.show(false);
-        terminal.sendText(pick.command);
-      }
     }),
   );
 
