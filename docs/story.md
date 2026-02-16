@@ -14,7 +14,7 @@ Meanwhile, my computer screen looked more like Dozer's terminal from *The Matrix
   <img src="https://media1.tenor.com/m/iAMuI4BD10AAAAAd/matrix-online.gif" alt="My actual desktop, basically" width="480" />
 </p>
 
-Multiple terminals on every screen, multiplexed to the max. And I kept losing track of them — what they were for, what they were working on. I'd have to stop and ask my agents what they were doing, which kind of defeats the purpose of having agents in the first place.
+Multiple terminals on every screen, multiplexed to the max. And I kept losing track of them — what they were for, what they were working on, if they needed my attention. I'd have to stop and ask my agents what they were doing frequently before giving them the next piece of work, which kind of defeats the purpose of having agents in the first place.
 
 ## The Framework That Almost Was
 
@@ -30,7 +30,7 @@ I realized that if I wanted to keep my sanity and my productivity climbing, I wo
 
 My manager asked me how my workflow had changed. And the truth is: things that would have felt normal weeks ago now felt completely archaic and out of date.
 
-Repos? Editors? I hadn't thought about or touched either in weeks. I simply had a team of agents that knew how I wanted them to work, and they were executing my every command with a simple type or voice.
+Repos? Editors? I hadn't thought about or touched either in weeks. I hadn't created a pull request or a work item myself in even longer. I was planning, executing, validating, reviewing, and merging work that would take me weeks before in a single day, all through chat with my agents.  I simply had a team of agents that knew how I wanted them to work, and they were executing my every command with a simple type (or speech-to-text).
 
 ## Built in a Weekend
 
