@@ -4,7 +4,7 @@
 
 ## What is EditLess?
 
-EditLess is a VS Code sidebar panel for managing AI coding agents. It auto-discovers agent teams in your workspace by scanning for `.ai-team/` directories, gives you terminal integration for launching and managing agent sessions, and supports multiple CLI providers (Copilot, Claude, and others) with auto-detection.
+EditLess is a VS Code sidebar panel for managing AI coding agents. It auto-discovers agent teams in your workspace by scanning for `.squad/` (or `.ai-team/`) directories, gives you terminal integration for launching and managing agent sessions, and supports multiple CLI providers (Copilot, Claude, and others) with auto-detection.
 
 EditLess uses progressive feature detection — features light up as tools are found in your environment. If you have no CLI tools installed, you still get basic terminal management. If you're working with [Squad CLI](https://github.com/bradygaster/squad) teams, you get enhanced features like roster views, decisions tracking, and activity monitoring. Nothing shows unless it's relevant.
 
