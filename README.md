@@ -28,7 +28,7 @@ EditLess is currently distributed via GitHub Releases.
 - 🔍 **Auto-detection** — discovers CLI tools and agent teams automatically
 - 📊 **Status bar** — quick glance at inbox items and agent status
 - 🏷️ **Session labels** — organize and tag your sessions
-- 🔄 **Squad upgrader** — keep Squad CLI teams up to date
+- 🔄 **Squad upgrader** — keep [Squad](https://github.com/bradygaster/squad) teams up to date
 
 ## Development
 
