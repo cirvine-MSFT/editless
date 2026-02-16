@@ -46,11 +46,12 @@ export class EditlessStatusBar implements vscode.Disposable {
     this._item.dispose();
   }
 
-  private _render(squadCount: number, sessionCount: number, inboxCount: number): void {
-    let text = `$(terminal) ${squadCount} agents · ${sessionCount} sessions`;
-    if (inboxCount > 0) {
-      text += ` · 📥 ${inboxCount}`;
-    }
+  private _render(squadCount: number, sessionCount: number, _inboxCount: number): void {
+    const text = `$(terminal) ${squadCount} agents · ${sessionCount} sessions`;
+    // Inbox badge hidden (#204) — inboxCount not reliably updated yet
+    // if (inboxCount > 0) {
+    //   text += ` · 📥 ${inboxCount}`;
+    // }
     this._item.text = text;
     this._item.show();
   }
