@@ -17,18 +17,34 @@ If you're new to AI-assisted development, it can feel overwhelming — dozens of
 
 ### Quick Start
 
+**Add Squad from EditLess (easiest path):**
+
+1. Open your project in VS Code with EditLess installed
+2. Click the EditLess icon in the sidebar
+3. Click "Add Squad" — EditLess handles the rest
+4. Your team appears automatically
+
+See [Adding Agents & Squads](workflows/adding-agents.md) *(coming soon)* for step-by-step guidance.
+
+**Alternative: CLI install**
+
+If you prefer the command line:
+
 ```bash
 # Install Squad CLI
 dotnet tool install -g Squad
 
 # Create a team in your project
 squad init
-
-# Open your project in VS Code with EditLess installed
-# Your team appears automatically in the sidebar
 ```
 
 EditLess auto-discovers Squad teams by scanning for `.squad/` (or `.ai-team/`) directories. No configuration needed.
+
+### Don't Need Squad?
+
+**Squad is optional.** EditLess natively supports markdown agent files and agent configs in `.github/agents/` or anywhere in your project. If you prefer working with standalone agents or simple instruction files (like `.github/copilot-instructions.md`), EditLess discovers and manages those too.
+
+Not every project needs a full team framework — start simple and adopt Squad when it makes sense for your workflow.
 
 ## Other Recommended Tools
 
