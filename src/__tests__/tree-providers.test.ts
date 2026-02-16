@@ -47,7 +47,10 @@ vi.mock('vscode', () => {
 
   return {
     TreeItem, TreeItemCollapsibleState, ThemeIcon, MarkdownString, EventEmitter,
-    Uri: { parse: (s: string) => ({ toString: () => s }) },
+    Uri: {
+      parse: (s: string) => ({ toString: () => s }),
+      file: (s: string) => ({ toString: () => s, fsPath: s }),
+    },
     workspace: {
       getConfiguration: () => ({
         get: (key: string, defaultValue?: unknown) =>
@@ -334,5 +337,391 @@ describe('EditlessTreeProvider — getParent', () => {
     for (const child of rosterChildren) {
       expect(provider.getParent(child)).toBe(rosterCategory);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — getChildren(squad)
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — getChildren(squad)', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('returns terminal sessions + roster, decisions, activity categories', () => {
+    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+
+    const children = provider.getChildren(squadItem);
+
+    const kinds = children.filter(c => c.type === 'category').map(c => c.categoryKind);
+    expect(kinds).toContain('roster');
+    expect(kinds).toContain('decisions');
+    expect(kinds).toContain('activity');
+  });
+
+  it('returns empty array for unknown squad id', () => {
+    const registry = createMockRegistry([]);
+    const provider = new EditlessTreeProvider(registry as never);
+    const fakeSquadItem = new EditlessTreeItem('Fake', 'squad', 1, 'nonexistent');
+
+    const children = provider.getChildren(fakeSquadItem);
+
+    expect(children).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — getChildren(category)
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — getChildren(category)', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  const testSquads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
+
+  it('returns roster agents for roster category', () => {
+    const registry = createMockRegistry(testSquads);
+    const provider = new EditlessTreeProvider(registry as never);
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    const squadChildren = provider.getChildren(squadItem);
+    const rosterCategory = squadChildren.find(c => c.categoryKind === 'roster')!;
+
+    const rosterChildren = provider.getChildren(rosterCategory);
+
+    expect(rosterChildren.length).toBeGreaterThan(0);
+    expect(rosterChildren[0].type).toBe('agent');
+    expect(rosterChildren[0].label).toBe('Morty');
+    expect(rosterChildren[0].description).toBe('Dev');
+  });
+
+  it('returns decision items for decisions category', () => {
+    const registry = createMockRegistry(testSquads);
+    const provider = new EditlessTreeProvider(registry as never);
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    const squadChildren = provider.getChildren(squadItem);
+    const decisionsCategory = squadChildren.find(c => c.categoryKind === 'decisions')!;
+
+    const decisionChildren = provider.getChildren(decisionsCategory);
+
+    expect(decisionChildren.length).toBeGreaterThan(0);
+    expect(decisionChildren[0].type).toBe('decision');
+    expect(decisionChildren[0].label).toBe('Dec1');
+  });
+
+  it('returns activity items for activity category', () => {
+    const registry = createMockRegistry(testSquads);
+    const provider = new EditlessTreeProvider(registry as never);
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    const squadChildren = provider.getChildren(squadItem);
+    const activityCategory = squadChildren.find(c => c.categoryKind === 'activity')!;
+
+    const activityChildren = provider.getChildren(activityCategory);
+
+    expect(activityChildren.length).toBeGreaterThan(0);
+    expect(activityChildren[0].type).toBe('activity');
+    expect(activityChildren[0].label).toBe('Morty: fix bug');
+  });
+
+  it('returns empty for non-squad non-category element', () => {
+    const registry = createMockRegistry(testSquads);
+    const provider = new EditlessTreeProvider(registry as never);
+    const item = new EditlessTreeItem('Random', 'agent');
+
+    const children = provider.getChildren(item);
+
+    expect(children).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — findTerminalItem
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — findTerminalItem', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('returns undefined when no terminal manager', () => {
+    const registry = createMockRegistry([]);
+    const provider = new EditlessTreeProvider(registry as never);
+    const mockTerminal = { name: 'test' } as never;
+
+    expect(provider.findTerminalItem(mockTerminal)).toBeUndefined();
+  });
+
+  it('returns undefined for untracked terminal', () => {
+    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
+    const registry = createMockRegistry(squads);
+    const mockTerminalMgr = {
+      getTerminalInfo: vi.fn().mockReturnValue(undefined),
+      getTerminalsForSquad: vi.fn().mockReturnValue([]),
+      getOrphanedSessions: vi.fn().mockReturnValue([]),
+      getSessionState: vi.fn().mockReturnValue('idle'),
+      onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      _lastActivityAt: new Map(),
+    };
+
+    const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
+    const mockTerminal = { name: 'untracked' } as never;
+
+    expect(provider.findTerminalItem(mockTerminal)).toBeUndefined();
+  });
+
+  it('returns matching item for tracked terminal', () => {
+    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
+    const registry = createMockRegistry(squads);
+    const mockTerminal = { name: 'test-session' } as never;
+
+    const mockTerminalMgr = {
+      getTerminalInfo: vi.fn().mockReturnValue({ squadId: 'squad-a', displayName: 'Test', labelKey: 'lk', createdAt: new Date() }),
+      getTerminalsForSquad: vi.fn().mockReturnValue([{ terminal: mockTerminal, info: { squadId: 'squad-a', displayName: 'Test', labelKey: 'lk', createdAt: new Date() } }]),
+      getOrphanedSessions: vi.fn().mockReturnValue([]),
+      getSessionState: vi.fn().mockReturnValue('idle'),
+      onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      _lastActivityAt: new Map(),
+    };
+
+    const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
+    const found = provider.findTerminalItem(mockTerminal);
+
+    expect(found).toBeDefined();
+    expect(found!.type).toBe('terminal');
+    expect(found!.terminal).toBe(mockTerminal);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — refresh, setDiscoveredAgents, invalidate
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — refresh / setDiscoveredAgents / invalidate', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('refresh clears cache and fires onDidChangeTreeData', () => {
+    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+
+    // Populate cache by accessing children
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    provider.getChildren(squadItem);
+
+    provider.refresh();
+
+    expect(listener).toHaveBeenCalled();
+  });
+
+  it('setDiscoveredAgents updates list and fires event', () => {
+    const registry = createMockRegistry([]);
+    const provider = new EditlessTreeProvider(registry as never);
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+
+    const agents = [
+      { id: 'agent-1', name: 'Agent One', filePath: '/agents/one.md', source: 'workspace' as const },
+    ];
+    provider.setDiscoveredAgents(agents);
+
+    expect(listener).toHaveBeenCalled();
+
+    const roots = provider.getChildren();
+    const discoveredItems = roots.filter(r => r.type === 'discovered-agent');
+    expect(discoveredItems).toHaveLength(1);
+    expect(discoveredItems[0].label).toBe('Agent One');
+  });
+
+  it('invalidate clears specific cache entry and fires event', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
+      { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+
+    provider.invalidate('squad-a');
+
+    expect(listener).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — visibility filtering
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — visibility filtering', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('hidden squads are excluded from root items', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
+      { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const visibility = { isHidden: (id: string) => id === 'squad-a' };
+    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
+
+    const roots = provider.getChildren();
+    const squadItems = roots.filter(r => r.type === 'squad');
+
+    expect(squadItems).toHaveLength(1);
+    expect(squadItems[0].squadId).toBe('squad-b');
+  });
+
+  it('"All agents hidden" placeholder when everything hidden', () => {
+    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
+    const registry = createMockRegistry(squads);
+    const visibility = { isHidden: () => true };
+    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
+
+    const roots = provider.getChildren();
+
+    expect(roots).toHaveLength(1);
+    expect(roots[0].label).toContain('All agents hidden');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — discovered agents section
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — discovered agents', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('shows discovered agents header and items in root', () => {
+    const registry = createMockRegistry([]);
+    const provider = new EditlessTreeProvider(registry as never);
+    provider.setDiscoveredAgents([
+      { id: 'a1', name: 'Bot One', filePath: '/bots/one.md', source: 'workspace' },
+      { id: 'a2', name: 'Bot Two', filePath: '/bots/two.agent.md', source: 'copilot-dir' },
+    ]);
+
+    const roots = provider.getChildren();
+    const header = roots.find(r => r.label === 'Discovered Agents');
+    expect(header).toBeDefined();
+
+    const agentItems = roots.filter(r => r.type === 'discovered-agent');
+    expect(agentItems).toHaveLength(2);
+  });
+
+  it('hidden discovered agents are excluded', () => {
+    const registry = createMockRegistry([]);
+    const visibility = { isHidden: (id: string) => id === 'a1' };
+    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
+    provider.setDiscoveredAgents([
+      { id: 'a1', name: 'Bot One', filePath: '/bots/one.md', source: 'workspace' },
+      { id: 'a2', name: 'Bot Two', filePath: '/bots/two.md', source: 'workspace' },
+    ]);
+
+    const roots = provider.getChildren();
+    const agentItems = roots.filter(r => r.type === 'discovered-agent');
+    expect(agentItems).toHaveLength(1);
+    expect(agentItems[0].label).toBe('Bot Two');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — squad item description
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — squad item description', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('includes session count in description when terminal manager has sessions', () => {
+    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
+    const registry = createMockRegistry(squads);
+    const mockTerminalMgr = {
+      getTerminalsForSquad: vi.fn().mockReturnValue([
+        { terminal: {}, info: {} },
+        { terminal: {}, info: {} },
+      ]),
+      getOrphanedSessions: vi.fn().mockReturnValue([]),
+      getSessionState: vi.fn().mockReturnValue('idle'),
+      onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      _lastActivityAt: new Map(),
+    };
+
+    const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+
+    expect(squadItem.description).toContain('2 sessions');
+  });
+
+  it('includes singular session count', () => {
+    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
+    const registry = createMockRegistry(squads);
+    const mockTerminalMgr = {
+      getTerminalsForSquad: vi.fn().mockReturnValue([{ terminal: {}, info: {} }]),
+      getOrphanedSessions: vi.fn().mockReturnValue([]),
+      getSessionState: vi.fn().mockReturnValue('idle'),
+      onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      _lastActivityAt: new Map(),
+    };
+
+    const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+
+    expect(squadItem.description).toContain('1 session');
+    expect(squadItem.description).not.toContain('1 sessions');
   });
 });
