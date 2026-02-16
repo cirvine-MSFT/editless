@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as https from 'https';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import type { AgentTeamConfig } from './types';
@@ -56,6 +57,68 @@ export function getLocalSquadVersion(squadPath: string): string | null {
   } catch (err) {
     console.error(`[squad-upgrader] Error reading squad version: ${err}`);
     return null;
+  }
+}
+
+// --- Latest version check (cached) -----------------------------------------
+
+let _latestVersionCache: { version: string | null; fetchedAt: number } | undefined;
+const VERSION_CACHE_TTL_MS = 60 * 60 * 1000;
+
+function fetchLatestSquadVersion(): Promise<string | null> {
+  return new Promise(resolve => {
+    const req = https.get(
+      'https://raw.githubusercontent.com/bradygaster/squad/main/package.json',
+      { timeout: 10000 },
+      res => {
+        if (res.statusCode !== 200) { resolve(null); return; }
+        let data = '';
+        res.on('data', (chunk: Buffer) => { data += chunk; });
+        res.on('end', () => {
+          try { resolve(JSON.parse(data).version ?? null); }
+          catch { resolve(null); }
+        });
+      },
+    );
+    req.on('error', () => resolve(null));
+    req.on('timeout', () => { req.destroy(); resolve(null); });
+  });
+}
+
+export async function getLatestSquadVersion(): Promise<string | null> {
+  if (_latestVersionCache && (Date.now() - _latestVersionCache.fetchedAt) < VERSION_CACHE_TTL_MS) {
+    return _latestVersionCache.version;
+  }
+  const version = await fetchLatestSquadVersion();
+  _latestVersionCache = { version, fetchedAt: Date.now() };
+  return version;
+}
+
+export function clearLatestVersionCache(): void {
+  _latestVersionCache = undefined;
+}
+
+export function isNewerVersion(latest: string, local: string): boolean {
+  const parse = (v: string) => v.replace(/^v/, '').split('.').map(Number);
+  const l = parse(latest);
+  const c = parse(local);
+  for (let i = 0; i < Math.max(l.length, c.length); i++) {
+    if ((l[i] ?? 0) > (c[i] ?? 0)) return true;
+    if ((l[i] ?? 0) < (c[i] ?? 0)) return false;
+  }
+  return false;
+}
+
+export async function checkSquadUpgradesOnStartup(
+  squads: AgentTeamConfig[],
+  onResult: (squadId: string, upgradeAvailable: boolean) => void,
+): Promise<void> {
+  const latest = await getLatestSquadVersion();
+  if (!latest) return;
+  for (const squad of squads) {
+    const local = getLocalSquadVersion(squad.path);
+    if (!local) continue;
+    onResult(squad.id, isNewerVersion(latest, local));
   }
 }
 
@@ -121,6 +184,7 @@ function getSquadIdFromArgs(args: unknown): string | undefined {
 export function registerSquadUpgradeCommand(
   context: vscode.ExtensionContext,
   registry: EditlessRegistry,
+  onUpgradeComplete?: (squadId: string) => void,
 ): vscode.Disposable {
   return vscode.commands.registerCommand('editless.upgradeSquad', async (args?: unknown) => {
     let config: AgentTeamConfig | undefined = isAgentTeamConfig(args) ? args : undefined;
@@ -152,7 +216,8 @@ export function registerSquadUpgradeCommand(
     }
 
     if (config) {
-      runSquadUpgrade(config);
+      const id = config.id;
+      runSquadUpgrade(config).then(() => onUpgradeComplete?.(id));
     }
   });
 }
@@ -160,6 +225,7 @@ export function registerSquadUpgradeCommand(
 export function registerSquadUpgradeAllCommand(
   context: vscode.ExtensionContext,
   registry: EditlessRegistry,
+  onUpgradeComplete?: (squadId: string) => void,
 ): vscode.Disposable {
   return vscode.commands.registerCommand('editless.upgradeAllSquads', async () => {
     const squads = registry.loadSquads();
@@ -169,7 +235,7 @@ export function registerSquadUpgradeAllCommand(
     }
 
     for (const squad of squads) {
-      runSquadUpgrade(squad);
+      runSquadUpgrade(squad).then(() => onUpgradeComplete?.(squad.id));
     }
 
     vscode.window.showInformationMessage(

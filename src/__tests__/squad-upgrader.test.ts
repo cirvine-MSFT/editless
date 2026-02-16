@@ -23,6 +23,10 @@ vi.mock('fs', () => ({
   readFileSync: mockReadFileSync,
 }));
 
+vi.mock('https', () => ({
+  get: vi.fn(),
+}));
+
 vi.mock('vscode', () => ({
   window: {
     showInformationMessage: vi.fn(),
@@ -38,11 +42,12 @@ vi.mock('vscode', () => ({
   commands: { registerCommand: vi.fn() },
 }));
 
-import { checkNpxAvailable, isSquadInitialized, getLocalSquadVersion } from '../squad-upgrader';
+import { checkNpxAvailable, isSquadInitialized, getLocalSquadVersion, isNewerVersion, clearLatestVersionCache } from '../squad-upgrader';
 import * as path from 'path';
 
 beforeEach(() => {
   vi.clearAllMocks();
+  clearLatestVersionCache();
 });
 
 // ---------------------------------------------------------------------------
@@ -125,5 +130,41 @@ describe('getLocalSquadVersion', () => {
     mockExistsSync.mockReturnValue(true);
     mockReadFileSync.mockReturnValue('---\nversion:   2.0.0-beta  \n---\n');
     expect(getLocalSquadVersion(squadPath)).toBe('2.0.0-beta');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isNewerVersion
+// ---------------------------------------------------------------------------
+
+describe('isNewerVersion', () => {
+  it('should return true when latest major is higher', () => {
+    expect(isNewerVersion('2.0.0', '1.0.0')).toBe(true);
+  });
+
+  it('should return true when latest minor is higher', () => {
+    expect(isNewerVersion('1.3.0', '1.2.0')).toBe(true);
+  });
+
+  it('should return true when latest patch is higher', () => {
+    expect(isNewerVersion('1.2.4', '1.2.3')).toBe(true);
+  });
+
+  it('should return false when versions are equal', () => {
+    expect(isNewerVersion('1.2.3', '1.2.3')).toBe(false);
+  });
+
+  it('should return false when local is newer', () => {
+    expect(isNewerVersion('1.2.3', '1.2.4')).toBe(false);
+  });
+
+  it('should handle v-prefix', () => {
+    expect(isNewerVersion('v2.0.0', 'v1.0.0')).toBe(true);
+    expect(isNewerVersion('v1.0.0', '1.0.0')).toBe(false);
+  });
+
+  it('should handle different length versions', () => {
+    expect(isNewerVersion('1.2.3.4', '1.2.3')).toBe(true);
+    expect(isNewerVersion('1.2.3', '1.2.3.1')).toBe(false);
   });
 });
