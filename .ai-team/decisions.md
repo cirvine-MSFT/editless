@@ -686,3 +686,25 @@ editless/
 
 **Why:** GIFs are universal, well-supported, and stored in the repo for reliability. Every popular extension (GitLens, ErrorLens, Todo Tree) uses this approach. Marketplace renders relative paths inline. ScreenToGif is free, Windows-native, and has built-in optimization for web delivery.
 
+
+
+### 2026-02-16: User directive — worktree enforcement reinforced
+**By:** Casey Irvine (via Copilot)
+**What:** The main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY. Never `git checkout <branch>` there. All coding work must happen in worktrees created via `git worktree add`. Squad file changes (.ai-team/) go on master locally in the main clone, then get PR'd from a separate worktree. This rule was already documented but agents kept violating it — Casey is escalating this to a hard constraint.
+**Why:** User request — captured for team memory. Agent spawned for #213 checked out a branch directly on the main clone, breaking Casey's working state. This has happened multiple times despite the existing decision entry.
+
+
+### 2026-02-16: Bug fixes require regression + UX tests; upgrade paths need dedicated testing
+**By:** Casey (via Copilot)
+**What:** All bug fixes must include regression tests AND UX tests. Upgrade scenarios specifically need tests that either check current state or force an earlier version to validate upgrade paths. We need solid testing for upgrade paths including Copilot CLI version detection with our default settings.
+**Why:** User request — captured for team memory. Ensures bugs don't regress and upgrade UX is thoroughly validated.
+
+
+### 2026-02-16: Use context keys for menu visibility based on dynamic state
+
+**By:** Morty
+
+**What:** Gate menu items on VS Code context keys when visibility depends on runtime state that can't be expressed through `viewItem` checks. For the "Upgrade All Squads" button, we use `editless.squadUpgradeAvailable` set via `vscode.commands.executeCommand('setContext', ...)` in `checkSquadUpgradesOnStartup()`.
+
+**Why:** VS Code's TreeView API doesn't support dynamic menu visibility based on tree contents — you can only use `view == <viewId>` (always visible) or `viewItem == <contextValue>` (per-item inline buttons). When a menu action should appear based on aggregate state (e.g., "any squad upgradeable"), a context key is the only option. This pattern should be used for other view-level actions that depend on computed state.
+
