@@ -18,6 +18,7 @@ import { NotificationManager } from './notifications';
 import { SessionContextResolver } from './session-context';
 import { scanSquad } from './scanner';
 import { flushDecisionsInbox } from './inbox-flusher';
+import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
 import { resolveTeamDir } from './team-dir';
 import { WorkItemsTreeProvider, WorkItemsTreeItem } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
@@ -36,6 +37,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- CLI provider detection (async, non-blocking) -------------------------
   vscode.commands.executeCommand('setContext', 'editless.agencyUpdateAvailable', false);
   probeAllProviders().then(() => resolveActiveProvider());
+
+  // --- Squad UI integration (#38) ------------------------------------------
+  initSquadUiContext(context);
 
   // --- Registry ----------------------------------------------------------
   const registry = createRegistry(context);
@@ -551,6 +555,11 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         initAdoIntegration(context, workItemsProvider, prsProvider);
       }
     }),
+  );
+
+  // Open in Squad UI (context menu on squads — visible only when SquadUI is installed)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.openInSquadUi', () => openSquadUiDashboard()),
   );
 
   // Open in Browser (context menu for work items and PRs)
