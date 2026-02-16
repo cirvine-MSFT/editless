@@ -788,6 +788,67 @@ describe('TerminalManager', () => {
     });
   });
 
+  describe('off-by-one reconciliation fix (#148)', () => {
+    it('should sort persisted entries by creation time before matching to prevent off-by-one', () => {
+      // Persisted entries deliberately OUT of creation order
+      // (simulating state drift from previous bad reconciliation)
+      const entries = [
+        makePersistedEntry({ id: 's3', index: 3, terminalName: 'pwsh', originalName: '🧪 Test Squad #3', displayName: '🧪 Test Squad #3', createdAt: '2026-02-16T00:03:00.000Z' }),
+        makePersistedEntry({ id: 's1', index: 1, terminalName: 'pwsh', originalName: '🧪 Test Squad #1', displayName: '🧪 Test Squad #1', createdAt: '2026-02-16T00:01:00.000Z' }),
+        makePersistedEntry({ id: 's4', index: 4, terminalName: 'pwsh', originalName: '🧪 Test Squad #4', displayName: '🧪 Test Squad #4', createdAt: '2026-02-16T00:04:00.000Z' }),
+        makePersistedEntry({ id: 's2', index: 2, terminalName: 'pwsh', originalName: '🧪 Test Squad #2', displayName: '🧪 Test Squad #2', createdAt: '2026-02-16T00:02:00.000Z' }),
+      ];
+
+      // Live terminals in creation order (as vscode.window.terminals returns them)
+      const t1 = makeMockTerminal('pwsh');
+      const t2 = makeMockTerminal('pwsh');
+      const t3 = makeMockTerminal('pwsh');
+      const t4 = makeMockTerminal('pwsh');
+      mockTerminals.push(t1, t2, t3, t4);
+
+      const ctx = makeMockContext(entries);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const all = mgr.getAllTerminals();
+      expect(all).toHaveLength(4);
+
+      // Entries should be matched in creation order:
+      // s1 (oldest, created 00:01) → t1 (first in terminals)
+      // s2 (00:02) → t2
+      // s3 (00:03) → t3
+      // s4 (00:04) → t4
+      const matchMap = new Map(all.map(({ terminal, info }) => [info.id, terminal]));
+      expect(matchMap.get('s1')).toBe(t1);
+      expect(matchMap.get('s2')).toBe(t2);
+      expect(matchMap.get('s3')).toBe(t3);
+      expect(matchMap.get('s4')).toBe(t4);
+    });
+
+    it('should match correctly when all terminals share identical shell-modified names', () => {
+      // All entries and terminals have the same name — matching relies entirely on order
+      const entries = [
+        makePersistedEntry({ id: 'a1', index: 1, terminalName: 'PowerShell', originalName: '🧪 Test Squad #1', displayName: '🧪 Test Squad #1', createdAt: '2026-02-16T01:00:00.000Z' }),
+        makePersistedEntry({ id: 'a2', index: 2, terminalName: 'PowerShell', originalName: '🧪 Test Squad #2', displayName: '🧪 Test Squad #2', createdAt: '2026-02-16T02:00:00.000Z' }),
+      ];
+
+      const t1 = makeMockTerminal('PowerShell');
+      const t2 = makeMockTerminal('PowerShell');
+      mockTerminals.push(t1, t2);
+
+      const ctx = makeMockContext(entries);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const all = mgr.getAllTerminals();
+      expect(all).toHaveLength(2);
+
+      const matchMap = new Map(all.map(({ terminal, info }) => [info.id, terminal]));
+      expect(matchMap.get('a1')).toBe(t1);
+      expect(matchMap.get('a2')).toBe(t2);
+    });
+  });
+
   describe('reconnect before relaunch (#84 bug 3)', () => {
     it('should reconnect to existing live terminal instead of creating new one when calling relaunchSession', () => {
       const orphanEntry = makePersistedEntry({
