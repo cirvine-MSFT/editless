@@ -307,6 +307,58 @@ The enum includes `"custom"` in package.json but `KNOWN_PROFILES` in cli-provide
    - Fix: Add `{ name: 'custom', command: '', versionCommand: '' }` to KNOWN_PROFILES
 
 3. **`activate()` doesn't return API for integration tests** (issue #110)
+
+### 2026-02-16: Work Items Tree — Ternary Plan Status
+**Date:** 2026-02-16
+**By:** Morty (Extension Dev)
+**Issue:** #139
+
+## Context
+
+`buildIssueItem()` used a binary check: either an issue "has plan" or it doesn't. The match list (`has plan`, `has-plan`, `plan`, `planned`) didn't include `status:planned`, so issues with that GitHub label showed the wrong "needs plan" indicator.
+
+## Decision
+
+Replaced binary planned/not-planned with **ternary** status:
+
+| Status | Labels matched | Indicator | Description prefix |
+|--------|---------------|-----------|-------------------|
+| Planned | `status:planned`, `has-plan`, `has plan`, `plan`, `planned` | 📋 | `✓ planned` |
+| Needs plan | `status:needs-plan`, `needs-plan`, `needs plan` | ❓ | `needs plan` |
+| Neutral | (none of the above) | — | (labels only) |
+
+`hasPlan` takes precedence — if both `status:planned` and `status:needs-plan` are present, the item shows as planned.
+
+## Impact
+
+- `src/work-items-tree.ts` — `buildIssueItem()` method
+- New test file: `src/__tests__/work-items-tree.test.ts`
+
+### 2026-02-16: Squad folder rename backward compatibility
+**Date:** 2026-02-16
+**By:** Morty (Extension Dev)
+**Issue:** #93
+
+## What
+
+Added `src/team-dir.ts` with `resolveTeamDir()` and `resolveTeamMd()` utilities that check `.squad/` first, then `.ai-team/` as fallback. Updated all hardcoded `.ai-team` references in discovery, scanner, squad-upgrader, and watcher to use these utilities.
+
+## Why
+
+The Squad CLI (bradygaster/squad) is renaming `.ai-team/` to `.squad/`. EditLess must support both folder names for backward compatibility. `.squad/` takes precedence when both exist.
+
+## Impact
+
+- All team members: Any future code that needs to locate the team directory must use `resolveTeamDir()` or `resolveTeamMd()` from `src/team-dir.ts` — never hardcode `.ai-team` or `.squad`.
+- Error messages now say `.squad/ (or .ai-team/)` for clarity.
+
+### 2026-02-17: Session persistence — launchCommand stored in PersistedTerminalInfo
+**By:** Morty (coding agent)
+**Issue:** #94
+**What:** `launchCommand` is persisted alongside terminal metadata in `workspaceState`, rather than looked up from the squad config at relaunch time.
+**Why:** The squad config may not exist at relaunch (registry changed, squad removed, repo not yet loaded). Storing the command at launch time makes relaunch self-contained and removes the dependency on registry availability during crash recovery.
+
+**Resume convention:** When `agentSessionId` is set, relaunch appends `--resume <sessionId>` to the persisted launch command. This is a convention that upstream CLIs (Copilot, Agency) can adopt. If a CLI uses a different resume flag, the convention can be overridden by storing a custom resume command pattern in the future.
    - File: `src/extension.ts:32`
    - `activate()` returns `void` but decisions.md requires `{ terminalManager, context }`
    - Integration tests depend on this export
