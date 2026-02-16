@@ -1,6 +1,6 @@
 # EditLess
 
-> Escape the editor. Free your mind. Command your AI teams from one pane of glass.
+> Escape the editor. Free your mind. Command your AI teams all from one place.
 
 Plan work and delegate to AI agents across multiple repos and sessions, then monitor and review everything from one sidebar — no context switching required. One window. One view. Complete control — all without touching the editor. Join the editorless software development revolution!
 
