@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 export class TerminalLayoutManager implements vscode.Disposable {
   private panelWasMaximized = false;
   private hadVisibleEditors = false;
+  private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly disposables: vscode.Disposable[] = [];
 
   constructor() {
@@ -10,7 +11,9 @@ export class TerminalLayoutManager implements vscode.Disposable {
 
     this.disposables.push(
       vscode.window.onDidChangeVisibleTextEditors(editors => {
-        this.onEditorsChanged(editors);
+        // Debounce to avoid reacting to transient zero-editor states during tab switches
+        if (this.debounceTimer) clearTimeout(this.debounceTimer);
+        this.debounceTimer = setTimeout(() => this.onEditorsChanged(editors), 150);
       }),
     );
   }
@@ -42,6 +45,7 @@ export class TerminalLayoutManager implements vscode.Disposable {
   }
 
   dispose(): void {
+    if (this.debounceTimer) clearTimeout(this.debounceTimer);
     for (const d of this.disposables) {
       d.dispose();
     }
