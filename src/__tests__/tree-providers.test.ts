@@ -484,7 +484,7 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
       getOrphanedSessions: vi.fn().mockReturnValue([]),
       getSessionState: vi.fn().mockReturnValue('idle'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
-      _lastActivityAt: new Map(),
+      getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
     const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
@@ -504,7 +504,7 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
       getOrphanedSessions: vi.fn().mockReturnValue([]),
       getSessionState: vi.fn().mockReturnValue('idle'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
-      _lastActivityAt: new Map(),
+      getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
     const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
@@ -696,7 +696,7 @@ describe('EditlessTreeProvider — squad item description', () => {
       getOrphanedSessions: vi.fn().mockReturnValue([]),
       getSessionState: vi.fn().mockReturnValue('idle'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
-      _lastActivityAt: new Map(),
+      getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
     const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
@@ -714,7 +714,7 @@ describe('EditlessTreeProvider — squad item description', () => {
       getOrphanedSessions: vi.fn().mockReturnValue([]),
       getSessionState: vi.fn().mockReturnValue('idle'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
-      _lastActivityAt: new Map(),
+      getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
     const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
