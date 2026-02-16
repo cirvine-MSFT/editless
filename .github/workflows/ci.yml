@@ -35,3 +35,6 @@ jobs:
 
       # Unit tests via vitest
       - run: npm run test
+
+      # Dependency audit — catch known vulnerabilities in production deps
+      - run: npm audit --omit=dev || true
