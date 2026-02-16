@@ -12,6 +12,8 @@
 ## Learnings
 
 
+📌 **Team update (2026-02-16):** Default release target — All new issues default to elease:v0.1 unless Casey explicitly directs otherwise. This ensures v0.1 work is automatically tagged correctly. — decided by Casey Irvine
+
 📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
@@ -30,5 +32,6 @@
 📌 Agent file format (2026-02-16): Standalone agents discovered from `.agent.md` files in workspace, `.github/agents/`, and `~/.copilot/`. Parser extracts name from H1 heading (or filename fallback), description from YAML `description:` field or blockquote. ID generated via kebab-case normalization from filename. Deduplication: workspace wins over system-wide. — documented by Summer
 
 📌 Developer documentation structure (2026-02-16): Created `docs/architecture.md` (system overview, components, data flows), `docs/SETTINGS.md` (complete reference), and `docs/agent-file-format.md` (file spec). These are for contributors, not end users. See PR #225. — created by Summer
+
 
 

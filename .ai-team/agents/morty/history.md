@@ -11,6 +11,10 @@
 ## Learnings
 
 
+📌 **Team update (2026-02-16):** Documentation animation strategy — EditLess uses optimized GIFs stored in docs/media/ directory. Primary tool: ScreenToGif (Windows). Files must be <1 MB, max 800px width, 3–8 seconds duration. File naming is descriptive kebab-case (e.g., planning-feature.gif). Re-recording triggers documented: UI structure changes, command/shortcut changes, label changes, layout changes. Team reviews animations on code review checklist. — decided by Summer
+
+📌 **Team update (2026-02-16):** Default release target — All new issues default to elease:v0.1 unless Casey explicitly directs otherwise. This ensures v0.1 work is automatically tagged correctly. — decided by Casey Irvine
+
 📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
@@ -55,4 +59,5 @@
 📌 **Team update (2026-02-16):** Session State Design Issue — `waiting-on-input` misclassification documented as a P2 design issue in decisions.md. Investigation revealed that the heuristic conflates "recent activity" with "waiting for user input" and has no positive signal to distinguish legitimate input-waiting scenarios. Fix requires inverting the default to `idle` and introducing a separate `_waitingOnInput` signal or terminal output parsing. Filed as issue #226. — investigated by Morty
 - **Session state `waiting-on-input` misclassification (investigation):** `getSessionState()` in `terminal-manager.ts:336-365` defaults to `waiting-on-input` for any terminal with `_lastActivityAt` within the 5-minute idle threshold and no active shell execution. This means every terminal shows `waiting-on-input` for up to 5 minutes after any command finishes — even when idle. Root cause is a design issue: `onDidEndTerminalShellExecution` (line 86-89) sets both `_shellExecutionActive=false` and `_lastActivityAt=Date.now()`, but there is no positive signal distinguishing "agent asking a question" from "command finished normally." The reconcile path (line 449) restoring `_lastActivityAt` from `persisted.lastSeenAt` amplifies this on reload. Fix requires inverting the default to `idle` and introducing a separate positive signal for `waiting-on-input`.
 - **Filter category grouping (#213):** The work items filter now groups active filters by their label prefix (everything before the colon). Within each prefix group (e.g., `release:`), filters use OR logic. Across different prefix groups (e.g., `type:` + `release:`), filters use AND logic. This lets you say "show me docs OR bugs from v0.1 OR backlog" by selecting `type:docs`, `type:bug`, `release:v0.1`, `release:backlog`. The pattern is implemented in a private `matchesLabelFilter()` helper that groups by prefix, checks OR within each group, and AND across groups.
+
 
