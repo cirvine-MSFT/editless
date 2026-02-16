@@ -8,7 +8,7 @@ import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand, checkSquadUpgradesOnStartup, clearLatestVersionCache } from './squad-upgrader';
-import { registerAgencyUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider } from './cli-provider';
+import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider } from './cli-provider';
 import { registerDiscoveryCommand, checkDiscoveryOnStartup } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import { AgentVisibilityManager } from './visibility';
@@ -35,7 +35,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(output);
 
   // --- CLI provider detection (async, non-blocking) -------------------------
-  vscode.commands.executeCommand('setContext', 'editless.agencyUpdateAvailable', false);
+  vscode.commands.executeCommand('setContext', 'editless.cliUpdateAvailable', false);
   probeAllProviders().then(() => resolveActiveProvider());
 
   // --- Squad UI integration (#38) ------------------------------------------
@@ -190,8 +190,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(registerSquadUpgradeCommand(context, registry, onUpgradeComplete));
   context.subscriptions.push(registerSquadUpgradeAllCommand(context, registry, onUpgradeComplete));
 
-  // Agency update command
-  context.subscriptions.push(registerAgencyUpdateCommand(context));
+  // CLI provider update command
+  context.subscriptions.push(registerCliUpdateCommand(context));
 
   // Check for CLI provider updates on startup
   checkProviderUpdatesOnStartup(context);
