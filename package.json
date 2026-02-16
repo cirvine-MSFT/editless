@@ -275,7 +275,6 @@
         { "command": "editless.refresh", "when": "view == editlessTree", "group": "navigation@1" },
         { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@2" },
         { "command": "editless.addNew", "when": "view == editlessTree", "group": "navigation@3" },
-        { "command": "editless.addSquad", "when": "view == editlessTree", "group": "navigation@4" },
         { "command": "editless.updateCliProvider", "when": "view == editlessTree && editless.cliUpdateAvailable", "group": "1_updates" },
         { "command": "editless.upgradeAllSquads", "when": "view == editlessTree", "group": "1_updates" },
         { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation@1" },
