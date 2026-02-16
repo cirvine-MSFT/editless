@@ -77,13 +77,21 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       }
 
       if (this._repos.length === 0) {
-        const item = new PRsTreeItem('Configure GitHub repos in settings');
-        item.iconPath = new vscode.ThemeIcon('info');
-        item.command = {
+        const ghItem = new PRsTreeItem('Configure in GitHub');
+        ghItem.iconPath = new vscode.ThemeIcon('github');
+        ghItem.command = {
           command: 'editless.configureRepos',
           title: 'Configure GitHub Repos',
         };
-        return [item];
+
+        const adoItem = new PRsTreeItem('Configure in ADO');
+        adoItem.iconPath = new vscode.ThemeIcon('azure');
+        adoItem.command = {
+          command: 'editless.configureAdo',
+          title: 'Configure Azure DevOps',
+        };
+
+        return [ghItem, adoItem];
       }
 
       if (this._prs.size === 0) {

@@ -110,9 +110,11 @@ describe('WorkItemsTreeProvider', () => {
     const provider = new WorkItemsTreeProvider();
     const children = provider.getChildren();
 
-    expect(children).toHaveLength(1);
-    expect(children[0].label).toBe('Configure GitHub repos in settings');
+    expect(children).toHaveLength(2);
+    expect(children[0].label).toBe('Configure in GitHub');
+    expect(children[1].label).toBe('Configure in ADO');
     expect(children[0].iconPath).toBeDefined();
+    expect(children[1].iconPath).toBeDefined();
   });
 
   it('should return empty array when getChildren is called with an unrecognised element', async () => {
@@ -240,9 +242,11 @@ describe('PRsTreeProvider', () => {
     const provider = new PRsTreeProvider();
     const children = provider.getChildren();
 
-    expect(children).toHaveLength(1);
-    expect(children[0].label).toBe('Configure GitHub repos in settings');
+    expect(children).toHaveLength(2);
+    expect(children[0].label).toBe('Configure in GitHub');
+    expect(children[1].label).toBe('Configure in ADO');
     expect(children[0].iconPath).toBeDefined();
+    expect(children[1].iconPath).toBeDefined();
   });
 
   it('should return empty array when getChildren is called with an unrecognised element', async () => {

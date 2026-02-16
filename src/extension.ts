@@ -470,7 +470,14 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Configure GitHub repos (opens settings)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.configureRepos', async () => {
-      await vscode.commands.executeCommand('workbench.action.openSettings', 'editless.github.repos');
+      await vscode.commands.executeCommand('workbench.action.openSettings', 'editless.github');
+    }),
+  );
+
+  // Configure ADO (opens settings)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.configureAdo', async () => {
+      await vscode.commands.executeCommand('workbench.action.openSettings', 'editless.ado');
     }),
   );
 
