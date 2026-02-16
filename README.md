@@ -36,6 +36,11 @@ npm run build
 # Press F5 in VS Code to launch Extension Development Host
 ```
 
+## Workflow Documentation
+
+- [GitHub Workflow](docs/workflows/github-workflow.md) — Managing work with AI agents on GitHub
+- [ADO Workflow](docs/workflows/ado-workflow.md) — Managing work with AI agents on Azure DevOps
+
 ## License
 
 [MIT](LICENSE)
