@@ -37,6 +37,15 @@ const {
   mockPRsRefresh,
   mockOpenExternal,
   mockGetActiveCliProvider,
+  mockSetFilter,
+  mockClearFilter,
+  mockGetAllRepos,
+  mockGetAllLabels,
+  mockPromptAdoSignIn,
+  mockOpenSquadUiDashboard,
+  mockFetchLinkedPRs,
+  mockShowTextDocument,
+  mockShowOpenDialog,
   MockEditlessTreeItem,
 } = vi.hoisted(() => {
   class MockEditlessTreeItem {
@@ -90,6 +99,15 @@ const {
     mockPRsRefresh: vi.fn(),
     mockOpenExternal: vi.fn(),
     mockGetActiveCliProvider: vi.fn(),
+    mockSetFilter: vi.fn(),
+    mockClearFilter: vi.fn(),
+    mockGetAllRepos: vi.fn().mockReturnValue([]),
+    mockGetAllLabels: vi.fn().mockReturnValue([]),
+    mockPromptAdoSignIn: vi.fn(),
+    mockOpenSquadUiDashboard: vi.fn(),
+    mockFetchLinkedPRs: vi.fn(),
+    mockShowTextDocument: vi.fn(),
+    mockShowOpenDialog: vi.fn(),
     MockEditlessTreeItem,
   };
 });
@@ -168,7 +186,8 @@ vi.mock('vscode', () => {
       get activeTerminal() { return mockActiveTerminalRef.current; },
       createTerminal: vi.fn(() => ({ show: vi.fn(), sendText: vi.fn(), dispose: vi.fn() })),
       terminals: [],
-      showOpenDialog: vi.fn(),
+      showOpenDialog: mockShowOpenDialog,
+      showTextDocument: mockShowTextDocument,
     },
     workspace: {
       getConfiguration: () => ({
@@ -328,15 +347,21 @@ vi.mock('../work-items-tree', () => ({
       setRepos: vi.fn(),
       refresh: mockWorkItemsRefresh,
       setTreeView: vi.fn(),
-      setFilter: vi.fn(),
-      clearFilter: vi.fn(),
+      setFilter: mockSetFilter,
+      clearFilter: mockClearFilter,
       filter: { repos: [], labels: [], states: [] },
       isFiltered: false,
-      getAllRepos: vi.fn().mockReturnValue([]),
-      getAllLabels: vi.fn().mockReturnValue([]),
+      getAllRepos: mockGetAllRepos,
+      getAllLabels: mockGetAllLabels,
+      setAdoItems: vi.fn(),
+      setAdoRefresh: vi.fn(),
     };
   }),
-  WorkItemsTreeItem: class {},
+  WorkItemsTreeItem: class {
+    issue?: unknown;
+    adoWorkItem?: unknown;
+    constructor(public label: string) {}
+  },
 }));
 
 vi.mock('../prs-tree', () => ({
@@ -344,17 +369,53 @@ vi.mock('../prs-tree', () => ({
     return {
       setRepos: vi.fn(),
       refresh: mockPRsRefresh,
+      setAdoPRs: vi.fn(),
+      setAdoRefresh: vi.fn(),
     };
   }),
-  PRsTreeItem: class {},
+  PRsTreeItem: class {
+    pr?: unknown;
+    adoPR?: unknown;
+    constructor(public label: string) {}
+  },
 }));
 
 vi.mock('../github-client', () => ({
-  fetchLinkedPRs: vi.fn(),
+  fetchLinkedPRs: mockFetchLinkedPRs,
 }));
 
 vi.mock('../vscode-compat', () => ({
   getEdition: vi.fn(() => 'VS Code'),
+}));
+
+vi.mock('../ado-auth', () => ({
+  getAdoToken: vi.fn(),
+  promptAdoSignIn: mockPromptAdoSignIn,
+  clearAzTokenCache: vi.fn(),
+}));
+
+vi.mock('../ado-client', () => ({
+  fetchAdoWorkItems: vi.fn(),
+  fetchAdoPRs: vi.fn(),
+}));
+
+vi.mock('../squad-ui-integration', () => ({
+  initSquadUiContext: vi.fn(),
+  openSquadUiDashboard: mockOpenSquadUiDashboard,
+}));
+
+vi.mock('../inbox-flusher', () => ({
+  flushDecisionsInbox: vi.fn(),
+}));
+
+vi.mock('../team-dir', () => ({
+  resolveTeamDir: vi.fn(),
+}));
+
+vi.mock('../terminal-layout', () => ({
+  TerminalLayoutManager: vi.fn(function () {
+    return { dispose: vi.fn() };
+  }),
 }));
 
 import { activate } from '../extension';
@@ -363,6 +424,7 @@ import { activate } from '../extension';
 
 function makeContext(): vscode.ExtensionContext {
   const store = new Map<string, unknown>();
+  const secretStore = new Map<string, string>();
   return {
     subscriptions: [],
     workspaceState: {
@@ -375,6 +437,12 @@ function makeContext(): vscode.ExtensionContext {
       update: vi.fn((key: string, value: unknown) => { store.set(key, value); return Promise.resolve(); }),
       keys: () => [...store.keys()],
       setKeysForSync: vi.fn(),
+    },
+    secrets: {
+      get: vi.fn((key: string) => Promise.resolve(secretStore.get(key))),
+      store: vi.fn((key: string, value: string) => { secretStore.set(key, value); return Promise.resolve(); }),
+      delete: vi.fn((key: string) => { secretStore.delete(key); return Promise.resolve(); }),
+      onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     },
   } as unknown as vscode.ExtensionContext;
 }
@@ -1113,6 +1181,264 @@ describe('extension command handlers', () => {
       const uri = { fsPath: '/test.md' };
       getHandler('editless.openFilePreview')(uri);
       expect(mockExecuteCommand).toHaveBeenCalledWith('markdown.showPreviewToSide', uri);
+    });
+  });
+
+  // --- editless.filterWorkItems -----------------------------------------------
+
+  describe('editless.filterWorkItems', () => {
+    it('should show QuickPick with repos, states, and labels', async () => {
+      mockGetAllRepos.mockReturnValue(['owner/repo1']);
+      mockGetAllLabels.mockReturnValue(['type:bug', 'release:v0.1']);
+      mockShowQuickPick.mockResolvedValue([]);
+
+      await getHandler('editless.filterWorkItems')();
+
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ label: 'owner/repo1', description: 'repo' }),
+          expect.objectContaining({ label: 'Open (New)', description: 'state' }),
+          expect.objectContaining({ label: 'type:bug', description: 'label' }),
+          expect.objectContaining({ label: 'release:v0.1', description: 'label' }),
+        ]),
+        expect.objectContaining({ canPickMany: true }),
+      );
+    });
+
+    it('should apply selected filters to provider', async () => {
+      mockGetAllRepos.mockReturnValue(['owner/repo1']);
+      mockGetAllLabels.mockReturnValue(['type:bug']);
+      mockShowQuickPick.mockResolvedValue([
+        { label: 'owner/repo1', description: 'repo' },
+        { label: 'type:bug', description: 'label' },
+        { label: 'Open (New)', description: 'state' },
+      ]);
+
+      await getHandler('editless.filterWorkItems')();
+
+      expect(mockSetFilter).toHaveBeenCalledWith({
+        repos: ['owner/repo1'],
+        labels: ['type:bug'],
+        states: ['open'],
+      });
+    });
+
+    it('should no-op when user cancels QuickPick', async () => {
+      mockShowQuickPick.mockResolvedValue(undefined);
+      await getHandler('editless.filterWorkItems')();
+      expect(mockSetFilter).not.toHaveBeenCalled();
+    });
+
+    it('should set empty filter when no items selected', async () => {
+      mockShowQuickPick.mockResolvedValue([]);
+      await getHandler('editless.filterWorkItems')();
+      expect(mockSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], states: [] });
+    });
+  });
+
+  // --- editless.clearWorkItemsFilter -----------------------------------------
+
+  describe('editless.clearWorkItemsFilter', () => {
+    it('should delegate to provider clearFilter', () => {
+      getHandler('editless.clearWorkItemsFilter')();
+      expect(mockClearFilter).toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.openInBrowser ------------------------------------------------
+
+  describe('editless.openInBrowser', () => {
+    it('should open GitHub issue URL in external browser', async () => {
+      const item = { issue: { url: 'https://github.com/owner/repo/issues/1' } };
+      await getHandler('editless.openInBrowser')(item);
+      expect(mockOpenExternal).toHaveBeenCalled();
+    });
+
+    it('should open ADO work item URL in external browser', async () => {
+      const item = { adoWorkItem: { url: 'https://dev.azure.com/org/project/_workitems/edit/42' } };
+      await getHandler('editless.openInBrowser')(item);
+      expect(mockOpenExternal).toHaveBeenCalled();
+    });
+
+    it('should open PR URL in external browser', async () => {
+      const item = { pr: { url: 'https://github.com/owner/repo/pull/5' } };
+      await getHandler('editless.openInBrowser')(item);
+      expect(mockOpenExternal).toHaveBeenCalled();
+    });
+
+    it('should open ADO PR URL in external browser', async () => {
+      const item = { adoPR: { url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/10' } };
+      await getHandler('editless.openInBrowser')(item);
+      expect(mockOpenExternal).toHaveBeenCalled();
+    });
+
+    it('should no-op when item has no URL', async () => {
+      const item = {};
+      await getHandler('editless.openInBrowser')(item);
+      expect(mockOpenExternal).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.launchFromWorkItem -------------------------------------------
+
+  describe('editless.launchFromWorkItem', () => {
+    it('should show warning when no squads registered', async () => {
+      const item = { issue: { number: 42, title: 'Fix bug', url: 'https://example.com/42' } };
+      mockLoadSquads.mockReturnValue([]);
+      await getHandler('editless.launchFromWorkItem')(item);
+      expect(mockShowWarningMessage).toHaveBeenCalledWith('No agents registered.');
+    });
+
+    it('should show QuickPick and launch terminal for selected squad', async () => {
+      const squad = makeSquad();
+      const item = { issue: { number: 42, title: 'Fix bug', url: 'https://example.com/42', repository: 'owner/repo' } };
+      mockLoadSquads.mockReturnValue([squad]);
+      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', squad });
+
+      await getHandler('editless.launchFromWorkItem')(item);
+
+      expect(mockLaunchTerminal).toHaveBeenCalledWith(squad, '#42 Fix bug');
+    });
+
+    it('should no-op when item has no issue', async () => {
+      await getHandler('editless.launchFromWorkItem')({});
+      expect(mockLaunchTerminal).not.toHaveBeenCalled();
+    });
+
+    it('should no-op when item is undefined', async () => {
+      await getHandler('editless.launchFromWorkItem')();
+      expect(mockLaunchTerminal).not.toHaveBeenCalled();
+    });
+
+    it('should no-op when user cancels QuickPick', async () => {
+      const squad = makeSquad();
+      const item = { issue: { number: 1, title: 'T', url: 'https://example.com/1' } };
+      mockLoadSquads.mockReturnValue([squad]);
+      mockShowQuickPick.mockResolvedValue(undefined);
+      await getHandler('editless.launchFromWorkItem')(item);
+      expect(mockLaunchTerminal).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.goToPR -------------------------------------------------------
+
+  describe('editless.goToPR', () => {
+    it('should show info when no linked PRs found', async () => {
+      const item = { issue: { number: 42, title: 'Test', repository: 'owner/repo' } };
+      mockFetchLinkedPRs.mockResolvedValue([]);
+      await getHandler('editless.goToPR')(item);
+      expect(mockShowInformationMessage).toHaveBeenCalledWith('No linked PRs found for #42');
+    });
+
+    it('should open single PR directly in browser', async () => {
+      const item = { issue: { number: 42, repository: 'owner/repo' } };
+      mockFetchLinkedPRs.mockResolvedValue([{ number: 100, title: 'PR', state: 'open', url: 'https://github.com/pr/100' }]);
+      await getHandler('editless.goToPR')(item);
+      expect(mockOpenExternal).toHaveBeenCalled();
+    });
+
+    it('should show QuickPick when multiple PRs found', async () => {
+      const item = { issue: { number: 42, repository: 'owner/repo' } };
+      mockFetchLinkedPRs.mockResolvedValue([
+        { number: 100, title: 'PR A', state: 'open', url: 'https://github.com/pr/100' },
+        { number: 101, title: 'PR B', state: 'closed', url: 'https://github.com/pr/101' },
+      ]);
+      mockShowQuickPick.mockResolvedValue({ label: '#100 PR A', description: 'open', url: 'https://github.com/pr/100' });
+      await getHandler('editless.goToPR')(item);
+      expect(mockShowQuickPick).toHaveBeenCalled();
+      expect(mockOpenExternal).toHaveBeenCalled();
+    });
+
+    it('should no-op when item has no issue', async () => {
+      await getHandler('editless.goToPR')({});
+      expect(mockFetchLinkedPRs).not.toHaveBeenCalled();
+    });
+
+    it('should no-op when user cancels QuickPick for multiple PRs', async () => {
+      const item = { issue: { number: 42, repository: 'owner/repo' } };
+      mockFetchLinkedPRs.mockResolvedValue([
+        { number: 100, title: 'PR A', state: 'open', url: 'https://github.com/pr/100' },
+        { number: 101, title: 'PR B', state: 'open', url: 'https://github.com/pr/101' },
+      ]);
+      mockShowQuickPick.mockResolvedValue(undefined);
+      await getHandler('editless.goToPR')(item);
+      expect(mockOpenExternal).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.setAdoPat ----------------------------------------------------
+
+  describe('editless.setAdoPat', () => {
+    it('should prompt for PAT with password input', async () => {
+      mockShowInputBox.mockResolvedValueOnce(undefined);
+      await getHandler('editless.setAdoPat')();
+      expect(mockShowInputBox).toHaveBeenCalledWith(
+        expect.objectContaining({ password: true }),
+      );
+    });
+
+    it('should not show confirmation when user cancels input', async () => {
+      mockShowInputBox.mockResolvedValueOnce(undefined);
+      await getHandler('editless.setAdoPat')();
+      expect(mockShowInformationMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.adoSignIn ----------------------------------------------------
+
+  describe('editless.adoSignIn', () => {
+    it('should show confirmation when sign-in succeeds', async () => {
+      mockPromptAdoSignIn.mockResolvedValue('some-token');
+      await getHandler('editless.adoSignIn')();
+      expect(mockShowInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Signed in to Azure DevOps'),
+      );
+    });
+
+    it('should not show confirmation when sign-in fails', async () => {
+      mockPromptAdoSignIn.mockResolvedValue(undefined);
+      await getHandler('editless.adoSignIn')();
+      expect(mockShowInformationMessage).not.toHaveBeenCalledWith(
+        expect.stringContaining('Signed in'),
+      );
+    });
+  });
+
+  // --- editless.openInSquadUi ------------------------------------------------
+
+  describe('editless.openInSquadUi', () => {
+    it('should delegate to openSquadUiDashboard', () => {
+      getHandler('editless.openInSquadUi')();
+      expect(mockOpenSquadUiDashboard).toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.openRegistry -------------------------------------------------
+
+  describe('editless.openRegistry', () => {
+    it('should open the registry file in editor', async () => {
+      await getHandler('editless.openRegistry')();
+      expect(mockShowTextDocument).toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.goToSquadSettings --------------------------------------------
+
+  describe('editless.goToSquadSettings', () => {
+    it('should no-op when item has no squadId', async () => {
+      const item = new MockEditlessTreeItem('Agent', 'agent', 0);
+      await getHandler('editless.goToSquadSettings')(item);
+      expect(mockShowTextDocument).not.toHaveBeenCalled();
+    });
+
+    it('should open registry file when squadId is present', async () => {
+      const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
+      mockShowTextDocument.mockResolvedValue({
+        selection: undefined,
+        revealRange: vi.fn(),
+      });
+      await getHandler('editless.goToSquadSettings')(item);
+      expect(mockShowTextDocument).toHaveBeenCalled();
     });
   });
 });
