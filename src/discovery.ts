@@ -4,6 +4,7 @@ import * as path from 'path';
 import { AgentTeamConfig } from './types';
 import { EditlessRegistry } from './registry';
 import { resolveTeamMd } from './team-dir';
+import { getActiveProviderLaunchCommand } from './cli-provider';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
@@ -89,7 +90,7 @@ export function discoverAgentTeams(dirPath: string, existingSquads: AgentTeamCon
       path: folderPath,
       icon: '🔷',
       universe: parsed.universe,
-      launchCommand: 'agency copilot --agent squad --yolo -s',
+      launchCommand: getActiveProviderLaunchCommand(),
     });
   }
 
@@ -137,7 +138,7 @@ export function discoverAgentTeamsInMultiplePaths(
         path: folderPath,
         icon: '🔷',
         universe: parsed.universe,
-        launchCommand: 'agency copilot --agent squad --yolo -s',
+        launchCommand: getActiveProviderLaunchCommand(),
       });
     }
   }

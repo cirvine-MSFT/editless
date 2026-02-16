@@ -57,7 +57,11 @@ vi.mock('vscode', () => {
   return {
     TreeItem, TreeItemCollapsibleState, ThemeIcon, ThemeColor, MarkdownString, EventEmitter,
     Uri: { parse: (s: string) => ({ toString: () => s }) },
+    commands: {
+      executeCommand: vi.fn(),
+    },
     workspace: {
+      workspaceFolders: [],
       getConfiguration: () => ({
         get: () => ({}),
       }),
@@ -70,7 +74,23 @@ vi.mock('../github-client', () => ({
   fetchAssignedIssues: (...args: unknown[]) => mockFetchAssignedIssues(...(args as [string])),
 }));
 
-import { WorkItemsTreeProvider, WorkItemsTreeItem } from '../work-items-tree';
+const mockExistsSync = vi.fn().mockReturnValue(false);
+const mockReaddirSync = vi.fn().mockReturnValue([]);
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    existsSync: (...args: unknown[]) => mockExistsSync(...args),
+    readdirSync: (...args: unknown[]) => mockReaddirSync(...args),
+  };
+});
+
+vi.mock('../team-dir', () => ({
+  TEAM_DIR_NAMES: ['.squad', '.ai-team'],
+}));
+
+import { WorkItemsTreeProvider, WorkItemsTreeItem, mapGitHubState, mapAdoState, buildPlanFileIndex } from '../work-items-tree';
 import type { GitHubIssue } from '../github-client';
 
 beforeEach(() => {
@@ -243,5 +263,255 @@ describe('WorkItemsTreeProvider — plan status indicators', () => {
     const icon = items[0].iconPath as { id: string; color?: unknown };
     expect(icon.id).toBe('issues');
     expect(icon.color).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// mapGitHubState / mapAdoState (#132)
+// ---------------------------------------------------------------------------
+
+describe('mapGitHubState', () => {
+  it('should return "active" for open issues with assignees', () => {
+    expect(mapGitHubState(makeIssue({ state: 'open', assignees: ['user'] }))).toBe('active');
+  });
+
+  it('should return "open" for open issues with no assignees', () => {
+    expect(mapGitHubState(makeIssue({ state: 'open', assignees: [] }))).toBe('open');
+  });
+
+  it('should return "closed" for closed issues', () => {
+    expect(mapGitHubState(makeIssue({ state: 'closed' }))).toBe('closed');
+  });
+});
+
+describe('mapAdoState', () => {
+  it('should map "New" to "open"', () => {
+    expect(mapAdoState('New')).toBe('open');
+  });
+
+  it('should map "Active" to "active"', () => {
+    expect(mapAdoState('Active')).toBe('active');
+  });
+
+  it('should map "Resolved" to "closed"', () => {
+    expect(mapAdoState('Resolved')).toBe('closed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Runtime filtering (#132)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — runtime filter', () => {
+  async function getFilteredItems(
+    issues: GitHubIssue[],
+    filter: { repos?: string[]; labels?: string[]; states?: Array<'open' | 'active' | 'closed'> },
+  ): Promise<WorkItemsTreeItem[]> {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue(issues);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+    provider.setFilter({
+      repos: filter.repos ?? [],
+      labels: filter.labels ?? [],
+      states: filter.states ?? [],
+    });
+
+    return provider.getChildren();
+  }
+
+  it('should filter by label', async () => {
+    const items = await getFilteredItems(
+      [makeIssue({ number: 1, labels: ['bug'] }), makeIssue({ number: 2, labels: ['feature'] })],
+      { labels: ['bug'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+
+  it('should filter by state (active = assigned)', async () => {
+    const items = await getFilteredItems(
+      [makeIssue({ number: 1, assignees: ['user'] }), makeIssue({ number: 2, assignees: [] })],
+      { states: ['active'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+
+  it('should filter by state (open = unassigned)', async () => {
+    const items = await getFilteredItems(
+      [makeIssue({ number: 1, assignees: ['user'] }), makeIssue({ number: 2, assignees: [] })],
+      { states: ['open'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#2');
+  });
+
+  it('should show empty state message when filter excludes all items', async () => {
+    const items = await getFilteredItems(
+      [makeIssue({ labels: ['bug'] })],
+      { labels: ['nonexistent'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('No items match current filter');
+  });
+
+  it('should return all items when filter is empty', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue({ number: 1 }), makeIssue({ number: 2 })]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+    provider.setFilter({ repos: [], labels: [], states: [] });
+    const items = provider.getChildren();
+    expect(items).toHaveLength(2);
+  });
+
+  it('should clear filter and show all items', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue({ number: 1, labels: ['bug'] }), makeIssue({ number: 2 })]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+    provider.setFilter({ repos: [], labels: ['bug'], states: [] });
+    expect(provider.getChildren()).toHaveLength(1);
+
+    provider.clearFilter();
+    expect(provider.getChildren()).toHaveLength(2);
+  });
+
+  it('should report isFiltered correctly', () => {
+    const provider = new WorkItemsTreeProvider();
+    expect(provider.isFiltered).toBe(false);
+    provider.setFilter({ repos: ['test'], labels: [], states: [] });
+    expect(provider.isFiltered).toBe(true);
+    provider.clearFilter();
+    expect(provider.isFiltered).toBe(false);
+  });
+
+  it('should collect all unique labels from issues', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      makeIssue({ labels: ['bug', 'urgent'] }),
+      makeIssue({ labels: ['bug', 'feature'] }),
+    ]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+    const labels = provider.getAllLabels();
+    expect(labels).toEqual(['bug', 'feature', 'urgent']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildPlanFileIndex
+// ---------------------------------------------------------------------------
+
+describe('buildPlanFileIndex', () => {
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    mockExistsSync.mockReturnValue(false);
+    mockReaddirSync.mockReturnValue([]);
+    const vscodeModule = await import('vscode');
+    Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+  });
+
+  it('should return empty map when no workspace folders', () => {
+    const index = buildPlanFileIndex();
+    expect(index.size).toBe(0);
+  });
+
+  it('should return empty map when plans directory does not exist', async () => {
+    const vscodeModule = await import('vscode');
+    Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', {
+      value: [{ uri: { fsPath: '/workspace' } }],
+      configurable: true,
+    });
+    mockExistsSync.mockReturnValue(false);
+    const index = buildPlanFileIndex();
+    expect(index.size).toBe(0);
+  });
+
+  it('should index plan files by issue number', async () => {
+    const vscodeModule = await import('vscode');
+    Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', {
+      value: [{ uri: { fsPath: '/workspace' } }],
+      configurable: true,
+    });
+    mockExistsSync.mockImplementation((p: unknown) =>
+      String(p).endsWith('plans'),
+    );
+    mockReaddirSync.mockReturnValue(['toolbar-ux-60.md', 'session-persistence-53.md']);
+
+    const index = buildPlanFileIndex();
+    expect(index.get(60)).toBe('toolbar-ux-60.md');
+    expect(index.get(53)).toBe('session-persistence-53.md');
+  });
+
+  it('should handle multi-number plan files', async () => {
+    const vscodeModule = await import('vscode');
+    Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', {
+      value: [{ uri: { fsPath: '/workspace' } }],
+      configurable: true,
+    });
+    mockExistsSync.mockImplementation((p: unknown) =>
+      String(p).endsWith('plans'),
+    );
+    mockReaddirSync.mockReturnValue(['toolbar-ux-60-64.md']);
+
+    const index = buildPlanFileIndex();
+    expect(index.get(60)).toBe('toolbar-ux-60-64.md');
+    expect(index.get(64)).toBe('toolbar-ux-60-64.md');
+  });
+
+  it('should skip non-md files', async () => {
+    const vscodeModule = await import('vscode');
+    Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', {
+      value: [{ uri: { fsPath: '/workspace' } }],
+      configurable: true,
+    });
+    mockExistsSync.mockImplementation((p: unknown) =>
+      String(p).endsWith('plans'),
+    );
+    mockReaddirSync.mockReturnValue(['.gitkeep', 'notes.txt', 'plan-42.md']);
+
+    const index = buildPlanFileIndex();
+    expect(index.size).toBe(1);
+    expect(index.get(42)).toBe('plan-42.md');
+  });
+
+  it('should scan both .squad and .ai-team directories', async () => {
+    const vscodeModule = await import('vscode');
+    Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', {
+      value: [{ uri: { fsPath: '/workspace' } }],
+      configurable: true,
+    });
+    const calls: string[] = [];
+    mockExistsSync.mockImplementation((p: unknown) => {
+      calls.push(String(p));
+      return String(p).includes('.ai-team');
+    });
+    mockReaddirSync.mockReturnValue(['fix-99.md']);
+
+    buildPlanFileIndex();
+    expect(calls.some(c => c.includes('.squad'))).toBe(true);
+    expect(calls.some(c => c.includes('.ai-team'))).toBe(true);
   });
 });

@@ -20,7 +20,7 @@ export interface AgentTeamConfig {
   terminalProfileGuid?: string;
   /** Windows Terminal profile name for matching */
   terminalProfileName?: string;
-  /** Command to launch in terminal (e.g., "agency copilot --agent squad ...") */
+  /** Command to launch in terminal (e.g., "copilot --agent squad") */
   launchCommand?: string;
 }
 

@@ -36,6 +36,7 @@ const {
   mockWorkItemsRefresh,
   mockPRsRefresh,
   mockOpenExternal,
+  mockGetActiveCliProvider,
   MockEditlessTreeItem,
 } = vi.hoisted(() => {
   class MockEditlessTreeItem {
@@ -88,6 +89,7 @@ const {
     mockWorkItemsRefresh: vi.fn(),
     mockPRsRefresh: vi.fn(),
     mockOpenExternal: vi.fn(),
+    mockGetActiveCliProvider: vi.fn(),
     MockEditlessTreeItem,
   };
 });
@@ -153,7 +155,7 @@ vi.mock('vscode', () => {
       showWarningMessage: mockShowWarningMessage,
       showInformationMessage: mockShowInformationMessage,
       createOutputChannel: () => ({ appendLine: vi.fn(), dispose: vi.fn() }),
-      createTreeView: () => ({ reveal: vi.fn(), dispose: vi.fn() }),
+      createTreeView: () => ({ reveal: vi.fn(), dispose: vi.fn(), description: undefined }),
       registerTreeDataProvider: () => ({ dispose: vi.fn() }),
       onDidChangeActiveTerminal: vi.fn(() => ({ dispose: vi.fn() })),
       onDidOpenTerminal: vi.fn(() => ({ dispose: vi.fn() })),
@@ -186,6 +188,7 @@ vi.mock('vscode', () => {
       onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     },
     ProgressLocation: { Notification: 15 },
+    QuickPickItemKind: { Separator: -1, Default: 0 },
   };
 });
 
@@ -273,10 +276,11 @@ vi.mock('../squad-upgrader', () => ({
 }));
 
 vi.mock('../cli-provider', () => ({
-  registerAgencyUpdateCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  registerCliUpdateCommand: vi.fn(() => ({ dispose: vi.fn() })),
   checkProviderUpdatesOnStartup: vi.fn(),
   probeAllProviders: vi.fn(() => Promise.resolve()),
   resolveActiveProvider: vi.fn(),
+  getActiveCliProvider: mockGetActiveCliProvider,
 }));
 
 vi.mock('../discovery', () => ({
@@ -321,6 +325,13 @@ vi.mock('../work-items-tree', () => ({
     return {
       setRepos: vi.fn(),
       refresh: mockWorkItemsRefresh,
+      setTreeView: vi.fn(),
+      setFilter: vi.fn(),
+      clearFilter: vi.fn(),
+      filter: { repos: [], labels: [], states: [] },
+      isFiltered: false,
+      getAllRepos: vi.fn().mockReturnValue([]),
+      getAllLabels: vi.fn().mockReturnValue([]),
     };
   }),
   WorkItemsTreeItem: class {},
@@ -373,7 +384,7 @@ function makeSquad(overrides: Record<string, unknown> = {}) {
     icon: '🚀',
     universe: 'test',
     path: '/squads/alpha',
-    launchCommand: 'agency copilot --model gpt-5',
+    launchCommand: 'copilot --agent squad --model gpt-5',
     ...overrides,
   };
 }
@@ -920,14 +931,14 @@ describe('extension command handlers', () => {
   describe('editless.changeModel', () => {
     it('should update launch command model and refresh tree', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      const squad = makeSquad({ launchCommand: 'agency copilot --model gpt-5' });
+      const squad = makeSquad({ launchCommand: 'copilot --agent squad --model gpt-5' });
       mockGetSquad.mockReturnValue(squad);
       mockShowQuickPick.mockResolvedValue({ label: 'claude-sonnet-4' });
 
       await getHandler('editless.changeModel')(item);
 
       expect(mockUpdateSquad).toHaveBeenCalledWith('squad-1', {
-        launchCommand: 'agency copilot --model claude-sonnet-4',
+        launchCommand: 'copilot --agent squad --model claude-sonnet-4',
       });
       expect(mockTreeRefresh).toHaveBeenCalled();
     });
@@ -956,7 +967,7 @@ describe('extension command handlers', () => {
 
     it('should no-op when selected model is same as current', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: 'agency copilot --model gpt-5' }));
+      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: 'copilot --agent squad --model gpt-5' }));
       mockShowQuickPick.mockResolvedValue({ label: 'gpt-5' });
 
       await getHandler('editless.changeModel')(item);
@@ -965,13 +976,13 @@ describe('extension command handlers', () => {
 
     it('should append --model when launch command has no model flag', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: 'agency copilot' }));
+      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: 'copilot --agent squad' }));
       mockShowQuickPick.mockResolvedValue({ label: 'claude-sonnet-4' });
 
       await getHandler('editless.changeModel')(item);
 
       expect(mockUpdateSquad).toHaveBeenCalledWith('squad-1', {
-        launchCommand: 'agency copilot --model claude-sonnet-4',
+        launchCommand: 'copilot --agent squad --model claude-sonnet-4',
       });
     });
   });
@@ -997,6 +1008,99 @@ describe('extension command handlers', () => {
         'workbench.action.openSettings',
         'editless.ado',
       );
+    });
+  });
+
+  // --- editless.addNew --------------------------------------------------------
+
+  describe('editless.addNew', () => {
+    it('should show quickpick with Agent, Session, and Squad options', async () => {
+      mockShowQuickPick.mockResolvedValueOnce(undefined);
+      await getHandler('editless.addNew')();
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ value: 'agent' }),
+          expect.objectContaining({ value: 'session' }),
+          expect.objectContaining({ value: 'squad' }),
+        ]),
+        expect.any(Object),
+      );
+    });
+
+    it('should delegate to addAgent when agent is selected', async () => {
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'agent' });
+      await getHandler('editless.addNew')();
+      expect(mockExecuteCommand).toHaveBeenCalledWith('editless.addAgent');
+    });
+
+    it('should delegate to launchSession when session is selected', async () => {
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'session' });
+      await getHandler('editless.addNew')();
+      expect(mockExecuteCommand).toHaveBeenCalledWith('editless.launchSession');
+    });
+
+    it('should delegate to addSquad when squad is selected', async () => {
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'squad' });
+      await getHandler('editless.addNew')();
+      expect(mockExecuteCommand).toHaveBeenCalledWith('editless.addSquad');
+    });
+
+    it('should do nothing when quickpick is cancelled', async () => {
+      mockShowQuickPick.mockResolvedValueOnce(undefined);
+      await getHandler('editless.addNew')();
+      expect(mockExecuteCommand).not.toHaveBeenCalledWith('editless.addAgent');
+      expect(mockExecuteCommand).not.toHaveBeenCalledWith('editless.launchSession');
+      expect(mockExecuteCommand).not.toHaveBeenCalledWith('editless.addSquad');
+    });
+  });
+
+  // --- editless.addAgent -----------------------------------------------------
+
+  describe('editless.addAgent', () => {
+    it('should warn when no workspace folder is open', async () => {
+      const origFolders = (await import('vscode')).workspace.workspaceFolders;
+      Object.defineProperty((await import('vscode')).workspace, 'workspaceFolders', { value: undefined, configurable: true });
+      await getHandler('editless.addAgent')();
+      expect(mockShowWarningMessage).toHaveBeenCalledWith('No workspace folder open.');
+      Object.defineProperty((await import('vscode')).workspace, 'workspaceFolders', { value: origFolders, configurable: true });
+    });
+
+    it('should skip mode picker when no provider has createCommand', async () => {
+      mockGetActiveCliProvider.mockReturnValue(undefined);
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce('test-agent');
+      // Handler will try to write a file — catch that; we only care about QuickPick not being called
+      try { await getHandler('editless.addAgent')(); } catch { /* fs write expected to fail */ }
+      expect(mockShowQuickPick).not.toHaveBeenCalled();
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+    });
+
+    it('should show mode picker when provider has createCommand', async () => {
+      mockGetActiveCliProvider.mockReturnValue({ name: 'TestCLI', createCommand: 'test-cli create $(agent)' });
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce('test-agent');
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'provider' });
+      await getHandler('editless.addAgent')();
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ value: 'provider' }),
+          expect.objectContaining({ value: 'repo' }),
+        ]),
+        expect.any(Object),
+      );
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+    });
+
+    it('should do nothing when name input is cancelled', async () => {
+      mockShowInputBox.mockResolvedValueOnce(undefined);
+      await getHandler('editless.addAgent')();
+      expect(mockShowQuickPick).not.toHaveBeenCalled();
     });
   });
 

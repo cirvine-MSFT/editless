@@ -6,45 +6,82 @@ export interface CliProvider {
   name: string;
   command: string;
   versionCommand: string;
+  versionRegex: string;
+  launchCommand: string;
+  createCommand: string;
+  updateCommand: string;
+  updateRunCommand: string;
+  upToDatePattern: string;
   detected: boolean;
   version?: string;
-  updateCommand?: string;
-  upToDatePattern?: string;
-  updateRunCommand?: string;
 }
 
-const KNOWN_PROFILES: Omit<CliProvider, 'detected' | 'version'>[] = [
-  {
-    name: 'agency',
-    command: 'agency',
-    versionCommand: 'agency --version',
-    updateCommand: 'agency update',
-    upToDatePattern: 'up to date',
-    updateRunCommand: 'agency update',
-  },
-  { name: 'copilot', command: 'copilot', versionCommand: 'copilot --version' },
-  { name: 'claude', command: 'claude', versionCommand: 'claude --version' },
-  { name: 'custom', command: '', versionCommand: '' },
-];
+const COPILOT_DEFAULT: Omit<CliProvider, 'detected' | 'version'> = {
+  name: 'Copilot CLI',
+  command: 'copilot',
+  versionCommand: 'copilot --version',
+  versionRegex: '(\\d+\\.\\d+[\\d.]*)',
+  launchCommand: 'copilot --agent $(agent)',
+  createCommand: '',
+  updateCommand: '',
+  updateRunCommand: '',
+  upToDatePattern: 'up to date',
+};
 
 let _providers: CliProvider[] = [];
 let _activeProvider: CliProvider | undefined;
 
-function probeCliVersion(versionCommand: string): Promise<string | null> {
+function probeCliVersion(versionCommand: string, versionRegex: string): Promise<string | null> {
   if (!versionCommand) return Promise.resolve(null);
   return new Promise(resolve => {
     exec(versionCommand, { encoding: 'utf-8', timeout: 5000 }, (err, stdout) => {
       if (err) { resolve(null); return; }
-      const match = stdout.match(/([\d]+\.[\d]+[\d.]*)/);
-      resolve(match ? match[1] : stdout.trim().slice(0, 50) || null);
+      try {
+        const re = new RegExp(versionRegex);
+        const match = stdout.match(re);
+        resolve(match ? (match[1] ?? match[0]) : stdout.trim().slice(0, 50) || null);
+      } catch {
+        const match = stdout.match(/([\d]+\.[\d]+[\d.]*)/);
+        resolve(match ? match[1] : stdout.trim().slice(0, 50) || null);
+      }
     });
   });
 }
 
+function loadProviderSettings(): Omit<CliProvider, 'detected' | 'version'>[] {
+  const config = vscode.workspace.getConfiguration('editless');
+  const raw = config.get<Array<Record<string, string>>>('cli.providers') ?? [];
+
+  const providers = raw.map(entry => ({
+    name: entry.name ?? '',
+    command: entry.command ?? '',
+    versionCommand: entry.versionCommand ?? '',
+    versionRegex: entry.versionRegex ?? '(\\d+\\.\\d+[\\d.]*)',
+    launchCommand: entry.launchCommand ?? '',
+    createCommand: entry.createCommand ?? '',
+    updateCommand: entry.updateCommand ?? '',
+    updateRunCommand: entry.updateRunCommand ?? '',
+    upToDatePattern: entry.upToDatePattern ?? 'up to date',
+  })).filter(p => p.name.length > 0);
+
+  // Self-healing: inject Copilot default if missing
+  const hasCopilot = providers.some(p => p.name.toLowerCase() === COPILOT_DEFAULT.name.toLowerCase());
+  if (!hasCopilot) {
+    providers.unshift({ ...COPILOT_DEFAULT });
+    config.update('cli.providers', providers.map(p => ({ ...p })), vscode.ConfigurationTarget.Global).then(
+      () => {},
+      () => {},
+    );
+  }
+
+  return providers;
+}
+
 export async function probeAllProviders(): Promise<CliProvider[]> {
+  const profiles = loadProviderSettings();
   _providers = await Promise.all(
-    KNOWN_PROFILES.map(async profile => {
-      const version = await probeCliVersion(profile.versionCommand);
+    profiles.map(async profile => {
+      const version = await probeCliVersion(profile.versionCommand, profile.versionRegex);
       return {
         ...profile,
         detected: version !== null,
@@ -56,24 +93,19 @@ export async function probeAllProviders(): Promise<CliProvider[]> {
 }
 
 export function resolveActiveProvider(): CliProvider | undefined {
-  const configured = vscode.workspace
-    .getConfiguration('editless')
-    .get<string>('cli.provider', 'copilot');
+  const config = vscode.workspace.getConfiguration('editless');
+  const configured = (config.get<string>('cli.activeProvider') ?? 'auto').trim();
 
-  // Honor explicit "custom" setting — presence-only, no probe needed
-  if (configured === 'custom') {
-    _activeProvider = _providers.find(p => p.name === 'custom');
-    return _activeProvider;
+  if (configured !== 'auto') {
+    const byName = _providers.find(p =>
+      p.name.toLowerCase() === configured.toLowerCase() && p.detected,
+    );
+    if (byName) {
+      _activeProvider = byName;
+      return _activeProvider;
+    }
   }
 
-  // Manual override takes priority if the provider was detected
-  const byConfig = _providers.find(p => p.name === configured && p.detected);
-  if (byConfig) {
-    _activeProvider = byConfig;
-    return _activeProvider;
-  }
-
-  // Fall back to first detected provider
   _activeProvider = _providers.find(p => p.detected);
   return _activeProvider;
 }
@@ -82,33 +114,36 @@ export function getActiveCliProvider(): CliProvider | undefined {
   return _activeProvider;
 }
 
+export function getActiveProviderLaunchCommand(): string {
+  return _activeProvider?.launchCommand ?? '';
+}
+
 export function getAllProviders(): CliProvider[] {
   return _providers;
 }
 
-// --- Provider updates (conditional on provider having updateCommand) -------
+// --- Provider updates -------------------------------------------------------
 
-function setAgencyUpdateAvailable(available: boolean): void {
-  vscode.commands.executeCommand('setContext', 'editless.agencyUpdateAvailable', available);
+function setCliUpdateAvailable(available: boolean): void {
+  vscode.commands.executeCommand('setContext', 'editless.cliUpdateAvailable', available);
 }
 
 function runProviderUpdate(provider: CliProvider): void {
-  const displayName = provider.name.charAt(0).toUpperCase() + provider.name.slice(1);
   vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Notification,
-      title: `🔄 Updating ${displayName} CLI…`,
+      title: `Updating ${provider.name}...`,
       cancellable: false,
     },
     () =>
       new Promise<void>((resolve) => {
-        exec(provider.updateRunCommand || provider.updateCommand!, (err, _stdout, stderr) => {
+        exec(provider.updateRunCommand || provider.updateCommand, (err, _stdout, stderr) => {
           if (err) {
             const msg = stderr?.trim() || err.message;
-            vscode.window.showErrorMessage(`${displayName} CLI update failed: ${msg}`);
+            vscode.window.showErrorMessage(`${provider.name} update failed: ${msg}`);
           } else {
-            if (provider.name === 'agency') setAgencyUpdateAvailable(false);
-            vscode.window.showInformationMessage(`🔄 ${displayName} CLI updated.`);
+            setCliUpdateAvailable(false);
+            vscode.window.showInformationMessage(`${provider.name} updated.`);
           }
           resolve();
         });
@@ -116,14 +151,22 @@ function runProviderUpdate(provider: CliProvider): void {
   );
 }
 
-export function registerAgencyUpdateCommand(context: vscode.ExtensionContext): vscode.Disposable {
-  return vscode.commands.registerCommand('editless.updateAgency', () => {
-    const agencyProvider = _providers.find(p => p.name === 'agency');
-    if (!agencyProvider?.detected) {
-      vscode.window.showWarningMessage('Agency CLI not detected. Update skipped.');
+export function registerCliUpdateCommand(context: vscode.ExtensionContext): vscode.Disposable {
+  return vscode.commands.registerCommand('editless.updateCliProvider', async () => {
+    const updatable = _providers.filter(p => p.detected && p.updateCommand);
+    if (updatable.length === 0) {
+      vscode.window.showInformationMessage('All CLIs are up to date.');
       return;
     }
-    runProviderUpdate(agencyProvider);
+    if (updatable.length === 1) {
+      runProviderUpdate(updatable[0]);
+      return;
+    }
+    const picked = await vscode.window.showQuickPick(
+      updatable.map(p => ({ label: p.name, provider: p })),
+      { placeHolder: 'Select CLI to update' },
+    );
+    if (picked) runProviderUpdate(picked.provider);
   });
 }
 
@@ -156,14 +199,17 @@ function checkSingleProviderUpdate(context: vscode.ExtensionContext, provider: C
   if (!isNotificationEnabled('updates')) return;
   if (shouldSkipPrompt(context, provider.name, provider.version!)) return;
 
-  const displayName = provider.name.charAt(0).toUpperCase() + provider.name.slice(1);
-  const pattern = provider.upToDatePattern ?? 'up to date';
-
-  exec(provider.updateCommand!, { encoding: 'utf-8', timeout: 10000 }, (err, stdout) => {
+  exec(provider.updateCommand, { encoding: 'utf-8', timeout: 10000 }, (err, stdout) => {
     if (err) return;
 
-    const upToDate = stdout.includes(pattern);
-    if (provider.name === 'agency') setAgencyUpdateAvailable(!upToDate);
+    let upToDate: boolean;
+    try {
+      upToDate = new RegExp(provider.upToDatePattern).test(stdout);
+    } catch {
+      upToDate = stdout.includes(provider.upToDatePattern);
+    }
+
+    setCliUpdateAvailable(!upToDate);
     if (upToDate) return;
 
     recordPrompt(context, provider.name, provider.version!);
@@ -171,8 +217,8 @@ function checkSingleProviderUpdate(context: vscode.ExtensionContext, provider: C
     const availableMatch = stdout.match(/([\d]+\.[\d]+[\d.]*)/);
     const available = availableMatch?.[1];
     const msg = available
-      ? `🔄 ${displayName} CLI update available: ${provider.version} → ${available}. Update now?`
-      : `🔄 ${displayName} CLI update available (current: ${provider.version}). Update now?`;
+      ? `${provider.name} update available: ${provider.version} -> ${available}. Update now?`
+      : `${provider.name} update available (current: ${provider.version}). Update now?`;
 
     vscode.window
       .showInformationMessage(msg, 'Update')
@@ -189,9 +235,4 @@ export function checkProviderUpdatesOnStartup(context: vscode.ExtensionContext):
     if (!provider.detected || !provider.version || !provider.updateCommand) continue;
     checkSingleProviderUpdate(context, provider);
   }
-}
-
-/** @deprecated Use checkProviderUpdatesOnStartup — kept for backward compat */
-export function checkAgencyOnStartup(context: vscode.ExtensionContext): void {
-  checkProviderUpdatesOnStartup(context);
 }

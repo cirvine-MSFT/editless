@@ -8,7 +8,7 @@ import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand, checkSquadUpgradesOnStartup, clearLatestVersionCache } from './squad-upgrader';
-import { registerAgencyUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider } from './cli-provider';
+import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider } from './cli-provider';
 import { registerDiscoveryCommand, checkDiscoveryOnStartup } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import { AgentVisibilityManager } from './visibility';
@@ -20,7 +20,7 @@ import { scanSquad } from './scanner';
 import { flushDecisionsInbox } from './inbox-flusher';
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
 import { resolveTeamDir } from './team-dir';
-import { WorkItemsTreeProvider, WorkItemsTreeItem } from './work-items-tree';
+import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
@@ -35,7 +35,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(output);
 
   // --- CLI provider detection (async, non-blocking) -------------------------
-  vscode.commands.executeCommand('setContext', 'editless.agencyUpdateAvailable', false);
+  vscode.commands.executeCommand('setContext', 'editless.cliUpdateAvailable', false);
   probeAllProviders().then(() => resolveActiveProvider());
 
   // --- Squad UI integration (#38) ------------------------------------------
@@ -87,7 +87,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // --- Work Items tree view ------------------------------------------------
   const workItemsProvider = new WorkItemsTreeProvider();
-  context.subscriptions.push(vscode.window.registerTreeDataProvider('editlessWorkItems', workItemsProvider));
+  const workItemsView = vscode.window.createTreeView('editlessWorkItems', { treeDataProvider: workItemsProvider });
+  workItemsProvider.setTreeView(workItemsView);
+  context.subscriptions.push(workItemsView);
 
   // --- PRs tree view -------------------------------------------------------
   const prsProvider = new PRsTreeProvider();
@@ -188,8 +190,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(registerSquadUpgradeCommand(context, registry, onUpgradeComplete));
   context.subscriptions.push(registerSquadUpgradeAllCommand(context, registry, onUpgradeComplete));
 
-  // Agency update command
-  context.subscriptions.push(registerAgencyUpdateCommand(context));
+  // CLI provider update command
+  context.subscriptions.push(registerCliUpdateCommand(context));
 
   // Check for CLI provider updates on startup
   checkProviderUpdatesOnStartup(context);
@@ -515,6 +517,54 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     vscode.commands.registerCommand('editless.refreshPRs', () => prsProvider.refresh()),
   );
 
+  // Filter work items (#132)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.filterWorkItems', async () => {
+      const current = workItemsProvider.filter;
+      const allRepos = workItemsProvider.getAllRepos();
+      const allLabels = workItemsProvider.getAllLabels();
+      const stateOptions: { label: string; value: UnifiedState }[] = [
+        { label: 'Open (New)', value: 'open' },
+        { label: 'Active / In Progress', value: 'active' },
+      ];
+
+      const items: vscode.QuickPickItem[] = [];
+      if (allRepos.length > 0) {
+        items.push({ label: 'Repos', kind: vscode.QuickPickItemKind.Separator });
+        for (const repo of allRepos) {
+          items.push({ label: repo, description: 'repo', picked: current.repos.includes(repo) });
+        }
+      }
+      items.push({ label: 'State', kind: vscode.QuickPickItemKind.Separator });
+      for (const s of stateOptions) {
+        items.push({ label: s.label, description: 'state', picked: current.states.includes(s.value) });
+      }
+      if (allLabels.length > 0) {
+        items.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
+        for (const label of allLabels) {
+          items.push({ label, description: 'label', picked: current.labels.includes(label) });
+        }
+      }
+
+      const picks = await vscode.window.showQuickPick(items, {
+        title: 'Filter Work Items',
+        canPickMany: true,
+        placeHolder: 'Select filters (leave empty to show all)',
+      });
+      if (picks === undefined) return;
+
+      const repos = picks.filter(p => p.description === 'repo').map(p => p.label);
+      const labels = picks.filter(p => p.description === 'label').map(p => p.label);
+      const states = picks.filter(p => p.description === 'state')
+        .map(p => stateOptions.find(s => s.label === p.label)?.value)
+        .filter((s): s is UnifiedState => s !== undefined);
+
+      workItemsProvider.setFilter({ repos, labels, states });
+    }),
+    vscode.commands.registerCommand('editless.clearWorkItemsFilter', () => workItemsProvider.clearFilter()),
+  );
+  vscode.commands.executeCommand('setContext', 'editless.workItemsFiltered', false);
+
   // Configure GitHub repos (opens settings)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.configureRepos', async () => {
@@ -678,6 +728,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const pick = await vscode.window.showQuickPick(
         [
           { label: '$(file-code) Agent', description: 'Create an agent template file', value: 'agent' as const },
+          { label: '$(terminal) Session', description: 'Launch a new agent session', value: 'session' as const },
           { label: '$(rocket) Squad', description: 'Initialize a new Squad project', value: 'squad' as const },
         ],
         { placeHolder: 'What would you like to add?' },
@@ -685,13 +736,15 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!pick) return;
       if (pick.value === 'agent') {
         await vscode.commands.executeCommand('editless.addAgent');
+      } else if (pick.value === 'session') {
+        await vscode.commands.executeCommand('editless.launchSession');
       } else {
         await vscode.commands.executeCommand('editless.addSquad');
       }
     }),
   );
 
-  // Add Agent — create a .github/agents/{name}.agent.md template or run custom command
+  // Add Agent — choose mode (repo template or CLI provider), then create
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.addAgent', async () => {
       const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -712,9 +765,46 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!name) return;
 
       const customCommand = vscode.workspace.getConfiguration('editless').get<string>('agentCreationCommand');
-      if (customCommand?.trim()) {
+      if (typeof customCommand === 'string' && customCommand.trim()) {
         const command = customCommand
           .replace(/\$\{workspaceFolder\}/g, workspaceFolder.uri.fsPath)
+          .replace(/\$\{agentName\}/g, name.trim());
+        const terminal = vscode.window.createTerminal({
+          name: `Add Agent: ${name.trim()}`,
+          cwd: workspaceFolder.uri.fsPath,
+        });
+        terminal.show();
+        terminal.sendText(command);
+        return;
+      }
+
+      const provider = getActiveCliProvider();
+      const hasProviderCreate = !!provider?.createCommand?.trim();
+
+      type ModeValue = 'repo' | 'provider';
+      const modeItems: { label: string; description: string; value: ModeValue }[] = [
+        { label: '$(repo) Repo template', description: 'Create .github/agents/ markdown file', value: 'repo' },
+      ];
+      if (hasProviderCreate) {
+        modeItems.unshift({
+          label: `$(terminal) ${provider!.name}`,
+          description: `Create via ${provider!.name} CLI`,
+          value: 'provider',
+        });
+      }
+
+      let mode: ModeValue = 'repo';
+      if (modeItems.length > 1) {
+        const modePick = await vscode.window.showQuickPick(modeItems, {
+          placeHolder: 'How should the agent be created?',
+        });
+        if (!modePick) return;
+        mode = modePick.value;
+      }
+
+      if (mode === 'provider' && provider?.createCommand) {
+        const command = provider.createCommand
+          .replace(/\$\(agent\)/g, name.trim())
           .replace(/\$\{agentName\}/g, name.trim());
         const terminal = vscode.window.createTerminal({
           name: `Add Agent: ${name.trim()}`,
@@ -845,8 +935,8 @@ async function initAdoIntegration(
   prsProvider: PRsTreeProvider,
 ): Promise<void> {
   const config = vscode.workspace.getConfiguration('editless');
-  const org = (config.get<string>('ado.organization') ?? '').trim();
-  const project = (config.get<string>('ado.project') ?? '').trim();
+  const org = String(config.get<string>('ado.organization') ?? '').trim();
+  const project = String(config.get<string>('ado.project') ?? '').trim();
 
   if (!org || !project) {
     return;
