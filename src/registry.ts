@@ -62,7 +62,7 @@ export class EditlessRegistry {
 
 export function createRegistry(context: vscode.ExtensionContext): EditlessRegistry {
   const config = vscode.workspace.getConfiguration('editless');
-  let registryPath = config.get<string>('registryPath', './squad-registry.json');
+  let registryPath = config.get<string>('registryPath', './agent-registry.json');
 
   if (!path.isAbsolute(registryPath)) {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -70,6 +70,14 @@ export function createRegistry(context: vscode.ExtensionContext): EditlessRegist
       ? workspaceFolder.uri.fsPath
       : (context.storageUri?.fsPath ?? context.extensionPath);
     registryPath = path.resolve(base, registryPath);
+  }
+
+  // Migrate from old squad-registry.json if new file doesn't exist
+  if (!fs.existsSync(registryPath)) {
+    const oldPath = registryPath.replace('agent-registry.json', 'squad-registry.json');
+    if (fs.existsSync(oldPath)) {
+      fs.renameSync(oldPath, registryPath);
+    }
   }
 
   return new EditlessRegistry(registryPath);
