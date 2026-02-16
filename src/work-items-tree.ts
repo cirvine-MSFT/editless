@@ -85,6 +85,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   private _adoConfigured = false;
   private _loading = false;
   private _filter: WorkItemsFilter = { repos: [], labels: [], states: [] };
+  private _filterSeq = 0;
   private _treeView?: vscode.TreeView<WorkItemsTreeItem>;
   private _planIndex: PlanFileIndex = new Map();
   private _allLabels = new Set<string>();
@@ -121,6 +122,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
 
   setFilter(filter: WorkItemsFilter): void {
     this._filter = { ...filter };
+    this._filterSeq++;
     vscode.commands.executeCommand('setContext', 'editless.workItemsFiltered', this.isFiltered);
     this._updateDescription();
     this._onDidChangeTreeData.fire();
@@ -266,6 +268,8 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       }
 
       const items: WorkItemsTreeItem[] = [];
+      // Embed filter sequence in group IDs so VS Code discards cached children on filter change
+      const fseq = this._filterSeq;
 
       // ADO work items group
       if (hasAdo) {
@@ -274,7 +278,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
           adoGroup.iconPath = new vscode.ThemeIcon('azure');
           adoGroup.description = `${filteredAdo.length} item${filteredAdo.length === 1 ? '' : 's'}`;
           adoGroup.contextValue = 'ado-group';
-          adoGroup.id = 'wi:ado';
+          adoGroup.id = `wi:ado:f${fseq}`;
           items.push(adoGroup);
         } else {
           return filteredAdo.map(wi => this.buildAdoItem(wi));
@@ -298,7 +302,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
             repoItem.iconPath = new vscode.ThemeIcon('github');
             repoItem.description = `${issues.length} issue${issues.length === 1 ? '' : 's'}`;
             repoItem.contextValue = 'repo-group';
-            repoItem.id = `wi:${repo}`;
+            repoItem.id = `wi:${repo}:f${fseq}`;
             items.push(repoItem);
           }
         }
@@ -312,7 +316,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     }
 
     if (element.contextValue === 'milestone-group') {
-      const msName = element.id?.replace('ms:', '') ?? '';
+      const msName = element.id?.replace(/^ms:|:f\d+$/g, '') ?? '';
       const allIssues = this.applyRuntimeFilter([...this._issues.values()].flat());
       const filtered = msName === '__none__'
         ? allIssues.filter((i) => !i.milestone)
@@ -320,7 +324,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       return filtered.map((i) => this.buildIssueItem(i));
     }
 
-    const repoId = element.id?.replace('wi:', '');
+    const repoId = element.id?.replace(/^wi:|:f\d+$/g, '');
     if (repoId && this._issues.has(repoId)) {
       return this.applyRuntimeFilter(this._issues.get(repoId)!).map((i) => this.buildIssueItem(i));
     }
@@ -380,13 +384,14 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
 
     if (milestones.size === 0) { return undefined; }
 
+    const fseq = this._filterSeq;
     const items: WorkItemsTreeItem[] = [];
     for (const [ms, issues] of milestones) {
       const msItem = new WorkItemsTreeItem(ms, vscode.TreeItemCollapsibleState.Expanded);
       msItem.iconPath = new vscode.ThemeIcon('milestone');
       msItem.description = `${issues.length} issue${issues.length === 1 ? '' : 's'}`;
       msItem.contextValue = 'milestone-group';
-      msItem.id = `ms:${ms}`;
+      msItem.id = `ms:${ms}:f${fseq}`;
       items.push(msItem);
     }
     if (noMilestone.length > 0) {
@@ -394,7 +399,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       noMsItem.iconPath = new vscode.ThemeIcon('milestone');
       noMsItem.description = `${noMilestone.length} issue${noMilestone.length === 1 ? '' : 's'}`;
       noMsItem.contextValue = 'milestone-group';
-      noMsItem.id = 'ms:__none__';
+      noMsItem.id = `ms:__none__:f${fseq}`;
       items.push(noMsItem);
     }
     return items;

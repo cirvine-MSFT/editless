@@ -402,6 +402,21 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     expect(provider.isFiltered).toBe(false);
   });
 
+  it('should exclude items with non-matching release label (#194)', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['release:v0.1', 'type:bug'] }),
+        makeIssue({ number: 2, labels: ['release:backlog', 'type:bug'] }),
+        makeIssue({ number: 3, labels: ['release:v0.1', 'priority:p1'] }),
+      ],
+      { labels: ['release:v0.1'] },
+    );
+    expect(items).toHaveLength(2);
+    expect(items.map(i => i.label)).toEqual(
+      expect.arrayContaining([expect.stringContaining('#1'), expect.stringContaining('#3')]),
+    );
+  });
+
   it('should collect all unique labels from issues', async () => {
     mockIsGhAvailable.mockResolvedValue(true);
     mockFetchAssignedIssues.mockResolvedValue([

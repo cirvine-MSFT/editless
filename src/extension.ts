@@ -9,7 +9,7 @@ import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand, checkSquadUpgradesOnStartup, clearLatestVersionCache } from './squad-upgrader';
 import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider } from './cli-provider';
-import { registerDiscoveryCommand, checkDiscoveryOnStartup } from './discovery';
+import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
@@ -44,6 +44,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- Registry ----------------------------------------------------------
   const registry = createRegistry(context);
   registry.loadSquads();
+
+  // --- Auto-register workspace squads (#201) --------------------------------
+  autoRegisterWorkspaceSquads(registry);
 
   // --- Auto-flush decisions inbox (#66) ------------------------------------
   for (const squad of registry.loadSquads()) {
