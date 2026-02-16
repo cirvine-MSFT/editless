@@ -164,3 +164,123 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 5. After merge, continue with build/package/install as before.
 **Why:** We now have real CI gates (lint, build, test, integration). Direct merges bypass them. This ensures every change passes gates before hitting master. Draft PRs aren't needed — it's just Casey, so the draft→publish step adds no value. The `--auto` flag makes routine work zero-friction while still gated.
 **Supersedes:** The "all PRs start as drafts" convention is retired for this project.
+
+### 2026-02-16: TreeDataProvider must implement getParent() when using reveal()
+**By:** Morty (Extension Dev), issue #95
+**What:** `EditlessTreeProvider` stores a `parent` reference on `EditlessTreeItem`, set during child construction. `getParent(element)` returns `element.parent`. Any code path that constructs tree items for use with `reveal()` (like `findTerminalItem`) must also set the parent reference.
+**Why:** VS Code's `TreeView.reveal()` requires `getParent()` to walk from the target item back to the root. Without it, the extension host throws. This is a VS Code API contract — not optional when `reveal()` is used.
+
+### 2026-02-16: Multi-signal terminal reconciliation
+**By:** Morty (Extension Dev), issue #84
+**What:** Terminal reconciliation now uses a 4-stage matching strategy instead of exact `terminal.name` comparison:
+1. Exact match on `terminalName` (the last-known name)
+2. Exact match on `originalName` (the name from `createTerminal()`, never mutates)
+3. Exact match on `displayName` (the user-facing label)
+4. Contains match — `terminal.name.includes(originalName)` or `terminalName.includes(terminal.name)`
+
+Stages run globally across all persisted entries — higher-confidence matches claim terminals before fuzzy matches get a chance. A `Set<vscode.Terminal>` tracks claimed terminals to prevent double-assignment.
+
+**Why:** `terminal.name` is mutable — CLI processes can rename it via escape sequences, and VS Code may restore with a different name after reload. The old exact-match strategy created false orphans and silently dropped entries when names collided. The staged approach maximizes reconnection success while preserving correctness (exact matches always win over fuzzy ones).
+
+**Impact:** `PersistedTerminalInfo` gains optional `originalName` field (backward-compatible — defaults to `displayName` when missing). `TerminalInfo` gains required `originalName: string`. `reconnectSession()` is a new public method on `TerminalManager` — searches live terminals before creating duplicates. `relaunchSession()` now tries reconnect first, only creates a new terminal if no match found.
+
+### 2026-02-16: Session State Detection Implementation
+**By:** Morty (Extension Dev), issue #50
+**What:** Implemented rich session state detection for terminal sessions using VS Code shell integration APIs. Sessions now show granular state: `active`, `idle`, `stale`, `needs-attention`, or `orphaned`.
+
+**How:**
+1. Shell Integration: Subscribed to `onDidStartTerminalShellExecution` and `onDidEndTerminalShellExecution` events to track when commands are running
+2. Activity Tracking: Maintain `_shellExecutionActive` and `_lastActivityAt` maps per terminal
+3. State Computation: `getSessionState()` method determines state based on execution active, recent activity (<5 min), activity 5-60 min, activity >60 min, inbox items + not active, or no live terminal
+4. Tree View: Icons and descriptions update based on state via `getStateIcon()` and `getStateDescription()` helpers
+
+**Technical Decisions:**
+- Idle threshold: 5 minutes (IDLE_THRESHOLD_MS)
+- Stale threshold: 60 minutes (STALE_THRESHOLD_MS)
+- Needs-attention overrides idle/stale but NOT active (don't interrupt actively working agents)
+- Icon mapping: active→debug-start, needs-attention→warning, orphaned→debug-disconnect, idle/stale→terminal
+- Helper functions exported for tree view use and testability
+
+**Why:** Users need to know at a glance which sessions are actively working, which are idle, and which need attention. Shell integration events provide reliable, low-overhead detection without polling. The 5-minute and 60-minute thresholds match typical workflow patterns (quick tasks vs. long-running builds).
+
+**Impact:** Requires VS Code 1.93+ (released 18 months ago, 85-95% adoption). Updated `engines.vscode` in package.json from `^1.100.0` to `^1.93.0`.
+
+### 2026-02-16: CI/CD pipeline structure
+**By:** Birdperson (DevOps), issue #82
+**What:** Three GitHub Actions workflows handle the full CI/CD lifecycle:
+- **`ci.yml`** — Lint, build, test on every push/PR to main/master. Single job, <5 min target.
+- **`release.yml`** — Full quality gate + VSIX packaging + GitHub Release. Triggered by `v*.*.*` tags or manual `workflow_dispatch`. Pre-release detection for alpha/beta/rc tags.
+- **`integration.yml`** — VS Code integration tests (`xvfb-run`) in a separate workflow. Runs on push/PR but does not block main CI.
+
+Key choices:
+- Node 22 LTS across all workflows (upgraded from 20)
+- `npm ci` everywhere — deterministic installs from lockfile
+- Version from `package.json` — single source of truth. Tags should match but package.json wins.
+- `workflow_dispatch` on release — allows manual releases using package.json version + commit SHA as release name
+- `softprops/action-gh-release@v2` for GitHub Releases — creates tags on manual dispatch
+- Integration tests are a separate workflow, not a separate job in CI. They need `xvfb-run` and are slower — keeping them decoupled means CI stays fast and integration flakes don't block merges.
+
+**Why:** Batch-c scaffolded the workflows but was missing: lint/test gates in release, workflow_dispatch, pre-release support, main branch triggers, and explanatory comments. Casey is learning GitHub Actions (experienced with ADO) — comments explain non-obvious concepts like `npm ci` vs `npm install`, `xvfb-run`, and `GITHUB_OUTPUT`. Separate integration workflow avoids the "flaky integration test blocks all PRs" problem while still running on every push.
+
+### 2026-02-16: Extension must export a test API for integration tests
+**By:** Meeseeks (Tester), issue #53
+**What:** The persistence integration tests (`src/__integration__/persistence.test.ts`) require the extension to export an API object from `activate()`. Currently `activate()` returns `void`.
+
+The required contract:
+```typescript
+export function activate(context: vscode.ExtensionContext): EditlessApi {
+  // ... existing activation code ...
+  return {
+    terminalManager,
+    context,
+  };
+}
+```
+
+The integration tests import this as:
+```typescript
+interface EditlessTestApi {
+  terminalManager: {
+    launchTerminal(config: AgentTeamConfig, customName?: string): vscode.Terminal;
+    getAllTerminals(): Array<{ terminal: vscode.Terminal; info: Record<string, unknown> }>;
+  };
+  context: vscode.ExtensionContext;
+}
+```
+
+**Why:** Integration tests need to:
+1. Call `terminalManager.launchTerminal()` directly with test configs (the `editless.launchSession` command requires squads in the registry and shows UI pickers — not suitable for automated tests)
+2. Read `context.workspaceState.get('editless.terminalSessions')` to verify persistence actually wrote to the real VS Code storage API
+3. Clear `workspaceState` between tests to prevent state leakage
+
+Without these exports, the only alternative is testing indirectly via commands — but `launchSession` requires interactive QuickPick input and registry entries, making it unreliable for CI.
+
+**Impact:** `activate()` return type changes from `void` to `EditlessApi`. `deactivate()` is unaffected. No runtime behavior changes — the export is additive.
+
+### 2026-02-16: Pre-Release Go-Live Audit
+**By:** Rick (Lead), issue #87
+**Date:** 2026-02-16
+**Status:** One blocker, go-live conditional on fix
+
+**Executive Summary:** EditLess is ready for go-live with one blocking issue. The extension is well-structured, settings are clean and follow conventions, sensitive terms have been properly removed, and feature detection is properly implemented.
+
+**🔴 BLOCKER: Enum Values for `cli.provider` Are Incomplete**
+
+The enum includes `"custom"` in package.json but `KNOWN_PROFILES` in cli-provider.ts does not define a custom profile. When a user sets `editless.cli.provider` to `"custom"`, the code looks for a provider with `name === "custom"` which won't exist. The fallback logic silently drops to "first detected provider" — confusing UX when the user explicitly set a preference.
+
+**Fix:** Add a `custom` profile to `KNOWN_PROFILES` with no version/update commands, honoring the decisions.md intent: "Custom CLIs get presence-only detection... they work for terminal management but don't get version/update features."
+
+**Recommendations:**
+- Fix the `custom` provider enum/profile mismatch (30 seconds)
+- Merge & release for go-live
+- Document settings in README as a follow-up improvement (not blocking)
+
+**Additional Findings:**
+- ✅ All settings follow `editless.{category}.{setting}` naming pattern
+- ✅ All defaults are sensible, no internal URLs or sensitive values
+- ✅ No orphaned settings
+- ✅ No hardcoded sensitive terms — clean codebase
+- ✅ Test fixtures use generic names only
+- ✅ Feature flags implement progressive detection correctly
+- ✅ Notification master + category toggles implemented correctly
+- ⚠️ Settings exist but not documented in README (post-launch improvement)
