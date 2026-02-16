@@ -254,11 +254,11 @@
         { "command": "editless.refreshPRs", "when": "view == editlessPRs", "group": "navigation" }
       ],
       "view/item/context": [
-        { "command": "editless.upgradeSquad", "when": "view == editlessTree && viewItem == squad", "group": "inline@1" },
-        { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem == squad", "group": "squad@1" },
-        { "command": "editless.changeModel", "when": "view == editlessTree && viewItem == squad", "group": "squad@2" },
-        { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem == squad", "group": "squad@3" },
-        { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == squad", "group": "squad@4" },
+        { "command": "editless.upgradeSquad", "when": "view == editlessTree && viewItem == squad-upgradeable", "group": "inline@1" },
+        { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@1" },
+        { "command": "editless.changeModel", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@2" },
+        { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@3" },
+        { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@4" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal", "group": "inline@99" },

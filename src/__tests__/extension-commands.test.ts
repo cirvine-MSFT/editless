@@ -190,6 +190,7 @@ vi.mock('../editless-tree', () => ({
     return {
       refresh: mockTreeRefresh,
       setDiscoveredAgents: mockTreeSetDiscoveredAgents,
+      setUpgradeAvailable: vi.fn(),
       invalidate: vi.fn(),
       findTerminalItem: vi.fn(),
     };
@@ -258,6 +259,8 @@ vi.mock('../visibility', () => ({
 vi.mock('../squad-upgrader', () => ({
   registerSquadUpgradeCommand: vi.fn(() => ({ dispose: vi.fn() })),
   registerSquadUpgradeAllCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  checkSquadUpgradesOnStartup: vi.fn(() => Promise.resolve()),
+  clearLatestVersionCache: vi.fn(),
 }));
 
 vi.mock('../cli-provider', () => ({
