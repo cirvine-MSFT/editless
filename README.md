@@ -1,6 +1,6 @@
 # EditLess
 
-> Escape the editor. Free your mind. Command your AI teams all from one place.
+> Escape the editor. Free your mind.
 
 Plan work and delegate to AI agents across multiple repos and sessions, then monitor and review everything from one sidebar — no context switching required. One window. One view. Complete control — all without touching the editor. Join the editorless software development revolution!
 
@@ -82,7 +82,8 @@ No experience with agentic development required. No complex setup. Just install,
 
 ## Documentation
 
-- [The EditLess Story](docs/philosophy.md) — Why EditLess exists and the editorless philosophy
+- [The EditLess Story](docs/story.md) — How EditLess came to be
+- [The Editorless Philosophy](docs/philosophy.md) — Why go editorless? A deeper dive
 - [Getting Started](docs/getting-started.md) — New to vibe coding? Start here
 - [Multi-Repo Workflow](docs/multi-repo-workflow.md) — Working across multiple repos
 - [GitHub Workflow](docs/workflows/github-workflow.md) — Managing work with AI agents on GitHub
