@@ -836,8 +836,8 @@ async function initAdoIntegration(
   prsProvider: PRsTreeProvider,
 ): Promise<void> {
   const config = vscode.workspace.getConfiguration('editless');
-  const org = config.get<string>('ado.organization', '').trim();
-  const project = config.get<string>('ado.project', '').trim();
+  const org = (config.get<string>('ado.organization') ?? '').trim();
+  const project = (config.get<string>('ado.project') ?? '').trim();
 
   if (!org || !project) {
     return;
