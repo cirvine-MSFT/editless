@@ -15,17 +15,6 @@ All settings are accessible through VS Code's Settings UI (**Ctrl+,**) or direct
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `editless.cli.provider` | `string` | `"copilot"` | CLI provider for agent sessions. Auto-detected on startup. Allowed values: `"copilot"`, `"agency"`, `"claude"`, `"custom"` |
-| `editless.customCommands` | `array` | `[]` | Custom commands that can be sent to terminal sessions via context menu. Each item has a `label` (display name) and `command` (text to send) |
-
-**Example — custom commands:**
-
-```jsonc
-"editless.customCommands": [
-  { "label": "Run Tests", "command": "npm test" },
-  { "label": "Lint Fix", "command": "npm run lint -- --fix" }
-]
-```
-
 ## GitHub Integration
 
 | Setting | Type | Default | Description |

@@ -284,3 +284,94 @@ The enum includes `"custom"` in package.json but `KNOWN_PROFILES` in cli-provide
 - ✅ Feature flags implement progressive detection correctly
 - ✅ Notification master + category toggles implemented correctly
 - ⚠️ Settings exist but not documented in README (post-launch improvement)
+
+### 2026-02-16: Pre-Release Code Quality Review
+**By:** Rick (Lead), issue #87
+**Date:** 2026-02-16
+**Scope:** Full codebase review — all source files in `src/`, `src/__tests__/`, `package.json`, config files
+
+**Executive Summary:** EditLess is well-structured for an MVP. The architecture is clean — modules are focused, dependency graph flows one direction (extension → managers → providers), types are shared through a single types.ts file, and test coverage is solid (200 tests passing across 11 test suites). Three critical items must be fixed before go-live: blocking calls in the activation path, missing custom provider profile, and missing extension API for integration tests.
+
+**🔴 MUST FIX Before Go-Live:**
+
+1. **`execSync` blocks extension activation path** (issue #107)
+   - File: `src/cli-provider.ts:34`, called from `src/extension.ts:38`
+   - `probeCliVersion()` uses `execSync` with 5-second timeout for each of 3 CLI providers
+   - Worst case: 15 seconds blocking the extension host thread → "Extension host unresponsive" dialog
+   - Fix: Replace with async `execFile` + `promisify`. Run `probeAllProviders()` after activation returns
+
+2. **Missing `custom` provider profile in KNOWN_PROFILES** (issue #109)
+   - File: `src/cli-provider.ts:16-27`
+   - `package.json` declares `"custom"` as valid enum value, but no profile defined
+   - When user selects "custom", code silently falls back to first detected provider
+   - Fix: Add `{ name: 'custom', command: '', versionCommand: '' }` to KNOWN_PROFILES
+
+3. **`activate()` doesn't return API for integration tests** (issue #110)
+   - File: `src/extension.ts:32`
+   - `activate()` returns `void` but decisions.md requires `{ terminalManager, context }`
+   - Integration tests depend on this export
+   - Fix: Return the API object (non-breaking, additive export)
+
+**🟡 SHOULD FIX:**
+
+- Vitest picks up compiled integration test JS files (issue #112) — Add `'out/**'` to exclude
+- Private field access via bracket notation (issue #114) — Add public getter to `TerminalManager`
+- Event listener leaks in EditlessTreeProvider (issue #116) — Implement `Disposable`, track subscriptions
+- Dead prototype types in types.ts (issue #117) — Remove unused types
+- Unused `promptRenameSession` export (issue #119) — Remove dead function
+
+**Security / Sensitive Content Scan ✅**
+- ✅ No hardcoded "openai" or "coeus" references
+- ✅ No Microsoft-internal URLs
+- ✅ No hardcoded tokens/keys
+- ✅ Generic test fixture names only
+
+**Architecture Assessment ✅**
+- ✅ Module focus: One concern per module
+- ✅ No circular dependencies
+- ✅ Correct dependency direction: extension → managers → providers → types
+- ✅ TypeScript strict mode enabled
+- ⚠️ TreeProvider has disposable leaks (see #116)
+
+**Verdict:** Conditional go-live. Fix the 3 🔴 items and this ships clean. The `execSync` blocker is most critical — it's the only user-visible hang risk.
+
+### 2026-02-16: Test Coverage Audit — Pre-Release Go-Live
+**By:** Meeseeks (Tester), issue #89
+**Date:** 2026-02-17
+**Status:** Audit complete, gaps filed
+
+**Executive Summary:** 200 unit tests pass across 11 test files. 2 integration test files (6 tests) exist but require VS Code host — they fail in vitest (expected). No skipped or commented-out tests. Test quality is high: descriptive names, appropriate mocks, good use of `vi.hoisted()` patterns.
+
+**Coverage Matrix:** 7/19 source modules have good coverage, 5 have partial, 7 have none. Untested modules include critical user-facing code: `editless-tree.ts`, `registry.ts`, `session-labels.ts`.
+
+**Command Coverage:** 32 commands registered. Zero have handler execution tests. Commands with high logical complexity untested:
+- `editless.renameSession` (3 code paths, label + tab rename)
+- `editless.addAgent` (file creation, custom command, validation)
+- `editless.addSquad` (npx check, init vs upgrade)
+
+**P0 Gaps (Could cause user-visible bugs):**
+1. `editless-tree.ts` (issue #104) — Broken tree view (primary UI)
+2. `registry.ts` (issue #105) — Squads fail to load/persist
+3. `session-labels.ts` (issue #106) — Session labels lost on reload
+4. `extension.ts` commands (issue #108) — Command handlers crash/misbehave
+
+**P1 Gaps (Maintainability risk):**
+- `squad-upgrader.ts` (issue #111) — Brittle frontmatter parsing
+- `status-bar.ts` (issue #113) — Incorrect rendering
+- `watcher.ts` (issue #115) — Debounce/dispose lifecycle bugs
+- `prs-tree.ts` (issue #118) — PR state derivation incorrect
+- `github-client.ts` (issue #120) — JSON parse errors silently wrong
+
+**Test Quality Strengths:**
+- ✅ Descriptive test names follow `should {behavior}` convention
+- ✅ Appropriate mocks: VS Code API mocked, internal logic tested directly
+- ✅ Good use of `vi.hoisted()` for mock function references
+- ✅ No skipped or commented-out tests
+- ✅ Edge cases covered in well-tested modules (terminal-manager: 56 tests!)
+
+**Recommendations:**
+1. Before go-live: P0 #104 (editless-tree) highest risk — entire UI
+2. Week 1 post-launch: Close remaining P0s (#105, #106, #108)
+3. Week 2: P1 issues (#111, #113, #115, #118, #120)
+4. Ongoing: Add `c8` coverage reporting to CI pipeline
+5. Quick fix: Add `'out/integration/**'` to vitest `exclude` to silence integration test failures
