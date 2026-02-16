@@ -206,6 +206,18 @@
         "category": "EditLess"
       },
       {
+        "command": "editless.configureWorkItems",
+        "title": "Configure Work Items",
+        "category": "EditLess",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "editless.configurePRs",
+        "title": "Configure Pull Requests",
+        "category": "EditLess",
+        "icon": "$(gear)"
+      },
+      {
         "command": "editless.setAdoPat",
         "title": "Set Azure DevOps PAT",
         "category": "EditLess"
@@ -289,7 +301,9 @@
         { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation@1" },
         { "command": "editless.filterWorkItems", "when": "view == editlessWorkItems", "group": "navigation@2" },
         { "command": "editless.clearWorkItemsFilter", "when": "view == editlessWorkItems && editless.workItemsFiltered", "group": "navigation@3" },
-        { "command": "editless.refreshPRs", "when": "view == editlessPRs", "group": "navigation" }
+        { "command": "editless.configureWorkItems", "when": "view == editlessWorkItems", "group": "navigation@4" },
+        { "command": "editless.refreshPRs", "when": "view == editlessPRs", "group": "navigation@1" },
+        { "command": "editless.configurePRs", "when": "view == editlessPRs", "group": "navigation@2" }
       ],
       "view/item/context": [
         { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent$/", "group": "inline@0" },
@@ -324,7 +338,9 @@
         { "command": "editless.refreshWorkItems", "when": "false" },
         { "command": "editless.filterWorkItems", "when": "false" },
         { "command": "editless.clearWorkItemsFilter", "when": "false" },
+        { "command": "editless.configureWorkItems", "when": "false" },
         { "command": "editless.refreshPRs", "when": "false" },
+        { "command": "editless.configurePRs", "when": "false" },
         { "command": "editless.openInBrowser", "when": "false" },
         { "command": "editless.launchFromWorkItem", "when": "false" },
         { "command": "editless.openFilePreview", "when": "false" },
