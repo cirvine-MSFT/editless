@@ -14,4 +14,4 @@ Both tools can coexist. EditLess manages the operational layer (sessions, work i
 
 ## Other Tools
 
-The AI development tools landscape is evolving rapidly. EditLess is designed to be tool-agnostic — it works with any CLI that launches agents (Copilot, Agency, Claude, custom CLIs). As new tools emerge, EditLess aims to integrate with them through its provider system.
+The AI development tools landscape is evolving rapidly. EditLess is designed to be tool-agnostic — it works with any CLI that launches agents (Copilot, Claude, custom CLIs, and more). As new tools emerge, EditLess aims to integrate with them through its provider system.

@@ -14,7 +14,7 @@ All settings are accessible through VS Code's Settings UI (**Ctrl+,**) or direct
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `editless.cli.provider` | `string` | `"copilot"` | CLI provider for agent sessions. Auto-detected on startup. Allowed values: `"copilot"`, `"agency"`, `"claude"`, `"custom"` |
+| `editless.cli.provider` | `string` | `"copilot"` | CLI provider for agent sessions. Auto-detected on startup. Allowed values: `"copilot"`, `"claude"`, `"custom"` |
 ## GitHub Integration
 
 | Setting | Type | Default | Description |

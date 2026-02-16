@@ -8,10 +8,14 @@ The `master` branch is protected to ensure code quality and prevent accidental b
 
 | Rule | Setting | Description |
 |------|---------|-------------|
-| Required status checks | `build` | The `build` CI job must pass before merging |
+| Required status checks | `Lint, Build & Test`, `VS Code Integration Tests`, `scan` | These CI jobs must pass before merging |
 | Strict status checks | `true` | Branch must be up to date with `master` before merging |
 | Enforce admins | `false` | Admins can bypass protection for emergency hotfixes |
 | Required reviews | `null` | PR reviews are not enforced by branch protection |
+| Required signatures | `false` | Not required — agents cannot sign commits |
+| Required linear history | `false` | Not needed — squash merges keep history clean |
+| Lock branch | `false` | Branch accepts pushes normally |
+| Allow force pushes | `false` | Force pushes to master are blocked |
 | Restrictions | `null` | No push restrictions beyond the above rules |
 
 ## Running the Setup Script
