@@ -142,7 +142,7 @@ export interface SquadState {
   error?: string;
   /** Squad roster parsed from .squad/team.md (or .ai-team/team.md) */
   roster: AgentInfo[];
-  /** Squad charter/description (from squad-registry.json or team.md header) */
+  /** Squad charter/description (from agent-registry.json or team.md header) */
   charter: string;
   /** Recent activity entries (last 3-5 orchestration entries) */
   recentActivity: RecentActivity[];
