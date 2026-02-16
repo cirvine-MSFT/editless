@@ -247,12 +247,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
     item.iconPath = new vscode.ThemeIcon('organization');
 
-    item.command = {
-      command: 'editless.launchSession',
-      title: 'Launch Session',
-      arguments: [cfg.id],
-    };
-
     return item;
   }
 
@@ -366,7 +360,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     let children: EditlessTreeItem[];
     switch (kind) {
       case 'roster':
-        children = state.roster.map(a => this.buildAgentItem(a));
+        children = state.roster.map(a => this.buildAgentItem(a, squadId));
         break;
       case 'decisions':
         children = state.recentDecisions.map(d => this.buildDecisionItem(d));
@@ -385,8 +379,8 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     return children;
   }
 
-  private buildAgentItem(agent: AgentInfo): EditlessTreeItem {
-    const item = new EditlessTreeItem(agent.name, 'agent');
+  private buildAgentItem(agent: AgentInfo, squadId?: string): EditlessTreeItem {
+    const item = new EditlessTreeItem(agent.name, 'agent', vscode.TreeItemCollapsibleState.None, squadId);
     item.description = agent.role;
     item.iconPath = new vscode.ThemeIcon('person');
     return item;
