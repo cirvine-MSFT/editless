@@ -202,9 +202,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const cached = this._cache.get(cfg.id);
     if (cached) {
       descParts.push(cached.status);
-      if (cached.inboxCount > 0) {
-        descParts.push(`📥 ${cached.inboxCount}`);
-      }
+      // Inbox badge hidden (#204) — inboxCount not reliably updated yet
+      // if (cached.inboxCount > 0) {
+      //   descParts.push(`📥 ${cached.inboxCount}`);
+      // }
     }
     if (this.terminalManager) {
       const count = this.terminalManager.getTerminalsForSquad(cfg.id).length;
@@ -240,9 +241,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       if (cached.lastActivity) {
         tooltipLines.push(`Last activity: ${cached.lastActivity}`);
       }
-      if (cached.inboxCount > 0) {
-        tooltipLines.push(`Inbox: ${cached.inboxCount} item(s) — agents have submitted decisions for your review`);
-      }
+      // Inbox tooltip hidden (#204) — inboxCount not reliably updated yet
+      // if (cached.inboxCount > 0) {
+      //   tooltipLines.push(`Inbox: ${cached.inboxCount} item(s) — agents have submitted decisions for your review`);
+      // }
     }
     item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
     item.iconPath = new vscode.ThemeIcon('organization');
@@ -327,9 +329,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       'decisions',
     );
     decisionItem.iconPath = new vscode.ThemeIcon('law');
-    if (state.inboxCount > 0) {
-      decisionItem.description = `📥 ${state.inboxCount} pending review`;
-    }
+    // Inbox badge hidden (#204) — inboxCount not reliably updated yet
+    // if (state.inboxCount > 0) {
+    //   decisionItem.description = `📥 ${state.inboxCount} pending review`;
+    // }
     children.push(decisionItem);
 
     // Activity

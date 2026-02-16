@@ -346,11 +346,33 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     });
   }
 
+  /**
+   * Group filters by their label prefix (everything before the colon).
+   * Within each group, use OR logic (item matches if it has ANY label from that group).
+   * Across groups, use AND logic (item must match at least one label from EACH group).
+   */
+  private matchesLabelFilter(itemLabels: string[], activeFilters: string[]): boolean {
+    const grouped = new Map<string, string[]>();
+    for (const filter of activeFilters) {
+      const colonIndex = filter.indexOf(':');
+      const prefix = colonIndex > 0 ? filter.slice(0, colonIndex) : '';
+      const existing = grouped.get(prefix) ?? [];
+      existing.push(filter);
+      grouped.set(prefix, existing);
+    }
+
+    for (const [, group] of grouped) {
+      const matchesAny = group.some(f => itemLabels.includes(f));
+      if (!matchesAny) return false;
+    }
+    return true;
+  }
+
   private applyRuntimeFilter(issues: GitHubIssue[]): GitHubIssue[] {
     if (!this.isFiltered) return issues;
     return issues.filter(issue => {
       if (this._filter.repos.length > 0 && !this._filter.repos.includes(issue.repository)) return false;
-      if (this._filter.labels.length > 0 && !this._filter.labels.every(l => issue.labels.includes(l))) return false;
+      if (this._filter.labels.length > 0 && !this.matchesLabelFilter(issue.labels, this._filter.labels)) return false;
       if (this._filter.states.length > 0 && !this._filter.states.includes(mapGitHubState(issue))) return false;
       return true;
     });
@@ -360,7 +382,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     if (!this.isFiltered) return items;
     return items.filter(wi => {
       if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
-      if (this._filter.labels.length > 0 && !this._filter.labels.every(l => wi.tags.includes(l))) return false;
+      if (this._filter.labels.length > 0 && !this.matchesLabelFilter(wi.tags, this._filter.labels)) return false;
       if (this._filter.states.length > 0 && !this._filter.states.includes(mapAdoState(wi.state))) return false;
       return true;
     });

@@ -65,16 +65,15 @@ describe('EditlessStatusBar — update()', () => {
     expect(mockShow).toHaveBeenCalled();
   });
 
-  it('should show inbox badge when inbox count > 0', () => {
+  it('should not show inbox badge even when inbox count > 0 (#204)', () => {
     const squads = [makeSquad('a')];
     mockScanSquad.mockReturnValue({ inboxCount: 5 });
     const bar = new EditlessStatusBar(makeRegistry(squads), makeTerminalManager(1));
 
     bar.update();
 
-    // Access the status bar item through the mock
     const item = (bar as any)._item;
-    expect(item.text).toContain('📥 5');
+    expect(item.text).not.toContain('📥');
   });
 
   it('should not show inbox badge when inbox count is 0', () => {
@@ -105,7 +104,7 @@ describe('EditlessStatusBar — update()', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessStatusBar — updateSessionsOnly()', () => {
-  it('should use cached inbox count instead of rescanning', () => {
+  it('should use cached inbox count but not display it (#204)', () => {
     const squads = [makeSquad('a')];
     mockScanSquad.mockReturnValue({ inboxCount: 3 });
     const bar = new EditlessStatusBar(makeRegistry(squads), makeTerminalManager(1));
@@ -117,7 +116,7 @@ describe('EditlessStatusBar — updateSessionsOnly()', () => {
 
     expect(mockScanSquad).not.toHaveBeenCalled();
     const item = (bar as any)._item;
-    expect(item.text).toContain('📥 3');
+    expect(item.text).not.toContain('📥');
   });
 });
 

@@ -12,7 +12,14 @@ export class EditlessRegistry {
     try {
       const raw = fs.readFileSync(this.registryPath, 'utf-8');
       const data = JSON.parse(raw);
-      this._squads = Array.isArray(data.squads) ? data.squads : [];
+      const parsed = Array.isArray(data.squads) ? data.squads : [];
+      // Deduplicate by id — keep first occurrence
+      const seen = new Set<string>();
+      this._squads = parsed.filter((s: AgentTeamConfig) => {
+        if (seen.has(s.id)) { return false; }
+        seen.add(s.id);
+        return true;
+      });
     } catch (err: unknown) {
       if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
         console.warn(`[EditlessRegistry] Registry file not found: ${this.registryPath}`);
@@ -47,7 +54,10 @@ export class EditlessRegistry {
 
   addSquads(squads: AgentTeamConfig[]): void {
     this.loadSquads();
-    this._squads.push(...squads);
+    const existingIds = new Set(this._squads.map(s => s.id));
+    const unique = squads.filter(s => !existingIds.has(s.id));
+    if (unique.length === 0) { return; }
+    this._squads.push(...unique);
     const existing = (() => {
       try {
         return JSON.parse(fs.readFileSync(this.registryPath, 'utf-8'));
