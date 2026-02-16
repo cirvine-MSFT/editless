@@ -68,7 +68,7 @@ export interface OrchestrationEntry {
 export interface AgentInfo {
   name: string;
   role: string;
-  /** Charter file path (relative to .ai-team/) */
+  /** Charter file path (relative to .squad/ or .ai-team/) */
   charter?: string;
   /** Status badge: 'active', 'silent', 'monitor', or custom */
   status?: string;
@@ -140,7 +140,7 @@ export interface SquadState {
   inboxCount: number;
   /** Set if squad path is inaccessible or scanning failed */
   error?: string;
-  /** Squad roster parsed from .ai-team/team.md */
+  /** Squad roster parsed from .squad/team.md (or .ai-team/team.md) */
   roster: AgentInfo[];
   /** Squad charter/description (from squad-registry.json or team.md header) */
   charter: string;

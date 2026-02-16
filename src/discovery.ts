@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AgentTeamConfig } from './types';
 import { EditlessRegistry } from './registry';
+import { resolveTeamMd } from './team-dir';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
@@ -72,9 +73,9 @@ export function discoverAgentTeams(dirPath: string, existingSquads: AgentTeamCon
     if (!entry.isDirectory()) { continue; }
 
     const folderPath = path.resolve(dirPath, entry.name);
-    const teamMdPath = path.join(folderPath, '.ai-team', 'team.md');
+    const teamMdPath = resolveTeamMd(folderPath);
 
-    if (!fs.existsSync(teamMdPath)) { continue; }
+    if (!teamMdPath) { continue; }
 
     if (existingPaths.has(folderPath.toLowerCase())) { continue; }
 
@@ -117,9 +118,9 @@ export function discoverAgentTeamsInMultiplePaths(
       if (!entry.isDirectory()) { continue; }
 
       const folderPath = path.resolve(scanPath, entry.name);
-      const teamMdPath = path.join(folderPath, '.ai-team', 'team.md');
+      const teamMdPath = resolveTeamMd(folderPath);
 
-      if (!fs.existsSync(teamMdPath)) { continue; }
+      if (!teamMdPath) { continue; }
       if (existingPaths.has(folderPath.toLowerCase())) { continue; }
 
       const id = toKebabCase(entry.name);

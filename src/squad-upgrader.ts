@@ -6,6 +6,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import type { AgentTeamConfig } from './types';
 import { EditlessRegistry } from './registry';
+import { TEAM_DIR_NAMES } from './team-dir';
 
 const execAsync = promisify(exec);
 
@@ -30,7 +31,7 @@ export async function promptInstallNode(): Promise<void> {
 }
 
 export function isSquadInitialized(squadPath: string): boolean {
-  return fs.existsSync(path.join(squadPath, '.ai-team'));
+  return TEAM_DIR_NAMES.some(name => fs.existsSync(path.join(squadPath, name)));
 }
 
 export function getLocalSquadVersion(squadPath: string): string | null {

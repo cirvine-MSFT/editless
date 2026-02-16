@@ -51,6 +51,40 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('discoverAgentTeams', () => {
+  it('discovers agent teams from child folders with .squad/team.md (new convention)', () => {
+    writeFixture('squad-a/.squad/team.md', `# Alpha Squad
+> The alpha team.
+**Universe:** production
+`);
+    writeFixture('squad-b/.squad/team.md', `# Bravo Squad
+> The bravo team.
+**Universe:** testing
+`);
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(2);
+    expect(result.map(s => s.name)).toContain('Alpha Squad');
+    expect(result.map(s => s.name)).toContain('Bravo Squad');
+  });
+
+  it('prefers .squad/team.md over .ai-team/team.md when both exist', () => {
+    writeFixture('squad-a/.squad/team.md', `# New Name
+> New description.
+**Universe:** new
+`);
+    writeFixture('squad-a/.ai-team/team.md', `# Old Name
+> Old description.
+**Universe:** old
+`);
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('New Name');
+    expect(result[0].universe).toBe('new');
+  });
+
   it('discovers agent teams from child folders with .ai-team/team.md', () => {
     // Create 3 child folders, 2 with .ai-team/team.md
     writeFixture('squad-a/.ai-team/team.md', `# Alpha Squad
