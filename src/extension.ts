@@ -696,8 +696,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const terminal = vscode.window.createTerminal({
         name: `Squad ${action}: ${path.basename(dirPath)}`,
         cwd: dirPath,
+        hideFromUser: true,
       });
-      terminal.show();
       terminal.sendText(command);
 
       vscode.window.showInformationMessage(
