@@ -1908,3 +1908,70 @@ The PR filter in `prs-tree.ts` mirrors the work items filter pattern exactly:
 - `view/title` menu buttons with `$(filter)` and `$(clear-all)` icons
 
 When adding filter support to future tree views, follow this same pattern. The `matchesLabelFilter()` logic is duplicated between work-items-tree.ts and prs-tree.ts — a future refactor could extract it to a shared utility.
+### 2026-02-16: Default release target is v0.1
+**By:** Casey Irvine (user directive)
+**What:** All new issues default to `release:v0.1` unless Casey explicitly says otherwise.
+**Why:** User request — captured for team memory
+
+
+### 2026-02-16: Documentation Animation Strategy — GIFs in `docs/media/`
+**By:** Summer (Product Designer)
+**Date:** 2026-02-16
+**Issue:** #43 — Visual workflow documentation with UI demos
+
+**Decision:** EditLess will use **optimized GIFs stored in the repo** with the following approach:
+
+- **Primary Format:** GIF (universal, well-supported, no audio needed)
+- **Recording Tool:** ScreenToGif (Windows, built-in editor, GIF + MP4 fallback)
+- **Storage Location:** `docs/media/` directory in repo
+- **Marketplace Strategy:** Relative paths in README for GitHub/Marketplace rendering
+- **Maintainability:** Document re-recording triggers in PR templates; track UI change impact in code reviews
+
+**Repository Structure:**
+```
+editless/
+├── docs/
+│   ├── media/                    # All demo animations
+│   │   ├── planning-feature.gif
+│   │   ├── review-prs.gif
+│   │   ├── switch-sessions.gif
+│   │   ├── manage-squad.gif
+│   │   └── vibe-loop.gif
+│   └── workflows/                # Existing workflow docs
+└── README.md
+```
+
+**File Naming Convention:**
+- Descriptive, kebab-case (e.g., `planning-feature.gif`, not `demo1.gif`)
+- Reflects the workflow being demonstrated
+- Consistent with EditLess naming conventions
+
+**GIF Specifications (VS Code Marketplace + GitHub):**
+- File size: Under 1 MB per GIF
+- Resolution: Up to 800px width (for mobile/web rendering)
+- Duration: 3–8 seconds per demo
+- Frame rate: 10–15 fps
+
+**ScreenToGif Workflow:**
+1. Open ScreenToGif, set recording region to capture sidebar + VS Code (1280×720 or 1024×768 recommended)
+2. Perform the workflow naturally (3–8 seconds)
+3. Use built-in editor to trim, remove excessive pauses, adjust FPS to stay under 1 MB
+4. Export as GIF (optimize for web)
+5. Place in `docs/media/` with descriptive alt text in markdown
+
+**When to Re-record:**
+- Tree view structure or hierarchy changes
+- Command names or keyboard shortcuts change
+- Button labels or icons change significantly
+- Sidebar layout or panel positioning changes
+- Add to PR template: "❯ Did this change EditLess UI? If yes, update or create a demo GIF in `docs/media/`"
+
+**Workflows to Document (Core v0.1 demos):**
+1. Planning a feature with agents — Agent discovery → Chat → Issue creation
+2. Reviewing PRs from work items view — Click PR → See linked issues → Approve/comment
+3. Switching tasks / terminal sessions — Terminal list → Click session → Resume work
+4. Managing your squad roster — Add squad → View agents → Manage skills/roles
+5. The full vibe coding loop — Create work → Delegate to agent → Review PRs → Close issue
+
+**Why:** GIFs are universal, well-supported, and stored in the repo for reliability. Every popular extension (GitLens, ErrorLens, Todo Tree) uses this approach. Marketplace renders relative paths inline. ScreenToGif is free, Windows-native, and has built-in optimization for web delivery.
+
