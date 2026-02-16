@@ -1394,4 +1394,115 @@ describe('TerminalManager', () => {
       expect(info?.launchCommand).toBe('agency copilot');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Session persistence scenarios (#53)
+  // ---------------------------------------------------------------------------
+
+  describe('session persistence across reload (#53)', () => {
+    it('should restore multiple squads with correct association after reload', () => {
+      // Pre-seed saved state with two squads
+      const alphaEntry = makePersistedEntry({
+        id: 'alpha-1', squadId: 'squad-alpha', squadName: 'Alpha', squadIcon: '🅰️',
+        terminalName: '🅰️ Alpha #1', displayName: '🅰️ Alpha #1', originalName: '🅰️ Alpha #1',
+      });
+      const betaEntry = makePersistedEntry({
+        id: 'beta-1', squadId: 'squad-beta', squadName: 'Beta', squadIcon: '🅱️',
+        terminalName: '🅱️ Beta #1', displayName: '🅱️ Beta #1', originalName: '🅱️ Beta #1',
+      });
+      // Simulate live terminals that survived the reload
+      mockTerminals.push(makeMockTerminal('🅰️ Alpha #1'), makeMockTerminal('🅱️ Beta #1'));
+
+      const ctx = makeMockContext([alphaEntry, betaEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const all = mgr.getAllTerminals();
+      expect(all).toHaveLength(2);
+      expect(all.map(t => t.info.squadId).sort()).toEqual(['squad-alpha', 'squad-beta']);
+    });
+
+    it('should mark entries as orphaned when terminals are gone (close/reopen)', () => {
+      // Saved state exists but no live terminals
+      const saved = [makePersistedEntry({ terminalName: '🧪 Gone #1' })];
+      const ctx = makeMockContext(saved);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans).toHaveLength(1);
+      expect(orphans[0].squadId).toBe('test-squad');
+    });
+
+    it('should persist squadPath from config and carry it through reconcile', () => {
+      const entry = makePersistedEntry({
+        terminalName: '🧪 Test Squad #1',
+        squadPath: '/home/user/project',
+      });
+      const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const all = mgr.getAllTerminals();
+      expect(all[0].info.squadPath).toBe('/home/user/project');
+    });
+
+    it('should recover session ID through persist/orphan/relaunch cycle', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'crash-recovery-1',
+        terminalName: '🧪 No Match',
+        displayName: '🧪 Test Squad #1',
+        launchCommand: 'copilot --yolo',
+        agentSessionId: 'session-abc-123',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans).toHaveLength(1);
+      expect(orphans[0].agentSessionId).toBe('session-abc-123');
+
+      const relaunched = mgr.relaunchSession(orphanEntry);
+      expect(relaunched.sendText).toHaveBeenCalledWith('copilot --yolo --resume session-abc-123');
+    });
+
+    it('should use squadPath as cwd when relaunching orphaned session', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'relaunch-cwd-1',
+        terminalName: '🧪 No Match',
+        displayName: '🧪 Test Squad #1',
+        squadPath: '/project/dir',
+        launchCommand: 'copilot chat',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      mgr.relaunchSession(orphanEntry);
+      expect(mockCreateTerminal).toHaveBeenCalledWith(
+        expect.objectContaining({ cwd: '/project/dir' }),
+      );
+    });
+  });
+
+  describe('periodic persist timer (#94)', () => {
+    it('should set up periodic persist interval on construction', () => {
+      const spy = vi.spyOn(global, 'setInterval');
+      const _mgr = new TerminalManager(makeMockContext());
+      expect(spy).toHaveBeenCalledWith(expect.any(Function), 30_000);
+      spy.mockRestore();
+    });
+
+    it('should clear persist interval on dispose', () => {
+      const spy = vi.spyOn(global, 'clearInterval');
+      const mgr = new TerminalManager(makeMockContext());
+      mgr.dispose();
+      expect(spy).toHaveBeenCalled();
+      spy.mockRestore();
+    });
+  });
 });
