@@ -2,15 +2,17 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { discoverAgentTeams } from '../discovery';
+import { discoverAgentTeams, autoRegisterWorkspaceSquads } from '../discovery';
 import type { AgentTeamConfig } from '../types';
 
 // Mock vscode module
+const mockWorkspaceFolders: Array<{ name: string; uri: { fsPath: string } }> = [];
 vi.mock('vscode', () => ({
   workspace: {
     getConfiguration: () => ({
       get: (key: string) => undefined,
     }),
+    get workspaceFolders() { return mockWorkspaceFolders.length > 0 ? mockWorkspaceFolders : undefined; },
   },
   window: {
     showInformationMessage: async () => undefined,
@@ -323,5 +325,75 @@ describe('discoverAgentTeams', () => {
         expect(squad.path).toBe(path.resolve(tmpDir, `squad-${idx}`));
       });
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// autoRegisterWorkspaceSquads
+// ---------------------------------------------------------------------------
+
+describe('autoRegisterWorkspaceSquads', () => {
+  beforeEach(() => {
+    mockWorkspaceFolders.length = 0;
+  });
+
+  it('auto-registers a workspace folder containing .ai-team/team.md', () => {
+    writeFixture('project-a/.ai-team/team.md', '# Team Roster\n> A cool squad.');
+    mockWorkspaceFolders.push({ name: 'project-a', uri: { fsPath: path.join(tmpDir, 'project-a') } });
+
+    const added: AgentTeamConfig[] = [];
+    const registry = {
+      loadSquads: () => [] as AgentTeamConfig[],
+      addSquads: (squads: AgentTeamConfig[]) => { added.push(...squads); },
+    };
+    autoRegisterWorkspaceSquads(registry as never);
+
+    expect(added).toHaveLength(1);
+    expect(added[0].path).toBe(path.join(tmpDir, 'project-a'));
+    expect(added[0].name).toBe('project-a');
+  });
+
+  it('skips workspace folders already in the registry', () => {
+    writeFixture('project-a/.ai-team/team.md', '# Team Roster');
+    const folderPath = path.join(tmpDir, 'project-a');
+    mockWorkspaceFolders.push({ name: 'project-a', uri: { fsPath: folderPath } });
+
+    const added: AgentTeamConfig[] = [];
+    const existing: AgentTeamConfig = {
+      id: 'project-a', name: 'Project A', path: folderPath,
+      icon: '🔷', universe: 'unknown', launchCommand: '',
+    };
+    const registry = {
+      loadSquads: () => [existing],
+      addSquads: (squads: AgentTeamConfig[]) => { added.push(...squads); },
+    };
+    autoRegisterWorkspaceSquads(registry as never);
+
+    expect(added).toHaveLength(0);
+  });
+
+  it('skips workspace folders without .ai-team or .squad', () => {
+    fs.mkdirSync(path.join(tmpDir, 'plain-project'), { recursive: true });
+    mockWorkspaceFolders.push({ name: 'plain-project', uri: { fsPath: path.join(tmpDir, 'plain-project') } });
+
+    const added: AgentTeamConfig[] = [];
+    const registry = {
+      loadSquads: () => [] as AgentTeamConfig[],
+      addSquads: (squads: AgentTeamConfig[]) => { added.push(...squads); },
+    };
+    autoRegisterWorkspaceSquads(registry as never);
+
+    expect(added).toHaveLength(0);
+  });
+
+  it('does nothing when no workspace folders exist', () => {
+    const added: AgentTeamConfig[] = [];
+    const registry = {
+      loadSquads: () => [] as AgentTeamConfig[],
+      addSquads: (squads: AgentTeamConfig[]) => { added.push(...squads); },
+    };
+    autoRegisterWorkspaceSquads(registry as never);
+
+    expect(added).toHaveLength(0);
   });
 });

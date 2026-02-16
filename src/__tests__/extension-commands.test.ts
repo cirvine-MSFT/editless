@@ -287,6 +287,7 @@ vi.mock('../cli-provider', () => ({
 vi.mock('../discovery', () => ({
   registerDiscoveryCommand: vi.fn(() => ({ dispose: vi.fn() })),
   checkDiscoveryOnStartup: vi.fn(),
+  autoRegisterWorkspaceSquads: vi.fn(),
 }));
 
 vi.mock('../agent-discovery', () => ({
