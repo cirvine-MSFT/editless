@@ -9,7 +9,7 @@ import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand, checkSquadUpgradesOnStartup, clearLatestVersionCache } from './squad-upgrader';
 import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider } from './cli-provider';
-import { registerDiscoveryCommand, checkDiscoveryOnStartup } from './discovery';
+import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
@@ -44,6 +44,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- Registry ----------------------------------------------------------
   const registry = createRegistry(context);
   registry.loadSquads();
+
+  // --- Auto-register workspace squads (#201) --------------------------------
+  autoRegisterWorkspaceSquads(registry);
 
   // --- Auto-flush decisions inbox (#66) ------------------------------------
   for (const squad of registry.loadSquads()) {
@@ -992,19 +995,42 @@ async function initAdoIntegration(
     return;
   }
 
-  const token = await getAdoToken(context.secrets);
-  if (!token) {
-    return;
+  async function fetchAdoData(): Promise<void> {
+    const token = await getAdoToken(context.secrets);
+    if (!token) {
+      vscode.window.showWarningMessage(
+        'Azure DevOps: authentication required',
+        'Sign In',
+        'Set PAT',
+      ).then(choice => {
+        if (choice === 'Sign In') vscode.commands.executeCommand('editless.adoSignIn');
+        else if (choice === 'Set PAT') vscode.commands.executeCommand('editless.setAdoPat');
+      });
+      return;
+    }
+
+    try {
+      const [workItems, prs] = await Promise.all([
+        fetchAdoWorkItems(org, project, token),
+        fetchAdoPRs(org, project, token),
+      ]);
+      workItemsProvider.setAdoItems(workItems);
+      prsProvider.setAdoPRs(prs);
+    } catch (err) {
+      console.error('[EditLess] ADO fetch failed:', err);
+      vscode.window.showWarningMessage(
+        `Azure DevOps: failed to fetch data — check organization and project settings`,
+        'Configure',
+      ).then(choice => {
+        if (choice === 'Configure') vscode.commands.executeCommand('editless.configureAdo');
+      });
+    }
   }
 
-  try {
-    const [workItems, prs] = await Promise.all([
-      fetchAdoWorkItems(org, project, token),
-      fetchAdoPRs(org, project, token),
-    ]);
-    workItemsProvider.setAdoItems(workItems);
-    prsProvider.setAdoPRs(prs);
-  } catch {
-    // ADO fetch failed silently — user can retry via refresh
-  }
+  // Wire up refresh callback so providers can re-fetch ADO data
+  workItemsProvider.setAdoRefresh(fetchAdoData);
+  prsProvider.setAdoRefresh(fetchAdoData);
+
+  // Initial fetch
+  await fetchAdoData();
 }

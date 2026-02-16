@@ -936,7 +936,7 @@ describe('TerminalManager', () => {
         expect(state).toBe('working');
       });
 
-      it('should show working immediately after shell execution ends then transition later', () => {
+      it('should show waiting-on-input immediately after shell execution ends', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -951,9 +951,9 @@ describe('TerminalManager', () => {
 
         capturedShellEndListener({ terminal, execution });
         
-        // Immediately after ending: still 'working' (within 30s threshold)
+        // Immediately after ending: waiting-on-input (execution no longer active)
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('working');
+        expect(state).toBe('waiting-on-input');
       });
 
       it('should handle multiple rapid start/end cycles correctly', () => {
@@ -1003,7 +1003,7 @@ describe('TerminalManager', () => {
         expect(['waiting-on-input', 'idle']).toContain(state);
       });
 
-      it('should return working for recently-reconnected terminal regardless of lastSeenAt', () => {
+      it('should return stale for recently-reconnected terminal with old lastSeenAt', () => {
         const staleEntry = makePersistedEntry({
           id: 'stale-session-1',
           terminalName: '🧪 Stale #1',
@@ -1017,7 +1017,7 @@ describe('TerminalManager', () => {
         mgr.reconcile();
 
         const state = mgr.getSessionState(liveTerminal);
-        expect(state).toBe('working');
+        expect(state).toBe('stale');
       });
 
       it('should return orphaned for persisted session with no live terminal', () => {
@@ -1171,7 +1171,7 @@ describe('TerminalManager', () => {
         expect(state).toBe('needs-attention');
       });
 
-      it('should override working with needs-attention when inbox has items', () => {
+      it('should override stale with needs-attention when inbox has items', () => {
         const staleEntry = makePersistedEntry({
           id: 'stale-needs-attention',
           terminalName: '🧪 Stale #1',
@@ -1184,9 +1184,9 @@ describe('TerminalManager', () => {
         const mgr = new TerminalManager(ctx);
         mgr.reconcile();
 
-        // Reconnected terminal shows as working (recent activity from reconcile)
+        // Reconnected terminal with old lastSeenAt shows as stale
         const beforeState = mgr.getSessionState(liveTerminal);
-        expect(beforeState).toBe('working');
+        expect(beforeState).toBe('stale');
 
         // After inbox items — needs-attention overrides
         mgr.setSquadInboxCount('test-squad', 3);

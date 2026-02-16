@@ -36,6 +36,7 @@ export interface PersistedTerminalInfo {
   createdAt: string;
   terminalName: string;
   lastSeenAt: number;
+  lastActivityAt?: number;
   rebootCount: number;
   agentSessionId?: string;
   launchCommand?: string;
@@ -43,7 +44,6 @@ export interface PersistedTerminalInfo {
 }
 
 const STORAGE_KEY = 'editless.terminalSessions';
-const WORKING_THRESHOLD_MS = 30 * 1000;
 const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
 const STALE_THRESHOLD_MS = 60 * 60 * 1000;
 
@@ -354,9 +354,6 @@ export class TerminalManager implements vscode.Disposable {
     }
 
     const ageMs = Date.now() - lastActivity;
-    if (ageMs < WORKING_THRESHOLD_MS) {
-      return inboxCount > 0 ? 'needs-attention' : 'working';
-    }
     if (ageMs < IDLE_THRESHOLD_MS) {
       return inboxCount > 0 ? 'needs-attention' : 'waiting-on-input';
     }
@@ -448,8 +445,8 @@ export class TerminalManager implements vscode.Disposable {
         launchCommand: persisted.launchCommand,
         squadPath: persisted.squadPath,
       });
-      // Seed activity with current time — terminal was just re-matched as alive
-      this._lastActivityAt.set(match, Date.now());
+      // Restore persisted activity time so state reflects actual history
+      this._lastActivityAt.set(match, persisted.lastActivityAt ?? persisted.lastSeenAt);
     };
 
     const runPass = (matcher: (t: vscode.Terminal, p: PersistedTerminalInfo) => boolean): void => {
@@ -501,6 +498,7 @@ export class TerminalManager implements vscode.Disposable {
         createdAt: info.createdAt.toISOString(),
         terminalName: terminal.name,
         lastSeenAt: now,
+        lastActivityAt: this._lastActivityAt.get(terminal),
         rebootCount: 0,
         agentSessionId: info.agentSessionId,
         launchCommand: info.launchCommand,
