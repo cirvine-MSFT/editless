@@ -6,11 +6,13 @@
 
 EditLess was born after a particularly animated one-on-one with my boss.
 
-I had recently dove headfirst into agentic development and vibe coding as a philosophy — without even realizing that's what I was doing. I was ranting and raving about how my productivity had increased tenfold, but I could be *even more* productive if the tools kept up with how I wanted to work with my agents. I kept going on about how Microsoft Teams is going to be the IDE of the future.
+I had recently dove headfirst into agentic development and vibe coding as a philosophy — without even realizing that's what I was doing. I was ranting and raving about how my productivity had increased tenfold, but I could be *even more* productive if the tools kept up with how I wanted to work with my agents. I kept going on about how Microsoft Teams is going to be the IDE of the future. I wanted a world where I interacted with my agents through multiple chat windows — or even through a phone call in the car on the way to work. Just *talking* to my team and having things happen.
 
 Meanwhile, my computer screen looked more like Dozer's terminal from *The Matrix* than a software development workspace.
 
-<!-- TODO: Add Matrix terminal GIF here -->
+<p align="center">
+  <img src="https://media.giphy.com/media/zXmbOaTpbY6mA/giphy.gif" alt="Dozer watching the Matrix code — my actual desktop, basically" width="480" />
+</p>
 
 Multiple terminals on every screen, multiplexed to the max. And I kept losing track of them — what they were for, what they were working on. I'd have to stop and ask my agents what they were doing, which kind of defeats the purpose of having agents in the first place.
 
