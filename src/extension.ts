@@ -20,7 +20,7 @@ import { scanSquad } from './scanner';
 import { flushDecisionsInbox } from './inbox-flusher';
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
 import { resolveTeamDir } from './team-dir';
-import { WorkItemsTreeProvider, WorkItemsTreeItem } from './work-items-tree';
+import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
@@ -87,7 +87,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // --- Work Items tree view ------------------------------------------------
   const workItemsProvider = new WorkItemsTreeProvider();
-  context.subscriptions.push(vscode.window.registerTreeDataProvider('editlessWorkItems', workItemsProvider));
+  const workItemsView = vscode.window.createTreeView('editlessWorkItems', { treeDataProvider: workItemsProvider });
+  workItemsProvider.setTreeView(workItemsView);
+  context.subscriptions.push(workItemsView);
 
   // --- PRs tree view -------------------------------------------------------
   const prsProvider = new PRsTreeProvider();
@@ -514,6 +516,54 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     vscode.commands.registerCommand('editless.refreshWorkItems', () => workItemsProvider.refresh()),
     vscode.commands.registerCommand('editless.refreshPRs', () => prsProvider.refresh()),
   );
+
+  // Filter work items (#132)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.filterWorkItems', async () => {
+      const current = workItemsProvider.filter;
+      const allRepos = workItemsProvider.getAllRepos();
+      const allLabels = workItemsProvider.getAllLabels();
+      const stateOptions: { label: string; value: UnifiedState }[] = [
+        { label: 'Open (New)', value: 'open' },
+        { label: 'Active / In Progress', value: 'active' },
+      ];
+
+      const items: vscode.QuickPickItem[] = [];
+      if (allRepos.length > 0) {
+        items.push({ label: 'Repos', kind: vscode.QuickPickItemKind.Separator });
+        for (const repo of allRepos) {
+          items.push({ label: repo, description: 'repo', picked: current.repos.includes(repo) });
+        }
+      }
+      items.push({ label: 'State', kind: vscode.QuickPickItemKind.Separator });
+      for (const s of stateOptions) {
+        items.push({ label: s.label, description: 'state', picked: current.states.includes(s.value) });
+      }
+      if (allLabels.length > 0) {
+        items.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
+        for (const label of allLabels) {
+          items.push({ label, description: 'label', picked: current.labels.includes(label) });
+        }
+      }
+
+      const picks = await vscode.window.showQuickPick(items, {
+        title: 'Filter Work Items',
+        canPickMany: true,
+        placeHolder: 'Select filters (leave empty to show all)',
+      });
+      if (picks === undefined) return;
+
+      const repos = picks.filter(p => p.description === 'repo').map(p => p.label);
+      const labels = picks.filter(p => p.description === 'label').map(p => p.label);
+      const states = picks.filter(p => p.description === 'state')
+        .map(p => stateOptions.find(s => s.label === p.label)?.value)
+        .filter((s): s is UnifiedState => s !== undefined);
+
+      workItemsProvider.setFilter({ repos, labels, states });
+    }),
+    vscode.commands.registerCommand('editless.clearWorkItemsFilter', () => workItemsProvider.clearFilter()),
+  );
+  vscode.commands.executeCommand('setContext', 'editless.workItemsFiltered', false);
 
   // Configure GitHub repos (opens settings)
   context.subscriptions.push(
