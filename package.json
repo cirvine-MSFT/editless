@@ -80,8 +80,8 @@
         "category": "EditLess"
       },
       {
-        "command": "editless.updateAgency",
-        "title": "Update Agency CLI",
+        "command": "editless.updateCliProvider",
+        "title": "Update CLI Provider",
         "category": "EditLess",
         "icon": "$(cloud-download)"
       },
@@ -276,7 +276,7 @@
         { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@2" },
         { "command": "editless.addNew", "when": "view == editlessTree", "group": "navigation@3" },
         { "command": "editless.addSquad", "when": "view == editlessTree", "group": "navigation@4" },
-        { "command": "editless.updateAgency", "when": "view == editlessTree && editless.agencyUpdateAvailable", "group": "1_updates" },
+        { "command": "editless.updateCliProvider", "when": "view == editlessTree && editless.cliUpdateAvailable", "group": "1_updates" },
         { "command": "editless.upgradeAllSquads", "when": "view == editlessTree", "group": "1_updates" },
         { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation@1" },
         { "command": "editless.filterWorkItems", "when": "view == editlessWorkItems", "group": "navigation@2" },
@@ -386,21 +386,33 @@
           "scope": "resource",
           "order": 3
         },
-        "editless.cli.provider": {
-          "type": "string",
-          "default": "copilot",
-          "enum": ["copilot", "agency", "claude", "custom"],
-          "enumDescriptions": [
-            "GitHub Copilot CLI — default, works out of the box",
-            "Agency CLI — auto-detected when installed",
-            "Anthropic Claude CLI",
-            "User-defined CLI — presence-only detection, no version checking"
+        "editless.cli.providers": {
+          "type": "array",
+          "default": [
+            {
+              "name": "Copilot CLI",
+              "command": "copilot",
+              "versionCommand": "copilot --version",
+              "versionRegex": "(\\d+\\.\\d+[\\d.]*)",
+              "launchCommand": "copilot --agent $(agent)",
+              "createCommand": "",
+              "updateCommand": "",
+              "updateRunCommand": "",
+              "upToDatePattern": "up to date"
+            }
           ],
-          "enumItemLabels": ["Copilot", "Agency", "Claude", "Custom"],
-          "description": "CLI provider for agent sessions. Auto-detected on startup.",
-          "markdownDescription": "CLI provider for agent sessions. Auto-detected on startup — only change this if auto-detection picks the wrong provider.\n\nEach provider has built-in support for version checking and updates. Choose **Custom** to use a CLI not listed here.",
+          "description": "CLI providers for agent sessions. Each provider defines how to launch, detect, and update a CLI tool.",
+          "markdownDescription": "CLI providers for agent sessions. Each entry defines a CLI tool with version detection, launch command, and optional update support.\n\nThe first detected provider is used by default (override with `editless.cli.activeProvider`).\n\nCopilot CLI is included by default and will be re-added if removed.",
           "scope": "window",
           "order": 20
+        },
+        "editless.cli.activeProvider": {
+          "type": "string",
+          "default": "auto",
+          "description": "Active CLI provider name, or 'auto' to use the first detected provider.",
+          "markdownDescription": "Active CLI provider. Set to `\"auto\"` (default) to use the first detected provider, or specify a provider name from `editless.cli.providers`.",
+          "scope": "window",
+          "order": 21
         },
         "editless.github.repos": {
           "type": "array",

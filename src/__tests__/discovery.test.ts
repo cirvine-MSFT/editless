@@ -21,6 +21,10 @@ vi.mock('vscode', () => ({
   },
 }));
 
+vi.mock('../cli-provider', () => ({
+  getActiveProviderLaunchCommand: () => 'copilot --agent $(agent)',
+}));
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -228,7 +232,7 @@ describe('discoverAgentTeams', () => {
 
     const result = discoverAgentTeams(tmpDir, []);
     
-    expect(result[0].launchCommand).toBe('agency copilot --agent squad --yolo -s');
+    expect(result[0].launchCommand).toBe('copilot --agent $(agent)');
   });
 
   describe('edge cases', () => {
