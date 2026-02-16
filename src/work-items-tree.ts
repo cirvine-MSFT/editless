@@ -157,6 +157,12 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     return repos;
   }
 
+  private _adoRefresh?: () => Promise<void>;
+
+  setAdoRefresh(fn: () => Promise<void>): void {
+    this._adoRefresh = fn;
+  }
+
   refresh(): void {
     this.fetchAll();
   }
@@ -173,25 +179,33 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     this._allLabels.clear();
     this._onDidChangeTreeData.fire();
 
-    const ghOk = await isGhAvailable();
-    if (!ghOk) {
-      this._loading = false;
-      this._onDidChangeTreeData.fire();
-      return;
+    const fetches: Promise<void>[] = [];
+
+    // GitHub fetch — only if gh CLI is available and repos configured
+    if (this._repos.length > 0) {
+      const ghOk = await isGhAvailable();
+      if (ghOk) {
+        fetches.push(
+          ...this._repos.map(async (repo) => {
+            const issues = await fetchAssignedIssues(repo);
+            for (const issue of issues) {
+              for (const label of issue.labels) this._allLabels.add(label);
+            }
+            const filtered = this.filterIssues(issues);
+            if (filtered.length > 0) {
+              this._issues.set(repo, filtered);
+            }
+          }),
+        );
+      }
     }
 
-    await Promise.all(
-      this._repos.map(async (repo) => {
-        const issues = await fetchAssignedIssues(repo);
-        for (const issue of issues) {
-          for (const label of issue.labels) this._allLabels.add(label);
-        }
-        const filtered = this.filterIssues(issues);
-        if (filtered.length > 0) {
-          this._issues.set(repo, filtered);
-        }
-      }),
-    );
+    // ADO fetch — independent of GitHub
+    if (this._adoRefresh) {
+      fetches.push(this._adoRefresh());
+    }
+
+    await Promise.all(fetches);
 
     this._loading = false;
     this._onDidChangeTreeData.fire();
