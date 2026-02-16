@@ -180,6 +180,11 @@
         "category": "EditLess"
       },
       {
+        "command": "editless.configureAdo",
+        "title": "Configure Azure DevOps",
+        "category": "EditLess"
+      },
+      {
         "command": "editless.openInBrowser",
         "title": "Open in Browser",
         "category": "EditLess",
@@ -288,6 +293,7 @@
         { "command": "editless.openFilePreview", "when": "false" },
         { "command": "editless.goToPR", "when": "false" },
         { "command": "editless.configureRepos", "when": "false" },
+        { "command": "editless.configureAdo", "when": "false" },
         { "command": "editless.addNew", "when": "false" },
         { "command": "editless.relaunchSession", "when": "false" },
         { "command": "editless.dismissOrphan", "when": "false" }
@@ -422,6 +428,22 @@
               "items": { "type": "string" }
             }
           }
+        },
+        "editless.ado.organization": {
+          "type": "string",
+          "default": "",
+          "description": "Azure DevOps organization URL (e.g., https://dev.azure.com/myorg)",
+          "markdownDescription": "Azure DevOps organization URL for the **Work Items** and **Pull Requests** panes.\n\nExample: `\"https://dev.azure.com/myorg\"`",
+          "scope": "resource",
+          "order": 32
+        },
+        "editless.ado.project": {
+          "type": "string",
+          "default": "",
+          "description": "Azure DevOps project name",
+          "markdownDescription": "Azure DevOps project to show in the **Work Items** and **Pull Requests** panes.",
+          "scope": "resource",
+          "order": 33
         },
         "editless.agentCreationCommand": {
           "type": "string",

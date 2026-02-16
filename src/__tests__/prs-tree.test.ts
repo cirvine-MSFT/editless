@@ -214,7 +214,8 @@ describe('PRsTreeProvider — loading & empty states', () => {
   it('should show config placeholder when no repos set', () => {
     const provider = new PRsTreeProvider();
     const children = provider.getChildren();
-    expect(children).toHaveLength(1);
-    expect(children[0].label).toBe('Configure GitHub repos in settings');
+    expect(children).toHaveLength(2);
+    expect(children[0].label).toBe('Configure in GitHub');
+    expect(children[1].label).toBe('Configure in ADO');
   });
 });
