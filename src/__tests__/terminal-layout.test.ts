@@ -41,6 +41,7 @@ describe('TerminalLayoutManager', () => {
   let manager: TerminalLayoutManager;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.clearAllMocks();
     (vscode.window as unknown as { visibleTextEditors: unknown[] }).visibleTextEditors = [];
     stubSetting(true);
@@ -48,13 +49,16 @@ describe('TerminalLayoutManager', () => {
 
   afterEach(() => {
     manager?.dispose();
+    vi.useRealTimers();
   });
 
   it('should maximize panel when all editors close after opening', () => {
     manager = new TerminalLayoutManager();
 
     fireEditors([{ document: {} }]);
+    vi.advanceTimersByTime(200);
     fireEditors([]);
+    vi.advanceTimersByTime(200);
 
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('workbench.action.toggleMaximizedPanel');
   });
@@ -64,6 +68,7 @@ describe('TerminalLayoutManager', () => {
     manager = new TerminalLayoutManager();
 
     fireEditors([]);
+    vi.advanceTimersByTime(200);
 
     expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
   });
@@ -72,8 +77,11 @@ describe('TerminalLayoutManager', () => {
     manager = new TerminalLayoutManager();
 
     fireEditors([{ document: {} }]);
+    vi.advanceTimersByTime(200);
     fireEditors([{ document: {} }, { document: {} }]);
+    vi.advanceTimersByTime(200);
     fireEditors([{ document: {} }]);
+    vi.advanceTimersByTime(200);
 
     expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
   });
@@ -83,8 +91,10 @@ describe('TerminalLayoutManager', () => {
     manager = new TerminalLayoutManager();
 
     fireEditors([{ document: {} }]);
+    vi.advanceTimersByTime(200);
     stubSetting(false);
     fireEditors([]);
+    vi.advanceTimersByTime(200);
 
     expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
   });
@@ -93,11 +103,15 @@ describe('TerminalLayoutManager', () => {
     manager = new TerminalLayoutManager();
 
     fireEditors([{ document: {} }]);
+    vi.advanceTimersByTime(200);
     fireEditors([]);
+    vi.advanceTimersByTime(200);
     expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(1);
 
     fireEditors([{ document: {} }]);
+    vi.advanceTimersByTime(200);
     fireEditors([]);
+    vi.advanceTimersByTime(200);
     expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(2);
   });
 
@@ -105,13 +119,17 @@ describe('TerminalLayoutManager', () => {
     manager = new TerminalLayoutManager();
 
     fireEditors([{ document: {} }]);
+    vi.advanceTimersByTime(200);
     fireEditors([]);
+    vi.advanceTimersByTime(200);
     expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(1);
 
     stubSetting(false);
     fireEditors([{ document: {} }]);
+    vi.advanceTimersByTime(200);
     stubSetting(false);
     fireEditors([]);
+    vi.advanceTimersByTime(200);
     expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(1);
   });
 
@@ -119,7 +137,23 @@ describe('TerminalLayoutManager', () => {
     manager = new TerminalLayoutManager();
 
     fireEditors([]);
+    vi.advanceTimersByTime(200);
     fireEditors([]);
+    vi.advanceTimersByTime(200);
+
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+  });
+
+  it('should not maximize during rapid tab switches with transient zero state', () => {
+    manager = new TerminalLayoutManager();
+
+    fireEditors([{ document: {} }]);
+    vi.advanceTimersByTime(200);
+    // Rapid tab switch: editors briefly go to 0 then back to 1
+    fireEditors([]);
+    vi.advanceTimersByTime(50); // less than debounce
+    fireEditors([{ document: {} }]);
+    vi.advanceTimersByTime(200);
 
     expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
   });
