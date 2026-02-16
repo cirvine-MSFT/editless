@@ -64,7 +64,7 @@ export class EditlessTreeItem extends vscode.TreeItem {
 // EditlessTreeProvider
 // ---------------------------------------------------------------------------
 
-export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTreeItem> {
+export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTreeItem>, vscode.Disposable {
   private _onDidChangeTreeData = new vscode.EventEmitter<EditlessTreeItem | undefined | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
@@ -72,6 +72,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   private _discoveredAgents: DiscoveredAgent[] = [];
 
   private readonly _terminalSub: vscode.Disposable | undefined;
+  private readonly _labelSub: vscode.Disposable | undefined;
 
   constructor(
     private readonly registry: EditlessRegistry,
@@ -84,8 +85,14 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       this._terminalSub = terminalManager.onDidChange(() => this._onDidChangeTreeData.fire());
     }
     if (labelManager) {
-      labelManager.onDidChange(() => this._onDidChangeTreeData.fire());
+      this._labelSub = labelManager.onDidChange(() => this._onDidChangeTreeData.fire());
     }
+  }
+
+  dispose(): void {
+    this._terminalSub?.dispose();
+    this._labelSub?.dispose();
+    this._onDidChangeTreeData.dispose();
   }
 
   refresh(): void {
@@ -258,7 +265,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
       for (const { terminal, info } of this.terminalManager.getTerminalsForSquad(squadId)) {
         const sessionState = this.terminalManager.getSessionState(terminal) ?? 'idle';
-        const lastActivityAt = this.terminalManager['_lastActivityAt'].get(terminal);
+        const lastActivityAt = this.terminalManager.getLastActivityAt(terminal);
 
         const elapsed = Date.now() - info.createdAt.getTime();
         const mins = Math.floor(elapsed / 60_000);
