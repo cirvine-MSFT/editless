@@ -189,6 +189,11 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     clearLatestVersionCache();
     treeProvider.setUpgradeAvailable(squadId, false);
     treeProvider.invalidate(squadId);
+    
+    // Re-check all squads after upgrade to update the context key
+    checkSquadUpgradesOnStartup(registry.loadSquads(), (sid, available) => {
+      treeProvider.setUpgradeAvailable(sid, available);
+    });
   };
   context.subscriptions.push(registerSquadUpgradeCommand(context, registry, onUpgradeComplete));
   context.subscriptions.push(registerSquadUpgradeAllCommand(context, registry, onUpgradeComplete));
