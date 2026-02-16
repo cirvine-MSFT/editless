@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { execSync, exec } from 'child_process';
+import { exec } from 'child_process';
 import { isNotificationEnabled } from './notifications';
 
 export interface CliProvider {
@@ -24,30 +24,34 @@ const KNOWN_PROFILES: Omit<CliProvider, 'detected' | 'version'>[] = [
   },
   { name: 'copilot', command: 'copilot', versionCommand: 'copilot --version' },
   { name: 'claude', command: 'claude', versionCommand: 'claude --version' },
+  { name: 'custom', command: '', versionCommand: '' },
 ];
 
 let _providers: CliProvider[] = [];
 let _activeProvider: CliProvider | undefined;
 
-function probeCliVersion(versionCommand: string): string | null {
-  try {
-    const output = execSync(versionCommand, { encoding: 'utf-8', timeout: 5000 });
-    const match = output.match(/([\d]+\.[\d]+[\d.]*)/);
-    return match ? match[1] : output.trim().slice(0, 50) || null;
-  } catch {
-    return null;
-  }
+function probeCliVersion(versionCommand: string): Promise<string | null> {
+  if (!versionCommand) return Promise.resolve(null);
+  return new Promise(resolve => {
+    exec(versionCommand, { encoding: 'utf-8', timeout: 5000 }, (err, stdout) => {
+      if (err) { resolve(null); return; }
+      const match = stdout.match(/([\d]+\.[\d]+[\d.]*)/);
+      resolve(match ? match[1] : stdout.trim().slice(0, 50) || null);
+    });
+  });
 }
 
-export function probeAllProviders(): CliProvider[] {
-  _providers = KNOWN_PROFILES.map(profile => {
-    const version = probeCliVersion(profile.versionCommand);
-    return {
-      ...profile,
-      detected: version !== null,
-      version: version ?? undefined,
-    };
-  });
+export async function probeAllProviders(): Promise<CliProvider[]> {
+  _providers = await Promise.all(
+    KNOWN_PROFILES.map(async profile => {
+      const version = await probeCliVersion(profile.versionCommand);
+      return {
+        ...profile,
+        detected: version !== null,
+        version: version ?? undefined,
+      };
+    }),
+  );
   return _providers;
 }
 
@@ -55,6 +59,12 @@ export function resolveActiveProvider(): CliProvider | undefined {
   const configured = vscode.workspace
     .getConfiguration('editless')
     .get<string>('cli.provider', 'copilot');
+
+  // Honor explicit "custom" setting — presence-only, no probe needed
+  if (configured === 'custom') {
+    _activeProvider = _providers.find(p => p.name === 'custom');
+    return _activeProvider;
+  }
 
   // Manual override takes priority if the provider was detected
   const byConfig = _providers.find(p => p.name === configured && p.detected);

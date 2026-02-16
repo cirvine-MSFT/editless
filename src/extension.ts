@@ -33,10 +33,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   const output = vscode.window.createOutputChannel('EditLess');
   context.subscriptions.push(output);
 
-  // --- CLI provider detection ---------------------------------------------
+  // --- CLI provider detection (async, non-blocking) -------------------------
   vscode.commands.executeCommand('setContext', 'editless.agencyUpdateAvailable', false);
-  probeAllProviders();
-  resolveActiveProvider();
+  probeAllProviders().then(() => resolveActiveProvider());
 
   // --- Registry ----------------------------------------------------------
   const registry = createRegistry(context);
@@ -63,6 +62,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   const treeProvider = new EditlessTreeProvider(registry, terminalManager, labelManager, sessionContextResolver, visibilityManager);
   const treeView = vscode.window.createTreeView('editlessTree', { treeDataProvider: treeProvider });
   context.subscriptions.push(treeView);
+  context.subscriptions.push(treeProvider);
 
   // --- Work Items tree view ------------------------------------------------
   const workItemsProvider = new WorkItemsTreeProvider();

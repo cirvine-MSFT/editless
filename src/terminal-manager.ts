@@ -141,6 +141,10 @@ export class TerminalManager implements vscode.Disposable {
     return this._terminals.get(terminal)?.displayName ?? terminal.name;
   }
 
+  getLastActivityAt(terminal: vscode.Terminal): number | undefined {
+    return this._lastActivityAt.get(terminal);
+  }
+
   renameSession(terminal: vscode.Terminal, newDisplayName: string): void {
     const info = this._terminals.get(terminal);
     if (!info) return;
