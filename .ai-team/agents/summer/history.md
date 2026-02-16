@@ -11,7 +11,11 @@
 
 ## Learnings
 
+
+📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
+
+📌 **Documentation animation strategy (2026-02-16):** EditLess will embed demo GIFs in docs for issue #43. Approach: store GIFs in `docs/media/` with relative markdown paths. Tool: ScreenToGif (Windows, built-in editor, open-source). Targets: < 1 MB per GIF, 800px width, 3–8 sec duration, 10–15 fps. Re-recording triggers: tree view changes, command/label/icon changes, sidebar layout changes. Maintainability: PR template must include UI change → update demo GIF checklist. Decision doc: `.ai-team/decisions/inbox/summer-docs-animation-strategy.md`. — researched by Summer
 
 📌 Team update (2026-02-16): Squad folder rename — `.squad/` support added with `.ai-team/` backward compatibility via `src/team-dir.ts` utility. Any future code that needs to locate the team directory must use `resolveTeamDir()` or `resolveTeamMd()` — never hardcode paths. — decided by Morty
 
@@ -27,4 +31,5 @@
 📌 Agent file format (2026-02-16): Standalone agents discovered from `.agent.md` files in workspace, `.github/agents/`, and `~/.copilot/`. Parser extracts name from H1 heading (or filename fallback), description from YAML `description:` field or blockquote. ID generated via kebab-case normalization from filename. Deduplication: workspace wins over system-wide. — documented by Summer
 
 📌 Developer documentation structure (2026-02-16): Created `docs/architecture.md` (system overview, components, data flows), `docs/SETTINGS.md` (complete reference), and `docs/agent-file-format.md` (file spec). These are for contributors, not end users. See PR #225. — created by Summer
+
 
