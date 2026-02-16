@@ -51,6 +51,7 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _counters = new Map<string, number>();
   private readonly _shellExecutionActive = new Map<vscode.Terminal, boolean>();
   private readonly _lastActivityAt = new Map<vscode.Terminal, number>();
+  private _matchTimer: ReturnType<typeof setTimeout> | undefined;
 
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange: vscode.Event<void> = this._onDidChange.event;
@@ -333,20 +334,37 @@ export class TerminalManager implements vscode.Disposable {
 
     this._tryMatchTerminals();
 
-    // Terminals may not be available yet during activation — retry as they appear
+    // Terminals may not be available yet during activation — retry as they appear.
+    // Debounce to batch rapid terminal arrivals and avoid off-by-one mismatches
+    // when multiple terminals share the same shell-modified name (#148).
     this._disposables.push(
-      vscode.window.onDidOpenTerminal(() => this._tryMatchTerminals()),
+      vscode.window.onDidOpenTerminal(() => this._scheduleMatch()),
     );
   }
 
   private _pendingSaved: PersistedTerminalInfo[] = [];
+
+  private _scheduleMatch(): void {
+    if (this._matchTimer !== undefined) {
+      clearTimeout(this._matchTimer);
+    }
+    this._matchTimer = setTimeout(() => {
+      this._matchTimer = undefined;
+      this._tryMatchTerminals();
+    }, 200);
+  }
 
   private _tryMatchTerminals(): void {
     if (this._pendingSaved.length === 0) return;
 
     const liveTerminals = vscode.window.terminals;
     const claimed = new Set<vscode.Terminal>();
-    let unmatched = [...this._pendingSaved];
+    // Sort by creation time so positional matching aligns with
+    // vscode.window.terminals creation order — prevents off-by-one
+    // when terminal names are non-unique (e.g., shell-modified to "pwsh").
+    let unmatched = [...this._pendingSaved].sort((a, b) =>
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    );
 
     const claimMatch = (match: vscode.Terminal, persisted: PersistedTerminalInfo): void => {
       claimed.add(match);
@@ -432,6 +450,9 @@ export class TerminalManager implements vscode.Disposable {
   // -- Disposable -----------------------------------------------------------
 
   dispose(): void {
+    if (this._matchTimer !== undefined) {
+      clearTimeout(this._matchTimer);
+    }
     for (const d of this._disposables) {
       d.dispose();
     }
