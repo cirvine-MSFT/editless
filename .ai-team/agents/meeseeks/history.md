@@ -45,6 +45,8 @@
 📌 **Team update (2026-02-16):** Use context keys for menu visibility based on dynamic state — Gate menu items on VS Code context keys when visibility depends on runtime state that can't be expressed through `viewItem` checks. For the "Upgrade All Squads" button, use `editless.squadUpgradeAvailable` context key set via `vscode.commands.executeCommand('setContext', ...)` in `checkSquadUpgradesOnStartup()`. This pattern applies to all view-level actions depending on aggregate state (e.g., "any squad upgradeable"). — decided by Morty
 
 📌 **Team update (2026-02-16):** All bug fixes must include regression tests AND UX tests — Bug fixes require both regression test coverage (prevents recurrence) and UX tests (validates user experience). For upgrade scenarios, create tests that either check current state or force an earlier version to validate upgrade paths. Copilot CLI version detection with default settings must be thoroughly tested. — decided by Casey Irvine
+
+📌 **Team update (2026-02-16):** Meeseeks writes regression tests for every bug Casey discovers — When Casey discovers a bug during usage, Meeseeks should write regression tests for that specific scenario BEFORE Morty fixes it. Tests-first approach for all user-discovered bugs ensures proper coverage and clear verification criteria when the fix lands. — decided by Casey Irvine
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
 📌 Team update (2026-02-16): Squad folder rename — `.squad/` support added with `.ai-team/` backward compatibility via `src/team-dir.ts` utility. Any future code that needs to locate the team directory must use `resolveTeamDir()` or `resolveTeamMd()` — never hardcode paths. — decided by Morty
