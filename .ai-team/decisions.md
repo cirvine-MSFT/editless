@@ -136,10 +136,10 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 **Why:** `type:epic` implies parent-child hierarchy which doesn't fit ad-hoc clusters. `area:` is lightweight, widely understood (Kubernetes, VS Code use similar patterns), and lets agents and humans see at a glance which issues are related.
 
 
-### 2025-07-18: Git worktrees required — never switch branches in the main working directory
-**By:** Casey Irvine (user directive)
-**What:** All feature branch work MUST use git worktrees. The main working directory (`editless/`) stays on `master` at all times. Create a worktree for each feature branch (e.g., `git worktree add ../editless-wt-batch-c squad/batch-c`), do all work there, push, merge back to master from the main directory, then clean up the worktree. Never run `git checkout <branch>` in the main directory.
-**Why:** Multiple concurrent sessions (planning, coding, coordinator) share the same repo directory. Switching branches in the main directory disrupts all other sessions. Worktrees give each branch an isolated directory so sessions don't interfere with each other.
+### 2025-07-18: ⛔ CRITICAL — Git worktrees required — NEVER checkout a branch in the main clone
+**By:** Casey Irvine (user directive, reinforced 2026-02-16)
+**What:** **ABSOLUTE RULE — NO EXCEPTIONS.** The main clone (`C:\Users\cirvine\code\work\editless`) stays on `master` at ALL times. `git checkout <any-branch>` in the main clone is FORBIDDEN. All feature branch work MUST use git worktrees (`git worktree add ../editless-wt-{name} squad/{branch}`). `.ai-team/` changes that need to be committed go on master locally, then get PR'd from a separate worktree if needed. The main clone is pull-only — you fetch and pull, never push or checkout branches from it.
+**Why:** Multiple concurrent sessions share the main clone. Checking out a branch there breaks every other session. This has been violated repeatedly despite being documented — agents keep checking out branches on the main clone instead of using worktrees. This directive must be treated as a hard constraint, not a suggestion. Any agent that runs `git checkout <branch>` in the main clone directory is violating a critical user directive.
 
 
 ### 2026-02-15: Generalized provider update infrastructure
