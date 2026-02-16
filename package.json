@@ -116,7 +116,8 @@
       {
         "command": "editless.closeTerminal",
         "title": "Close Terminal",
-        "category": "EditLess"
+        "category": "EditLess",
+        "icon": "$(close)"
       },
       {
         "command": "editless.clearSessionLabel",
@@ -261,6 +262,7 @@
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == squad", "group": "squad@4" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal" },
+        { "command": "editless.closeTerminal", "when": "viewItem == terminal", "group": "inline@99" },
         { "command": "editless.renameSession", "when": "viewItem == terminal" },
         { "command": "editless.clearSessionLabel", "when": "viewItem == terminal" },
         { "command": "editless.runCustomCommand", "when": "viewItem == terminal", "group": "inline@2" },
