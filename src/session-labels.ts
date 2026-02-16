@@ -51,23 +51,6 @@ export class SessionLabelManager {
 // Prompt helpers
 // ---------------------------------------------------------------------------
 
-export async function promptRenameSession(
-  terminal: vscode.Terminal,
-  labelManager: SessionLabelManager,
-  labelKey: string,
-  displayName?: string,
-): Promise<void> {
-  const current = labelManager.getLabel(labelKey) ?? displayName ?? terminal.name;
-  const value = await vscode.window.showInputBox({
-    prompt: 'Enter a label for this session',
-    placeHolder: 'Enter a label for this session',
-    value: current,
-  });
-  if (value !== undefined && value.length > 0) {
-    labelManager.setLabel(labelKey, value);
-  }
-}
-
 export async function promptClearLabel(
   _terminal: vscode.Terminal,
   labelManager: SessionLabelManager,
