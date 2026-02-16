@@ -375,3 +375,16 @@ The enum includes `"custom"` in package.json but `KNOWN_PROFILES` in cli-provide
 3. Week 2: P1 issues (#111, #113, #115, #118, #120)
 4. Ongoing: Add `c8` coverage reporting to CI pipeline
 5. Quick fix: Add `'out/integration/**'` to vitest `exclude` to silence integration test failures
+
+### 2026-02-17: Remove custom commands feature for v0.1
+**By:** Morty (Extension Dev), requested by Casey Irvine
+**Date:** 2026-02-17
+**Issue:** #131
+
+**What:** Removed `editless.customCommands` setting, `editless.runCustomCommand` command, context menu entry, and all related tests from v0.1. The `custom` CLI provider enum description was updated to no longer reference custom commands.
+
+**Why:** Feature wasn't working reliably and was ambitious for v0.1. UX needs to be sorted before it comes back (#100 remains the north star).
+
+**Impact:** Anyone referencing `editless.customCommands` in their settings.json will see it ignored. No migration needed — the setting was array-defaulting-to-empty, so existing installs degrade silently.
+
+**What stays:** `editless.agentCreationCommand` is a separate feature and was preserved.
