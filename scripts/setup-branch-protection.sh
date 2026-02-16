@@ -13,7 +13,7 @@ gh api -X PUT "repos/$REPO/branches/master/protection" \
 {
   "required_status_checks": {
     "strict": true,
-    "contexts": ["build"]
+    "contexts": ["Lint, Build & Test", "VS Code Integration Tests", "scan"]
   },
   "enforce_admins": false,
   "required_pull_request_reviews": null,
@@ -22,5 +22,6 @@ gh api -X PUT "repos/$REPO/branches/master/protection" \
 EOF
 
 echo "✅ Branch protection configured for master"
-echo "  - CI must pass before merge"
+echo "  - Required checks: Lint, Build & Test, VS Code Integration Tests, scan"
 echo "  - Branch must be up to date before merge"
+echo "  - gh pr merge --auto --squash will wait for these checks"

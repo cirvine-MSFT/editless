@@ -165,15 +165,14 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 **Why:** We now have real CI gates (lint, build, test, integration). Direct merges bypass them. This ensures every change passes gates before hitting master. Draft PRs aren't needed — it's just Casey, so the draft→publish step adds no value. The `--auto` flag makes routine work zero-friction while still gated.
 **Supersedes:** The "all PRs start as drafts" convention is retired for this project.
 
-### 2026-02-16: NEVER merge PRs with failing CI — verify checks before merge
+### 2026-02-16: NEVER merge PRs with failing CI — use --auto --squash
 **By:** Casey Irvine (user directive)
-**What:** Agents MUST verify CI checks pass before merging any PR. Branch protection is not available on this private repo (requires GitHub Pro), and `--auto` merges immediately when no required checks are configured. Enforcement is therefore **procedural**. Rules:
-1. **After creating a PR, wait for CI.** Run `gh pr checks {number} --watch` and wait for ALL checks to pass before proceeding.
-2. **If CI fails, fix it first.** Do not merge. Push fixes to the branch, run `gh pr checks {number} --watch` again, and wait for green.
-3. **Only merge after all checks pass.** Run `gh pr merge {number} --squash` only after step 1 confirms all checks are green.
-4. **Never bypass failing checks.** No exceptions. If checks are flaky, fix the flakiness — don't merge around it.
-5. **The merge command is `gh pr merge {number} --squash`** — do NOT use `--auto` (it merges immediately since no required checks are configured at the repo level).
-**Why:** 4 of the last 10 merged PRs had failing CI ("Lint, Build & Test" = FAILURE). Without branch protection, nothing prevents agents from merging broken code. Agents must self-enforce by watching checks before merging.
+**What:** Agents MUST ensure CI checks pass before merging any PR. Branch protection is now configured on the public repo with required status checks (`Lint, Build & Test`, `VS Code Integration Tests`, `scan`). Rules:
+1. **Always use `gh pr merge {number} --auto --squash`** after creating a PR. The `--auto` flag waits for required checks to pass before merging.
+2. **If CI fails, fix it first.** Push fixes to the branch — `--auto` will re-evaluate and merge when checks go green.
+3. **Never bypass failing checks.** No exceptions. If checks are flaky, fix the flakiness — don't merge around it.
+**Why:** 4 of the last 10 merged PRs (when repo was private) had failing CI. Branch protection with required status checks now enforces this at the platform level. The `--auto` flag is the correct mechanism.
+**Supersedes:** The procedural `gh pr checks --watch` workaround from earlier today (no longer needed — branch protection handles it).
 
 ### 2026-02-16: TreeDataProvider must implement getParent() when using reveal()
 **By:** Morty (Extension Dev), issue #95
