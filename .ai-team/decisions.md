@@ -167,12 +167,13 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 
 ### 2026-02-16: NEVER merge PRs with failing CI — verify checks before merge
 **By:** Casey Irvine (user directive)
-**What:** Agents MUST verify CI checks pass before merging any PR. Branch protection is not available on this private repo, so enforcement is manual. Rules:
-1. **Always use `gh pr merge --auto --squash`** — never `gh pr merge --squash` alone. The `--auto` flag waits for required checks to pass before merging.
-2. **If CI fails, fix it first.** Do not merge. Push fixes, wait for CI to go green, then merge (or let `--auto` handle it).
-3. **Before merging manually** (without `--auto`), run `gh pr checks {number} --watch` and confirm all checks pass.
+**What:** Agents MUST verify CI checks pass before merging any PR. Branch protection is not available on this private repo (requires GitHub Pro), and `--auto` merges immediately when no required checks are configured. Enforcement is therefore **procedural**. Rules:
+1. **After creating a PR, wait for CI.** Run `gh pr checks {number} --watch` and wait for ALL checks to pass before proceeding.
+2. **If CI fails, fix it first.** Do not merge. Push fixes to the branch, run `gh pr checks {number} --watch` again, and wait for green.
+3. **Only merge after all checks pass.** Run `gh pr merge {number} --squash` only after step 1 confirms all checks are green.
 4. **Never bypass failing checks.** No exceptions. If checks are flaky, fix the flakiness — don't merge around it.
-**Why:** 4 of the last 10 merged PRs had failing CI ("Lint, Build & Test" = FAILURE). This repo has no branch protection enforcement (requires GitHub Pro for private repos), so agents must self-enforce. The `--auto` flag is the primary mechanism — it simply won't merge until checks pass.
+5. **The merge command is `gh pr merge {number} --squash`** — do NOT use `--auto` (it merges immediately since no required checks are configured at the repo level).
+**Why:** 4 of the last 10 merged PRs had failing CI ("Lint, Build & Test" = FAILURE). Without branch protection, nothing prevents agents from merging broken code. Agents must self-enforce by watching checks before merging.
 
 ### 2026-02-16: TreeDataProvider must implement getParent() when using reveal()
 **By:** Morty (Extension Dev), issue #95
