@@ -1151,4 +1151,186 @@ describe('TerminalManager', () => {
       });
     });
   });
+
+  // =========================================================================
+  // Session ID persistence and resume (#94)
+  // =========================================================================
+
+  describe('agent session ID tracking (#94)', () => {
+    it('should store agentSessionId via setAgentSessionId and persist it', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+      const terminal = mgr.launchTerminal(config);
+
+      vi.mocked(ctx.workspaceState.update).mockClear();
+
+      mgr.setAgentSessionId(terminal, 'copilot-session-abc123');
+
+      const info = mgr.getTerminalInfo(terminal);
+      expect(info?.agentSessionId).toBe('copilot-session-abc123');
+
+      const persisted = getLastPersistedState(ctx);
+      expect(persisted).toBeDefined();
+      expect(persisted![0].agentSessionId).toBe('copilot-session-abc123');
+    });
+
+    it('should fire onDidChange when setting agent session ID', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+      const terminal = mgr.launchTerminal(config);
+
+      const changeSpy = vi.fn();
+      mgr.onDidChange(changeSpy);
+
+      mgr.setAgentSessionId(terminal, 'session-xyz');
+      expect(changeSpy).toHaveBeenCalledOnce();
+    });
+
+    it('should be a no-op for an untracked terminal', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const untracked = makeMockTerminal('random');
+
+      vi.mocked(ctx.workspaceState.update).mockClear();
+
+      mgr.setAgentSessionId(untracked, 'session-xyz');
+      expect(ctx.workspaceState.update).not.toHaveBeenCalled();
+    });
+
+    it('should restore agentSessionId after reconciliation', () => {
+      const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const saved = [makePersistedEntry({ agentSessionId: 'restored-session-id' })];
+      const ctx = makeMockContext(saved);
+      const mgr = new TerminalManager(ctx);
+
+      mgr.reconcile();
+
+      const info = mgr.getTerminalInfo(liveTerminal);
+      expect(info?.agentSessionId).toBe('restored-session-id');
+    });
+
+    it('should preserve agentSessionId through reconnectSession', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'reconnect-session-id',
+        terminalName: '🧪 Test Squad #1',
+        displayName: '🧪 Test Squad #1',
+        agentSessionId: 'reconnect-abc',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const result = mgr.reconnectSession(orphanEntry);
+      expect(result).toBe(liveTerminal);
+
+      const info = mgr.getTerminalInfo(liveTerminal);
+      expect(info?.agentSessionId).toBe('reconnect-abc');
+    });
+  });
+
+  describe('launch command persistence (#94)', () => {
+    it('should persist launchCommand from squad config', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ launchCommand: 'agency copilot --agent squad' });
+
+      mgr.launchTerminal(config);
+
+      const persisted = getLastPersistedState(ctx);
+      expect(persisted).toBeDefined();
+      expect(persisted![0].launchCommand).toBe('agency copilot --agent squad');
+    });
+
+    it('should restore launchCommand after reconciliation', () => {
+      const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const saved = [makePersistedEntry({ launchCommand: 'agency copilot --yolo' })];
+      const ctx = makeMockContext(saved);
+      const mgr = new TerminalManager(ctx);
+
+      mgr.reconcile();
+
+      const info = mgr.getTerminalInfo(liveTerminal);
+      expect(info?.launchCommand).toBe('agency copilot --yolo');
+    });
+  });
+
+  describe('relaunch with command (#94)', () => {
+    it('should send launchCommand when relaunching orphaned session', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'relaunch-cmd-1',
+        terminalName: '🧪 No Match',
+        displayName: '🧪 Test Squad #1',
+        launchCommand: 'agency copilot --agent squad',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const terminal = mgr.relaunchSession(orphanEntry);
+
+      expect(terminal.sendText).toHaveBeenCalledWith('agency copilot --agent squad');
+    });
+
+    it('should send resume command with agentSessionId when available', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'relaunch-resume-1',
+        terminalName: '🧪 No Match',
+        displayName: '🧪 Test Squad #1',
+        launchCommand: 'agency copilot --agent squad',
+        agentSessionId: 'session-to-resume',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const terminal = mgr.relaunchSession(orphanEntry);
+
+      expect(terminal.sendText).toHaveBeenCalledWith(
+        'agency copilot --agent squad --resume session-to-resume',
+      );
+    });
+
+    it('should NOT send any command when launchCommand is not set', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'relaunch-no-cmd',
+        terminalName: '🧪 No Match',
+        displayName: '🧪 Test Squad #1',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const terminal = mgr.relaunchSession(orphanEntry);
+
+      expect(terminal.sendText).not.toHaveBeenCalled();
+    });
+
+    it('should preserve agentSessionId and launchCommand in relaunched terminal info', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'relaunch-preserve-1',
+        terminalName: '🧪 No Match',
+        displayName: '🧪 Test Squad #1',
+        launchCommand: 'agency copilot',
+        agentSessionId: 'preserved-session',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const terminal = mgr.relaunchSession(orphanEntry);
+
+      const info = mgr.getTerminalInfo(terminal);
+      expect(info?.agentSessionId).toBe('preserved-session');
+      expect(info?.launchCommand).toBe('agency copilot');
+    });
+  });
 });
