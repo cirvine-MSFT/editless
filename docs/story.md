@@ -32,4 +32,14 @@ My manager asked me how my workflow had changed. And the truth is: things that w
 
 Repos? Editors? I hadn't thought about or touched either in weeks. I simply had a team of agents that knew how I wanted them to work, and they were executing my every command with a simple type or voice.
 
-<!-- To be continued... -->
+## Built in a Weekend
+
+That one-on-one was on a Friday. I set my sights on having EditLess built, out the door, and ready enough for myself — and the world — to use by the end of the long weekend.
+
+I threw together quick prototypes and then used those prototypes to enhance my own workflow, which I then used to build EditLess. Vibe coding, bootstrapping itself. The whole thing was a feedback loop: every feature I added made it easier to add the next one.
+
+## What Comes Next
+
+The tools we use and the models behind them are getting better every day. My true hope is that EditLess is outpaced and replaced by something better very soon — and I will gladly adopt it, rejoicing in being able to use a tool that fits my workflow even better.
+
+But until then, EditLess is good enough for what I need. And I hope it is for you too.
