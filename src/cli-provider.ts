@@ -19,13 +19,13 @@ export interface CliProvider {
 const COPILOT_DEFAULT: Omit<CliProvider, 'detected' | 'version'> = {
   name: 'Copilot CLI',
   command: 'copilot',
-  versionCommand: 'copilot --version',
+  versionCommand: 'copilot version',
   versionRegex: '(\\d+\\.\\d+[\\d.]*)',
   launchCommand: 'copilot --agent $(agent)',
   createCommand: '',
-  updateCommand: '',
+  updateCommand: 'copilot update',
   updateRunCommand: '',
-  upToDatePattern: 'up to date',
+  upToDatePattern: 'latest version',
 };
 
 let _providers: CliProvider[] = [];

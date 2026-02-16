@@ -150,7 +150,7 @@ export function parseRoster(teamMdPath: string): AgentInfo[] {
     const content = fs.readFileSync(teamMdPath, 'utf-8');
     const agents: AgentInfo[] = [];
 
-    const membersMatch = content.match(/##\s+Members\s+\|[\s\S]*?(?=\n##|\n\n##|$)/i);
+    const membersMatch = content.match(/##\s+Members\s*\n+\|[\s\S]*?(?=\n##|\n\n##|$)/i);
     if (!membersMatch) return [];
 
     const tableContent = membersMatch[0];
