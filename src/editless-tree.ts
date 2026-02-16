@@ -363,10 +363,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         children = state.roster.map(a => this.buildAgentItem(a, squadId));
         break;
       case 'decisions':
-        children = state.recentDecisions.map(d => this.buildDecisionItem(d));
+        children = state.recentDecisions.map((d, i) => this.buildDecisionItem(d, squadId, i));
         break;
       case 'activity':
-        children = state.recentActivity.map(a => this.buildActivityItem(a));
+        children = state.recentActivity.map((a, i) => this.buildActivityItem(a, squadId, i));
         break;
     }
 
@@ -380,22 +380,25 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   }
 
   private buildAgentItem(agent: AgentInfo, squadId?: string): EditlessTreeItem {
-    const item = new EditlessTreeItem(agent.name, 'agent', vscode.TreeItemCollapsibleState.None, squadId);
+    const item = new EditlessTreeItem(agent.name, 'agent', vscode.TreeItemCollapsibleState.None);
+    item.id = squadId ? `${squadId}:agent:${agent.name}` : undefined;
     item.description = agent.role;
     item.iconPath = new vscode.ThemeIcon('person');
     return item;
   }
 
-  private buildDecisionItem(decision: DecisionEntry): EditlessTreeItem {
+  private buildDecisionItem(decision: DecisionEntry, squadId?: string, index?: number): EditlessTreeItem {
     const item = new EditlessTreeItem(decision.title, 'decision');
+    item.id = squadId ? `${squadId}:decision:${index}` : undefined;
     item.description = `${decision.date} by ${decision.author}`;
     item.iconPath = new vscode.ThemeIcon('law');
     item.tooltip = decision.summary || undefined;
     return item;
   }
 
-  private buildActivityItem(activity: RecentActivity): EditlessTreeItem {
+  private buildActivityItem(activity: RecentActivity, squadId?: string, index?: number): EditlessTreeItem {
     const item = new EditlessTreeItem(`${activity.agent}: ${activity.task}`, 'activity');
+    item.id = squadId ? `${squadId}:activity:${index}` : undefined;
     item.description = activity.outcome;
     item.iconPath = new vscode.ThemeIcon('pulse');
     return item;
