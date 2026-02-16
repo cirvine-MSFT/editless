@@ -41,6 +41,12 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     this._onDidChangeTreeData.fire();
   }
 
+  private _adoRefresh?: () => Promise<void>;
+
+  setAdoRefresh(fn: () => Promise<void>): void {
+    this._adoRefresh = fn;
+  }
+
   refresh(): void {
     this.fetchAll();
   }
@@ -56,21 +62,29 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     this._prs.clear();
     this._onDidChangeTreeData.fire();
 
-    const ghOk = await isGhAvailable();
-    if (!ghOk) {
-      this._loading = false;
-      this._onDidChangeTreeData.fire();
-      return;
+    const fetches: Promise<void>[] = [];
+
+    // GitHub fetch — only if gh CLI is available and repos configured
+    if (this._repos.length > 0) {
+      const ghOk = await isGhAvailable();
+      if (ghOk) {
+        fetches.push(
+          ...this._repos.map(async (repo) => {
+            const prs = await fetchMyPRs(repo);
+            if (prs.length > 0) {
+              this._prs.set(repo, prs);
+            }
+          }),
+        );
+      }
     }
 
-    await Promise.all(
-      this._repos.map(async (repo) => {
-        const prs = await fetchMyPRs(repo);
-        if (prs.length > 0) {
-          this._prs.set(repo, prs);
-        }
-      }),
-    );
+    // ADO fetch — independent of GitHub
+    if (this._adoRefresh) {
+      fetches.push(this._adoRefresh());
+    }
+
+    await Promise.all(fetches);
 
     this._loading = false;
     this._onDidChangeTreeData.fire();
