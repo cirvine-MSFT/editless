@@ -181,6 +181,10 @@ vi.mock('vscode', () => {
       openExternal: mockOpenExternal,
       clipboard: { writeText: vi.fn() },
     },
+    extensions: {
+      getExtension: vi.fn(),
+      onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+    },
     ProgressLocation: { Notification: 15 },
   };
 });

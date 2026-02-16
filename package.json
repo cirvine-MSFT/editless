@@ -106,6 +106,11 @@
         "title": "Go to Settings"
       },
       {
+        "command": "editless.openInSquadUi",
+        "title": "Open in Squad UI",
+        "icon": "$(link-external)"
+      },
+      {
         "command": "editless.changeModel",
         "title": "Change Model"
       },
@@ -270,7 +275,8 @@
         { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@1" },
         { "command": "editless.changeModel", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@2" },
         { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@3" },
-        { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@4" },
+        { "command": "editless.openInSquadUi", "when": "view == editlessTree && viewItem =~ /^squad/ && editless.squadUiAvailable", "group": "squad@4" },
+        { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@5" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal", "group": "inline@99" },
@@ -290,6 +296,7 @@
         { "command": "editless.renameSquad", "when": "false" },
         { "command": "editless.changeModel", "when": "false" },
         { "command": "editless.goToSquadSettings", "when": "false" },
+        { "command": "editless.openInSquadUi", "when": "false" },
         { "command": "editless.hideAgent", "when": "false" },
         { "command": "editless.refreshWorkItems", "when": "false" },
         { "command": "editless.refreshPRs", "when": "false" },

@@ -41,6 +41,10 @@ npm run build
 - [GitHub Workflow](docs/workflows/github-workflow.md) — Managing work with AI agents on GitHub
 - [ADO Workflow](docs/workflows/ado-workflow.md) — Managing work with AI agents on Azure DevOps
 
+## Companion Extensions
+
+- **[SquadUI](https://marketplace.visualstudio.com/items?itemName=csharpfritz.squadui)** — Visualize team state, manage skills, view the squad dashboard. When SquadUI is installed, EditLess adds "Open in Squad UI" to squad context menus for quick cross-linking.
+
 ## License
 
 [MIT](LICENSE)
