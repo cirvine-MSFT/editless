@@ -17,6 +17,8 @@ import { EditlessStatusBar } from './status-bar';
 import { NotificationManager } from './notifications';
 import { SessionContextResolver } from './session-context';
 import { scanSquad } from './scanner';
+import { flushDecisionsInbox } from './inbox-flusher';
+import { resolveTeamDir } from './team-dir';
 import { WorkItemsTreeProvider, WorkItemsTreeItem } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
@@ -36,6 +38,20 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- Registry ----------------------------------------------------------
   const registry = createRegistry(context);
   registry.loadSquads();
+
+  // --- Auto-flush decisions inbox (#66) ------------------------------------
+  for (const squad of registry.loadSquads()) {
+    const teamDir = resolveTeamDir(squad.path);
+    if (teamDir) {
+      const result = flushDecisionsInbox(teamDir);
+      if (result.flushed > 0) {
+        output.appendLine(`[inbox-flush] ${squad.name}: flushed ${result.flushed} decision(s)`);
+      }
+      for (const err of result.errors) {
+        output.appendLine(`[inbox-flush] ${squad.name}: ${err}`);
+      }
+    }
+  }
 
   // --- Terminal manager --------------------------------------------------
   const terminalManager = new TerminalManager(context);
