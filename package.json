@@ -284,11 +284,6 @@
         "command": "editless.renameSquad",
         "key": "f2",
         "when": "focusedView == editlessTree && viewItem == squad"
-      },
-      {
-        "command": "editless.renameSession",
-        "key": "f2",
-        "when": "terminalFocus"
       }
     ],
     "menus": {
