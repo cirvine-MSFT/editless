@@ -32,9 +32,9 @@ New to agentic development? Start here — install EditLess, add a squad, and le
 ## Features
 
 - 🌳 **Agent tree view** — see all discovered agent teams in your workspace
-- 💻 **Terminal integration** — launch and manage agent sessions with session state tracking
 - 📋 **Work items** — view GitHub issues and Azure DevOps work items with label filtering
 - 🔀 **Pull requests** — track PRs across repos, jump to linked issues
+- 💻 **Terminal integration** — launch agent sessions from a work item, PR, or agent — get to work on what you care about faster and never lose track of what a session was for
 - 🔔 **Notifications** — desktop alerts for inbox items and CLI updates
 - 🔄 **Auto-refresh** — work items and PRs poll on a configurable interval
 - 🔍 **Auto-detection** — discovers CLI tools and agent teams automatically
