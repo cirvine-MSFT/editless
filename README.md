@@ -53,6 +53,19 @@ npm run build
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for code style, testing, PR conventions, and the full development guide.
 
+## 🚀 Take the Challenge
+
+Never tried vibe coding? There's no better time to start. Here's the challenge:
+
+1. **Install EditLess** and [GitHub Copilot CLI](https://github.com/github/gh-copilot)
+2. **Add a [Squad](https://github.com/bradygaster/squad)** to any project — even a brand new one
+3. **Give your AI team a task** and watch them work — right from the sidebar
+4. **Review the results** without ever opening another window
+
+That's it. One extension, one sidebar, one workflow. You'll go from zero to managing AI agents in minutes — and you'll wonder why you ever did it any other way.
+
+No experience with agentic development required. No complex setup. Just install, point, and let the AI do the heavy lifting. The editorless revolution starts with a single click.
+
 ## Documentation
 
 - [The EditLess Story](docs/philosophy.md) — Why EditLess exists and the editorless philosophy
