@@ -92,6 +92,8 @@ No experience with agentic development required. No complex setup. Just install,
 
 - **Use your agents to create your agents.** Don't hand-edit your agent files (charters, configs, skills) except for maybe basic boilerplate. Let your agents do their own editing and refinement instead. You hired them to be builders — give them the keys to their own workshop.
 
+## Documentation
+
 - [The EditLess Story](docs/story.md) — How EditLess came to be
 - [The Editorless Philosophy](docs/philosophy.md) — Why go editorless? A deeper dive
 - [Getting Started](docs/getting-started.md) — New to vibe coding? Start here
