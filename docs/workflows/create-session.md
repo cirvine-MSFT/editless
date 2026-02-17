@@ -10,7 +10,7 @@ Launch a terminal session connected to an agent, then give it a meaningful name.
 4. The session appears under the agent in the sidebar tree
 5. Right-click the session → **Rename Session** to give it a meaningful name (e.g., "Auth refactor", "Bug #42", "Review PRs")
 6. Press Enter — the name sticks around even after you close and reopen VS Code
-7. Use `Ctrl+Shift+;` to quickly focus and switch between your sessions
+7. Use `Ctrl+Shift+S` (`Cmd+Shift+S` on macOS) to quickly focus and switch between your sessions
 
 ## Session names help you stay organized
 
@@ -21,7 +21,7 @@ Name your sessions based on what you're working on:
 
 ## Switch between sessions
 
-Press `Ctrl+Shift+;` to bring up a quick-pick menu of all your sessions. Pick one to focus it.
+Press `Ctrl+Shift+S` (`Cmd+Shift+S` on macOS) to bring up a quick-pick menu of all your sessions. Pick one to focus it.
 
 <!-- TODO: Add GIF recording for this workflow -->
 
