@@ -50,6 +50,7 @@ const {
   mockPromptInstallNode,
   mockIsSquadInitialized,
   mockCreateTerminal,
+  mockWorkspaceFsCopy,
   mockAddSquads,
   mockGetActiveProviderLaunchCommand,
   mockDiscoverAllAgents,
@@ -121,6 +122,7 @@ const {
     mockPromptInstallNode: vi.fn(),
     mockIsSquadInitialized: vi.fn().mockReturnValue(false),
     mockCreateTerminal: vi.fn(() => ({ sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
+    mockWorkspaceFsCopy: vi.fn(),
     mockAddSquads: vi.fn(),
     mockGetActiveProviderLaunchCommand: vi.fn().mockReturnValue('copilot --agent'),
     mockDiscoverAllAgents: vi.fn().mockReturnValue([]),
@@ -215,7 +217,7 @@ vi.mock('vscode', () => {
       onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
       workspaceFolders: [],
       openTextDocument: vi.fn().mockResolvedValue({ getText: () => '', positionAt: () => ({}) }),
-      fs: { createDirectory: vi.fn() },
+      fs: { createDirectory: vi.fn(), copy: mockWorkspaceFsCopy },
     },
     env: {
       openExternal: mockOpenExternal,
@@ -1160,29 +1162,75 @@ describe('extension command handlers', () => {
       Object.defineProperty((await import('vscode')).workspace, 'workspaceFolders', { value: origFolders, configurable: true });
     });
 
-    it('should skip mode picker when no provider has createCommand', async () => {
+    it('should do nothing when name input is cancelled', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce(undefined);
+      await getHandler('editless.addAgent')();
+      expect(mockShowQuickPick).not.toHaveBeenCalled();
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+    });
+
+    it('should show source picker with Create new and Import from file', async () => {
       mockGetActiveCliProvider.mockReturnValue(undefined);
       const vscodeModule = await import('vscode');
       const os = await import('os');
       const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
       Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
       mockShowInputBox.mockResolvedValueOnce('test-agent');
-      // Handler will try to write a file — catch that; we only care about QuickPick not being called
-      try { await getHandler('editless.addAgent')(); } catch { /* fs write expected to fail */ }
-      expect(mockShowQuickPick).not.toHaveBeenCalled();
+      mockShowQuickPick.mockResolvedValueOnce(undefined);
+      await getHandler('editless.addAgent')();
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ value: 'create' }),
+          expect.objectContaining({ value: 'import' }),
+        ]),
+        expect.any(Object),
+      );
       Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
     });
 
-    it('should show mode picker when provider has createCommand', async () => {
+    it('should do nothing when source picker is cancelled', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce('test-agent');
+      mockShowQuickPick.mockResolvedValueOnce(undefined);
+      await getHandler('editless.addAgent')();
+      expect(mockShowOpenDialog).not.toHaveBeenCalled();
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+    });
+
+    it('should skip mode picker under Create new when no provider has createCommand', async () => {
+      mockGetActiveCliProvider.mockReturnValue(undefined);
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce('test-agent');
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'create' });
+      try { await getHandler('editless.addAgent')(); } catch { /* fs write expected to fail */ }
+      // source picker was called, but mode picker should not be (only 1 mode item)
+      expect(mockShowQuickPick).toHaveBeenCalledTimes(1);
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+    });
+
+    it('should show mode picker under Create new when provider has createCommand', async () => {
       mockGetActiveCliProvider.mockReturnValue({ name: 'TestCLI', createCommand: 'test-cli create $(agent)' });
       const vscodeModule = await import('vscode');
       const os = await import('os');
       const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
       Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
       mockShowInputBox.mockResolvedValueOnce('test-agent');
-      mockShowQuickPick.mockResolvedValueOnce({ value: 'provider' });
+      mockShowQuickPick
+        .mockResolvedValueOnce({ value: 'create' })
+        .mockResolvedValueOnce({ value: 'provider' });
       await getHandler('editless.addAgent')();
-      expect(mockShowQuickPick).toHaveBeenCalledWith(
+      expect(mockShowQuickPick).toHaveBeenCalledTimes(2);
+      expect(mockShowQuickPick).toHaveBeenNthCalledWith(2,
         expect.arrayContaining([
           expect.objectContaining({ value: 'provider' }),
           expect.objectContaining({ value: 'repo' }),
@@ -1192,10 +1240,81 @@ describe('extension command handlers', () => {
       Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
     });
 
-    it('should do nothing when name input is cancelled', async () => {
-      mockShowInputBox.mockResolvedValueOnce(undefined);
+    it('should open file dialog filtered to .md when Import from file is selected', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce('imported-agent');
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'import' });
+      mockShowOpenDialog.mockResolvedValueOnce(undefined);
       await getHandler('editless.addAgent')();
-      expect(mockShowQuickPick).not.toHaveBeenCalled();
+      expect(mockShowOpenDialog).toHaveBeenCalledWith(
+        expect.objectContaining({
+          canSelectFiles: true,
+          canSelectFolders: false,
+          filters: { 'Markdown': ['md'] },
+        }),
+      );
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+    });
+
+    it('should do nothing when file dialog is cancelled', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce('imported-agent');
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'import' });
+      mockShowOpenDialog.mockResolvedValueOnce(undefined);
+      await getHandler('editless.addAgent')();
+      expect(mockWorkspaceFsCopy).not.toHaveBeenCalled();
+      expect(mockShowTextDocument).not.toHaveBeenCalled();
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+    });
+
+    it('should copy file, open in editor, and refresh tree on successful import', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const tmpDir = os.tmpdir();
+      const testFolders = [{ uri: { fsPath: tmpDir } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce('imported-agent');
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'import' });
+      const sourceUri = { fsPath: '/some/path/agent.md' };
+      mockShowOpenDialog.mockResolvedValueOnce([sourceUri]);
+      mockWorkspaceFsCopy.mockResolvedValueOnce(undefined);
+
+      await getHandler('editless.addAgent')();
+
+      expect(mockWorkspaceFsCopy).toHaveBeenCalledWith(
+        sourceUri,
+        expect.objectContaining({ fsPath: expect.stringContaining('imported-agent.agent.md') }),
+        { overwrite: false },
+      );
+      expect(mockShowTextDocument).toHaveBeenCalled();
+      expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+    });
+
+    it('should show warning when file copy fails', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      mockShowInputBox.mockResolvedValueOnce('imported-agent');
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'import' });
+      const sourceUri = { fsPath: '/some/path/agent.md' };
+      mockShowOpenDialog.mockResolvedValueOnce([sourceUri]);
+      mockWorkspaceFsCopy.mockRejectedValueOnce(new Error('File already exists'));
+
+      await getHandler('editless.addAgent')();
+
+      expect(mockShowWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to import agent file'),
+      );
+      expect(mockShowTextDocument).not.toHaveBeenCalled();
+      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
     });
   });
 
