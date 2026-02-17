@@ -177,10 +177,9 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       return;
     }
     this._loading = true;
-    this._issues.clear();
-    this._allLabels.clear();
-    this._onDidChangeTreeData.fire();
 
+    const nextIssues = new Map<string, GitHubIssue[]>();
+    const nextLabels = new Set<string>();
     const fetches: Promise<void>[] = [];
 
     // GitHub fetch — only if gh CLI is available and repos configured
@@ -191,11 +190,11 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
           ...this._repos.map(async (repo) => {
             const issues = await fetchAssignedIssues(repo);
             for (const issue of issues) {
-              for (const label of issue.labels) this._allLabels.add(label);
+              for (const label of issue.labels) nextLabels.add(label);
             }
             const filtered = this.filterIssues(issues);
             if (filtered.length > 0) {
-              this._issues.set(repo, filtered);
+              nextIssues.set(repo, filtered);
             }
           }),
         );
@@ -209,6 +208,8 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
 
     await Promise.all(fetches);
 
+    this._issues = nextIssues;
+    this._allLabels = nextLabels;
     this._loading = false;
     this._onDidChangeTreeData.fire();
     if (this._pendingRefresh) {
@@ -224,7 +225,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   getChildren(element?: WorkItemsTreeItem): WorkItemsTreeItem[] {
     if (!element) {
       this._planIndex = buildPlanFileIndex();
-      if (this._loading) {
+      if (this._loading && this._issues.size === 0 && this._adoItems.length === 0) {
         const item = new WorkItemsTreeItem('Loading...');
         item.iconPath = new vscode.ThemeIcon('loading~spin');
         return [item];

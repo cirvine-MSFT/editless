@@ -22,13 +22,25 @@ function normalizePath(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
+export interface SessionEvent {
+  type: string;
+  timestamp: string;
+}
+
 interface CacheEntry {
   timestamp: number;
   results: Map<string, SessionContext>;
 }
 
+interface EventCacheEntry {
+  timestamp: number;
+  event: SessionEvent | null;
+}
+
 export class SessionContextResolver {
   private _cache: CacheEntry | null = null;
+  private readonly _eventCache = new Map<string, EventCacheEntry>();
+  private static readonly EVENT_CACHE_TTL_MS = 3_000;
   private readonly _sessionStateDir: string;
 
   constructor() {
@@ -58,6 +70,42 @@ export class SessionContextResolver {
 
   clearCache(): void {
     this._cache = null;
+  }
+
+  getLastEvent(sessionId: string): SessionEvent | null {
+    const now = Date.now();
+    const cached = this._eventCache.get(sessionId);
+    if (cached && (now - cached.timestamp) < SessionContextResolver.EVENT_CACHE_TTL_MS) {
+      return cached.event;
+    }
+
+    const eventsPath = path.join(this._sessionStateDir, sessionId, 'events.jsonl');
+    let event: SessionEvent | null = null;
+
+    try {
+      const fd = fs.openSync(eventsPath, 'r');
+      try {
+        const stats = fs.fstatSync(fd);
+        if (stats.size === 0) { fs.closeSync(fd); return null; }
+        const readSize = Math.min(2048, stats.size);
+        const buffer = Buffer.alloc(readSize);
+        fs.readSync(fd, buffer, 0, readSize, stats.size - readSize);
+        const chunk = buffer.toString('utf-8');
+        const lines = chunk.split('\n').filter(l => l.trim());
+        const lastLine = lines[lines.length - 1];
+        if (lastLine) {
+          const parsed = JSON.parse(lastLine);
+          event = { type: parsed.type, timestamp: parsed.timestamp };
+        }
+      } finally {
+        fs.closeSync(fd);
+      }
+    } catch {
+      // File doesn't exist or read error
+    }
+
+    this._eventCache.set(sessionId, { timestamp: now, event });
+    return event;
   }
 
   private _scan(squadPaths: string[]): Map<string, SessionContext> {

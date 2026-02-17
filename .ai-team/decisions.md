@@ -818,3 +818,37 @@ editless/
 **What:** Gate menu items on VS Code context keys when visibility depends on runtime state that can't be expressed through `viewItem` checks. For the "Upgrade All Squads" button, we use `editless.squadUpgradeAvailable` set via `vscode.commands.executeCommand('setContext', ...)` in `checkSquadUpgradesOnStartup()`.
 
 **Why:** VS Code's TreeView API doesn't support dynamic menu visibility based on tree contents — you can only use `view == <viewId>` (always visible) or `viewItem == <contextValue>` (per-item inline buttons). When a menu action should appear based on aggregate state (e.g., "any squad upgradeable"), a context key is the only option. This pattern should be used for other view-level actions that depend on computed state.
+
+
+# Hidden terminals must exit and have completion listeners
+
+**By:** Morty (Extension Dev)
+**Date:** 2026-02-16
+**Issue:** #232
+
+**What:** When using `hideFromUser: true` terminals for background work (like `npx squad init`), always:
+1. Append `; exit` to the `sendText` command so the shell closes after the command finishes
+2. Register an `onDidCloseTerminal` listener to detect completion and perform follow-up actions
+
+**Why:** `terminal.sendText()` is fire-and-forget — the shell stays open after the command completes. With `hideFromUser: true`, the user has no way to see the terminal or close it manually. Without `; exit`, the terminal lingers forever. Without a close listener, there's no mechanism to act on completion (e.g., registering a newly initialized squad).
+
+**Impact:** Any future feature that uses hidden terminals for background work should follow this pattern. The addSquad handler (#127 added `hideFromUser: true` but didn't add the completion handling) was the first case — this decision prevents the same class of bug.
+
+# ADO auth module uses a setter pattern for output channel
+
+**By:** Morty (Extension Dev)
+**Date:** 2026-02-16
+**Context:** #252 — ADO auth error logging
+
+## Decision
+
+`ado-auth.ts` now uses a module-level `setAdoAuthOutput(channel)` setter to receive the output channel from `activate()`. This avoids changing the `getAdoToken()` and `promptAdoSignIn()` function signatures while still enabling error logging.
+
+## Rationale
+
+The module was already stateful (`_cachedAzToken`), so adding another module-level variable is consistent. Passing the output channel as a parameter to every function would have been a larger API change touching all call sites and test mocks. The setter is called once during `activate()` and works for the module's lifetime.
+
+## Impact
+
+- Any new auth strategies added to `ado-auth.ts` should use `_output?.appendLine(...)` for error logging
+- Tests that want to verify error logging need to call `setAdoAuthOutput()` in setup and clean it up in teardown
