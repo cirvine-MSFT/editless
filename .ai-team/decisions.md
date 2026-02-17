@@ -240,6 +240,7 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 
 
 
+
 ### 2026-02-15: PR workflow — CI gates before merge, no more direct-to-master
 **By:** Casey Irvine (user directive)
 **What:** Stop merging feature branches directly to master. New flow:
@@ -976,6 +977,7 @@ Replaced binary planned/not-planned with **ternary** status:
 Terminal sessions display `waiting-on-input` (bell-dot icon, "waiting on input" description) when they are actually idle. This happens for **every session** within 5 minutes of any command finishing.
 
 
+
 ### 2026-02-17: Session persistence — launchCommand stored in PersistedTerminalInfo
 **By:** Morty (coding agent)
 **Issue:** #94
@@ -1052,6 +1054,7 @@ Option 1 is the cleanest. The tests at lines 939-956 would need updating — the
 
 
 
+
 ### 2026-02-17: User directive
 **By:** Casey (via Copilot)
 **What:** When doing a clean reinstall of the editless extension, only clear editless-specific state (e.g., `globalStorage/cirvine-msft.editless`). Never wipe all of VS Code's `workspaceStorage` — that affects every extension.
@@ -1069,6 +1072,10 @@ Option 1 is the cleanest. The tests at lines 939-956 would need updating — the
 **What:** When a terminal is launched via "Launch with Agent" from a work item or PR, the terminal title should be treated as a sticky label (same as a user-initiated rename). It should not be overridden by session context summaries or auto-rename logic.
 **Why:** User request — captured for team memory. The session context resolver currently overwrites terminal names, which loses the meaningful "#42 Fix auth timeout" titles that came from work items/PRs.
 
+### 2026-02-17: SETTINGS.md scope values corrected to match package.json
+**By:** Summer
+**What:** All `resource`-scoped settings in SETTINGS.md were documented as "workspace" scope. Corrected to "resource" to match `package.json` `contributes.configuration`. Affected: `registryPath`, `discoveryDir`, `discovery.scanPaths`, `scanDebounceMs`, `github.repos`, `github.issueFilter`, `ado.organization`, `ado.project`, `agentCreationCommand`. Also corrected three stale default values in the CLI provider example (`versionCommand`, `updateCommand`, `upToDatePattern`).
+**Why:** Docs should always match the source of truth in package.json. "resource" and "workspace" are different VS Code scopes — "resource" means the setting can vary per folder in multi-root workspaces, which is the intended behavior for path and repo settings. Incorrect scope documentation would mislead contributors and users trying to configure multi-root workspaces.
 ### 2025-07-18: Cross-platform label compatibility (GitHub ↔ ADO)
 **By:** Casey Irvine (planning session), Squad Coordinator
 **What:** `status:`, `squad:`, and `go:` labels are portable across GitHub and ADO (colons allowed in ADO tags). `type:` and `priority:` are GitHub-only — ADO handles these natively via Work Item Type and Priority field. Users should use the portable labels identically on both platforms for a consistent experience.

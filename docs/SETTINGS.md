@@ -1,6 +1,6 @@
 # EditLess Settings Reference
 
-All EditLess settings are accessible through VS Code's Settings UI (**Ctrl+,**) or by editing `settings.json` directly. Each setting is prefixed with `editless.` and scoped to workspace or window as indicated.
+All EditLess settings are accessible through VS Code's Settings UI (**Ctrl+,**) or by editing `settings.json` directly. Each setting is prefixed with `editless.` and scoped appropriately (see the Scope column in each table — `resource` settings can vary per folder in multi-root workspaces, `window` settings apply to the whole VS Code window).
 
 ---
 
@@ -10,10 +10,10 @@ Settings for discovering and registering agent teams and standalone agents.
 
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
-| `editless.registryPath` | `string` | `"./agent-registry.json"` | workspace | Path to the agent registry JSON file (relative to workspace root). The registry tracks which agent teams are available and their configuration. |
-| `editless.discoveryDir` | `string` | `""` | workspace | **(Deprecated)** Use `discovery.scanPaths` instead. Directory to scan for squad projects on startup. |
-| `editless.discovery.scanPaths` | `array` | `[]` | workspace | Additional directories to scan for agents and squads on startup and when configuration changes. Accepts absolute paths or paths relative to workspace root. |
-| `editless.scanDebounceMs` | `number` | `500` | workspace | Debounce interval in milliseconds for file-system scanning. Increase this value if you experience excessive refreshes in large workspaces with many file changes. |
+| `editless.registryPath` | `string` | `"./agent-registry.json"` | resource | Path to the agent registry JSON file (relative to workspace root). The registry tracks which agent teams are available and their configuration. |
+| `editless.discoveryDir` | `string` | `""` | resource | **(Deprecated)** Use `discovery.scanPaths` instead. Directory to scan for squad projects on startup. |
+| `editless.discovery.scanPaths` | `array` | `[]` | window | Additional directories to scan for agents and squads on startup and when configuration changes. Accepts absolute paths or paths relative to workspace root. |
+| `editless.scanDebounceMs` | `number` | `500` | resource | Debounce interval in milliseconds for file-system scanning. Increase this value if you experience excessive refreshes in large workspaces with many file changes. |
 
 **Example:**
 
@@ -65,13 +65,13 @@ Each entry in `editless.cli.providers` has this structure:
     {
       "name": "Copilot CLI",
       "command": "copilot",
-      "versionCommand": "copilot version",
+      "versionCommand": "copilot --version",
       "versionRegex": "(\\d+\\.\\d+[\\d.]*)",
       "launchCommand": "copilot --agent $(agent)",
       "createCommand": "",
-      "updateCommand": "copilot update",
+      "updateCommand": "",
       "updateRunCommand": "",
-      "upToDatePattern": "latest version"
+      "upToDatePattern": "up to date"
     }
   ],
   "editless.cli.activeProvider": "auto"
@@ -86,8 +86,8 @@ Settings for displaying GitHub issues and pull requests in the Work Items and Pu
 
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
-| `editless.github.repos` | `array` | `[]` | workspace | GitHub repositories to show in Work Items and Pull Requests panes. Use `"owner/repo"` format (e.g., `["octocat/hello-world"]`). If empty, EditLess auto-detects repositories from workspace using `git remote`. |
-| `editless.github.issueFilter` | `object` | `{}` | workspace | Filter which GitHub issues appear by label. See schema below. |
+| `editless.github.repos` | `array` | `[]` | resource | GitHub repositories to show in Work Items and Pull Requests panes. Use `"owner/repo"` format (e.g., `["octocat/hello-world"]`). If empty, EditLess auto-detects repositories from workspace using `git remote`. |
+| `editless.github.issueFilter` | `object` | `{}` | resource | Filter which GitHub issues appear by label. See schema below. |
 
 ### Issue Filter Schema
 
@@ -118,8 +118,8 @@ Settings for displaying Azure DevOps work items and pull requests.
 
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
-| `editless.ado.organization` | `string` | `""` | workspace | Azure DevOps organization URL (e.g., `"https://dev.azure.com/myorg"`). Required to show work items and PRs from ADO. |
-| `editless.ado.project` | `string` | `""` | workspace | Azure DevOps project name to display in Work Items and Pull Requests panes (e.g., `"MyProject"`). |
+| `editless.ado.organization` | `string` | `""` | resource | Azure DevOps organization URL (e.g., `"https://dev.azure.com/myorg"`). Required to show work items and PRs from ADO. |
+| `editless.ado.project` | `string` | `""` | resource | Azure DevOps project name to display in Work Items and Pull Requests panes (e.g., `"MyProject"`). |
 
 **Example:**
 
@@ -180,7 +180,7 @@ Settings for customizing the agent creation workflow.
 
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
-| `editless.agentCreationCommand` | `string` | `""` | workspace | Custom command to run when adding an agent. Overrides the built-in agent creation flow. Supports variable substitution: `${workspaceFolder}` (workspace root path) and `${agentName}` (user-entered agent name). |
+| `editless.agentCreationCommand` | `string` | `""` | resource | Custom command to run when adding an agent. Overrides the built-in agent creation flow. Supports variable substitution: `${workspaceFolder}` (workspace root path) and `${agentName}` (user-entered agent name). |
 
 **Example — use a custom initialization script:**
 

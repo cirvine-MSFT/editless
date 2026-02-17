@@ -1,38 +1,34 @@
-# Open a session from a work item
+# Launch a Session from a Work Item
 
-Launch a terminal session connected to a specific issue or task. The agent gets full context about what needs to be done.
-
-## Steps
-
-1. In the **Work Items** panel (left sidebar), find a GitHub issue or Azure DevOps work item you want to work on
-2. Right-click the work item → **Launch with Agent**
-3. Pick which agent should work on this item from the quick-pick menu
-4. A new terminal session opens with the Copilot CLI
-5. The agent has the work item context (issue number, title, description)
-6. The session is automatically labeled with work item info (e.g., "PR #234", "Bug #89")
-
-## Perfect for two workflows
-
-**Planning:** "Tell me what you think about this issue" — great for initial analysis and breaking down work.
-
-**Execution:** "Implement this feature" — the agent knows exactly what to build because it has the context.
-
-## Work item context includes
-
-- Issue or task title
-- Description and labels
-- Linked PRs and related items
-- Your agent gets this automatically — no copy/paste needed
+Open a session directly from a GitHub issue or Azure DevOps work item — your agent starts with full context about what you want it to work on.
 
 <!-- TODO: Add GIF recording for this workflow -->
 
----
+## Steps
 
-💡 **Tip:** Start with planning — ask your agent to analyze and summarize the issue before diving into implementation. It's a great way to catch edge cases early.
+1. **Find an issue** in the **Work Items** panel in the EditLess sidebar. These are your GitHub issues or ADO work items.
 
-📖 **See Also:**
-- [Create a session and name it](create-session.md)
-- [GitHub Workflow](github-workflow.md)
-- [ADO Workflow](ado-workflow.md)
+2. **Right-click the work item** and select **Launch with Agent**.
+
+3. **Pick your agent** from the quick-pick menu — choose which agent should work on this item.
+
+4. **A new terminal session opens** with the agent connected and the work item context loaded. The agent knows the issue number, title, and details.
+
+5. **The session is automatically labeled** with the work item info, so you can see at a glance which session is working on which issue.
+
+6. **Start working.** You can use this for:
+   - **Planning** — "Tell me what you think about this issue" or "Break this down into subtasks"
+   - **Execution** — "Implement this feature" or "Fix this bug"
+   - **Investigation** — "What files are related to this issue?" or "What would the impact of this change be?"
+
+## 💡 Tip
+
+This is one of EditLess's most powerful features — context transfer. Instead of copy-pasting issue descriptions into a terminal, your agent starts with everything it needs. No more "here's the issue link, go read it" — the agent already knows.
+
+## 📖 See Also
+
+- [Create and Name a Session](create-session.md) — rename the session for extra clarity
+- [GitHub Workflow](github-workflow.md) — the full issue → PR → merge lifecycle
+- [ADO Workflow](ado-workflow.md) — the Azure DevOps equivalent
 
 ← [Back to Common Workflows](README.md)

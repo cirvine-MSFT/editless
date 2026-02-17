@@ -29,6 +29,8 @@ EditLess integrates with GitHub Copilot CLI and includes native support for [Squ
 
 New to agentic development? Start here — install EditLess, add a squad, and let the AI do the heavy lifting. You'll wonder how you ever worked without it.
 
+![EditLess sidebar showing agents, work items, and terminal sessions](docs/images/hero-screenshot.png)
+
 ## Installation
 
 ### VS Code Marketplace
@@ -104,6 +106,7 @@ No experience with agentic development required. No complex setup. Just install,
 - [The EditLess Story](docs/story.md) — How EditLess came to be
 - [Common Workflows](docs/workflows/README.md) — Step-by-step guides for everyday tasks
 - [The Editorless Philosophy](docs/philosophy.md) — Why go editorless? A deeper dive
+- [Settings Reference](docs/SETTINGS.md) — Every setting explained
 - [Getting Started](docs/getting-started.md) — New to vibe coding? Start here
 - [Multi-Repo Workflow](docs/multi-repo-workflow.md) — Working across multiple repos
 - [GitHub Workflow](docs/workflows/github-workflow.md) — Managing work with AI agents on GitHub
