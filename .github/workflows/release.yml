@@ -80,4 +80,4 @@ jobs:
       # Publish to VS Code Marketplace (only on tag push, not manual dispatch)
       - name: Publish to VS Code Marketplace
         if: github.event_name == 'push'
-        run: vsce publish -p ${{ secrets.VSCE_PAT }}
+        run: npx @vscode/vsce publish -p ${{ secrets.VSCE_PAT }}
