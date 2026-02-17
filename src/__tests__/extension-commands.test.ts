@@ -625,6 +625,13 @@ describe('extension command handlers', () => {
       expect(mockHide).toHaveBeenCalledWith('agent-42');
     });
 
+    it('should strip discovered: prefix when hiding discovered agent', () => {
+      const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
+      item.id = 'discovered:my-agent';
+      getHandler('editless.hideAgent')(item);
+      expect(mockHide).toHaveBeenCalledWith('my-agent');
+    });
+
     it('should no-op when item is undefined', () => {
       getHandler('editless.hideAgent')(undefined);
       expect(mockHide).not.toHaveBeenCalled();
@@ -772,6 +779,13 @@ describe('extension command handlers', () => {
     it('should refresh tree provider', () => {
       getHandler('editless.refresh')();
       expect(mockTreeRefresh).toHaveBeenCalled();
+    });
+
+    it('should re-scan discovered agents on refresh', () => {
+      mockDiscoverAllAgents.mockClear();
+      getHandler('editless.refresh')();
+      expect(mockDiscoverAllAgents).toHaveBeenCalled();
+      expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
     });
   });
 
