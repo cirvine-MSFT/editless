@@ -49,7 +49,7 @@ Not every project needs a full team framework — start simple and adopt Squad w
 ## Other Recommended Tools
 
 - **[Handy](https://github.com/bradygaster/handy)** — A companion tool for agent workflow automation
-- **[SquadUI](https://marketplace.visualstudio.com/items?itemName=csharpfritz.squadui)** — Visualize team state, manage skills, and view the squad dashboard
+- **[SquadUI](https://marketplace.visualstudio.com/items?itemName=csharpfritz.squadui)** — Visualize team state, manage skills, and monitor squad activity
 
 ## The EditLess Philosophy
 

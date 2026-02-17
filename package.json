@@ -285,16 +285,6 @@
         "command": "editless.focusSession",
         "key": "ctrl+shift+s",
         "mac": "cmd+shift+s"
-      },
-      {
-        "command": "editless.renameSession",
-        "key": "f2",
-        "when": "focusedView == editlessTree && viewItem == terminal"
-      },
-      {
-        "command": "editless.renameSquad",
-        "key": "f2",
-        "when": "focusedView == editlessTree && viewItem == squad"
       }
     ],
     "menus": {
