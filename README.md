@@ -4,6 +4,13 @@
 
 [![Preview Status](https://img.shields.io/badge/status-preview-blue)](https://github.com/cirvine-MSFT/editless)
 [![CI Status](https://github.com/cirvine-MSFT/editless/actions/workflows/ci.yml/badge.svg)](https://github.com/cirvine-MSFT/editless/actions/workflows/ci.yml)
+[![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/cirvine-MSFT.editless)](https://marketplace.visualstudio.com/items?itemName=cirvine-MSFT.editless)
+[![VS Code Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/cirvine-MSFT.editless)](https://marketplace.visualstudio.com/items?itemName=cirvine-MSFT.editless)
+[![VS Code Marketplace Rating](https://img.shields.io/visual-studio-marketplace/r/cirvine-MSFT.editless)](https://marketplace.visualstudio.com/items?itemName=cirvine-MSFT.editless)
+[![GitHub Stars](https://img.shields.io/github/stars/cirvine-MSFT/editless)](https://github.com/cirvine-MSFT/editless/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/cirvine-MSFT/editless)](https://github.com/cirvine-MSFT/editless/issues)
+[![GitHub Forks](https://img.shields.io/github/forks/cirvine-MSFT/editless)](https://github.com/cirvine-MSFT/editless/network/members)
+[![Last Commit](https://img.shields.io/github/last-commit/cirvine-MSFT/editless)](https://github.com/cirvine-MSFT/editless/commits)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 🎉 **Hey there!** EditLess is still in preview — we're building it in the open and **we'd love your feedback.** If you hit any snags, rough edges, or brilliant ideas, [please open an issue](https://github.com/cirvine-MSFT/editless/issues). We read every one, and your input shapes what's next. This is a living project, and you're part of making it better.
