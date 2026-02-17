@@ -223,7 +223,19 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
 
   for (const folder of folders) {
     const folderPath = folder.uri.fsPath;
-    if (existingPaths.has(folderPath.toLowerCase())) { continue; }
+    if (existingPaths.has(folderPath.toLowerCase())) {
+      // When team.md appears for an already-registered "unknown" squad, update it
+      const existingSquad = existing.find(s => s.path.toLowerCase() === folderPath.toLowerCase());
+      if (existingSquad?.universe === 'unknown') {
+        const teamMdPath = resolveTeamMd(folderPath);
+        if (teamMdPath) {
+          const content = fs.readFileSync(teamMdPath, 'utf-8');
+          const parsed = parseTeamMd(content, folder.name);
+          registry.updateSquad(existingSquad.id, parsed);
+        }
+      }
+      continue;
+    }
 
     const teamMdPath = resolveTeamMd(folderPath);
     if (teamMdPath) {
