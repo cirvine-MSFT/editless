@@ -165,6 +165,34 @@ describe('fetchMyPRs', () => {
     mockExecFileAsync.mockResolvedValue({ stdout: '}{bad', stderr: '' });
     expect(await fetchMyPRs('owner/repo')).toEqual([]);
   });
+
+  it('should retry without autoMergeRequest on Unknown JSON field error', async () => {
+    const ghOutput = JSON.stringify([
+      {
+        number: 10,
+        title: 'Add feature',
+        state: 'OPEN',
+        isDraft: false,
+        url: 'https://github.com/owner/repo/pull/10',
+        headRefName: 'feat-branch',
+        baseRefName: 'main',
+        reviewDecision: 'APPROVED',
+      },
+    ]);
+    mockExecFileAsync
+      .mockRejectedValueOnce(new Error('Unknown JSON field: "autoMergeRequest"'))
+      .mockResolvedValueOnce({ stdout: ghOutput, stderr: '' });
+
+    const prs = await fetchMyPRs('owner/repo');
+
+    expect(prs).toHaveLength(1);
+    expect(prs[0].number).toBe(10);
+    expect(mockExecFileAsync).toHaveBeenCalledTimes(2);
+    // Second call should not include autoMergeRequest
+    const secondCallArgs = mockExecFileAsync.mock.calls[1][1] as string[];
+    const jsonArg = secondCallArgs[secondCallArgs.indexOf('--json') + 1];
+    expect(jsonArg).not.toContain('autoMergeRequest');
+  });
 });
 
 // ---------------------------------------------------------------------------

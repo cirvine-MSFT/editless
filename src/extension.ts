@@ -20,7 +20,7 @@ import { SessionContextResolver } from './session-context';
 import { scanSquad } from './scanner';
 import { flushDecisionsInbox } from './inbox-flusher';
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
-import { resolveTeamDir } from './team-dir';
+import { resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
 import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem, type PRsFilter } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
@@ -157,6 +157,22 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       }
     }),
   );
+
+  // --- Workspace watcher for new .ai-team/ or .squad/ directories ----------
+  // Detects when squad init runs in-session (outside the addSquad command flow)
+  for (const dirName of TEAM_DIR_NAMES) {
+    for (const folder of (vscode.workspace.workspaceFolders ?? [])) {
+      const pattern = new vscode.RelativePattern(folder, `${dirName}/team.md`);
+      const teamMdWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+      teamMdWatcher.onDidCreate(() => {
+        autoRegisterWorkspaceSquads(registry);
+        treeProvider.refresh();
+        squadWatcher.updateSquads(registry.loadSquads());
+        statusBar.update();
+      });
+      context.subscriptions.push(teamMdWatcher);
+    }
+  }
 
   // --- Status bar ----------------------------------------------------------
   const statusBar = new EditlessStatusBar(registry, terminalManager);
@@ -1123,6 +1139,25 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
           vscode.window.showInformationMessage(
             `Squad "${match[0].name}" added to registry.`,
           );
+        } else if (resolveTeamDir(dirPath)) {
+          // squad init creates .ai-team/ before the coordinator writes team.md
+          const existing = registry.loadSquads();
+          const alreadyRegistered = existing.some(s => s.path.toLowerCase() === dirPath.toLowerCase());
+          if (!alreadyRegistered) {
+            const folderName = path.basename(dirPath);
+            registry.addSquads([{
+              id: folderName.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase(),
+              name: folderName,
+              path: dirPath,
+              icon: '🔷',
+              universe: 'unknown',
+              launchCommand: getActiveProviderLaunchCommand(),
+            }]);
+            treeProvider.refresh();
+            vscode.window.showInformationMessage(
+              `Squad "${folderName}" added to registry.`,
+            );
+          }
         }
       });
       context.subscriptions.push(listener);

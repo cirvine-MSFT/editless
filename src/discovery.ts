@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AgentTeamConfig } from './types';
 import { EditlessRegistry } from './registry';
-import { resolveTeamMd } from './team-dir';
+import { resolveTeamMd, resolveTeamDir } from './team-dir';
 import { getActiveProviderLaunchCommand } from './cli-provider';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
@@ -226,20 +226,30 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
     if (existingPaths.has(folderPath.toLowerCase())) { continue; }
 
     const teamMdPath = resolveTeamMd(folderPath);
-    if (!teamMdPath) { continue; }
+    if (teamMdPath) {
+      const content = fs.readFileSync(teamMdPath, 'utf-8');
+      const parsed = parseTeamMd(content, folder.name);
 
-    const content = fs.readFileSync(teamMdPath, 'utf-8');
-    const parsed = parseTeamMd(content, folder.name);
-
-    toAdd.push({
-      id: toKebabCase(folder.name),
-      name: parsed.name,
-      description: parsed.description,
-      path: folderPath,
-      icon: '🔷',
-      universe: parsed.universe,
-      launchCommand: getActiveProviderLaunchCommand(),
-    });
+      toAdd.push({
+        id: toKebabCase(folder.name),
+        name: parsed.name,
+        description: parsed.description,
+        path: folderPath,
+        icon: '🔷',
+        universe: parsed.universe,
+        launchCommand: getActiveProviderLaunchCommand(),
+      });
+    } else if (resolveTeamDir(folderPath)) {
+      // squad init creates .ai-team/ before the coordinator writes team.md
+      toAdd.push({
+        id: toKebabCase(folder.name),
+        name: folder.name,
+        path: folderPath,
+        icon: '🔷',
+        universe: 'unknown',
+        launchCommand: getActiveProviderLaunchCommand(),
+      });
+    }
   }
 
   if (toAdd.length > 0) {
