@@ -1444,6 +1444,21 @@ describe('extension command handlers', () => {
       expect(mockLaunchTerminal).toHaveBeenCalledWith(squad, '#42 Fix bug');
     });
 
+    it('should persist terminal name as sticky label after launch', async () => {
+      const squad = makeSquad();
+      const item = { issue: { number: 42, title: 'Fix bug', url: 'https://example.com/42', repository: 'owner/repo' } };
+      const mockTerminal = { name: '#42 Fix bug' };
+      mockLoadSquads.mockReturnValue([squad]);
+      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', squad });
+      mockLaunchTerminal.mockReturnValue(mockTerminal);
+      mockGetLabelKey.mockReturnValue('terminal:squad-1-123-1');
+
+      await getHandler('editless.launchFromWorkItem')(item);
+
+      expect(mockGetLabelKey).toHaveBeenCalledWith(mockTerminal);
+      expect(mockSetLabel).toHaveBeenCalledWith('terminal:squad-1-123-1', '#42 Fix bug');
+    });
+
     it('should no-op when item has no issue', async () => {
       await getHandler('editless.launchFromWorkItem')({});
       expect(mockLaunchTerminal).not.toHaveBeenCalled();
