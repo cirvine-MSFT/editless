@@ -160,7 +160,7 @@ describe('WorkItemsTreeProvider', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['r']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     const children = provider.getChildren();
     expect(children).toHaveLength(1);
@@ -179,7 +179,7 @@ describe('WorkItemsTreeProvider', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['r']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     const children = provider.getChildren();
     expect(children).toHaveLength(1);
@@ -198,7 +198,7 @@ describe('WorkItemsTreeProvider', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['r']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     const roots = provider.getChildren();
     expect(roots).toHaveLength(2);
@@ -225,7 +225,7 @@ describe('WorkItemsTreeProvider', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['r']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     const children = provider.getChildren();
     expect(children).toHaveLength(2);
