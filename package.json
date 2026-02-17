@@ -174,7 +174,7 @@
         "command": "editless.addSquad",
         "title": "Add Squad",
         "category": "EditLess",
-        "icon": "$(file-directory-create)"
+        "icon": "$(organization)"
       },
       {
         "command": "editless.refreshWorkItems",
