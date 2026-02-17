@@ -41,3 +41,53 @@ The workflows index (`docs/workflows/README.md`) organizes guides into two secti
 - `docs/workflows/create-agent.md` — Add agents/squads
 - `docs/workflows/create-session.md` — Launch and name sessions
 - `docs/workflows/launch-from-work-item.md` — Open from work items
+
+### 2026-02-17: Release Workflow vsce Fix Pattern
+
+**Decided by:** Birdperson  
+**Date:** 2026-02-17
+
+## Decision
+
+Use `npx @vscode/vsce` instead of bare `vsce` in CI/CD release workflows.
+
+## Rationale
+
+The v0.1.0 release failed at the marketplace publish step with `vsce: command not found` (exit code 127). The publish step was calling:
+
+```yaml
+run: vsce publish -p ${{ secrets.VSCE_PAT }}
+```
+
+But `vsce` was not installed or in $PATH. The tool is declared as a devDependency (`@vscode/vsce`), so it exists locally but npm didn't add its binary to $PATH in the GitHub Actions environment.
+
+## Solution
+
+Use npx to resolve the package:
+
+```yaml
+run: npx @vscode/vsce publish -p ${{ secrets.VSCE_PAT }}
+```
+
+npx:
+1. Checks node_modules for `@vscode/vsce` and uses its binary if found
+2. Falls back to downloading the package if not present
+3. Executes the command in a safe subprocess
+
+## Applies To
+
+Any npm package binary that needs to run in CI. Pattern:
+- ❌ Bare command: `vsce`, `tsc`, `eslint` (may not be in $PATH)
+- ✅ With npx: `npx @vscode/vsce`, `npx tsc`, `npx eslint`
+
+## Related
+
+- PR: #275 (fix: install vsce before marketplace publish)
+- Workflow: `.github/workflows/release.yml` line 83
+- Config: `package.json` devDependencies includes `@vscode/vsce`
+
+### 2026-02-17: Release branching strategy — ship from master, no release branches yet
+
+**By:** Casey (via Copilot)  
+**What:** v0.1.x bugfix releases and v0.2.0 feature releases both ship from master. No release branches until we need to hotfix an old version while new features are in flight. Version bump in package.json happens right before tagging (not after release). Workflow: fix bugs on master → bump package.json to 0.1.1 → commit → tag v0.1.1 → push tag → pipeline publishes. If we later need to hotfix v0.1.x while v0.2 is in progress, THEN create a `release/v0.1` branch from the last v0.1.x tag and cherry-pick.  
+**Why:** Solo dev with one active line of development — release branches add complexity with no benefit right now. Keeping it simple until parallel release lines are actually needed.
