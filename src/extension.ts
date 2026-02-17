@@ -8,9 +8,10 @@ import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand, checkSquadUpgradesOnStartup, clearLatestVersionCache } from './squad-upgrader';
-import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider } from './cli-provider';
-import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads } from './discovery';
+import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider, getActiveProviderLaunchCommand } from './cli-provider';
+import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
+import type { AgentTeamConfig } from './types';
 import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
@@ -25,7 +26,7 @@ import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { TerminalLayoutManager } from './terminal-layout';
-import { getAdoToken, promptAdoSignIn } from './ado-auth';
+import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
 import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
 
 const execFileAsync = promisify(execFile);
@@ -33,6 +34,7 @@ const execFileAsync = promisify(execFile);
 export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {
   const output = vscode.window.createOutputChannel('EditLess');
   context.subscriptions.push(output);
+  setAdoAuthOutput(output);
 
   // --- CLI provider detection (async, non-blocking) -------------------------
   vscode.commands.executeCommand('setContext', 'editless.cliUpdateAvailable', false);
@@ -485,6 +487,32 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
+  // Promote discovered agent to registry (#250)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.promoteDiscoveredAgent', (item?: EditlessTreeItem) => {
+      if (!item?.id) return;
+      const agentId = item.id.replace(/^discovered:/, '');
+      const agent = discoveredAgents.find(a => a.id === agentId);
+      if (!agent) return;
+
+      const config: AgentTeamConfig = {
+        id: agent.id,
+        name: agent.name,
+        path: path.dirname(agent.filePath),
+        icon: '🤖',
+        universe: 'standalone',
+        description: agent.description,
+        launchCommand: getActiveProviderLaunchCommand(),
+      };
+
+      registry.addSquads([config]);
+      discoveredAgents = discoveredAgents.filter(a => a.id !== agent.id);
+      treeProvider.setDiscoveredAgents(discoveredAgents);
+      treeProvider.refresh();
+      vscode.window.showInformationMessage(`Added "${agent.name}" to registry.`);
+    }),
+  );
+
   // Show hidden agents (QuickPick)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.showHiddenAgents', async () => {
@@ -593,7 +621,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const choice = await vscode.window.showQuickPick(
         [
           { label: 'GitHub', description: 'Configure GitHub repositories for work items', command: 'editless.configureRepos' },
-          { label: 'Azure DevOps', description: 'Configure Azure DevOps project and PAT', command: 'editless.configureAdo' },
+          { label: 'Azure DevOps', description: 'Configure Azure DevOps project', command: 'editless.configureAdo' },
         ],
         { placeHolder: 'Choose a provider to configure' },
       );
@@ -609,7 +637,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const choice = await vscode.window.showQuickPick(
         [
           { label: 'GitHub', description: 'Configure GitHub repositories for pull requests', command: 'editless.configureRepos' },
-          { label: 'Azure DevOps', description: 'Configure Azure DevOps project and PAT', command: 'editless.configureAdo' },
+          { label: 'Azure DevOps', description: 'Configure Azure DevOps project', command: 'editless.configureAdo' },
         ],
         { placeHolder: 'Choose a provider to configure' },
       );
@@ -927,12 +955,30 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         cwd: dirPath,
         hideFromUser: true,
       });
-      terminal.sendText(command);
+      terminal.sendText(command + '; exit');
+
+      // Auto-register the squad when the hidden terminal closes
+      const listener = vscode.window.onDidCloseTerminal(closedTerminal => {
+        if (closedTerminal !== terminal) { return; }
+        listener.dispose();
+
+        const parentDir = path.dirname(dirPath);
+        const discovered = discoverAgentTeams(parentDir, registry.loadSquads());
+        const match = discovered.filter(s => s.path.toLowerCase() === dirPath.toLowerCase());
+        if (match.length > 0) {
+          registry.addSquads(match);
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(
+            `Squad "${match[0].name}" added to registry.`,
+          );
+        }
+      });
+      context.subscriptions.push(listener);
 
       vscode.window.showInformationMessage(
         squadExists
           ? `Squad upgrade started in ${path.basename(dirPath)}.`
-          : `Squad initialization started in ${path.basename(dirPath)}. After it completes, use "Discover Squads" to add it to the registry.`,
+          : `Squad initialization started in ${path.basename(dirPath)}.`,
       );
     }),
   );
@@ -1033,7 +1079,11 @@ async function initAdoIntegration(
   }
 
   async function fetchAdoData(): Promise<void> {
-    const token = await getAdoToken(context.secrets);
+    let token = await getAdoToken(context.secrets);
+    if (!token) {
+      // Auto-prompt Microsoft SSO before falling back to warning toast
+      token = await promptAdoSignIn();
+    }
     if (!token) {
       vscode.window.showWarningMessage(
         'Azure DevOps: authentication required',

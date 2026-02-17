@@ -145,6 +145,12 @@
         "category": "EditLess"
       },
       {
+        "command": "editless.promoteDiscoveredAgent",
+        "title": "Add to Registry",
+        "category": "EditLess",
+        "icon": "$(add)"
+      },
+      {
         "command": "editless.hideAgent",
         "title": "Hide"
       },
@@ -314,6 +320,7 @@
         { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@3" },
         { "command": "editless.openInSquadUi", "when": "view == editlessTree && viewItem =~ /^squad/ && editless.squadUiAvailable", "group": "squad@4" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@5" },
+        { "command": "editless.promoteDiscoveredAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal", "group": "inline@99" },
@@ -348,6 +355,7 @@
         { "command": "editless.configureRepos", "when": "false" },
         { "command": "editless.configureAdo", "when": "false" },
         { "command": "editless.addNew", "when": "false" },
+        { "command": "editless.promoteDiscoveredAgent", "when": "false" },
         { "command": "editless.relaunchSession", "when": "false" },
         { "command": "editless.dismissOrphan", "when": "false" }
       ]
