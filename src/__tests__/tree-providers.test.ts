@@ -795,3 +795,131 @@ describe('EditlessTreeProvider — upgrade indicator', () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 });
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — Tree Item ID Collision Prevention (Issue #227)
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('agents with same name in different squads have different IDs', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
+      { id: 'squad-b', name: 'Squad B', path: '/projects/beta', icon: '🚀', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+    const squadAItem = roots.find(r => r.squadId === 'squad-a')!;
+    const squadBItem = roots.find(r => r.squadId === 'squad-b')!;
+
+    const squadAChildren = provider.getChildren(squadAItem);
+    const squadBChildren = provider.getChildren(squadBItem);
+
+    const rosterA = squadAChildren.find(c => c.categoryKind === 'roster')!;
+    const rosterB = squadBChildren.find(c => c.categoryKind === 'roster')!;
+
+    const agentsA = provider.getChildren(rosterA);
+    const agentsB = provider.getChildren(rosterB);
+
+    expect(agentsA.length).toBeGreaterThan(0);
+    expect(agentsB.length).toBeGreaterThan(0);
+    expect(agentsA[0].id).toBeDefined();
+    expect(agentsB[0].id).toBeDefined();
+    expect(agentsA[0].id).not.toBe(agentsB[0].id);
+  });
+
+  it('tree item IDs remain stable across refreshes', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const getRosterIds = () => {
+      const roots = provider.getChildren();
+      const squadItem = roots.find(r => r.squadId === 'squad-a')!;
+      const squadChildren = provider.getChildren(squadItem);
+      const rosterCategory = squadChildren.find(c => c.categoryKind === 'roster')!;
+      const agents = provider.getChildren(rosterCategory);
+      return agents.map(a => a.id);
+    };
+
+    const firstIds = getRosterIds();
+    provider.refresh();
+    const secondIds = getRosterIds();
+
+    expect(firstIds).toEqual(secondIds);
+  });
+
+  it('decision items have unique IDs based on content, not index', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.squadId === 'squad-a')!;
+    const squadChildren = provider.getChildren(squadItem);
+    const decisionsCategory = squadChildren.find(c => c.categoryKind === 'decisions')!;
+    const decisions = provider.getChildren(decisionsCategory);
+
+    expect(decisions.length).toBeGreaterThan(0);
+    expect(decisions[0].id).toBeDefined();
+    expect(decisions[0].id).not.toContain(':0');
+    expect(decisions[0].id).toMatch(/^[a-f0-9]{8}:decision:[a-f0-9]{8}$/);
+  });
+
+  it('activity items have unique IDs based on content, not index', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.squadId === 'squad-a')!;
+    const squadChildren = provider.getChildren(squadItem);
+    const activityCategory = squadChildren.find(c => c.categoryKind === 'activity')!;
+    const activities = provider.getChildren(activityCategory);
+
+    expect(activities.length).toBeGreaterThan(0);
+    expect(activities[0].id).toBeDefined();
+    expect(activities[0].id).not.toContain(':0');
+    expect(activities[0].id).toMatch(/^[a-f0-9]{8}:activity:[a-f0-9]{8}$/);
+  });
+
+  it('all tree item IDs across multiple squads are unique', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
+      { id: 'squad-b', name: 'Squad B', path: '/projects/beta', icon: '🚀', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const collectAllIds = (item?: EditlessTreeItem): string[] => {
+      const children = provider.getChildren(item);
+      const ids: string[] = [];
+      for (const child of children) {
+        if (child.id) ids.push(child.id);
+        ids.push(...collectAllIds(child));
+      }
+      return ids;
+    };
+
+    const allIds = collectAllIds();
+    const uniqueIds = new Set(allIds);
+
+    expect(allIds.length).toBe(uniqueIds.size);
+  });
+});
