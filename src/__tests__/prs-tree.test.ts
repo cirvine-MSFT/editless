@@ -106,7 +106,7 @@ describe('PRsTreeProvider — derivePRState', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['owner/repo']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     const children = provider.getChildren();
     expect(children).toHaveLength(1);
@@ -151,7 +151,7 @@ describe('PRsTreeProvider — multi-repo grouping', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['owner/repo']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     const children = provider.getChildren();
     expect(children).toHaveLength(2);
@@ -170,7 +170,7 @@ describe('PRsTreeProvider — multi-repo grouping', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['owner/repo-a', 'owner/repo-b']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     const roots = provider.getChildren();
     expect(roots).toHaveLength(2);
@@ -210,7 +210,7 @@ describe('PRsTreeProvider — loading & empty states', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['owner/repo']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     const children = provider.getChildren();
     expect(children).toHaveLength(1);
@@ -239,7 +239,7 @@ describe('PRsTreeProvider — merge conflict indicator', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['owner/repo']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     const children = provider.getChildren();
     expect(children).toHaveLength(1);

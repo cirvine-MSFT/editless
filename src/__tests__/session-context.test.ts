@@ -330,4 +330,82 @@ summary: Modified`,
       expect(result).toBeNull();
     });
   });
+
+  describe('getLastEvent', () => {
+    let resolver: any;
+
+    beforeEach(async () => {
+      const module = await import('../session-context');
+      resolver = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+    });
+
+    function writeEvents(sessionId: string, events: Array<{ type: string; timestamp: string }>): void {
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+      const lines = events.map(e => JSON.stringify(e)).join('\n') + '\n';
+      fs.writeFileSync(path.join(sessionDir, 'events.jsonl'), lines, 'utf-8');
+    }
+
+    it('returns last event from events.jsonl', () => {
+      writeEvents('session-1', [
+        { type: 'session.start', timestamp: '2026-01-01T00:00:00Z' },
+        { type: 'user.message', timestamp: '2026-01-01T00:01:00Z' },
+        { type: 'assistant.turn_end', timestamp: '2026-01-01T00:02:00Z' },
+      ]);
+
+      const event = resolver.getLastEvent('session-1');
+      expect(event).toEqual({ type: 'assistant.turn_end', timestamp: '2026-01-01T00:02:00Z' });
+    });
+
+    it('returns null for non-existent session', () => {
+      const event = resolver.getLastEvent('nonexistent');
+      expect(event).toBeNull();
+    });
+
+    it('returns null for empty events.jsonl', () => {
+      const sessionDir = path.join(tmpSessionDir, 'empty-session');
+      fs.mkdirSync(sessionDir, { recursive: true });
+      fs.writeFileSync(path.join(sessionDir, 'events.jsonl'), '', 'utf-8');
+
+      const event = resolver.getLastEvent('empty-session');
+      expect(event).toBeNull();
+    });
+
+    it('returns null for session without events.jsonl', () => {
+      const sessionDir = path.join(tmpSessionDir, 'no-events');
+      fs.mkdirSync(sessionDir, { recursive: true });
+      fs.writeFileSync(path.join(sessionDir, 'workspace.yaml'), 'id: no-events', 'utf-8');
+
+      const event = resolver.getLastEvent('no-events');
+      expect(event).toBeNull();
+    });
+
+    it('caches results within TTL', () => {
+      writeEvents('cached-session', [
+        { type: 'assistant.turn_end', timestamp: '2026-01-01T00:00:00Z' },
+      ]);
+
+      const event1 = resolver.getLastEvent('cached-session');
+      expect(event1?.type).toBe('assistant.turn_end');
+
+      // Overwrite the file — should still return cached value
+      writeEvents('cached-session', [
+        { type: 'tool.execution_start', timestamp: '2026-01-01T00:01:00Z' },
+      ]);
+
+      const event2 = resolver.getLastEvent('cached-session');
+      expect(event2?.type).toBe('assistant.turn_end');
+    });
+
+    it('handles mid-turn events', () => {
+      writeEvents('working-session', [
+        { type: 'session.start', timestamp: '2026-01-01T00:00:00Z' },
+        { type: 'tool.execution_start', timestamp: '2026-01-01T00:01:00Z' },
+      ]);
+
+      const event = resolver.getLastEvent('working-session');
+      expect(event?.type).toBe('tool.execution_start');
+    });
+  });
 });

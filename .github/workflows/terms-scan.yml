@@ -13,13 +13,27 @@ jobs:
         run: |
           found=0
           while IFS= read -r term || [ -n "$term" ]; do
-            # Skip empty lines and comments
             [[ -z "$term" || "$term" == \#* ]] && continue
-            if grep -rni "$term" src/ docs/ --include='*.ts' --include='*.md' --include='*.json'; then
+
+            # Search src/, scripts/, .github/, docs/ but exclude known-safe files
+            matches=$(grep -rniE "$term" \
+              src/ scripts/ .github/ docs/ \
+              --include='*.ts' --include='*.md' --include='*.json' \
+              --include='*.yml' --include='*.yaml' --include='*.sh' \
+              --exclude='internal-terms.txt' \
+              --exclude-dir='__fixtures__' \
+              --exclude-dir='.ai-team' \
+              --exclude-dir='.ai-team-templates' \
+              --exclude-dir='node_modules' \
+              || true)
+
+            if [ -n "$matches" ]; then
               echo "::error::Found internal term: $term"
+              echo "$matches"
               found=1
             fi
           done < .github/internal-terms.txt
+
           if [ "$found" -eq 1 ]; then
             echo "::error::Internal terms detected! Remove them before merging."
             exit 1

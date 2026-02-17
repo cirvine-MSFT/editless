@@ -767,6 +767,60 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
+  // Go to Work Item (context menu on work items)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.goToWorkItem', async (item?: WorkItemsTreeItem) => {
+      const url = item?.issue?.url ?? item?.adoWorkItem?.url;
+      if (url) await vscode.env.openExternal(vscode.Uri.parse(url));
+    }),
+  );
+
+  // Launch from PR (context menu on PRs)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.launchFromPR', async (item?: PRsTreeItem) => {
+      const pr = item?.pr;
+      const adoPR = item?.adoPR;
+      if (!pr && !adoPR) return;
+
+      const squads = registry.loadSquads();
+      if (squads.length === 0) {
+        vscode.window.showWarningMessage('No agents registered.');
+        return;
+      }
+
+      const number = pr?.number ?? adoPR?.id;
+      const title = pr?.title ?? adoPR?.title ?? '';
+      const url = pr?.url ?? adoPR?.url ?? '';
+
+      const pick = await vscode.window.showQuickPick(
+        squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, squad: s })),
+        { placeHolder: `Launch agent for PR #${number} ${title}` },
+      );
+      if (!pick) return;
+
+      const cfg = pick.squad;
+      const MAX_SESSION_NAME = 50;
+      const rawName = `PR #${number} ${title}`;
+      const terminalName = rawName.length <= MAX_SESSION_NAME
+        ? rawName
+        : rawName.slice(0, rawName.lastIndexOf(' ', MAX_SESSION_NAME)) + '…';
+      terminalManager.launchTerminal(cfg, terminalName);
+
+      if (url) {
+        await vscode.env.clipboard.writeText(url);
+        vscode.window.showInformationMessage(`Copied ${url} to clipboard`);
+      }
+    }),
+  );
+
+  // Go to PR in Browser (context menu on PRs)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.goToPRInBrowser', async (item?: PRsTreeItem) => {
+      const url = item?.pr?.url ?? item?.adoPR?.url;
+      if (url) await vscode.env.openExternal(vscode.Uri.parse(url));
+    }),
+  );
+
   // Show all agents
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.showAllAgents', () => {
