@@ -35,7 +35,7 @@ New to agentic development? Start here — install EditLess, add a squad, and le
 
 ### VS Code Marketplace
 
-> 🚧 Coming soon — EditLess will be available directly from the [VS Code Marketplace](https://marketplace.visualstudio.com/).
+**[Install EditLess from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=cirvine-MSFT.editless)** — or search for "EditLess" in the Extensions view (`Ctrl+Shift+X`).
 
 ### Manual Install (VSIX)
 
