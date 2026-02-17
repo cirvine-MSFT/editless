@@ -217,6 +217,9 @@ vi.mock('vscode', () => {
     },
     ProgressLocation: { Notification: 15 },
     QuickPickItemKind: { Separator: -1, Default: 0 },
+    tasks: {
+      onDidEndTask: vi.fn(() => ({ dispose: vi.fn() })),
+    },
   };
 });
 

@@ -490,10 +490,10 @@
         },
         "editless.refreshInterval": {
           "type": "number",
-          "default": 5,
+          "default": 1,
           "minimum": 0,
           "description": "Auto-refresh interval in minutes for Work Items and PRs panels. Set to 0 to disable.",
-          "markdownDescription": "Auto-refresh interval in minutes for the **Work Items** and **Pull Requests** panels.\n\nEditLess also refreshes when the VS Code window regains focus.\n\nSet to `0` to disable auto-refresh entirely (manual refresh only).\n\nDefault: `5` minutes.",
+          "markdownDescription": "Auto-refresh interval in minutes for the **Work Items** and **Pull Requests** panels.\n\nEditLess also refreshes on window focus, terminal close (agent work completing), and after git push/pull operations.\n\nSet to `0` to disable timer-based auto-refresh (event-driven refresh still works).\n\nDefault: `1` minute.",
           "scope": "window",
           "order": 34
         },
