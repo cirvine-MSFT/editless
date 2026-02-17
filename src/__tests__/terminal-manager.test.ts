@@ -54,7 +54,7 @@ vi.mock('../cli-provider', () => ({
   getActiveProviderLaunchCommand: () => '',
 }));
 
-import { TerminalManager, type PersistedTerminalInfo, type SessionState } from '../terminal-manager';
+import { TerminalManager, stateFromEvent, type PersistedTerminalInfo, type SessionState } from '../terminal-manager';
 
 function makeMockTerminal(name: string): vscode.Terminal {
   return {
@@ -1732,6 +1732,152 @@ describe('TerminalManager', () => {
       mgr.detectSessionIds();
       // resolveAll should not be called since there are no valid squad paths
       expect(resolver.resolveAll).not.toHaveBeenCalled();
+    });
+  });
+
+  // =========================================================================
+  // events.jsonl-based state detection
+  // =========================================================================
+
+  describe('stateFromEvent', () => {
+    it('returns working for mid-turn events', () => {
+      const midTurnTypes = [
+        'session.start', 'user.message', 'assistant.turn_start',
+        'assistant.message', 'tool.execution_start', 'tool.execution_complete',
+      ];
+      for (const type of midTurnTypes) {
+        expect(stateFromEvent({ type, timestamp: new Date().toISOString() }, 0)).toBe('working');
+      }
+    });
+
+    it('returns waiting-on-input for recent turn_end', () => {
+      const recent = new Date().toISOString();
+      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: recent }, 0)).toBe('waiting-on-input');
+    });
+
+    it('returns idle for turn_end older than 5 minutes', () => {
+      const old = new Date(Date.now() - 6 * 60 * 1000).toISOString();
+      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: old }, 0)).toBe('idle');
+    });
+
+    it('returns stale for turn_end older than 1 hour', () => {
+      const veryOld = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: veryOld }, 0)).toBe('stale');
+    });
+
+    it('returns needs-attention for turn_end with inbox items', () => {
+      const recent = new Date().toISOString();
+      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: recent }, 3)).toBe('needs-attention');
+    });
+
+    it('returns working even with inbox items when mid-turn', () => {
+      const recent = new Date().toISOString();
+      expect(stateFromEvent({ type: 'tool.execution_start', timestamp: recent }, 5)).toBe('working');
+    });
+
+    it('returns idle for unknown event types', () => {
+      expect(stateFromEvent({ type: 'unknown.event', timestamp: new Date().toISOString() }, 0)).toBe('idle');
+    });
+
+    it('returns needs-attention for unknown event with inbox', () => {
+      expect(stateFromEvent({ type: 'unknown.event', timestamp: new Date().toISOString() }, 1)).toBe('needs-attention');
+    });
+  });
+
+  describe('getSessionState with events.jsonl', () => {
+    function makeResolverWithEvents(eventsBySession: Map<string, { type: string; timestamp: string } | null>) {
+      return {
+        resolveAll: vi.fn(() => new Map()),
+        getLastEvent: vi.fn((sessionId: string) => eventsBySession.get(sessionId) ?? null),
+      };
+    }
+
+    it('uses events.jsonl when agentSessionId is set', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+      const terminal = mgr.launchTerminal(config);
+      mgr.setAgentSessionId(terminal, 'test-session');
+
+      const events = new Map([
+        ['test-session', { type: 'assistant.turn_end', timestamp: new Date().toISOString() }],
+      ]);
+      mgr.setSessionResolver(makeResolverWithEvents(events) as unknown as import('../session-context').SessionContextResolver);
+
+      expect(mgr.getSessionState(terminal)).toBe('waiting-on-input');
+    });
+
+    it('returns working when events.jsonl shows mid-turn', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+      const terminal = mgr.launchTerminal(config);
+      mgr.setAgentSessionId(terminal, 'busy-session');
+
+      const events = new Map([
+        ['busy-session', { type: 'tool.execution_start', timestamp: new Date().toISOString() }],
+      ]);
+      mgr.setSessionResolver(makeResolverWithEvents(events) as unknown as import('../session-context').SessionContextResolver);
+
+      // Even if shell execution says active, events.jsonl takes priority
+      const execution = { commandLine: { value: 'copilot' } } as vscode.TerminalShellExecution;
+      capturedShellStartListener({ terminal, execution });
+
+      expect(mgr.getSessionState(terminal)).toBe('working');
+    });
+
+    it('falls back to shell execution when no agentSessionId', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+      const terminal = mgr.launchTerminal(config);
+
+      // No agentSessionId set — should use shell execution fallback
+      const execution = { commandLine: { value: 'npm test' } } as vscode.TerminalShellExecution;
+      capturedShellStartListener({ terminal, execution });
+
+      expect(mgr.getSessionState(terminal)).toBe('working');
+    });
+
+    it('falls back to shell execution when events.jsonl returns null', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+      const terminal = mgr.launchTerminal(config);
+      mgr.setAgentSessionId(terminal, 'empty-session');
+
+      const events = new Map<string, { type: string; timestamp: string } | null>([
+        ['empty-session', null],
+      ]);
+      mgr.setSessionResolver(makeResolverWithEvents(events) as unknown as import('../session-context').SessionContextResolver);
+
+      const execution = { commandLine: { value: 'copilot' } } as vscode.TerminalShellExecution;
+      capturedShellStartListener({ terminal, execution });
+
+      // Falls back to shell execution → working
+      expect(mgr.getSessionState(terminal)).toBe('working');
+    });
+
+    it('events.jsonl overrides shell execution showing idle while shell says working', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+      const terminal = mgr.launchTerminal(config);
+      mgr.setAgentSessionId(terminal, 'idle-session');
+
+      // Shell says working (copilot process running)
+      const execution = { commandLine: { value: 'copilot' } } as vscode.TerminalShellExecution;
+      capturedShellStartListener({ terminal, execution });
+
+      // But events.jsonl says turn ended 10 minutes ago
+      const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+      const events = new Map([
+        ['idle-session', { type: 'assistant.turn_end', timestamp: tenMinAgo }],
+      ]);
+      mgr.setSessionResolver(makeResolverWithEvents(events) as unknown as import('../session-context').SessionContextResolver);
+
+      // events.jsonl wins — should show idle, not working
+      expect(mgr.getSessionState(terminal)).toBe('idle');
     });
   });
 });
