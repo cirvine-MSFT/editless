@@ -74,4 +74,6 @@
 
 - **Context menu improvements (#265):** Removed misleading `editless.goToPR` from work item context menus (only appeared when no PR existed). Added `editless.goToWorkItem` to work item context menu — opens the issue/work item URL in browser for both GitHub and ADO work items. Added `editless.launchFromPR` to PR context menu — mirrors the work item "Launch with Agent" UX: shows QuickPick of all registered agents, launches terminal with `PR #X Title` naming, and copies PR URL to clipboard. Added `editless.goToPRInBrowser` to PR context menu — opens the PR URL directly in browser. All four commands support both GitHub and ADO resources. Commands are suppressed in command palette (`when: false`) since they require tree item context. 12 new tests (3 per command), 638 total pass, tsc clean. PR #266.
 
+📌 **Team decision (2026-02-17):** Context Menu Commands: Suppress in Command Palette — All context menu commands that require tree item context (editless.goToWorkItem, editless.launchFromPR, etc.) should be suppressed in command palette via `"when": "false"` to reduce palette clutter and avoid confusing users with commands that require tree item context to function. — decided by Morty
+
 
