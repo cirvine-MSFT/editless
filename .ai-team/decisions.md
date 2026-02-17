@@ -614,6 +614,11 @@ Option 1 is the cleanest. The tests at lines 939-956 would need updating — the
 **Status:** Filed as issue #226 for Casey to triage.
 
 
+
+### 2026-02-16: User directive — worktree enforcement reinforced
+**By:** Casey Irvine (via Copilot)
+**What:** The main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY. Never `git checkout <branch>` there. All coding work must happen in worktrees created via `git worktree add`. Squad file changes (.ai-team/) go on master locally in the main clone, then get PR'd from a separate worktree. This rule was already documented but agents kept violating it — Casey is escalating this to a hard constraint.
+**Why:** User request — captured for team memory. Agent spawned for #213 checked out a branch directly on the main clone, breaking Casey's working state. This has happened multiple times despite the existing decision entry.
 ### 2026-02-16: Default release target is v0.1
 **By:** Casey Irvine (user directive)
 **What:** All new issues default to `release:v0.1` unless Casey explicitly says otherwise.
@@ -683,8 +688,94 @@ editless/
 
 
 
-### 2026-02-16: User directive — worktree enforcement reinforced
+### 2026-02-16: Default release target is v0.1
+**By:** Casey Irvine (user directive)
+**What:** All new issues default to `release:v0.1` unless Casey explicitly says otherwise.
+**Why:** User request — captured for team memory
+
+
+### 2026-02-16: Documentation Animation Strategy — GIFs in `docs/media/`
+**By:** Summer (Product Designer)
+**Date:** 2026-02-16
+**Issue:** #43 — Visual workflow documentation with UI demos
+
+**Decision:** EditLess will use **optimized GIFs stored in the repo** with the following approach:
+
+- **Primary Format:** GIF (universal, well-supported, no audio needed)
+- **Recording Tool:** ScreenToGif (Windows, built-in editor, GIF + MP4 fallback)
+- **Storage Location:** `docs/media/` directory in repo
+- **Marketplace Strategy:** Relative paths in README for GitHub/Marketplace rendering
+- **Maintainability:** Document re-recording triggers in PR templates; track UI change impact in code reviews
+
+**Repository Structure:**
+```
+editless/
+├── docs/
+│   ├── media/                    # All demo animations
+│   │   ├── planning-feature.gif
+│   │   ├── review-prs.gif
+│   │   ├── switch-sessions.gif
+│   │   ├── manage-squad.gif
+│   │   └── vibe-loop.gif
+│   └── workflows/                # Existing workflow docs
+└── README.md
+```
+
+**File Naming Convention:**
+- Descriptive, kebab-case (e.g., `planning-feature.gif`, not `demo1.gif`)
+- Reflects the workflow being demonstrated
+- Consistent with EditLess naming conventions
+
+**GIF Specifications (VS Code Marketplace + GitHub):**
+- File size: Under 1 MB per GIF
+- Resolution: Up to 800px width (for mobile/web rendering)
+- Duration: 3–8 seconds per demo
+- Frame rate: 10–15 fps
+
+**ScreenToGif Workflow:**
+1. Open ScreenToGif, set recording region to capture sidebar + VS Code (1280×720 or 1024×768 recommended)
+2. Perform the workflow naturally (3–8 seconds)
+3. Use built-in editor to trim, remove excessive pauses, adjust FPS to stay under 1 MB
+4. Export as GIF (optimize for web)
+5. Place in `docs/media/` with descriptive alt text in markdown
+
+**When to Re-record:**
+- Tree view structure or hierarchy changes
+- Command names or keyboard shortcuts change
+- Button labels or icons change significantly
+- Sidebar layout or panel positioning changes
+- Add to PR template: "❯ Did this change EditLess UI? If yes, update or create a demo GIF in `docs/media/`"
+
+**Workflows to Document (Core v0.1 demos):**
+1. Planning a feature with agents — Agent discovery → Chat → Issue creation
+2. Reviewing PRs from work items view — Click PR → See linked issues → Approve/comment
+3. Switching tasks / terminal sessions — Terminal list → Click session → Resume work
+4. Managing your squad roster — Add squad → View agents → Manage skills/roles
+5. The full vibe coding loop — Create work → Delegate to agent → Review PRs → Close issue
+
+**Why:** GIFs are universal, well-supported, and stored in the repo for reliability. Every popular extension (GitLens, ErrorLens, Todo Tree) uses this approach. Marketplace renders relative paths inline. ScreenToGif is free, Windows-native, and has built-in optimization for web delivery.
+
+
+### 2026-02-16: Bug fixes require regression + UX tests; upgrade paths need dedicated testing
+**By:** Casey (via Copilot)
+**What:** All bug fixes must include regression tests AND UX tests. Upgrade scenarios specifically need tests that either check current state or force an earlier version to validate upgrade paths. We need solid testing for upgrade paths including Copilot CLI version detection with our default settings.
+**Why:** User request — captured for team memory. Ensures bugs don't regress and upgrade UX is thoroughly validated.
+
+
+### 2026-02-16: Use context keys for menu visibility based on dynamic state
+
+**By:** Morty
+
+**What:** Gate menu items on VS Code context keys when visibility depends on runtime state that can't be expressed through `viewItem` checks. For the "Upgrade All Squads" button, we use `editless.squadUpgradeAvailable` set via `vscode.commands.executeCommand('setContext', ...)` in `checkSquadUpgradesOnStartup()`.
+
+**Why:** VS Code's TreeView API doesn't support dynamic menu visibility based on tree contents — you can only use `view == <viewId>` (always visible) or `viewItem == <contextValue>` (per-item inline buttons). When a menu action should appear based on aggregate state (e.g., "any squad upgradeable"), a context key is the only option. This pattern should be used for other view-level actions that depend on computed state.
+
+
+
+### 2026-02-16: Meeseeks writes regression tests for every bug Casey discovers
 **By:** Casey Irvine (via Copilot)
+**What:** When Casey discovers a bug during usage, Meeseeks should write regression tests for that specific scenario BEFORE Morty fixes it. Tests-first approach for all user-discovered bugs.
+**Why:** User request — ensures bugs have proper test coverage and we know exactly what to verify when the fix lands.
 **What:** The main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY. Never `git checkout <branch>` there. All coding work must happen in worktrees created via `git worktree add`. Squad file changes (.ai-team/) go on master locally in the main clone, then get PR'd from a separate worktree. This rule was already documented but agents kept violating it — Casey is escalating this to a hard constraint.
 **Why:** User request — captured for team memory. Agent spawned for #213 checked out a branch directly on the main clone, breaking Casey's working state. This has happened multiple times despite the existing decision entry.
 
