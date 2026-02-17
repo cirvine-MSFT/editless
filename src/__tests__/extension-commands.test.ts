@@ -1760,7 +1760,7 @@ describe('extension command handlers', () => {
         cwd: '/path/to/squad',
         hideFromUser: true,
       });
-      expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx github:bradygaster/squad init; exit');
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx -y github:bradygaster/squad init; exit');
     });
 
     it('should run squad upgrade command for existing squad directory', async () => {
@@ -1776,7 +1776,7 @@ describe('extension command handlers', () => {
         cwd: '/path/to/squad',
         hideFromUser: true,
       });
-      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx github:bradygaster/squad upgrade; exit');
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx -y github:bradygaster/squad upgrade; exit');
     });
 
     it('should show success notification for new squad', async () => {
@@ -1828,7 +1828,7 @@ describe('extension command handlers', () => {
       expect(mockShowOpenDialog).toHaveBeenCalled();
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/squad-dir');
       expect(mockCreateTerminal).toHaveBeenCalled();
-      expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx github:bradygaster/squad init; exit');
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx -y github:bradygaster/squad init; exit');
       expect(mockShowInformationMessage).toHaveBeenCalled();
     });
 
@@ -1845,7 +1845,7 @@ describe('extension command handlers', () => {
       expect(mockShowOpenDialog).toHaveBeenCalled();
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/existing-squad');
       expect(mockCreateTerminal).toHaveBeenCalled();
-      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx github:bradygaster/squad upgrade; exit');
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx -y github:bradygaster/squad upgrade; exit');
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
         'Squad upgrade started in existing-squad.',
       );
