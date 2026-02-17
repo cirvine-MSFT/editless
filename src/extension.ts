@@ -1098,8 +1098,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const dirPath = uris[0].fsPath;
       const squadExists = isSquadInitialized(dirPath);
       const command = squadExists 
-        ? 'npx github:bradygaster/squad upgrade'
-        : 'git init && npx github:bradygaster/squad init';
+        ? 'npx -y github:bradygaster/squad upgrade'
+        : 'git init && npx -y github:bradygaster/squad init';
       const action = squadExists ? 'Upgrade' : 'Init';
 
       const terminal = vscode.window.createTerminal({
