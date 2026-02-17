@@ -8,9 +8,10 @@ import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand, checkSquadUpgradesOnStartup, clearLatestVersionCache } from './squad-upgrader';
-import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider } from './cli-provider';
+import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider, getActiveProviderLaunchCommand } from './cli-provider';
 import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
+import type { AgentTeamConfig } from './types';
 import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
@@ -483,6 +484,32 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!id) return;
       visibilityManager.hide(id);
       treeProvider.refresh();
+    }),
+  );
+
+  // Promote discovered agent to registry (#250)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.promoteDiscoveredAgent', (item?: EditlessTreeItem) => {
+      if (!item?.id) return;
+      const agentId = item.id.replace(/^discovered:/, '');
+      const agent = discoveredAgents.find(a => a.id === agentId);
+      if (!agent) return;
+
+      const config: AgentTeamConfig = {
+        id: agent.id,
+        name: agent.name,
+        path: path.dirname(agent.filePath),
+        icon: '🤖',
+        universe: 'standalone',
+        description: agent.description,
+        launchCommand: getActiveProviderLaunchCommand(),
+      };
+
+      registry.addSquads([config]);
+      discoveredAgents = discoveredAgents.filter(a => a.id !== agent.id);
+      treeProvider.setDiscoveredAgents(discoveredAgents);
+      treeProvider.refresh();
+      vscode.window.showInformationMessage(`Added "${agent.name}" to registry.`);
     }),
   );
 

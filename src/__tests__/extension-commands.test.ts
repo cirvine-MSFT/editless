@@ -52,6 +52,8 @@ const {
   mockCreateTerminal,
   mockWorkspaceFsCopy,
   mockAddSquads,
+  mockGetActiveProviderLaunchCommand,
+  mockDiscoverAllAgents,
   mockDiscoverAgentTeams,
   mockOnDidCloseTerminal,
   MockEditlessTreeItem,
@@ -122,6 +124,8 @@ const {
     mockCreateTerminal: vi.fn(() => ({ sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
     mockWorkspaceFsCopy: vi.fn(),
     mockAddSquads: vi.fn(),
+    mockGetActiveProviderLaunchCommand: vi.fn().mockReturnValue('copilot --agent'),
+    mockDiscoverAllAgents: vi.fn().mockReturnValue([]),
     mockDiscoverAgentTeams: vi.fn().mockReturnValue([]),
     mockOnDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
     MockEditlessTreeItem,
@@ -321,7 +325,7 @@ vi.mock('../cli-provider', () => ({
   probeAllProviders: vi.fn(() => Promise.resolve()),
   resolveActiveProvider: vi.fn(),
   getActiveCliProvider: mockGetActiveCliProvider,
-  getActiveProviderLaunchCommand: vi.fn().mockReturnValue('copilot --agent'),
+  getActiveProviderLaunchCommand: mockGetActiveProviderLaunchCommand,
 }));
 
 vi.mock('../discovery', () => ({
@@ -332,7 +336,7 @@ vi.mock('../discovery', () => ({
 }));
 
 vi.mock('../agent-discovery', () => ({
-  discoverAllAgents: vi.fn(() => []),
+  discoverAllAgents: mockDiscoverAllAgents,
 }));
 
 vi.mock('../watcher', () => ({
@@ -1841,5 +1845,113 @@ describe('extension command handlers', () => {
       expect(adoItem).toBeDefined();
       expect(adoItem!.description).not.toContain('PAT');
     });
+  });
+});
+
+describe('editless.promoteDiscoveredAgent', () => {
+  const testAgent = {
+    id: 'my-agent',
+    name: 'My Agent',
+    filePath: '/workspace/.github/agents/my-agent.agent.md',
+    source: 'workspace' as const,
+    description: 'A test agent',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    commandHandlers.clear();
+    mockLoadSquads.mockReturnValue([]);
+    mockGetHiddenIds.mockReturnValue([]);
+    mockDiscoverAllAgents.mockReturnValue([testAgent]);
+    mockGetActiveProviderLaunchCommand.mockReturnValue('copilot --agent');
+    activate(makeContext());
+  });
+
+  it('should add discovered agent to registry', () => {
+    const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
+    item.id = 'discovered:my-agent';
+
+    getHandler('editless.promoteDiscoveredAgent')(item);
+
+    expect(mockAddSquads).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'my-agent',
+        name: 'My Agent',
+        path: '/workspace/.github/agents',
+        icon: '🤖',
+        universe: 'standalone',
+        description: 'A test agent',
+        launchCommand: 'copilot --agent',
+      }),
+    ]);
+  });
+
+  it('should refresh tree after promotion', () => {
+    const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
+    item.id = 'discovered:my-agent';
+
+    getHandler('editless.promoteDiscoveredAgent')(item);
+
+    expect(mockTreeRefresh).toHaveBeenCalled();
+    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalledWith([]);
+  });
+
+  it('should show confirmation message', () => {
+    const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
+    item.id = 'discovered:my-agent';
+
+    getHandler('editless.promoteDiscoveredAgent')(item);
+
+    expect(mockShowInformationMessage).toHaveBeenCalledWith('Added "My Agent" to registry.');
+  });
+
+  it('should no-op when item has no id', () => {
+    const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
+    item.id = undefined;
+
+    getHandler('editless.promoteDiscoveredAgent')(item);
+
+    expect(mockAddSquads).not.toHaveBeenCalled();
+  });
+
+  it('should no-op when agent is not found in discovered list', () => {
+    const item = new MockEditlessTreeItem('Unknown', 'discovered-agent', 0);
+    item.id = 'discovered:unknown-agent';
+
+    getHandler('editless.promoteDiscoveredAgent')(item);
+
+    expect(mockAddSquads).not.toHaveBeenCalled();
+  });
+
+  it('should no-op when called with no argument', () => {
+    getHandler('editless.promoteDiscoveredAgent')();
+
+    expect(mockAddSquads).not.toHaveBeenCalled();
+  });
+
+  it('should remove promoted agent from discovered list', () => {
+    mockDiscoverAllAgents.mockReturnValue([
+      testAgent,
+      { id: 'other-agent', name: 'Other', filePath: '/workspace/other.agent.md', source: 'workspace' as const },
+    ]);
+    vi.clearAllMocks();
+    commandHandlers.clear();
+    mockLoadSquads.mockReturnValue([]);
+    mockGetHiddenIds.mockReturnValue([]);
+    mockDiscoverAllAgents.mockReturnValue([
+      testAgent,
+      { id: 'other-agent', name: 'Other', filePath: '/workspace/other.agent.md', source: 'workspace' as const },
+    ]);
+    mockGetActiveProviderLaunchCommand.mockReturnValue('copilot --agent');
+    activate(makeContext());
+
+    const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
+    item.id = 'discovered:my-agent';
+
+    getHandler('editless.promoteDiscoveredAgent')(item);
+
+    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalledWith([
+      expect.objectContaining({ id: 'other-agent' }),
+    ]);
   });
 });
