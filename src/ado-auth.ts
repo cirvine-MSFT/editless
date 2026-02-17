@@ -6,6 +6,11 @@ const execFileAsync = promisify(execFile);
 
 let _cachedAzToken: { token: string; expiresAt: number } | undefined;
 const AZ_TOKEN_TTL_MS = 30 * 60 * 1000;
+let _output: vscode.OutputChannel | undefined;
+
+export function setAdoAuthOutput(channel: vscode.OutputChannel): void {
+  _output = channel;
+}
 
 /**
  * Layered ADO auth. Tries in order:
@@ -24,8 +29,8 @@ export async function getAdoToken(secrets: vscode.SecretStorage): Promise<string
     if (session?.accessToken) {
       return session.accessToken;
     }
-  } catch {
-    // Not available or user not signed in
+  } catch (err) {
+    _output?.appendLine(`[ADO auth] Microsoft auth provider error: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   // Strategy 2: PAT from secret storage
@@ -49,8 +54,8 @@ export async function getAdoToken(secrets: vscode.SecretStorage): Promise<string
       _cachedAzToken = { token, expiresAt: Date.now() + AZ_TOKEN_TTL_MS };
       return token;
     }
-  } catch {
-    // az CLI not available
+  } catch (err) {
+    _output?.appendLine(`[ADO auth] az CLI error: ${err instanceof Error ? err.message : String(err)}`);
   }
 
   return undefined;
@@ -64,7 +69,8 @@ export async function promptAdoSignIn(): Promise<string | undefined> {
       { createIfNone: true },
     );
     return session?.accessToken;
-  } catch {
+  } catch (err) {
+    _output?.appendLine(`[ADO auth] Sign-in error: ${err instanceof Error ? err.message : String(err)}`);
     return undefined;
   }
 }

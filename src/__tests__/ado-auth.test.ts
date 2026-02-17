@@ -24,7 +24,7 @@ vi.mock('util', () => ({
   promisify: (fn: Function) => fn,
 }));
 
-import { getAdoToken, promptAdoSignIn, clearAzTokenCache } from '../ado-auth';
+import { getAdoToken, promptAdoSignIn, clearAzTokenCache, setAdoAuthOutput } from '../ado-auth';
 
 function makeSecrets(): { get: typeof mockSecretGet } {
   return { get: mockSecretGet };
@@ -139,5 +139,66 @@ describe('clearAzTokenCache', () => {
     const token = await getAdoToken(makeSecrets() as never);
     expect(mockExecFile).toHaveBeenCalledTimes(2);
     expect(token).toBe('second-token');
+  });
+});
+
+// --- Regression tests for #252: error logging ---
+
+describe('error logging (#252)', () => {
+  const mockAppendLine = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    clearAzTokenCache();
+    setAdoAuthOutput({ appendLine: mockAppendLine } as never);
+  });
+
+  afterEach(() => {
+    setAdoAuthOutput(undefined as never);
+  });
+
+  it('should log auth provider errors to output channel instead of swallowing', async () => {
+    const authError = new Error('Microsoft auth unavailable');
+    mockGetSession.mockRejectedValue(authError);
+    mockSecretGet.mockResolvedValue('fallback-pat');
+
+    await getAdoToken(makeSecrets() as never);
+
+    expect(mockAppendLine).toHaveBeenCalledWith(
+      expect.stringContaining('Microsoft auth unavailable'),
+    );
+  });
+
+  it('should log az CLI errors to output channel instead of swallowing', async () => {
+    mockGetSession.mockResolvedValue(undefined);
+    mockSecretGet.mockResolvedValue(undefined);
+    const azError = new Error('az: command not found');
+    mockExecFile.mockRejectedValue(azError);
+
+    await getAdoToken(makeSecrets() as never);
+
+    expect(mockAppendLine).toHaveBeenCalledWith(
+      expect.stringContaining('az: command not found'),
+    );
+  });
+
+  it('should log promptAdoSignIn errors to output channel instead of swallowing', async () => {
+    const signInError = new Error('User cancelled auth');
+    mockGetSession.mockRejectedValue(signInError);
+
+    await promptAdoSignIn();
+
+    expect(mockAppendLine).toHaveBeenCalledWith(
+      expect.stringContaining('User cancelled auth'),
+    );
+  });
+
+  it('should not throw when output channel is not set', async () => {
+    setAdoAuthOutput(undefined as never);
+    mockGetSession.mockRejectedValue(new Error('fail'));
+    mockSecretGet.mockResolvedValue(undefined);
+    mockExecFile.mockRejectedValue(new Error('fail'));
+
+    await expect(getAdoToken(makeSecrets() as never)).resolves.toBeUndefined();
   });
 });

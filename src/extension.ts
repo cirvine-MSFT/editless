@@ -25,7 +25,7 @@ import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { TerminalLayoutManager } from './terminal-layout';
-import { getAdoToken, promptAdoSignIn } from './ado-auth';
+import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
 import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
 
 const execFileAsync = promisify(execFile);
@@ -33,6 +33,7 @@ const execFileAsync = promisify(execFile);
 export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {
   const output = vscode.window.createOutputChannel('EditLess');
   context.subscriptions.push(output);
+  setAdoAuthOutput(output);
 
   // --- CLI provider detection (async, non-blocking) -------------------------
   vscode.commands.executeCommand('setContext', 'editless.cliUpdateAvailable', false);
@@ -593,7 +594,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const choice = await vscode.window.showQuickPick(
         [
           { label: 'GitHub', description: 'Configure GitHub repositories for work items', command: 'editless.configureRepos' },
-          { label: 'Azure DevOps', description: 'Configure Azure DevOps project and PAT', command: 'editless.configureAdo' },
+          { label: 'Azure DevOps', description: 'Configure Azure DevOps project', command: 'editless.configureAdo' },
         ],
         { placeHolder: 'Choose a provider to configure' },
       );
@@ -609,7 +610,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const choice = await vscode.window.showQuickPick(
         [
           { label: 'GitHub', description: 'Configure GitHub repositories for pull requests', command: 'editless.configureRepos' },
-          { label: 'Azure DevOps', description: 'Configure Azure DevOps project and PAT', command: 'editless.configureAdo' },
+          { label: 'Azure DevOps', description: 'Configure Azure DevOps project', command: 'editless.configureAdo' },
         ],
         { placeHolder: 'Choose a provider to configure' },
       );
@@ -1033,7 +1034,11 @@ async function initAdoIntegration(
   }
 
   async function fetchAdoData(): Promise<void> {
-    const token = await getAdoToken(context.secrets);
+    let token = await getAdoToken(context.secrets);
+    if (!token) {
+      // Auto-prompt Microsoft SSO before falling back to warning toast
+      token = await promptAdoSignIn();
+    }
     if (!token) {
       vscode.window.showWarningMessage(
         'Azure DevOps: authentication required',
