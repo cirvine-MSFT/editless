@@ -11,6 +11,8 @@
 ## Learnings
 
 
+📌 **Team update (2026-02-17):** Release branching strategy — Ship from master, no release branches yet. v0.1.x bugfixes and v0.2.0 features ship from master. No release branches until parallel release lines needed. Version bump happens right before tagging. — decided by Casey
+
 📌 **Team update (2026-02-16):** Documentation animation strategy — EditLess uses optimized GIFs stored in docs/media/ directory. Primary tool: ScreenToGif (Windows). Files must be <1 MB, max 800px width, 3–8 seconds duration. File naming is descriptive kebab-case (e.g., planning-feature.gif). Re-recording triggers documented: UI structure changes, command/shortcut changes, label changes, layout changes. Team reviews animations on code review checklist. — decided by Summer
 
 📌 **Team update (2026-02-16):** Default release target — All new issues default to elease:v0.1 unless Casey explicitly directs otherwise. This ensures v0.1 work is automatically tagged correctly. — decided by Casey Irvine

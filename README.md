@@ -120,6 +120,14 @@ Use EditLess to manage your AI sessions and agents. Open it in a separate VS Cod
 - [GitHub Workflow](docs/workflows/github-workflow.md) — Managing work with AI agents on GitHub
 - [ADO Workflow](docs/workflows/ado-workflow.md) — Managing work with AI agents on Azure DevOps
 
+## Known Issues & Workarounds
+
+EditLess is in active development and some features have known issues. We document workarounds directly in the issue descriptions so you can keep moving while we work on fixes.
+
+👉 **[View issues with workarounds](https://github.com/cirvine-MSFT/editless/issues?q=is%3Aissue+is%3Aopen+label%3Ahas-workaround)** — look for the `has-workaround` label to find issues with documented solutions.
+
+If you run into something that isn't listed, [please open an issue](https://github.com/cirvine-MSFT/editless/issues/new) — we read every one.
+
 ## Companion Extensions
 
 - **[SquadUI](https://marketplace.visualstudio.com/items?itemName=csharpfritz.squadui)** — Visualize team state, manage skills, view the squad dashboard. When SquadUI is installed, EditLess adds "Open in Squad UI" to squad context menus for quick cross-linking.
