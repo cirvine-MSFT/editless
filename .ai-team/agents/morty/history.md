@@ -76,4 +76,6 @@
 
 📌 **Team decision (2026-02-17):** Context Menu Commands: Suppress in Command Palette — All context menu commands that require tree item context (editless.goToWorkItem, editless.launchFromPR, etc.) should be suppressed in command palette via `"when": "false"` to reduce palette clutter and avoid confusing users with commands that require tree item context to function. — decided by Morty
 
+- **Sticky terminal names on launch (#267):** When `launchFromWorkItem` creates a terminal with a custom name, it must also call `labelManager.setLabel(labelKey, name)` to make the name "sticky" — otherwise the tree view and other code paths don't treat it as a user-set label. The rename flow (`renameSession`) already does three steps: (1) rename VS Code tab, (2) persist via labelManager, (3) update internal displayName. Launch flows that set custom names need step 2 as well. Same pattern applies to `launchFromPR` (PR #266) when it merges. 646 tests pass, tsc clean. PR #268.
+
 

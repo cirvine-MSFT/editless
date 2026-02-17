@@ -884,7 +884,8 @@ Replaced binary planned/not-planned with **ternary** status:
 **What:** When doing a clean reinstall of the editless extension, only clear editless-specific state (e.g., `globalStorage/cirvine-msft.editless`). Never wipe all of VS Code's `workspaceStorage` — that affects every extension.
 **Why:** User request — captured for team memory. Broad wipe caused collateral damage to other extensions' cached state.
 
-### 2026-02-17: User directive — sticky terminal names from Launch with Agent
-**By:** Casey Irvine (via Copilot)
-**What:** When a terminal is launched via "Launch with Agent" from a work item or PR, the terminal title should be treated as a sticky label (same as a user-initiated rename). It should not be overridden by session context summaries or auto-rename logic.
-**Why:** User request — captured for team memory. The session context resolver currently overwrites terminal names, which loses the meaningful "#42 Fix auth timeout" titles that came from work items/PRs.
+### 2026-02-17: Sticky terminal names — user requirement and implementation pattern
+**By:** Casey Irvine (user directive); Morty (implementation)
+**What:** When a terminal is launched via "Launch with Agent" from a work item or PR, the terminal title should be treated as a sticky label (same as a user-initiated rename) and must not be overridden by session context summaries or auto-rename logic. Implementation: any code path that creates a terminal with a custom display name (e.g., launchFromWorkItem, launchFromPR) must call labelManager.setLabel(labelKey, name) after 	erminalManager.launchTerminal() to persist the name. Without this, the name is only cosmetic and won't survive tree refreshes or reconciliation.
+**Why:** User wants meaningful work item context visible in terminal titles without having those titles overridden by automatic rename logic. The rename flow already does this (renameSession → setLabel → renameSession), but launch flows were missing the persistence step. This pattern applies to any future command that launches a terminal with a user-meaningful name.
+
