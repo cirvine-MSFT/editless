@@ -201,6 +201,18 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "editless.filterPRs",
+        "title": "Filter PRs",
+        "category": "EditLess",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "editless.clearPRsFilter",
+        "title": "Clear PRs Filter",
+        "category": "EditLess",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "editless.refreshPRs",
         "title": "Refresh PRs",
         "category": "EditLess",
@@ -317,7 +329,9 @@
         { "command": "editless.clearWorkItemsFilter", "when": "view == editlessWorkItems && editless.workItemsFiltered", "group": "navigation@3" },
         { "command": "editless.configureWorkItems", "when": "view == editlessWorkItems", "group": "navigation@4" },
         { "command": "editless.refreshPRs", "when": "view == editlessPRs", "group": "navigation@1" },
-        { "command": "editless.configurePRs", "when": "view == editlessPRs", "group": "navigation@2" }
+        { "command": "editless.filterPRs", "when": "view == editlessPRs", "group": "navigation@2" },
+        { "command": "editless.clearPRsFilter", "when": "view == editlessPRs && editless.prsFiltered", "group": "navigation@3" },
+        { "command": "editless.configurePRs", "when": "view == editlessPRs", "group": "navigation@4" }
       ],
       "view/item/context": [
         { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent$/", "group": "inline@0" },
@@ -357,6 +371,8 @@
         { "command": "editless.clearWorkItemsFilter", "when": "false" },
         { "command": "editless.configureWorkItems", "when": "false" },
         { "command": "editless.refreshPRs", "when": "false" },
+        { "command": "editless.filterPRs", "when": "false" },
+        { "command": "editless.clearPRsFilter", "when": "false" },
         { "command": "editless.configurePRs", "when": "false" },
         { "command": "editless.openInBrowser", "when": "false" },
         { "command": "editless.launchFromWorkItem", "when": "false" },
