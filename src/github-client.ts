@@ -58,15 +58,30 @@ export async function fetchAssignedIssues(repo: string): Promise<GitHubIssue[]> 
   }
 }
 
+const BASE_PR_FIELDS = 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeable,labels';
+
 export async function fetchMyPRs(repo: string): Promise<GitHubPR[]> {
   try {
     const { stdout } = await execFileAsync('gh', [
       'pr', 'list', '--repo', repo, '--author', '@me', '--state', 'open',
-      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeable,labels,autoMergeRequest', '--limit', '50',
+      '--json', `${BASE_PR_FIELDS},autoMergeRequest`, '--limit', '50',
     ]);
     const raw: unknown[] = JSON.parse(stdout);
     return raw.map((p) => parsePR(p, repo));
-  } catch {
+  } catch (err) {
+    // autoMergeRequest not available in older gh CLI versions — retry without it
+    if (err instanceof Error && err.message.includes('Unknown JSON field')) {
+      try {
+        const { stdout } = await execFileAsync('gh', [
+          'pr', 'list', '--repo', repo, '--author', '@me', '--state', 'open',
+          '--json', BASE_PR_FIELDS, '--limit', '50',
+        ]);
+        const raw: unknown[] = JSON.parse(stdout);
+        return raw.map((p) => parsePR(p, repo));
+      } catch {
+        return [];
+      }
+    }
     return [];
   }
 }
@@ -95,11 +110,23 @@ export async function fetchLinkedPRs(repo: string, issueNumber: number): Promise
   try {
     const { stdout } = await execFileAsync('gh', [
       'pr', 'list', '--repo', repo, '--search', `${issueNumber}`, '--state', 'all',
-      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeable,labels,autoMergeRequest', '--limit', '10',
+      '--json', `${BASE_PR_FIELDS},autoMergeRequest`, '--limit', '10',
     ]);
     const raw: unknown[] = JSON.parse(stdout);
     return raw.map((p) => parsePR(p, repo));
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.message.includes('Unknown JSON field')) {
+      try {
+        const { stdout } = await execFileAsync('gh', [
+          'pr', 'list', '--repo', repo, '--search', `${issueNumber}`, '--state', 'all',
+          '--json', BASE_PR_FIELDS, '--limit', '10',
+        ]);
+        const raw: unknown[] = JSON.parse(stdout);
+        return raw.map((p) => parsePR(p, repo));
+      } catch {
+        return [];
+      }
+    }
     return [];
   }
 }

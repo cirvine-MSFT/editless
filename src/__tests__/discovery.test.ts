@@ -361,11 +361,12 @@ describe('autoRegisterWorkspaceSquads', () => {
     const added: AgentTeamConfig[] = [];
     const existing: AgentTeamConfig = {
       id: 'project-a', name: 'Project A', path: folderPath,
-      icon: '🔷', universe: 'unknown', launchCommand: '',
+      icon: '🔷', universe: 'production', launchCommand: '',
     };
     const registry = {
       loadSquads: () => [existing],
       addSquads: (squads: AgentTeamConfig[]) => { added.push(...squads); },
+      updateSquad: () => true,
     };
     autoRegisterWorkspaceSquads(registry as never);
 
@@ -384,6 +385,64 @@ describe('autoRegisterWorkspaceSquads', () => {
     autoRegisterWorkspaceSquads(registry as never);
 
     expect(added).toHaveLength(0);
+  });
+
+  it('updates an existing unknown squad when team.md appears', () => {
+    writeFixture('project-a/.ai-team/team.md', `# Real Squad Name
+> The real description.
+**Universe:** production
+`);
+    const folderPath = path.join(tmpDir, 'project-a');
+    mockWorkspaceFolders.push({ name: 'project-a', uri: { fsPath: folderPath } });
+
+    const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
+    const existing: AgentTeamConfig = {
+      id: 'project-a', name: 'project-a', path: folderPath,
+      icon: '🔷', universe: 'unknown', launchCommand: '',
+    };
+    const registry = {
+      loadSquads: () => [existing],
+      addSquads: () => {},
+      updateSquad: (id: string, data: Record<string, unknown>) => {
+        updates.push({ id, data });
+        return true;
+      },
+    };
+    autoRegisterWorkspaceSquads(registry as never);
+
+    expect(updates).toHaveLength(1);
+    expect(updates[0].id).toBe('project-a');
+    expect(updates[0].data).toEqual({
+      name: 'Real Squad Name',
+      description: 'The real description.',
+      universe: 'production',
+    });
+  });
+
+  it('does not update an existing squad with known universe', () => {
+    writeFixture('project-a/.ai-team/team.md', `# Updated Name
+> Updated description.
+**Universe:** staging
+`);
+    const folderPath = path.join(tmpDir, 'project-a');
+    mockWorkspaceFolders.push({ name: 'project-a', uri: { fsPath: folderPath } });
+
+    const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
+    const existing: AgentTeamConfig = {
+      id: 'project-a', name: 'Project A', path: folderPath,
+      icon: '🔷', universe: 'production', launchCommand: '',
+    };
+    const registry = {
+      loadSquads: () => [existing],
+      addSquads: () => {},
+      updateSquad: (id: string, data: Record<string, unknown>) => {
+        updates.push({ id, data });
+        return true;
+      },
+    };
+    autoRegisterWorkspaceSquads(registry as never);
+
+    expect(updates).toHaveLength(0);
   });
 
   it('does nothing when no workspace folders exist', () => {
