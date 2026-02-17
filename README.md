@@ -3,7 +3,7 @@
 > Escape the editor. Free your mind.
 
 [![Preview Status](https://img.shields.io/badge/status-preview-blue)](https://github.com/cirvine-MSFT/editless)
-[![CI Status](https://github.com/cirvine-MSFT/editless/workflows/ci/badge.svg)](https://github.com/cirvine-MSFT/editless/actions)
+[![CI Status](https://github.com/cirvine-MSFT/editless/actions/workflows/ci.yml/badge.svg)](https://github.com/cirvine-MSFT/editless/actions/workflows/ci.yml)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 🎉 **Hey there!** EditLess is still in preview — we're building it in the open and **we'd love your feedback.** If you hit any snags, rough edges, or brilliant ideas, [please open an issue](https://github.com/cirvine-MSFT/editless/issues). We read every one, and your input shapes what's next. This is a living project, and you're part of making it better.
