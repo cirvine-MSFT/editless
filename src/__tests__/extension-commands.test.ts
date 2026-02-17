@@ -60,6 +60,7 @@ const {
   mockDiscoverAllAgents,
   mockDiscoverAgentTeams,
   mockOnDidCloseTerminal,
+  mockResolveTeamDir,
   MockEditlessTreeItem,
 } = vi.hoisted(() => {
   class MockEditlessTreeItem {
@@ -136,6 +137,7 @@ const {
     mockDiscoverAllAgents: vi.fn().mockReturnValue([]),
     mockDiscoverAgentTeams: vi.fn().mockReturnValue([]),
     mockOnDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
+    mockResolveTeamDir: vi.fn(),
     MockEditlessTreeItem,
   };
 });
@@ -452,6 +454,8 @@ vi.mock('../inbox-flusher', () => ({
 
 vi.mock('../team-dir', () => ({
   resolveTeamDir: vi.fn(),
+  resolveTeamMd: vi.fn(),
+  TEAM_DIR_NAMES: ['.squad', '.ai-team'],
 }));
 
 vi.mock('../terminal-layout', () => ({
@@ -1913,11 +1917,37 @@ describe('extension command handlers', () => {
       mockCreateTerminal.mockReturnValue(mockTerminal);
       mockDiscoverAgentTeams.mockReturnValue([]);
 
+      const teamDirMod = await import('../team-dir');
+      (teamDirMod.resolveTeamDir as ReturnType<typeof vi.fn>).mockReturnValue(null);
+
       await getHandler('editless.addSquad')();
 
       getLastCloseCallback()(mockTerminal);
 
       expect(mockAddSquads).not.toHaveBeenCalled();
+    });
+
+    it('should register squad via resolveTeamDir when team.md does not exist yet', async () => {
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+      mockDiscoverAgentTeams.mockReturnValue([]);
+      mockLoadSquads.mockReturnValue([]);
+
+      // Get the actual mock reference vitest uses (proxy differs from hoisted ref)
+      const teamDirMod = await import('../team-dir');
+      const resolveTeamDirSpy = teamDirMod.resolveTeamDir as ReturnType<typeof vi.fn>;
+      resolveTeamDirSpy.mockReturnValue('/path/to/squad/.ai-team');
+
+      await getHandler('editless.addSquad')();
+
+      getLastCloseCallback()(mockTerminal);
+
+      expect(resolveTeamDirSpy).toHaveBeenCalledWith('/path/to/squad');
+      expect(mockAddSquads).toHaveBeenCalledWith([expect.objectContaining({
+        name: 'squad',
+        path: '/path/to/squad',
+        icon: '🔷',
+      })]);
     });
 
     it('should ignore close events from unrelated terminals', async () => {
