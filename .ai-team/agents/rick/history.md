@@ -52,8 +52,31 @@ Created two GitHub umbrella issues to track architectural cleanup and test quali
 ### 2026-02-17: Phase 2 addAgent feature issue created — #249
 Created GitHub issue #249 to implement Phase 2 of the addAgent work from #125. This issue adds local/repo mode prompting to the `editless.addAgent` command. Dependency on #101 (`createCommand` in cli-provider.ts) is resolved. Assigned to Morty (implementation) and Meeseeks (tests) with labels `type:feature`, `release:backlog`, and `squad:morty`.
 
+### 2026-02-17: PR #273 squad init fallback logic — changes requested
+Reviewed PR #273 fixing squad initialization visibility and GH CLI compatibility. **GH CLI Fix Approved:** Retry logic for `autoMergeRequest` is correct and safe. **Squad Init Fix Rejected:** The fallback to `resolveTeamDir` correctly registers incomplete squads, BUT introduces a regression where these "unknown" squads never update to their correct state once `team.md` is created. `autoRegisterWorkspaceSquads` skips already-registered paths, preserving the placeholder state indefinitely. Requested changes to `discovery.ts` to detect this state (existing entry is `unknown` + `team.md` now exists) and trigger a registry update. This ensures squads transition from "initializing" to "ready" automatically.
+
 ### 2026-02-17: Agent-registry promotion feature issue created — #250
 Created GitHub issue #250 to implement promotion of discovered agents and squads to the agent-registry. This resolves the "bridge gap" between the discovery system (passive display) and the registry (no context menu actions). Issue includes design decision needed: extend `AgentTeamConfig` to support standalone agents (option a) or wrap them in minimal squad containers (option b). Assigned to Rick (design decision), Morty (implementation), and Meeseeks (tests) with labels `type:feature` and `release:backlog`.
+
+### 2026-02-17: Recent feature changes scan for docs team
+Documented recent codebase changes (last 30 commits) for Summer (docs) to identify stale documentation:
+
+**New features that changed:**
+1. **PR Filtering** (#270) — Added `editless.filterPRs` and `editless.clearPRsFilter` commands. PRsTreeProvider now supports filtering by repo, labels, and status. Uses `editless.prsFiltered` context key for UI visibility. Replaces simple "Show/hide PRs" with sophisticated multi-criteria filtering.
+2. **Sticky Terminal Names** (#268) — Terminal names launched from work items are now persistent — session.ts stores launch metadata and restores on reload.
+3. **Agent Discovery Improvements** (#263, #257) — New discovery commands: `editless.promoteDiscoveredAgent`, `editless.hideAgent`, `editless.showHiddenAgents`, `editless.showAllAgents`. PR filter pattern documented in decisions.md as reusable template for future filters.
+4. **PR Filter Test Coverage** (#270) — New test suites: prs-tree.test.ts (146+ new tests), extension-commands.test.ts (80+ new tests for filter commands).
+
+**Key changes to settings (package.json):**
+- Two new commands added to PR filter toolbar: `editless.filterPRs` (navigation@2), `editless.clearPRsFilter` (navigation@3, conditional).
+- Four new commands for agent discovery/hiding: `hideAgent`, `showHiddenAgents`, `showAllAgents`, `promoteDiscoveredAgent`.
+- No NEW settings added to `editless.*` configuration section; filtering state managed via context keys.
+
+**Things that likely need docs updates:**
+- README: PR filtering feature and sticky names not yet documented (workflow guides exist in docs/workflows/ but high-level feature descriptions missing).
+- PR pane has new toolbar buttons — screenshots/GIFs may need re-recording.
+- Settings reference page should mention that PR/work item filters use context keys, not persistent settings.
+- Agent discovery UI changed significantly — sidebar now shows discovered agents with hide/promote actions.
 
 
 

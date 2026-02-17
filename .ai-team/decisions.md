@@ -2,11 +2,13 @@
 
 > Canonical decision log for the EditLess project. All agents read this before starting work.
 
+
 ### 2025-07-18: ⛔ CRITICAL — Git worktrees required — NEVER checkout a branch in the main clone
 **By:** Casey Irvine (user directive, reinforced 2026-02-16)
 **What:** **ABSOLUTE RULE — NO EXCEPTIONS.** The main clone (`C:\Users\cirvine\code\work\editless`) stays on `master` at ALL times. `git checkout <any-branch>` in the main clone is FORBIDDEN. All feature branch work MUST use git worktrees (`git worktree add ../editless-wt-{name} squad/{branch}`). `.ai-team/` changes that need to be committed go on master locally, then get PR'd from a separate worktree if needed. The main clone is pull-only — you fetch and pull, never push or checkout branches from it.
 **Why:** Multiple concurrent sessions share the main clone. Checking out a branch there breaks every other session. This has been violated repeatedly despite being documented — agents keep checking out branches on the main clone instead of using worktrees. This directive must be treated as a hard constraint, not a suggestion. Any agent that runs `git checkout <branch>` in the main clone directory is violating a critical user directive.
 **Reinforced 2026-02-16:** Agent spawned for #213 violated this rule by checking out a branch directly on the main clone, breaking Casey's working state. This pattern has repeated multiple times. Casey is escalating this from documentation to a hard constraint enforced through code reviews.
+
 
 
 
@@ -17,10 +19,12 @@
 
 
 
+
 ### 2025-07-18: Cross-platform label compatibility (GitHub ↔ ADO)
 **By:** Casey Irvine (planning session), Squad Coordinator
 **What:** `status:`, `squad:`, and `go:` labels are portable across GitHub and ADO (colons allowed in ADO tags). `type:` and `priority:` are GitHub-only — ADO handles these natively via Work Item Type and Priority field. Users should use the portable labels identically on both platforms for a consistent experience.
 **Why:** EditLess supports both GitHub and ADO. A consistent labeling story means users don't have to learn two systems. Portable labels enable cross-platform workflow automation.
+
 
 
 
@@ -31,6 +35,7 @@
 
 
 
+
 ### 2025-07-18: Label taxonomy — namespaced `prefix:value` scheme
 **By:** Casey Irvine (planning session), Squad Coordinator
 **What:** All labels use `prefix:value` syntax within 6 namespaced categories: `type:` (bug, feature, spike, chore, docs, epic), `priority:` (p0, p1, p2), `status:` (needs-plan, planned, in-progress, review), `squad:` (agent assignment), `release:` (version targeting), `go:` (decision gate). Labels are mutually exclusive within their namespace. Only standalone label is `duplicate`. Old GitHub defaults and duplicates (bug, enhancement, docs, etc.) are deleted.
@@ -38,10 +43,12 @@
 
 
 
+
 ### 2025-07-18: Plan→Execute→Review workflow with label lifecycle
 **By:** Casey Irvine (planning session), Squad Coordinator
 **What:** Issues follow: `status:needs-plan` → `status:planned` → `status:in-progress` → close (via PR merge). Complex PRs get `status:review` for human gate. Planning session owns `needs-plan → planned` transitions. Coding session owns `planned → in-progress → close`. Agent reviewer can flag `status:review` when human attention needed. Plans are linked files (not issue comments). No `done` label — closing the issue IS done. `release:backlog` takes precedence over `status:planned` (don't pick up backlog items).
 **Why:** Gives agents a clear, automatable workflow. The human gate (`status:review`) keeps Casey in the loop for complex decisions without creating bottlenecks on routine work.
+
 
 
 
@@ -54,10 +61,12 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 
 
 
+
 ### 2026-02-15: Acknowledge rapid tooling evolution in docs
 **By:** Casey Irvine (via Copilot)
 **What:** Documentation should acknowledge that AI dev tools are changing rapidly and EditLess may need to evolve quickly. Be honest with users that this space moves fast.
 **Why:** User request — sets expectations and builds trust with users.
+
 
 
 
@@ -68,10 +77,12 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 
 
 
+
 ### 2026-02-15: Branch naming convention — `cirvine/{feature}`
 **By:** Casey Irvine (user directive)
 **What:** Feature branches use `cirvine/{feature-name}` (alias/feature). No `users/` prefix on this project. Example: `cirvine/cli-provider`, `cirvine/task-view`. Worktrees go in `editless.wt/{branch-name}/`.
 **Why:** Simpler convention for a solo-dev project. The `users/` prefix adds noise when there's one contributor.
+
 
 
 
@@ -82,10 +93,12 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 
 
 
+
 ### 2026-02-15: Coding style — readable functions over comments, why-comments only
 **By:** Casey Irvine (user directive)
 **What:** Code should be self-documenting through well-named functions, not verbose comments. Comments are reserved for "why" explanations — when a feature wasn't available, a workaround was needed, something wasn't working as expected, or a non-obvious decision was made. No "what" comments that just describe what the code does. Wrap logic in readable functions instead.
 **Why:** User preference. Code clarity comes from structure, not narration. Why-comments capture institutional knowledge that can't be expressed in code.
+
 
 
 
@@ -96,10 +109,12 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 
 
 
+
 ### 2026-02-15: Dictation input — expect Handy transcription artifacts
 **By:** Casey Irvine (via Copilot)
 **What:** Casey dictates using Handy, which sometimes produces repeated words or misspellings. Don't second-guess — ask if something is unclear.
 **Why:** User request — captured for team memory.
+
 
 
 
@@ -110,10 +125,12 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 
 
 
+
 ### 2026-02-15: Domain terminology — agents (generic) with squads (specific)
 **By:** Casey Irvine (user directive)
 **What:** EditLess uses "agent" as the generic term. "Squad" refers specifically to teams created by the Squad CLI (bradygaster/squad). The extension supports agents generically, with enhanced features for squads. User-facing text should say "agent" or "team" where possible, not "squad" — unless specifically referring to the Squad product.
 **Why:** EditLess is broader than Squad. It's an agent management tool. Squads are one type of agent team it supports.
+
 
 
 
@@ -124,6 +141,7 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 
 
 
+
 ### 2026-02-15: Generalized provider update infrastructure
 **By:** Morty (Extension Dev), issue #14
 **What:** CLI update checking is now driven by optional fields on `CliProvider` (`updateCommand`, `upToDatePattern`, `updateRunCommand`). To add update support for a new CLI provider, populate these fields in `KNOWN_PROFILES` — no new code paths needed. The startup loop (`checkProviderUpdatesOnStartup`) iterates all detected providers with `updateCommand` set, and cache keys are scoped per-provider.
@@ -131,10 +149,12 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 
 
 
+
 ### 2026-02-15: Multi-repo workflow philosophy — don't open repos, open a workspace
 **By:** Casey Irvine (via Copilot)
 **What:** The EditLess philosophy is: don't open VS Code in a repo. Open it in a central folder and work across multiple repos simultaneously. Think in terms of working with agents, not in terms of an editor tied to one repo. This should be a core part of the documentation and philosophy sections.
 **Why:** User directive — this is a fundamental EditLess workflow pattern that changes how people think about their dev environment.
+
 
 
 
@@ -219,6 +239,7 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 **Why:** Rebases are destructive and create conflict headaches across concurrent sessions. Amend commits cause push failures when branches are already upstream. With multiple sessions working in parallel, history rewriting is too risky.
 
 
+
 ### 2026-02-15: PR workflow — CI gates before merge, no more direct-to-master
 **By:** Casey Irvine (user directive)
 **What:** Stop merging feature branches directly to master. New flow:
@@ -232,10 +253,12 @@ The `scanSquad` function in `src/scanner.ts` counts all files in the `decisions/
 
 
 
+
 ### 2026-02-15: Product name — EditLess
 **By:** Casey Irvine (user directive)
 **What:** The product is called "EditLess" throughout. Rebranding from prototype name "Squad Dashboard".
 **Why:** User directive — this is a polished product, not a prototype.
+
 
 
 
@@ -251,10 +274,12 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 
 
 
+
 ### 2026-02-15: Recommend Squad as the starting point for new vibe coders
 **By:** Casey Irvine (via Copilot)
 **What:** Documentation should recommend Squad as the entry point for people new to vibe coding or feeling overwhelmed by the agent landscape. Squad makes it easy and fun. This goes in the recommendations/philosophy docs — if you're new, start with Squad.
 **Why:** User directive — many people reaching out are intimidated by the agent landscape. Squad lowers the barrier.
+
 
 
 
@@ -265,10 +290,12 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 
 
 
+
 ### 2026-02-15: Remove tented feature entirely
 **By:** Casey Irvine (user directive)
 **What:** The entire "tented" concept is removed from EditLess. No tented terms, no tented detection, no tented guards, no tented field on config types. Remove `TENTED_TERMS`, `isTentedSquadPath()`, the `tented: boolean` field from the config type, and all conditional branches that check `config.tented`. Remove all associated test cases and fixtures. This includes stripping all references to "openai" and "coeus" from the codebase.
 **Why:** Tented feature was Microsoft-internal. Hardcoded sensitive terms and internal project names cannot ship in a potentially public repo. The feature itself has no value outside Microsoft's context.
+
 
 
 
@@ -279,10 +306,12 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 
 
 
+
 ### 2026-02-15: Table agency install feature
 **By:** Casey Irvine (via Copilot)
 **What:** Do NOT offer to install Agency if it's not detected. Checking the Agency endpoint or exposing where Agency is available would leak first-party Microsoft information into this repo. Agency install/detection is out of scope for the internals release. Squad install (via npx) is fine to offer.
 **Why:** User request — too much first-party Microsoft info to put into a public-facing repo
+
 
 
 
@@ -293,10 +322,12 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 
 
 
+
 ### 2026-02-15: Tented terms must not be hardcoded in source
 **By:** Casey Irvine (user directive)
 **What:** The TENTED_TERMS array in discovery.ts must not contain hardcoded sensitive terms (openai, coeus, or any internal project names). Make tented terms configurable via user settings (`editless.tented.terms`, default: empty array). Test fixtures must use generic placeholder names, not real internal project names. Scan all ported code for "openai" and "coeus" before committing.
 **Why:** This repo may go public. Hardcoded tented terms and internal project names in test data would leak confidential information.
+
 
 
 
@@ -307,10 +338,12 @@ The squad upgrader (`squad-upgrader.ts`) follows this same principle — it beco
 
 
 
+
 ### 2026-02-16: Bug fixes require regression + UX tests; upgrade paths need dedicated testing
 **By:** Casey (via Copilot)
 **What:** All bug fixes must include regression tests AND UX tests. Upgrade scenarios specifically need tests that either check current state or force an earlier version to validate upgrade paths. We need solid testing for upgrade paths including Copilot CLI version detection with our default settings.
 **Why:** User request — captured for team memory. Ensures bugs don't regress and upgrade UX is thoroughly validated.
+
 
 
 
@@ -333,10 +366,12 @@ Key choices:
 
 
 
+
 ### 2026-02-16: Default release target is v0.1
 **By:** Casey Irvine (user directive)
 **What:** All new issues default to `release:v0.1` unless Casey explicitly says otherwise.
 **Why:** User request — captured for team memory
+
 
 
 
@@ -403,6 +438,7 @@ editless/
 
 
 
+
 ### 2026-02-16: Extension must export a test API for integration tests
 **By:** Meeseeks (Tester), issue #53
 **What:** The persistence integration tests (`src/__integration__/persistence.test.ts`) require the extension to export an API object from `activate()`. Currently `activate()` returns `void`.
@@ -440,10 +476,12 @@ Without these exports, the only alternative is testing indirectly via commands �
 
 
 
+
 ### 2026-02-16: Meeseeks writes regression tests for every bug Casey discovers
 **By:** Casey Irvine (via Copilot)
 **What:** When Casey discovers a bug during usage, Meeseeks should write regression tests for that specific scenario BEFORE Morty fixes it. Tests-first approach for all user-discovered bugs.
 **Why:** User request — ensures bugs have proper test coverage and we know exactly what to verify when the fix lands.
+
 
 
 ### 2026-02-16: Multi-signal terminal reconciliation
@@ -462,6 +500,7 @@ Stages run globally across all persisted entries — higher-confidence matches c
 
 
 
+
 ### 2026-02-16: NEVER merge PRs with failing CI — use --auto --squash
 **By:** Casey Irvine (user directive)
 **What:** Agents MUST ensure CI checks pass before merging any PR. Branch protection is now configured on the public repo with required status checks (`Lint, Build & Test`, `VS Code Integration Tests`, `scan`). Rules:
@@ -470,6 +509,7 @@ Stages run globally across all persisted entries — higher-confidence matches c
 3. **Never bypass failing checks.** No exceptions. If checks are flaky, fix the flakiness — don't merge around it.
 **Why:** 4 of the last 10 merged PRs (when repo was private) had failing CI. Branch protection with required status checks now enforces this at the platform level. The `--auto` flag is the correct mechanism.
 **Supersedes:** The procedural `gh pr checks --watch` workaround from earlier today (no longer needed — branch protection handles it).
+
 
 
 
@@ -495,6 +535,7 @@ Stages run globally across all persisted entries — higher-confidence matches c
    - Fix: Add `{ name: 'custom', command: '', versionCommand: '' }` to KNOWN_PROFILES
 
 3. **`activate()` doesn't return API for integration tests** (issue #110)
+
 
 
 
@@ -528,6 +569,7 @@ The enum includes `"custom"` in package.json but `KNOWN_PROFILES` in cli-provide
 
 
 
+
 ### 2026-02-16: Remove go:* labels and simplify label taxonomy
 **By:** Birdperson (DevOps), directed by Casey Irvine
 **Date:** 2026-02-16
@@ -540,6 +582,7 @@ The enum includes `"custom"` in package.json but `KNOWN_PROFILES` in cli-provide
 - Do not reference `go:` labels in code, workflows, or documentation.
 - Triage default is now `status:needs-plan` (not `go:needs-research`).
 - Available release targets are `release:v0.1` and `release:backlog` only.
+
 
 
 ### 2026-02-16: Session State — `waiting-on-input` Misclassification (Design Issue)
@@ -593,6 +636,7 @@ Option 1 is the cleanest. The tests at lines 939-956 would need updating — the
 
 
 
+
 ### 2026-02-16: Session State Detection Implementation
 **By:** Morty (Extension Dev), issue #50
 **What:** Implemented rich session state detection for terminal sessions using VS Code shell integration APIs. Sessions now show granular state: `active`, `idle`, `stale`, `needs-attention`, or `orphaned`.
@@ -616,6 +660,7 @@ Option 1 is the cleanest. The tests at lines 939-956 would need updating — the
 
 
 
+
 ### 2026-02-16: Squad folder rename backward compatibility
 **Date:** 2026-02-16
 **By:** Morty (Extension Dev)
@@ -633,6 +678,7 @@ The Squad CLI (bradygaster/squad) is renaming `.ai-team/` to `.squad/`. EditLess
 
 - All team members: Any future code that needs to locate the team directory must use `resolveTeamDir()` or `resolveTeamMd()` from `src/team-dir.ts` — never hardcode `.ai-team` or `.squad`.
 - Error messages now say `.squad/ (or .ai-team/)` for clarity.
+
 
 
 
@@ -654,6 +700,7 @@ The Squad CLI (bradygaster/squad) is renaming `.ai-team/` to `.squad/`. EditLess
 - Conversational tone, not corporate ✓
 - Authentic personal narrative preserved ✓
 - Grammar corrected where it breaks readability or is factually wrong ✓
+
 
 
 
@@ -700,10 +747,12 @@ The Squad CLI (bradygaster/squad) is renaming `.ai-team/` to `.squad/`. EditLess
 
 
 
+
 ### 2026-02-16: TreeDataProvider must implement getParent() when using reveal()
 **By:** Morty (Extension Dev), issue #95
 **What:** `EditlessTreeProvider` stores a `parent` reference on `EditlessTreeItem`, set during child construction. `getParent(element)` returns `element.parent`. Any code path that constructs tree items for use with `reveal()` (like `findTerminalItem`) must also set the parent reference.
 **Why:** VS Code's `TreeView.reveal()` requires `getParent()` to walk from the target item back to the root. Without it, the extension host throws. This is a VS Code API contract — not optional when `reveal()` is used.
+
 
 
 
@@ -830,10 +879,12 @@ The internal terms scan should catch real leaks — corpnet references, internal
 - The scan still catches all real internal terms (11 patterns remain active)
 
 
+
 ### 2026-02-16: User directive — worktree enforcement reinforced
 **By:** Casey Irvine (via Copilot)
 **What:** The main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY. Never `git checkout <branch>` there. All coding work must happen in worktrees created via `git worktree add`. Squad file changes (.ai-team/) go on master locally in the main clone, then get PR'd from a separate worktree. This rule was already documented but agents kept violating it — Casey is escalating this to a hard constraint.
 **Why:** User request — captured for team memory. Agent spawned for #213 checked out a branch directly on the main clone, breaking Casey's working state. This has happened multiple times despite the existing decision entry.
+
 
 ### 2026-02-16: v0.1 Release Triage & Scope Lock
 **By:** Rick (Lead)
@@ -864,6 +915,7 @@ Final pre-release triage of all 25 open issues. Deadline: Monday evening (~16 ho
 **Why:** All P0 items assigned and labeled. Squad can execute immediately. P1 items are important but not blocking. Docs/marketplace work can follow in patch/v0.2. #38 honors the issue author's explicit "future work" intent.
 
 
+
 ### 2026-02-16: Work Items Tree — Ternary Plan Status
 **Date:** 2026-02-16
 **By:** Morty (Extension Dev)
@@ -892,10 +944,12 @@ Replaced binary planned/not-planned with **ternary** status:
 
 
 
+
 ### 2026-02-17: Always assign Casey on new issues
 **By:** Casey (via Copilot)
 **What:** All new issues filed in cirvine-MSFT/editless should be assigned to @me (cirvine-MSFT) so they appear in the Work Items pane. The pane uses --assignee @me to fetch issues.
 **Why:** User request — Casey wants visibility of all issues from the extension's Work Items view.
+
 
 
 ### 2026-02-17: Remove custom commands feature for v0.1
@@ -920,6 +974,7 @@ Replaced binary planned/not-planned with **ternary** status:
 
 **Problem:**
 Terminal sessions display `waiting-on-input` (bell-dot icon, "waiting on input" description) when they are actually idle. This happens for **every session** within 5 minutes of any command finishing.
+
 
 ### 2026-02-17: Session persistence — launchCommand stored in PersistedTerminalInfo
 **By:** Morty (coding agent)
@@ -996,30 +1051,23 @@ Option 1 is the cleanest. The tests at lines 939-956 would need updating — the
 
 
 
+
 ### 2026-02-17: User directive
 **By:** Casey (via Copilot)
 **What:** When doing a clean reinstall of the editless extension, only clear editless-specific state (e.g., `globalStorage/cirvine-msft.editless`). Never wipe all of VS Code's `workspaceStorage` — that affects every extension.
 **Why:** User request — captured for team memory. Broad wipe caused collateral damage to other extensions' cached state.
+
 
 ### 2026-02-17: Sticky terminal names — user requirement and implementation pattern
 **By:** Casey Irvine (user directive); Morty (implementation)
 **What:** When a terminal is launched via "Launch with Agent" from a work item or PR, the terminal title should be treated as a sticky label (same as a user-initiated rename) and must not be overridden by session context summaries or auto-rename logic. Implementation: any code path that creates a terminal with a custom display name (e.g., launchFromWorkItem, launchFromPR) must call labelManager.setLabel(labelKey, name) after 	erminalManager.launchTerminal() to persist the name. Without this, the name is only cosmetic and won't survive tree refreshes or reconciliation.
 **Why:** User wants meaningful work item context visible in terminal titles without having those titles overridden by automatic rename logic. The rename flow already does this (renameSession → setLabel → renameSession), but launch flows were missing the persistence step. This pattern applies to any future command that launches a terminal with a user-meaningful name.
 
-### 2025-07-18: ⛔ CRITICAL — Git worktrees required — NEVER checkout a branch in the main clone
-**By:** Casey Irvine (user directive, reinforced 2026-02-16)
-**What:** **ABSOLUTE RULE — NO EXCEPTIONS.** The main clone (`C:\Users\cirvine\code\work\editless`) stays on `master` at ALL times. `git checkout <any-branch>` in the main clone is FORBIDDEN. All feature branch work MUST use git worktrees (`git worktree add ../editless-wt-{name} squad/{branch}`). `.ai-team/` changes that need to be committed go on master locally, then get PR'd from a separate worktree if needed. The main clone is pull-only — you fetch and pull, never push or checkout branches from it.
-**Why:** Multiple concurrent sessions share the main clone. Checking out a branch there breaks every other session. This has been violated repeatedly despite being documented — agents keep checking out branches on the main clone instead of using worktrees. This directive must be treated as a hard constraint, not a suggestion. Any agent that runs `git checkout <branch>` in the main clone directory is violating a critical user directive.
-**Reinforced 2026-02-16:** Agent spawned for #213 violated this rule by checking out a branch directly on the main clone, breaking Casey's working state. This pattern has repeated multiple times. Casey is escalating this from documentation to a hard constraint enforced through code reviews.
 
-
-
-### 2025-07-18: Area labels for lightweight issue grouping (GitHub-only)
-**By:** Casey Irvine (planning session), Squad Coordinator
-**What:** `area:{theme}` labels group related issues by topic without implying parent-child hierarchy. Color: `#0969DA` (blue). NOT mutually exclusive — issues can have multiple `area:` labels. Created ad-hoc as clusters emerge, deleted when the cluster is resolved. Not enforced in `squad-label-enforce.yml` (no exclusivity) or `sync-squad-labels.yml` (not a fixed set). **GitHub-only** — ADO has native grouping concepts that should be used instead.
-**Why:** `type:epic` implies parent-child hierarchy which doesn't fit ad-hoc clusters. `area:` is lightweight, widely understood (Kubernetes, VS Code use similar patterns), and lets agents and humans see at a glance which issues are related.
-
-
+### 2026-02-17: User directive — sticky terminal names from Launch with Agent
+**By:** Casey Irvine (via Copilot)
+**What:** When a terminal is launched via "Launch with Agent" from a work item or PR, the terminal title should be treated as a sticky label (same as a user-initiated rename). It should not be overridden by session context summaries or auto-rename logic.
+**Why:** User request — captured for team memory. The session context resolver currently overwrites terminal names, which loses the meaningful "#42 Fix auth timeout" titles that came from work items/PRs.
 
 ### 2025-07-18: Cross-platform label compatibility (GitHub ↔ ADO)
 **By:** Casey Irvine (planning session), Squad Coordinator
@@ -2697,3 +2745,7 @@ Replaced binary planned/not-planned with **ternary** status:
 **What:** When a terminal is launched via "Launch with Agent" from a work item or PR, the terminal title should be treated as a sticky label (same as a user-initiated rename) and must not be overridden by session context summaries or auto-rename logic. Implementation: any code path that creates a terminal with a custom display name (e.g., launchFromWorkItem, launchFromPR) must call labelManager.setLabel(labelKey, name) after 	erminalManager.launchTerminal() to persist the name. Without this, the name is only cosmetic and won't survive tree refreshes or reconciliation.
 **Why:** User wants meaningful work item context visible in terminal titles without having those titles overridden by automatic rename logic. The rename flow already does this (renameSession → setLabel → renameSession), but launch flows were missing the persistence step. This pattern applies to any future command that launches a terminal with a user-meaningful name.
 
+### 2026-02-17: SETTINGS.md scope values corrected to match package.json
+**By:** Summer
+**What:** All `resource`-scoped settings in SETTINGS.md were documented as "workspace" scope. Corrected to "resource" to match `package.json` `contributes.configuration`. Affected: `registryPath`, `discoveryDir`, `discovery.scanPaths`, `scanDebounceMs`, `github.repos`, `github.issueFilter`, `ado.organization`, `ado.project`, `agentCreationCommand`. Also corrected three stale default values in the CLI provider example (`versionCommand`, `updateCommand`, `upToDatePattern`).
+**Why:** Docs should always match the source of truth in package.json. "resource" and "workspace" are different VS Code scopes — "resource" means the setting can vary per folder in multi-root workspaces, which is the intended behavior for path and repo settings. Incorrect scope documentation would mislead contributors and users trying to configure multi-root workspaces.
