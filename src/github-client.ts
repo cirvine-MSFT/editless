@@ -25,6 +25,8 @@ export interface GitHubPR {
   repository: string;
   reviewDecision: string;
   mergeable: string;
+  labels: string[];
+  autoMergeRequest: unknown | null;
 }
 
 export interface GitHubRepo {
@@ -60,51 +62,43 @@ export async function fetchMyPRs(repo: string): Promise<GitHubPR[]> {
   try {
     const { stdout } = await execFileAsync('gh', [
       'pr', 'list', '--repo', repo, '--author', '@me', '--state', 'open',
-      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeable', '--limit', '50',
+      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeable,labels,autoMergeRequest', '--limit', '50',
     ]);
     const raw: unknown[] = JSON.parse(stdout);
-    return raw.map((p) => {
-      const rec = p as Record<string, unknown>;
-      return {
-        number: rec.number as number,
-        title: rec.title as string,
-        state: rec.state as string,
-        isDraft: rec.isDraft as boolean,
-        url: rec.url as string,
-        headRef: rec.headRefName as string,
-        baseRef: rec.baseRefName as string,
-        repository: repo,
-        reviewDecision: (rec.reviewDecision as string) ?? '',
-        mergeable: (rec.mergeable as string) ?? '',
-      };
-    });
+    return raw.map((p) => parsePR(p, repo));
   } catch {
     return [];
   }
+}
+
+function parsePR(p: unknown, repo: string): GitHubPR {
+  const rec = p as Record<string, unknown>;
+  return {
+    number: rec.number as number,
+    title: rec.title as string,
+    state: rec.state as string,
+    isDraft: rec.isDraft as boolean,
+    url: rec.url as string,
+    headRef: rec.headRefName as string,
+    baseRef: rec.baseRefName as string,
+    repository: repo,
+    reviewDecision: (rec.reviewDecision as string) ?? '',
+    mergeable: (rec.mergeable as string) ?? '',
+    labels: Array.isArray(rec.labels)
+      ? (rec.labels as Array<{ name: string }>).map((l) => l.name)
+      : [],
+    autoMergeRequest: (rec.autoMergeRequest as unknown) ?? null,
+  };
 }
 
 export async function fetchLinkedPRs(repo: string, issueNumber: number): Promise<GitHubPR[]> {
   try {
     const { stdout } = await execFileAsync('gh', [
       'pr', 'list', '--repo', repo, '--search', `${issueNumber}`, '--state', 'all',
-      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeable', '--limit', '10',
+      '--json', 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeable,labels,autoMergeRequest', '--limit', '10',
     ]);
     const raw: unknown[] = JSON.parse(stdout);
-    return raw.map((p) => {
-      const rec = p as Record<string, unknown>;
-      return {
-        number: rec.number as number,
-        title: rec.title as string,
-        state: rec.state as string,
-        isDraft: rec.isDraft as boolean,
-        url: rec.url as string,
-        headRef: rec.headRefName as string,
-        baseRef: rec.baseRefName as string,
-        repository: repo,
-        reviewDecision: (rec.reviewDecision as string) ?? '',
-        mergeable: (rec.mergeable as string) ?? '',
-      };
-    });
+    return raw.map((p) => parsePR(p, repo));
   } catch {
     return [];
   }

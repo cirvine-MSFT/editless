@@ -41,6 +41,10 @@ const {
   mockClearFilter,
   mockGetAllRepos,
   mockGetAllLabels,
+  mockPRsSetFilter,
+  mockPRsClearFilter,
+  mockPRsGetAllRepos,
+  mockPRsGetAllLabels,
   mockPromptAdoSignIn,
   mockOpenSquadUiDashboard,
   mockFetchLinkedPRs,
@@ -113,6 +117,10 @@ const {
     mockClearFilter: vi.fn(),
     mockGetAllRepos: vi.fn().mockReturnValue([]),
     mockGetAllLabels: vi.fn().mockReturnValue([]),
+    mockPRsSetFilter: vi.fn(),
+    mockPRsClearFilter: vi.fn(),
+    mockPRsGetAllRepos: vi.fn().mockReturnValue([]),
+    mockPRsGetAllLabels: vi.fn().mockReturnValue([]),
     mockPromptAdoSignIn: vi.fn(),
     mockOpenSquadUiDashboard: vi.fn(),
     mockFetchLinkedPRs: vi.fn(),
@@ -397,6 +405,13 @@ vi.mock('../prs-tree', () => ({
       refresh: mockPRsRefresh,
       setAdoPRs: vi.fn(),
       setAdoRefresh: vi.fn(),
+      setTreeView: vi.fn(),
+      setFilter: mockPRsSetFilter,
+      clearFilter: mockPRsClearFilter,
+      filter: { repos: [], labels: [], statuses: [] },
+      isFiltered: false,
+      getAllRepos: mockPRsGetAllRepos,
+      getAllLabels: mockPRsGetAllLabels,
     };
   }),
   PRsTreeItem: class {
@@ -1386,6 +1401,71 @@ describe('extension command handlers', () => {
     it('should delegate to provider clearFilter', () => {
       getHandler('editless.clearWorkItemsFilter')();
       expect(mockClearFilter).toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.filterPRs ---------------------------------------------------
+
+  describe('editless.filterPRs', () => {
+    it('should show QuickPick with repos, statuses, and labels', async () => {
+      mockPRsGetAllRepos.mockReturnValue(['owner/repo1']);
+      mockPRsGetAllLabels.mockReturnValue(['type:bug', 'release:v0.1']);
+      mockShowQuickPick.mockResolvedValue([]);
+
+      await getHandler('editless.filterPRs')();
+
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ label: 'owner/repo1', description: 'repo' }),
+          expect.objectContaining({ label: 'Draft', description: 'status' }),
+          expect.objectContaining({ label: 'Open', description: 'status' }),
+          expect.objectContaining({ label: 'Approved', description: 'status' }),
+          expect.objectContaining({ label: 'Changes Requested', description: 'status' }),
+          expect.objectContaining({ label: 'Auto-merge', description: 'status' }),
+          expect.objectContaining({ label: 'type:bug', description: 'label' }),
+          expect.objectContaining({ label: 'release:v0.1', description: 'label' }),
+        ]),
+        expect.objectContaining({ canPickMany: true }),
+      );
+    });
+
+    it('should apply selected filters to provider', async () => {
+      mockPRsGetAllRepos.mockReturnValue(['owner/repo1']);
+      mockPRsGetAllLabels.mockReturnValue(['type:bug']);
+      mockShowQuickPick.mockResolvedValue([
+        { label: 'owner/repo1', description: 'repo' },
+        { label: 'type:bug', description: 'label' },
+        { label: 'Draft', description: 'status' },
+      ]);
+
+      await getHandler('editless.filterPRs')();
+
+      expect(mockPRsSetFilter).toHaveBeenCalledWith({
+        repos: ['owner/repo1'],
+        labels: ['type:bug'],
+        statuses: ['draft'],
+      });
+    });
+
+    it('should no-op when user cancels QuickPick', async () => {
+      mockShowQuickPick.mockResolvedValue(undefined);
+      await getHandler('editless.filterPRs')();
+      expect(mockPRsSetFilter).not.toHaveBeenCalled();
+    });
+
+    it('should set empty filter when no items selected', async () => {
+      mockShowQuickPick.mockResolvedValue([]);
+      await getHandler('editless.filterPRs')();
+      expect(mockPRsSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], statuses: [] });
+    });
+  });
+
+  // --- editless.clearPRsFilter -----------------------------------------------
+
+  describe('editless.clearPRsFilter', () => {
+    it('should delegate to provider clearFilter', () => {
+      getHandler('editless.clearPRsFilter')();
+      expect(mockPRsClearFilter).toHaveBeenCalled();
     });
   });
 
