@@ -89,6 +89,7 @@ No experience with agentic development required. No complex setup. Just install,
 ## Documentation
 
 - [The EditLess Story](docs/story.md) — How EditLess came to be
+- [Common Workflows](docs/workflows/README.md) — Step-by-step guides for everyday tasks
 - [The Editorless Philosophy](docs/philosophy.md) — Why go editorless? A deeper dive
 - [Getting Started](docs/getting-started.md) — New to vibe coding? Start here
 - [Multi-Repo Workflow](docs/multi-repo-workflow.md) — Working across multiple repos
