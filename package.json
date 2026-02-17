@@ -262,6 +262,24 @@
         "icon": "$(git-pull-request)"
       },
       {
+        "command": "editless.goToWorkItem",
+        "title": "Go to Work Item",
+        "category": "EditLess",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "editless.launchFromPR",
+        "title": "Launch with Agent",
+        "category": "EditLess",
+        "icon": "$(play)"
+      },
+      {
+        "command": "editless.goToPRInBrowser",
+        "title": "Go to PR",
+        "category": "EditLess",
+        "icon": "$(link-external)"
+      },
+      {
         "command": "editless.relaunchSession",
         "title": "Re-launch Session",
         "category": "EditLess",
@@ -327,9 +345,11 @@
         { "command": "editless.renameSession", "when": "viewItem == terminal" },
         { "command": "editless.clearSessionLabel", "when": "viewItem == terminal" },
         { "command": "editless.openInBrowser", "when": "viewItem == work-item", "group": "inline" },
-        { "command": "editless.goToPR", "when": "viewItem == work-item", "group": "work-item@2" },
+        { "command": "editless.goToWorkItem", "when": "viewItem == work-item", "group": "work-item@2" },
         { "command": "editless.launchFromWorkItem", "when": "viewItem == work-item", "group": "work-item@1" },
         { "command": "editless.openInBrowser", "when": "viewItem == pull-request", "group": "inline" },
+        { "command": "editless.launchFromPR", "when": "viewItem == pull-request", "group": "pull-request@1" },
+        { "command": "editless.goToPRInBrowser", "when": "viewItem == pull-request", "group": "pull-request@2" },
         { "command": "editless.relaunchSession", "when": "viewItem == orphanedSession", "group": "inline@1" },
         { "command": "editless.dismissOrphan", "when": "viewItem == orphanedSession", "group": "inline@2" }
       ],
@@ -357,7 +377,10 @@
         { "command": "editless.addNew", "when": "false" },
         { "command": "editless.promoteDiscoveredAgent", "when": "false" },
         { "command": "editless.relaunchSession", "when": "false" },
-        { "command": "editless.dismissOrphan", "when": "false" }
+        { "command": "editless.dismissOrphan", "when": "false" },
+        { "command": "editless.goToWorkItem", "when": "false" },
+        { "command": "editless.launchFromPR", "when": "false" },
+        { "command": "editless.goToPRInBrowser", "when": "false" }
       ]
     },
     "configuration": {
