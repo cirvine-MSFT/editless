@@ -2,6 +2,12 @@
 
 > Escape the editor. Free your mind.
 
+[![Preview Status](https://img.shields.io/badge/status-preview-blue)](https://github.com/cirvine-MSFT/editless)
+[![CI Status](https://github.com/cirvine-MSFT/editless/workflows/ci/badge.svg)](https://github.com/cirvine-MSFT/editless/actions)
+[![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
+> 🎉 **Hey there!** EditLess is still in preview — we're building it in the open and **we'd love your feedback.** If you hit any snags, rough edges, or brilliant ideas, [please open an issue](https://github.com/cirvine-MSFT/editless/issues). We read every one, and your input shapes what's next. This is a living project, and you're part of making it better.
+
 Plan work and delegate to AI agents across multiple repos and sessions, then monitor and review everything from one sidebar — no context switching required. One window. One view. Complete control — all without touching the editor. Join the editorless software development revolution!
 
 ## What is EditLess?
