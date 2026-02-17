@@ -1771,3 +1771,23 @@ Replaced binary planned/not-planned with **ternary** status:
 **What:** When doing a clean reinstall of the editless extension, only clear editless-specific state (e.g., `globalStorage/cirvine-msft.editless`). Never wipe all of VS Code's `workspaceStorage` — that affects every extension.
 **Why:** User request — captured for team memory. Broad wipe caused collateral damage to other extensions' cached state.
 
+
+
+### 2026-02-17: User directive — sticky terminal names from Launch with Agent
+**By:** Casey Irvine (via Copilot)
+**What:** When a terminal is launched via "Launch with Agent" from a work item or PR, the terminal title should be treated as a sticky label (same as a user-initiated rename). It should not be overridden by session context summaries or auto-rename logic.
+**Why:** User request — captured for team memory. The session context resolver currently overwrites terminal names, which loses the meaningful "#42 Fix auth timeout" titles that came from work items/PRs.
+
+# PR Filter Mirrors Work Items Filter Pattern
+
+**Date:** 2026-02-17
+**Author:** Morty (Extension Dev)
+
+The PR filter in `prs-tree.ts` mirrors the work items filter pattern exactly:
+- `PRsFilter` interface with `repos`, `labels`, `statuses` arrays
+- `setFilter()` / `clearFilter()` / `isFiltered` / `getFilterDescription()`
+- `matchesLabelFilter()` with OR-within-group / AND-across-groups logic
+- Context key `editless.prsFiltered` for menu visibility
+- `view/title` menu buttons with `$(filter)` and `$(clear-all)` icons
+
+When adding filter support to future tree views, follow this same pattern. The `matchesLabelFilter()` logic is duplicated between work-items-tree.ts and prs-tree.ts — a future refactor could extract it to a shared utility.
