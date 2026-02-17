@@ -65,6 +65,9 @@
 📌 Agent file format (2026-02-16): Standalone agents discovered from `.agent.md` files in workspace, `.github/agents/`, and `~/.copilot/`. Parser extracts name from H1 heading (or filename fallback), description from YAML `description:` field or blockquote. ID generated via kebab-case normalization from filename. Deduplication: workspace wins over system-wide. — documented by Summer
 
 📌 Developer documentation structure (2026-02-16): Created `docs/architecture.md` (system overview, components, data flows), `docs/SETTINGS.md` (complete reference), and `docs/agent-file-format.md` (file spec). These are for contributors, not end users. See PR #225. — created by Summer
+
+📌 Quick tips documentation pattern (2026-02-16): README Quick Tips section follows consistent format — actionable, problem-focused tips with conversational tone matching Casey's voice. Each tip starts with bold headline + backtick code reference, explains *why* and *when*, ends with benefit or context. Added two new tips for yolo mode (`--yolo` flag auto-approves, use for low-stakes work) and autopilot mode (autonomous agent operation, perfect for overnight/background tasks). PR #264. — documented by Summer
+
 # Project Context
 
 - **Owner:** Casey Irvine (cirvine@microsoft.com)

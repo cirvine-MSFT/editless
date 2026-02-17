@@ -85,11 +85,12 @@ export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFo
   return agents;
 }
 
-/** Scan the Copilot local directory (~/.copilot/) for agent configs. */
+/** Scan the Copilot local directory (~/.copilot/ and ~/.copilot/agents/) for agent configs. */
 export function discoverAgentsInCopilotDir(): DiscoveredAgent[] {
   const copilotDir = path.join(os.homedir(), '.copilot');
   const agents: DiscoveredAgent[] = [];
   const seen = new Set<string>();
+  for (const fp of collectAgentMdFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
   for (const fp of collectAgentMdFiles(copilotDir)) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
   return agents;
 }
