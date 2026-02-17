@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import { EditlessRegistry } from './registry';
 import { scanSquad } from './scanner';
 import { getLocalSquadVersion } from './squad-upgrader';
@@ -34,6 +35,10 @@ function normalizeSquadDisplayName(name: string, fallback: string): string {
   }
 
   return trimmed;
+}
+
+function stableHash(input: string): string {
+  return crypto.createHash('sha256').update(input).digest('hex').substring(0, 8);
 }
 
 // ---------------------------------------------------------------------------
@@ -387,7 +392,11 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private buildAgentItem(agent: AgentInfo, squadId?: string): EditlessTreeItem {
     const item = new EditlessTreeItem(agent.name, 'agent', vscode.TreeItemCollapsibleState.None);
-    item.id = squadId ? `${squadId}:agent:${agent.name}` : undefined;
+    if (squadId) {
+      const state = this.getState(squadId);
+      const squadPath = state?.config.path ?? squadId;
+      item.id = `${stableHash(squadPath)}:agent:${agent.name}`;
+    }
     item.description = agent.role;
     item.iconPath = new vscode.ThemeIcon('person');
     return item;
@@ -395,7 +404,12 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private buildDecisionItem(decision: DecisionEntry, squadId?: string, index?: number): EditlessTreeItem {
     const item = new EditlessTreeItem(decision.title, 'decision');
-    item.id = squadId ? `${squadId}:decision:${index}` : undefined;
+    if (squadId) {
+      const state = this.getState(squadId);
+      const squadPath = state?.config.path ?? squadId;
+      const contentId = stableHash(`${decision.title}:${decision.date}:${decision.author}`);
+      item.id = `${stableHash(squadPath)}:decision:${contentId}`;
+    }
     item.description = `${decision.date} by ${decision.author}`;
     item.iconPath = new vscode.ThemeIcon('law');
     item.tooltip = decision.summary || undefined;
@@ -404,7 +418,12 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private buildActivityItem(activity: RecentActivity, squadId?: string, index?: number): EditlessTreeItem {
     const item = new EditlessTreeItem(`${activity.agent}: ${activity.task}`, 'activity');
-    item.id = squadId ? `${squadId}:activity:${index}` : undefined;
+    if (squadId) {
+      const state = this.getState(squadId);
+      const squadPath = state?.config.path ?? squadId;
+      const contentId = stableHash(`${activity.agent}:${activity.task}:${activity.outcome}`);
+      item.id = `${stableHash(squadPath)}:activity:${contentId}`;
+    }
     item.description = activity.outcome;
     item.iconPath = new vscode.ThemeIcon('pulse');
     return item;
