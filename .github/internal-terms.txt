@@ -23,6 +23,8 @@ devdiv
 # Old branding (extension was renamed from "Squad Dashboard" to "EditLess")
 Squad Dashboard
 
-# Leaked credentials patterns (should never appear in source)
-VSCE_PAT
-vsce_pat
+# Note: VSCE_PAT / vsce_pat intentionally NOT listed here.
+# secrets.VSCE_PAT is the standard way to publish to VS Marketplace
+# in GitHub Actions. Scanning for the secret *name* causes false
+# positives in workflow files; actual leaked tokens won't match this
+# pattern anyway.
