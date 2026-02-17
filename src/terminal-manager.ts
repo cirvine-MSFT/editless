@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { AgentTeamConfig } from './types';
-import type { SessionContextResolver } from './session-context';
+import type { SessionContextResolver, SessionEvent } from './session-context';
 import { getActiveProviderLaunchCommand } from './cli-provider';
 
 // ---------------------------------------------------------------------------
@@ -343,10 +343,19 @@ export class TerminalManager implements vscode.Disposable {
     const info = this._terminals.get(terminal);
     if (!info) { return undefined; }
 
+    const inboxCount = this._squadInboxCounts.get(info.squadId) ?? 0;
+
+    // Primary: events.jsonl for Copilot sessions with a resolved session ID
+    if (info.agentSessionId && this._sessionResolver) {
+      const lastEvent = this._sessionResolver.getLastEvent(info.agentSessionId);
+      if (lastEvent) {
+        return stateFromEvent(lastEvent, inboxCount);
+      }
+    }
+
+    // Fallback: shell execution API for non-Copilot terminals
     const isExecuting = this._shellExecutionActive.get(terminal);
     if (isExecuting) { return 'working'; }
-
-    const inboxCount = this._squadInboxCounts.get(info.squadId) ?? 0;
 
     const lastActivity = this._lastActivityAt.get(terminal);
     if (!lastActivity) {
@@ -581,4 +590,30 @@ export function getStateDescription(state: SessionState, lastActivityAt?: number
     default:
       return '';
   }
+}
+
+const WORKING_EVENT_TYPES = new Set([
+  'session.start',
+  'user.message',
+  'assistant.turn_start',
+  'assistant.message',
+  'tool.execution_start',
+  'tool.execution_complete',
+]);
+
+export function stateFromEvent(event: SessionEvent, inboxCount: number): SessionState {
+  if (WORKING_EVENT_TYPES.has(event.type)) {
+    return 'working';
+  }
+
+  const ageMs = Date.now() - new Date(event.timestamp).getTime();
+
+  if (event.type === 'assistant.turn_end') {
+    if (inboxCount > 0) { return 'needs-attention'; }
+    if (ageMs < IDLE_THRESHOLD_MS) { return 'waiting-on-input'; }
+    if (ageMs < STALE_THRESHOLD_MS) { return 'idle'; }
+    return 'stale';
+  }
+
+  return inboxCount > 0 ? 'needs-attention' : 'idle';
 }
