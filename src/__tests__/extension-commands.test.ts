@@ -46,6 +46,10 @@ const {
   mockFetchLinkedPRs,
   mockShowTextDocument,
   mockShowOpenDialog,
+  mockCheckNpxAvailable,
+  mockPromptInstallNode,
+  mockIsSquadInitialized,
+  mockCreateTerminal,
   MockEditlessTreeItem,
 } = vi.hoisted(() => {
   class MockEditlessTreeItem {
@@ -108,6 +112,10 @@ const {
     mockFetchLinkedPRs: vi.fn(),
     mockShowTextDocument: vi.fn(),
     mockShowOpenDialog: vi.fn(),
+    mockCheckNpxAvailable: vi.fn().mockResolvedValue(true),
+    mockPromptInstallNode: vi.fn(),
+    mockIsSquadInitialized: vi.fn().mockReturnValue(false),
+    mockCreateTerminal: vi.fn(() => ({ sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
     MockEditlessTreeItem,
   };
 });
@@ -184,7 +192,7 @@ vi.mock('vscode', () => {
       onDidChangeWindowState: vi.fn(() => ({ dispose: vi.fn() })),
       visibleTextEditors: [],
       get activeTerminal() { return mockActiveTerminalRef.current; },
-      createTerminal: vi.fn(() => ({ show: vi.fn(), sendText: vi.fn(), dispose: vi.fn() })),
+      createTerminal: mockCreateTerminal,
       terminals: [],
       showOpenDialog: mockShowOpenDialog,
       showTextDocument: mockShowTextDocument,
@@ -293,6 +301,9 @@ vi.mock('../squad-upgrader', () => ({
   registerSquadUpgradeAllCommand: vi.fn(() => ({ dispose: vi.fn() })),
   checkSquadUpgradesOnStartup: vi.fn(() => Promise.resolve()),
   clearLatestVersionCache: vi.fn(),
+  checkNpxAvailable: mockCheckNpxAvailable,
+  promptInstallNode: mockPromptInstallNode,
+  isSquadInitialized: mockIsSquadInitialized,
 }));
 
 vi.mock('../cli-provider', () => ({
@@ -1439,6 +1450,163 @@ describe('extension command handlers', () => {
       });
       await getHandler('editless.goToSquadSettings')(item);
       expect(mockShowTextDocument).toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.addSquad -----------------------------------------------------
+
+  describe('editless.addSquad', () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+      mockCheckNpxAvailable.mockResolvedValue(true);
+      mockIsSquadInitialized.mockReturnValue(false);
+      mockShowOpenDialog.mockResolvedValue([{ fsPath: '/path/to/squad', toString: () => '/path/to/squad' }]);
+      mockCreateTerminal.mockReturnValue({ sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() });
+    });
+
+    it('should prompt for npx and return early when npx not available', async () => {
+      mockCheckNpxAvailable.mockResolvedValue(false);
+      
+      await getHandler('editless.addSquad')();
+      
+      expect(mockCheckNpxAvailable).toHaveBeenCalled();
+      expect(mockPromptInstallNode).toHaveBeenCalled();
+      expect(mockShowOpenDialog).not.toHaveBeenCalled();
+    });
+
+    it('should show folder picker dialog with correct options', async () => {
+      await getHandler('editless.addSquad')();
+      
+      expect(mockShowOpenDialog).toHaveBeenCalledWith({
+        canSelectFolders: true,
+        canSelectFiles: false,
+        canSelectMany: false,
+        openLabel: 'Select directory for new squad',
+      });
+    });
+
+    it('should return early when user cancels folder picker', async () => {
+      mockShowOpenDialog.mockResolvedValue(undefined);
+      
+      await getHandler('editless.addSquad')();
+      
+      expect(mockShowOpenDialog).toHaveBeenCalled();
+      expect(mockIsSquadInitialized).not.toHaveBeenCalled();
+      expect(mockCreateTerminal).not.toHaveBeenCalled();
+    });
+
+    it('should return early when folder picker returns empty array', async () => {
+      mockShowOpenDialog.mockResolvedValue([]);
+      
+      await getHandler('editless.addSquad')();
+      
+      expect(mockShowOpenDialog).toHaveBeenCalled();
+      expect(mockIsSquadInitialized).not.toHaveBeenCalled();
+      expect(mockCreateTerminal).not.toHaveBeenCalled();
+    });
+
+    it('should run squad init command for new squad directory', async () => {
+      mockIsSquadInitialized.mockReturnValue(false);
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+      
+      await getHandler('editless.addSquad')();
+      
+      expect(mockIsSquadInitialized).toHaveBeenCalledWith('/path/to/squad');
+      expect(mockCreateTerminal).toHaveBeenCalledWith({
+        name: 'Squad Init: squad',
+        cwd: '/path/to/squad',
+        hideFromUser: true,
+      });
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx github:bradygaster/squad init');
+    });
+
+    it('should run squad upgrade command for existing squad directory', async () => {
+      mockIsSquadInitialized.mockReturnValue(true);
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+      
+      await getHandler('editless.addSquad')();
+      
+      expect(mockIsSquadInitialized).toHaveBeenCalledWith('/path/to/squad');
+      expect(mockCreateTerminal).toHaveBeenCalledWith({
+        name: 'Squad Upgrade: squad',
+        cwd: '/path/to/squad',
+        hideFromUser: true,
+      });
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx github:bradygaster/squad upgrade');
+    });
+
+    it('should show success notification for new squad', async () => {
+      mockIsSquadInitialized.mockReturnValue(false);
+      
+      await getHandler('editless.addSquad')();
+      
+      expect(mockShowInformationMessage).toHaveBeenCalledWith(
+        'Squad initialization started in squad. After it completes, use "Discover Squads" to add it to the registry.',
+      );
+    });
+
+    it('should show success notification for squad upgrade', async () => {
+      mockIsSquadInitialized.mockReturnValue(true);
+      
+      await getHandler('editless.addSquad')();
+      
+      expect(mockShowInformationMessage).toHaveBeenCalledWith(
+        'Squad upgrade started in squad.',
+      );
+    });
+
+    it('should handle nested directory paths correctly', async () => {
+      mockShowOpenDialog.mockResolvedValue([{ 
+        fsPath: '/users/dev/projects/my-awesome-squad',
+        toString: () => '/users/dev/projects/my-awesome-squad',
+      }]);
+      mockIsSquadInitialized.mockReturnValue(false);
+      
+      await getHandler('editless.addSquad')();
+      
+      expect(mockCreateTerminal).toHaveBeenCalledWith({
+        name: 'Squad Init: my-awesome-squad',
+        cwd: '/users/dev/projects/my-awesome-squad',
+        hideFromUser: true,
+      });
+    });
+
+    it('should execute full flow for happy path (init)', async () => {
+      mockCheckNpxAvailable.mockResolvedValue(true);
+      mockShowOpenDialog.mockResolvedValue([{ fsPath: '/squad-dir', toString: () => '/squad-dir' }]);
+      mockIsSquadInitialized.mockReturnValue(false);
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+      
+      await getHandler('editless.addSquad')();
+      
+      expect(mockCheckNpxAvailable).toHaveBeenCalled();
+      expect(mockShowOpenDialog).toHaveBeenCalled();
+      expect(mockIsSquadInitialized).toHaveBeenCalledWith('/squad-dir');
+      expect(mockCreateTerminal).toHaveBeenCalled();
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx github:bradygaster/squad init');
+      expect(mockShowInformationMessage).toHaveBeenCalled();
+    });
+
+    it('should execute full flow for happy path (upgrade)', async () => {
+      mockCheckNpxAvailable.mockResolvedValue(true);
+      mockShowOpenDialog.mockResolvedValue([{ fsPath: '/existing-squad', toString: () => '/existing-squad' }]);
+      mockIsSquadInitialized.mockReturnValue(true);
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+      
+      await getHandler('editless.addSquad')();
+      
+      expect(mockCheckNpxAvailable).toHaveBeenCalled();
+      expect(mockShowOpenDialog).toHaveBeenCalled();
+      expect(mockIsSquadInitialized).toHaveBeenCalledWith('/existing-squad');
+      expect(mockCreateTerminal).toHaveBeenCalled();
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx github:bradygaster/squad upgrade');
+      expect(mockShowInformationMessage).toHaveBeenCalledWith(
+        'Squad upgrade started in existing-squad.',
+      );
     });
   });
 });
