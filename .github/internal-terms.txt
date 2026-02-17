@@ -1,5 +1,28 @@
 # Internal terms list for CI scanning.
-# Add one term per line. Lines starting with # are comments.
-# The terms scanner will fail the build if any of these terms
-# appear in src/ or docs/ files.
-INTERNAL_TERM_PLACEHOLDER
+# One term per line. Lines starting with # are comments.
+# The scan will fail the build if any of these appear in product code.
+#
+# Note: generic domains like dev.azure.com are NOT listed here because
+# the extension legitimately integrates with Azure DevOps via its public API.
+# Only add terms that indicate leaked internal references.
+
+# Internal Microsoft domains / infrastructure
+corpnet
+redmond\.microsoft\.com
+ntdev
+microsoft\.visualstudio\.com
+pkgs\.dev\.azure\.com
+artifacts\.dev\.azure\.com
+
+# Internal org / project codenames
+tools-squad
+onees
+1eshub
+devdiv
+
+# Old branding (extension was renamed from "Squad Dashboard" to "EditLess")
+Squad Dashboard
+
+# Leaked credentials patterns (should never appear in source)
+VSCE_PAT
+vsce_pat
