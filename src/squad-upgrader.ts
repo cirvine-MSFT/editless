@@ -149,7 +149,7 @@ export async function runSquadUpgrade(config: AgentTeamConfig): Promise<void> {
     },
     () =>
       new Promise<void>((resolve) => {
-        exec('npx github:bradygaster/squad upgrade', { cwd: config.path }, (err, stdout, stderr) => {
+        exec('npx -y github:bradygaster/squad upgrade', { cwd: config.path }, (err, stdout, stderr) => {
           if (err) {
             const msg = stderr?.trim() || err.message;
             vscode.window.showErrorMessage(`${config.icon} Squad upgrade failed for ${config.name}: ${msg}`);
