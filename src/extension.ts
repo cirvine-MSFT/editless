@@ -9,7 +9,7 @@ import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand, checkSquadUpgradesOnStartup, clearLatestVersionCache } from './squad-upgrader';
 import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider } from './cli-provider';
-import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads } from './discovery';
+import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
@@ -927,12 +927,30 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         cwd: dirPath,
         hideFromUser: true,
       });
-      terminal.sendText(command);
+      terminal.sendText(command + '; exit');
+
+      // Auto-register the squad when the hidden terminal closes
+      const listener = vscode.window.onDidCloseTerminal(closedTerminal => {
+        if (closedTerminal !== terminal) { return; }
+        listener.dispose();
+
+        const parentDir = path.dirname(dirPath);
+        const discovered = discoverAgentTeams(parentDir, registry.loadSquads());
+        const match = discovered.filter(s => s.path.toLowerCase() === dirPath.toLowerCase());
+        if (match.length > 0) {
+          registry.addSquads(match);
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(
+            `Squad "${match[0].name}" added to registry.`,
+          );
+        }
+      });
+      context.subscriptions.push(listener);
 
       vscode.window.showInformationMessage(
         squadExists
           ? `Squad upgrade started in ${path.basename(dirPath)}.`
-          : `Squad initialization started in ${path.basename(dirPath)}. After it completes, use "Discover Squads" to add it to the registry.`,
+          : `Squad initialization started in ${path.basename(dirPath)}.`,
       );
     }),
   );

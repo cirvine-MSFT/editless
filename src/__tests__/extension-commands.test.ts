@@ -50,6 +50,9 @@ const {
   mockPromptInstallNode,
   mockIsSquadInitialized,
   mockCreateTerminal,
+  mockAddSquads,
+  mockDiscoverAgentTeams,
+  mockOnDidCloseTerminal,
   MockEditlessTreeItem,
 } = vi.hoisted(() => {
   class MockEditlessTreeItem {
@@ -116,6 +119,9 @@ const {
     mockPromptInstallNode: vi.fn(),
     mockIsSquadInitialized: vi.fn().mockReturnValue(false),
     mockCreateTerminal: vi.fn(() => ({ sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
+    mockAddSquads: vi.fn(),
+    mockDiscoverAgentTeams: vi.fn().mockReturnValue([]),
+    mockOnDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
     MockEditlessTreeItem,
   };
 });
@@ -185,7 +191,7 @@ vi.mock('vscode', () => {
       registerTreeDataProvider: () => ({ dispose: vi.fn() }),
       onDidChangeActiveTerminal: vi.fn(() => ({ dispose: vi.fn() })),
       onDidOpenTerminal: vi.fn(() => ({ dispose: vi.fn() })),
-      onDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
+      onDidCloseTerminal: mockOnDidCloseTerminal,
       onDidStartTerminalShellExecution: vi.fn(() => ({ dispose: vi.fn() })),
       onDidEndTerminalShellExecution: vi.fn(() => ({ dispose: vi.fn() })),
       onDidChangeVisibleTextEditors: vi.fn(() => ({ dispose: vi.fn() })),
@@ -240,6 +246,7 @@ vi.mock('../registry', () => ({
     loadSquads: mockLoadSquads,
     getSquad: mockGetSquad,
     updateSquad: mockUpdateSquad,
+    addSquads: mockAddSquads,
     registryPath: '/mock/registry.json',
   })),
   watchRegistry: vi.fn(() => ({ dispose: vi.fn() })),
@@ -318,6 +325,7 @@ vi.mock('../discovery', () => ({
   registerDiscoveryCommand: vi.fn(() => ({ dispose: vi.fn() })),
   checkDiscoveryOnStartup: vi.fn(),
   autoRegisterWorkspaceSquads: vi.fn(),
+  discoverAgentTeams: mockDiscoverAgentTeams,
 }));
 
 vi.mock('../agent-discovery', () => ({
@@ -1518,7 +1526,7 @@ describe('extension command handlers', () => {
         cwd: '/path/to/squad',
         hideFromUser: true,
       });
-      expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx github:bradygaster/squad init');
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx github:bradygaster/squad init; exit');
     });
 
     it('should run squad upgrade command for existing squad directory', async () => {
@@ -1534,7 +1542,7 @@ describe('extension command handlers', () => {
         cwd: '/path/to/squad',
         hideFromUser: true,
       });
-      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx github:bradygaster/squad upgrade');
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx github:bradygaster/squad upgrade; exit');
     });
 
     it('should show success notification for new squad', async () => {
@@ -1543,7 +1551,7 @@ describe('extension command handlers', () => {
       await getHandler('editless.addSquad')();
       
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
-        'Squad initialization started in squad. After it completes, use "Discover Squads" to add it to the registry.',
+        'Squad initialization started in squad.',
       );
     });
 
@@ -1586,7 +1594,7 @@ describe('extension command handlers', () => {
       expect(mockShowOpenDialog).toHaveBeenCalled();
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/squad-dir');
       expect(mockCreateTerminal).toHaveBeenCalled();
-      expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx github:bradygaster/squad init');
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx github:bradygaster/squad init; exit');
       expect(mockShowInformationMessage).toHaveBeenCalled();
     });
 
@@ -1603,10 +1611,92 @@ describe('extension command handlers', () => {
       expect(mockShowOpenDialog).toHaveBeenCalled();
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/existing-squad');
       expect(mockCreateTerminal).toHaveBeenCalled();
-      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx github:bradygaster/squad upgrade');
+      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx github:bradygaster/squad upgrade; exit');
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
         'Squad upgrade started in existing-squad.',
       );
+    });
+
+    // --- Regression tests for #232: addSquad silently fails -------------------
+
+    function getLastCloseCallback(): (t: unknown) => void {
+      const calls = mockOnDidCloseTerminal.mock.calls as unknown[][];
+      return calls[calls.length - 1][0] as (t: unknown) => void;
+    }
+
+    it('should close terminal after command finishes so completion can be detected', async () => {
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+      mockIsSquadInitialized.mockReturnValue(false);
+
+      await getHandler('editless.addSquad')();
+
+      const sentCommand = mockTerminal.sendText.mock.calls[0][0] as string;
+      expect(sentCommand).toContain('; exit');
+    });
+
+    it('should register onDidCloseTerminal listener for auto-registration', async () => {
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+
+      await getHandler('editless.addSquad')();
+
+      expect(mockOnDidCloseTerminal).toHaveBeenCalled();
+    });
+
+    it('should auto-register squad when init terminal closes successfully', async () => {
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+      mockIsSquadInitialized.mockReturnValue(false);
+
+      const discoveredSquad = makeSquad({ id: 'squad', path: '/path/to/squad' });
+      mockDiscoverAgentTeams.mockReturnValue([discoveredSquad]);
+
+      await getHandler('editless.addSquad')();
+
+      getLastCloseCallback()(mockTerminal);
+
+      expect(mockAddSquads).toHaveBeenCalledWith([discoveredSquad]);
+    });
+
+    it('should refresh tree after auto-registering squad on terminal close', async () => {
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+
+      const discoveredSquad = makeSquad({ id: 'squad', path: '/path/to/squad' });
+      mockDiscoverAgentTeams.mockReturnValue([discoveredSquad]);
+
+      await getHandler('editless.addSquad')();
+
+      mockTreeRefresh.mockClear();
+      getLastCloseCallback()(mockTerminal);
+
+      expect(mockTreeRefresh).toHaveBeenCalled();
+    });
+
+    it('should not register squad when discovery finds nothing (init failed)', async () => {
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+      mockDiscoverAgentTeams.mockReturnValue([]);
+
+      await getHandler('editless.addSquad')();
+
+      getLastCloseCallback()(mockTerminal);
+
+      expect(mockAddSquads).not.toHaveBeenCalled();
+    });
+
+    it('should ignore close events from unrelated terminals', async () => {
+      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      mockCreateTerminal.mockReturnValue(mockTerminal);
+      mockDiscoverAgentTeams.mockReturnValue([makeSquad()]);
+
+      await getHandler('editless.addSquad')();
+
+      const unrelatedTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
+      getLastCloseCallback()(unrelatedTerminal);
+
+      expect(mockAddSquads).not.toHaveBeenCalled();
     });
   });
 });
