@@ -720,7 +720,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const terminalName = rawName.length <= MAX_SESSION_NAME
         ? rawName
         : rawName.slice(0, rawName.lastIndexOf(' ', MAX_SESSION_NAME)) + '…';
-      terminalManager.launchTerminal(cfg, terminalName);
+      const terminal = terminalManager.launchTerminal(cfg, terminalName);
+      labelManager.setLabel(terminalManager.getLabelKey(terminal), terminalName);
 
       await vscode.env.clipboard.writeText(issue.url);
       vscode.window.showInformationMessage(`Copied ${issue.url} to clipboard`);
