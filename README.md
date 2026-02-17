@@ -85,6 +85,14 @@ That's it. One extension, one sidebar, one conversation. You'll go from zero to 
 
 No experience with agentic development required. No complex setup. Just install, point, and let the AI do the heavy lifting. The editorless revolution starts with a single click.
 
+### Still Not Ready to Leave Your Editor Behind?
+
+Look, I'll level with you — I get it. A lot of the above reads like the manifesto of someone who wears a tinfoil hat to dinner parties. And the truth is, I *do* believe a lot of what's said here. But I also recognize that there are still plenty of valid scenarios where you might need to open an editor — to review code, watch what the AIs are doing, or just plan effectively. At least today.
+
+I want those of you still clinging to your editors to know: **I care about you, your scenarios, and your workflows.** I want to hear how EditLess can fit into your life to make your work with AI better — even if you're not ready to go fully editorless.
+
+Use EditLess to manage your AI sessions and agents. Open it in a separate VS Code instance. Pair it with your existing workflow. Whatever works for you. [File an issue](https://github.com/cirvine-MSFT/editless/issues/new) for your use case — we want to hear about it.
+
 ## 💡 Quick Tips
 
 - **Try squads without touching your team's repo.** You don't need to add [Squad](https://github.com/bradygaster/squad) to your work project to try it out. Create a personal repo, add a squad there, and tell your agents to work across your other repos. It's a great way to experiment without changing anything in your team's workspace.
