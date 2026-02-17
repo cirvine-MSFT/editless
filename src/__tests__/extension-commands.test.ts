@@ -1969,4 +1969,101 @@ describe('editless.promoteDiscoveredAgent', () => {
       expect.objectContaining({ id: 'other-agent' }),
     ]);
   });
+
+  // --- editless.goToWorkItem -------------------------------------------------
+
+  describe('editless.goToWorkItem', () => {
+    it('should open issue URL in browser', async () => {
+      const item = { issue: { url: 'https://github.com/owner/repo/issues/42' } };
+      await getHandler('editless.goToWorkItem')(item);
+      expect(mockOpenExternal).toHaveBeenCalled();
+    });
+
+    it('should open ADO work item URL in browser', async () => {
+      const item = { adoWorkItem: { url: 'https://dev.azure.com/org/project/_workitems/edit/42' } };
+      await getHandler('editless.goToWorkItem')(item);
+      expect(mockOpenExternal).toHaveBeenCalled();
+    });
+
+    it('should no-op when item has no URL', async () => {
+      const item = {};
+      await getHandler('editless.goToWorkItem')(item);
+      expect(mockOpenExternal).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.launchFromPR -------------------------------------------------
+
+  describe('editless.launchFromPR', () => {
+    it('should show warning when no squads registered', async () => {
+      const item = { pr: { number: 100, title: 'Add feature', url: 'https://github.com/owner/repo/pull/100' } };
+      mockLoadSquads.mockReturnValue([]);
+      await getHandler('editless.launchFromPR')(item);
+      expect(mockShowWarningMessage).toHaveBeenCalledWith('No agents registered.');
+    });
+
+    it('should show QuickPick and launch terminal for GitHub PR', async () => {
+      const squad = makeSquad();
+      const item = { pr: { number: 100, title: 'Add feature', url: 'https://github.com/owner/repo/pull/100' } };
+      mockLoadSquads.mockReturnValue([squad]);
+      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', squad });
+
+      await getHandler('editless.launchFromPR')(item);
+
+      expect(mockLaunchTerminal).toHaveBeenCalledWith(squad, 'PR #100 Add feature');
+      expect(mockShowInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('https://github.com/owner/repo/pull/100'),
+      );
+    });
+
+    it('should show QuickPick and launch terminal for ADO PR', async () => {
+      const squad = makeSquad();
+      const item = { adoPR: { id: 200, title: 'Fix bug', url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/200' } };
+      mockLoadSquads.mockReturnValue([squad]);
+      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', squad });
+
+      await getHandler('editless.launchFromPR')(item);
+
+      expect(mockLaunchTerminal).toHaveBeenCalledWith(squad, 'PR #200 Fix bug');
+      expect(mockShowInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('https://dev.azure.com/org/project/_git/repo/pullrequest/200'),
+      );
+    });
+
+    it('should no-op when item has no PR', async () => {
+      await getHandler('editless.launchFromPR')({});
+      expect(mockLaunchTerminal).not.toHaveBeenCalled();
+    });
+
+    it('should no-op when user cancels QuickPick', async () => {
+      const squad = makeSquad();
+      const item = { pr: { number: 100, title: 'Test', url: 'https://example.com/100' } };
+      mockLoadSquads.mockReturnValue([squad]);
+      mockShowQuickPick.mockResolvedValue(undefined);
+      await getHandler('editless.launchFromPR')(item);
+      expect(mockLaunchTerminal).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- editless.goToPRInBrowser ----------------------------------------------
+
+  describe('editless.goToPRInBrowser', () => {
+    it('should open GitHub PR URL in browser', async () => {
+      const item = { pr: { url: 'https://github.com/owner/repo/pull/100' } };
+      await getHandler('editless.goToPRInBrowser')(item);
+      expect(mockOpenExternal).toHaveBeenCalled();
+    });
+
+    it('should open ADO PR URL in browser', async () => {
+      const item = { adoPR: { url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/200' } };
+      await getHandler('editless.goToPRInBrowser')(item);
+      expect(mockOpenExternal).toHaveBeenCalled();
+    });
+
+    it('should no-op when item has no URL', async () => {
+      const item = {};
+      await getHandler('editless.goToPRInBrowser')(item);
+      expect(mockOpenExternal).not.toHaveBeenCalled();
+    });
+  });
 });
