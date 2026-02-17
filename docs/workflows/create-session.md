@@ -8,7 +8,7 @@ Launch a new terminal session with your AI agent and give it a meaningful name s
 
 1. **Find your agent** in the Agents panel in the EditLess sidebar.
 
-2. **Click the ▶️ (Launch Session) button** next to the agent — or right-click and select **Launch Session**.
+2. **Click the ➕ (Launch Session) button** next to the agent — or right-click and select **Launch Session**.
 
 3. **A new terminal opens** with a Copilot CLI session connected to that agent. The session appears under the agent in the sidebar tree.
 
