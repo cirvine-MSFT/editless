@@ -56,6 +56,7 @@ vi.mock('vscode', () => {
   return {
     TreeItem, TreeItemCollapsibleState, ThemeIcon, ThemeColor, MarkdownString, EventEmitter,
     Uri: { parse: (s: string) => ({ toString: () => s }) },
+    commands: { executeCommand: vi.fn() },
   };
 });
 
@@ -89,6 +90,8 @@ function makePR(overrides: Partial<GitHubPR> = {}): GitHubPR {
     repository: 'owner/repo',
     reviewDecision: '',
     mergeable: '',
+    labels: [],
+    autoMergeRequest: null,
     ...overrides,
   };
 }
@@ -135,6 +138,14 @@ describe('PRsTreeProvider — derivePRState', () => {
 
   it('should derive "open" when reviewDecision is empty (default)', async () => {
     expect(await getPRItemState(makePR({ reviewDecision: '' }))).toBe('open');
+  });
+
+  it('should derive "auto-merge" when autoMergeRequest is present', async () => {
+    expect(await getPRItemState(makePR({ autoMergeRequest: { mergeMethod: 'SQUASH' } }))).toBe('auto-merge');
+  });
+
+  it('should prioritize draft over auto-merge', async () => {
+    expect(await getPRItemState(makePR({ isDraft: true, autoMergeRequest: { mergeMethod: 'SQUASH' } }))).toBe('draft');
   });
 });
 
@@ -279,5 +290,140 @@ describe('PRsTreeProvider — merge conflict indicator', () => {
     const item = await getPRItem(makePR({ mergeable: 'CONFLICTING', reviewDecision: 'APPROVED' }));
     expect(item.description).toContain('approved');
     expect(item.description).toContain('has conflicts');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Filter infrastructure
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — filter', () => {
+  it('isFiltered should return false when no filters set', () => {
+    const provider = new PRsTreeProvider();
+    expect(provider.isFiltered).toBe(false);
+  });
+
+  it('isFiltered should return true when repo filter set', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: ['owner/repo'], labels: [], statuses: [] });
+    expect(provider.isFiltered).toBe(true);
+  });
+
+  it('isFiltered should return true when status filter set', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: ['draft'] });
+    expect(provider.isFiltered).toBe(true);
+  });
+
+  it('isFiltered should return false after clearFilter', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: ['r'], labels: ['l'], statuses: ['s'] });
+    provider.clearFilter();
+    expect(provider.isFiltered).toBe(false);
+  });
+
+  it('getFilterDescription should show active filters', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: ['owner/repo'], labels: ['bug'], statuses: ['draft'] });
+    const desc = provider.getFilterDescription();
+    expect(desc).toContain('repo:owner/repo');
+    expect(desc).toContain('status:draft');
+    expect(desc).toContain('label:bug');
+  });
+
+  it('getFilterDescription should show only set filters', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: ['open'] });
+    expect(provider.getFilterDescription()).toBe('status:open');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyRuntimeFilter
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — applyRuntimeFilter', () => {
+  it('should return all PRs when no filter set', () => {
+    const provider = new PRsTreeProvider();
+    const prs = [makePR({ number: 1 }), makePR({ number: 2 })];
+    expect(provider.applyRuntimeFilter(prs)).toHaveLength(2);
+  });
+
+  it('should filter by status', () => {
+    const provider = new PRsTreeProvider();
+    const prs = [
+      makePR({ number: 1, isDraft: true }),
+      makePR({ number: 2 }),
+      makePR({ number: 3, reviewDecision: 'APPROVED' }),
+    ];
+    provider.setFilter({ repos: [], labels: [], statuses: ['draft'] });
+    const filtered = provider.applyRuntimeFilter(prs);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].number).toBe(1);
+  });
+
+  it('should filter by labels with OR-within-group logic', () => {
+    const provider = new PRsTreeProvider();
+    const prs = [
+      makePR({ number: 1, labels: ['type:bug'] }),
+      makePR({ number: 2, labels: ['type:feature'] }),
+      makePR({ number: 3, labels: ['release:v1'] }),
+    ];
+    provider.setFilter({ repos: [], labels: ['type:bug', 'type:feature'], statuses: [] });
+    const filtered = provider.applyRuntimeFilter(prs);
+    expect(filtered).toHaveLength(2);
+  });
+
+  it('should filter by labels with AND-across-groups logic', () => {
+    const provider = new PRsTreeProvider();
+    const prs = [
+      makePR({ number: 1, labels: ['type:bug', 'release:v1'] }),
+      makePR({ number: 2, labels: ['type:bug'] }),
+      makePR({ number: 3, labels: ['release:v1'] }),
+    ];
+    provider.setFilter({ repos: [], labels: ['type:bug', 'release:v1'], statuses: [] });
+    const filtered = provider.applyRuntimeFilter(prs);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].number).toBe(1);
+  });
+
+  it('should filter by repo', () => {
+    const provider = new PRsTreeProvider();
+    const prs = [
+      makePR({ number: 1, repository: 'owner/repo1' }),
+      makePR({ number: 2, repository: 'owner/repo2' }),
+    ];
+    provider.setFilter({ repos: ['owner/repo1'], labels: [], statuses: [] });
+    const filtered = provider.applyRuntimeFilter(prs);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].repository).toBe('owner/repo1');
+  });
+
+  it('should filter auto-merge status', () => {
+    const provider = new PRsTreeProvider();
+    const prs = [
+      makePR({ number: 1, autoMergeRequest: { mergeMethod: 'SQUASH' } }),
+      makePR({ number: 2 }),
+    ];
+    provider.setFilter({ repos: [], labels: [], statuses: ['auto-merge'] });
+    const filtered = provider.applyRuntimeFilter(prs);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].number).toBe(1);
+  });
+
+  it('should show filter-aware empty message when filter active', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR({ number: 1, isDraft: true })]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalled());
+
+    provider.setFilter({ repos: [], labels: [], statuses: ['approved'] });
+    const children = provider.getChildren();
+    expect(children).toHaveLength(1);
+    expect(children[0].label).toBe('No PRs match current filter');
   });
 });

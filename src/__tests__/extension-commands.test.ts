@@ -41,6 +41,10 @@ const {
   mockClearFilter,
   mockGetAllRepos,
   mockGetAllLabels,
+  mockPRsSetFilter,
+  mockPRsClearFilter,
+  mockPRsGetAllRepos,
+  mockPRsGetAllLabels,
   mockPromptAdoSignIn,
   mockOpenSquadUiDashboard,
   mockFetchLinkedPRs,
@@ -113,6 +117,10 @@ const {
     mockClearFilter: vi.fn(),
     mockGetAllRepos: vi.fn().mockReturnValue([]),
     mockGetAllLabels: vi.fn().mockReturnValue([]),
+    mockPRsSetFilter: vi.fn(),
+    mockPRsClearFilter: vi.fn(),
+    mockPRsGetAllRepos: vi.fn().mockReturnValue([]),
+    mockPRsGetAllLabels: vi.fn().mockReturnValue([]),
     mockPromptAdoSignIn: vi.fn(),
     mockOpenSquadUiDashboard: vi.fn(),
     mockFetchLinkedPRs: vi.fn(),
@@ -397,6 +405,13 @@ vi.mock('../prs-tree', () => ({
       refresh: mockPRsRefresh,
       setAdoPRs: vi.fn(),
       setAdoRefresh: vi.fn(),
+      setTreeView: vi.fn(),
+      setFilter: mockPRsSetFilter,
+      clearFilter: mockPRsClearFilter,
+      filter: { repos: [], labels: [], statuses: [] },
+      isFiltered: false,
+      getAllRepos: mockPRsGetAllRepos,
+      getAllLabels: mockPRsGetAllLabels,
     };
   }),
   PRsTreeItem: class {
@@ -625,6 +640,13 @@ describe('extension command handlers', () => {
       expect(mockHide).toHaveBeenCalledWith('agent-42');
     });
 
+    it('should strip discovered: prefix when hiding discovered agent', () => {
+      const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
+      item.id = 'discovered:my-agent';
+      getHandler('editless.hideAgent')(item);
+      expect(mockHide).toHaveBeenCalledWith('my-agent');
+    });
+
     it('should no-op when item is undefined', () => {
       getHandler('editless.hideAgent')(undefined);
       expect(mockHide).not.toHaveBeenCalled();
@@ -772,6 +794,13 @@ describe('extension command handlers', () => {
     it('should refresh tree provider', () => {
       getHandler('editless.refresh')();
       expect(mockTreeRefresh).toHaveBeenCalled();
+    });
+
+    it('should re-scan discovered agents on refresh', () => {
+      mockDiscoverAllAgents.mockClear();
+      getHandler('editless.refresh')();
+      expect(mockDiscoverAllAgents).toHaveBeenCalled();
+      expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
     });
   });
 
@@ -1389,6 +1418,71 @@ describe('extension command handlers', () => {
     });
   });
 
+  // --- editless.filterPRs ---------------------------------------------------
+
+  describe('editless.filterPRs', () => {
+    it('should show QuickPick with repos, statuses, and labels', async () => {
+      mockPRsGetAllRepos.mockReturnValue(['owner/repo1']);
+      mockPRsGetAllLabels.mockReturnValue(['type:bug', 'release:v0.1']);
+      mockShowQuickPick.mockResolvedValue([]);
+
+      await getHandler('editless.filterPRs')();
+
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ label: 'owner/repo1', description: 'repo' }),
+          expect.objectContaining({ label: 'Draft', description: 'status' }),
+          expect.objectContaining({ label: 'Open', description: 'status' }),
+          expect.objectContaining({ label: 'Approved', description: 'status' }),
+          expect.objectContaining({ label: 'Changes Requested', description: 'status' }),
+          expect.objectContaining({ label: 'Auto-merge', description: 'status' }),
+          expect.objectContaining({ label: 'type:bug', description: 'label' }),
+          expect.objectContaining({ label: 'release:v0.1', description: 'label' }),
+        ]),
+        expect.objectContaining({ canPickMany: true }),
+      );
+    });
+
+    it('should apply selected filters to provider', async () => {
+      mockPRsGetAllRepos.mockReturnValue(['owner/repo1']);
+      mockPRsGetAllLabels.mockReturnValue(['type:bug']);
+      mockShowQuickPick.mockResolvedValue([
+        { label: 'owner/repo1', description: 'repo' },
+        { label: 'type:bug', description: 'label' },
+        { label: 'Draft', description: 'status' },
+      ]);
+
+      await getHandler('editless.filterPRs')();
+
+      expect(mockPRsSetFilter).toHaveBeenCalledWith({
+        repos: ['owner/repo1'],
+        labels: ['type:bug'],
+        statuses: ['draft'],
+      });
+    });
+
+    it('should no-op when user cancels QuickPick', async () => {
+      mockShowQuickPick.mockResolvedValue(undefined);
+      await getHandler('editless.filterPRs')();
+      expect(mockPRsSetFilter).not.toHaveBeenCalled();
+    });
+
+    it('should set empty filter when no items selected', async () => {
+      mockShowQuickPick.mockResolvedValue([]);
+      await getHandler('editless.filterPRs')();
+      expect(mockPRsSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], statuses: [] });
+    });
+  });
+
+  // --- editless.clearPRsFilter -----------------------------------------------
+
+  describe('editless.clearPRsFilter', () => {
+    it('should delegate to provider clearFilter', () => {
+      getHandler('editless.clearPRsFilter')();
+      expect(mockPRsClearFilter).toHaveBeenCalled();
+    });
+  });
+
   // --- editless.openInBrowser ------------------------------------------------
 
   describe('editless.openInBrowser', () => {
@@ -1442,6 +1536,21 @@ describe('extension command handlers', () => {
       await getHandler('editless.launchFromWorkItem')(item);
 
       expect(mockLaunchTerminal).toHaveBeenCalledWith(squad, '#42 Fix bug');
+    });
+
+    it('should persist terminal name as sticky label after launch', async () => {
+      const squad = makeSquad();
+      const item = { issue: { number: 42, title: 'Fix bug', url: 'https://example.com/42', repository: 'owner/repo' } };
+      const mockTerminal = { name: '#42 Fix bug' };
+      mockLoadSquads.mockReturnValue([squad]);
+      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', squad });
+      mockLaunchTerminal.mockReturnValue(mockTerminal);
+      mockGetLabelKey.mockReturnValue('terminal:squad-1-123-1');
+
+      await getHandler('editless.launchFromWorkItem')(item);
+
+      expect(mockGetLabelKey).toHaveBeenCalledWith(mockTerminal);
+      expect(mockSetLabel).toHaveBeenCalledWith('terminal:squad-1-123-1', '#42 Fix bug');
     });
 
     it('should no-op when item has no issue', async () => {

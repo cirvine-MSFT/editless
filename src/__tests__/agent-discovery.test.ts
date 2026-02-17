@@ -176,3 +176,35 @@ describe('discoverAllAgents', () => {
     expect(result.find(a => a.id === 'ws-agent')).toBeDefined();
   });
 });
+
+describe('discoverAgentsInCopilotDir', () => {
+  let originalHome: string;
+
+  beforeEach(() => {
+    originalHome = process.env.HOME ?? process.env.USERPROFILE ?? '';
+    const fakeHome = path.join(tmpDir, 'fakehome');
+    fs.mkdirSync(fakeHome, { recursive: true });
+    // Override homedir for the module
+    process.env.HOME = fakeHome;
+    process.env.USERPROFILE = fakeHome;
+  });
+
+  afterEach(() => {
+    if (originalHome) {
+      process.env.HOME = originalHome;
+      process.env.USERPROFILE = originalHome;
+    }
+  });
+
+  it('should discover agents in ~/.copilot/agents/ subdirectory', () => {
+    const fakeHome = process.env.HOME!;
+    const agentsDir = path.join(fakeHome, '.copilot', 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, 'foo.agent.md'), '# Foo Agent\n> Foo description\n', 'utf-8');
+
+    // discoverAgentsInCopilotDir uses os.homedir() which reads HOME/USERPROFILE
+    const result = discoverAgentsInCopilotDir();
+
+    expect(result.find(a => a.id === 'foo')).toBeDefined();
+  });
+});

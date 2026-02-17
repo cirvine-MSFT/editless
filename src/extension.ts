@@ -22,7 +22,7 @@ import { flushDecisionsInbox } from './inbox-flusher';
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
 import { resolveTeamDir } from './team-dir';
 import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState } from './work-items-tree';
-import { PRsTreeProvider, PRsTreeItem } from './prs-tree';
+import { PRsTreeProvider, PRsTreeItem, type PRsFilter } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { TerminalLayoutManager } from './terminal-layout';
@@ -98,7 +98,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // --- PRs tree view -------------------------------------------------------
   const prsProvider = new PRsTreeProvider();
-  context.subscriptions.push(vscode.window.registerTreeDataProvider('editlessPRs', prsProvider));
+  const prsView = vscode.window.createTreeView('editlessPRs', { treeDataProvider: prsProvider });
+  prsProvider.setTreeView(prsView);
+  context.subscriptions.push(prsView);
 
   // Reconcile persisted terminal sessions with live terminals after reload
   terminalManager.reconcile();
@@ -304,6 +306,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Refresh
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.refresh', () => {
+      discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
+      treeProvider.setDiscoveredAgents(discoveredAgents);
       treeProvider.refresh();
       output.appendLine('[refresh] Tree refreshed');
     }),
@@ -480,8 +484,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.hideAgent', (item?: EditlessTreeItem) => {
       if (!item) return;
-      const id = item.squadId ?? item.id;
-      if (!id) return;
+      const rawId = item.squadId ?? item.id;
+      if (!rawId) return;
+      // Discovered agents use 'discovered:{id}' as item.id but visibility checks raw id
+      const id = rawId.replace(/^discovered:/, '');
       visibilityManager.hide(id);
       treeProvider.refresh();
     }),
@@ -601,6 +607,57 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   );
   vscode.commands.executeCommand('setContext', 'editless.workItemsFiltered', false);
 
+  // Filter PRs (#269)
+  const prStatusOptions: { label: string; value: string }[] = [
+    { label: 'Draft', value: 'draft' },
+    { label: 'Open', value: 'open' },
+    { label: 'Approved', value: 'approved' },
+    { label: 'Changes Requested', value: 'changes-requested' },
+    { label: 'Auto-merge', value: 'auto-merge' },
+  ];
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.filterPRs', async () => {
+      const current = prsProvider.filter;
+      const allRepos = prsProvider.getAllRepos();
+      const allLabels = prsProvider.getAllLabels();
+
+      const items: vscode.QuickPickItem[] = [];
+      if (allRepos.length > 0) {
+        items.push({ label: 'Repos', kind: vscode.QuickPickItemKind.Separator });
+        for (const repo of allRepos) {
+          items.push({ label: repo, description: 'repo', picked: current.repos.includes(repo) });
+        }
+      }
+      items.push({ label: 'Status', kind: vscode.QuickPickItemKind.Separator });
+      for (const s of prStatusOptions) {
+        items.push({ label: s.label, description: 'status', picked: current.statuses.includes(s.value) });
+      }
+      if (allLabels.length > 0) {
+        items.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
+        for (const label of allLabels) {
+          items.push({ label, description: 'label', picked: current.labels.includes(label) });
+        }
+      }
+
+      const picks = await vscode.window.showQuickPick(items, {
+        title: 'Filter PRs',
+        canPickMany: true,
+        placeHolder: 'Select filters (leave empty to show all)',
+      });
+      if (picks === undefined) return;
+
+      const repos = picks.filter(p => p.description === 'repo').map(p => p.label);
+      const labels = picks.filter(p => p.description === 'label').map(p => p.label);
+      const statuses = picks.filter(p => p.description === 'status')
+        .map(p => prStatusOptions.find(s => s.label === p.label)?.value)
+        .filter((s): s is string => s !== undefined);
+
+      prsProvider.setFilter({ repos, labels, statuses });
+    }),
+    vscode.commands.registerCommand('editless.clearPRsFilter', () => prsProvider.clearFilter()),
+  );
+  vscode.commands.executeCommand('setContext', 'editless.prsFiltered', false);
+
   // Configure GitHub repos (opens settings)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.configureRepos', async () => {
@@ -716,7 +773,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const terminalName = rawName.length <= MAX_SESSION_NAME
         ? rawName
         : rawName.slice(0, rawName.lastIndexOf(' ', MAX_SESSION_NAME)) + '…';
-      terminalManager.launchTerminal(cfg, terminalName);
+      const terminal = terminalManager.launchTerminal(cfg, terminalName);
+      labelManager.setLabel(terminalManager.getLabelKey(terminal), terminalName);
 
       await vscode.env.clipboard.writeText(issue.url);
       vscode.window.showInformationMessage(`Copied ${issue.url} to clipboard`);

@@ -3,7 +3,14 @@
 > Escape the editor. Free your mind.
 
 [![Preview Status](https://img.shields.io/badge/status-preview-blue)](https://github.com/cirvine-MSFT/editless)
-[![CI Status](https://github.com/cirvine-MSFT/editless/workflows/ci/badge.svg)](https://github.com/cirvine-MSFT/editless/actions)
+[![CI Status](https://github.com/cirvine-MSFT/editless/actions/workflows/ci.yml/badge.svg)](https://github.com/cirvine-MSFT/editless/actions/workflows/ci.yml)
+[![VS Code Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/cirvine-MSFT.editless)](https://marketplace.visualstudio.com/items?itemName=cirvine-MSFT.editless)
+[![VS Code Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/cirvine-MSFT.editless)](https://marketplace.visualstudio.com/items?itemName=cirvine-MSFT.editless)
+[![VS Code Marketplace Rating](https://img.shields.io/visual-studio-marketplace/r/cirvine-MSFT.editless)](https://marketplace.visualstudio.com/items?itemName=cirvine-MSFT.editless)
+[![GitHub Stars](https://img.shields.io/github/stars/cirvine-MSFT/editless)](https://github.com/cirvine-MSFT/editless/stargazers)
+[![GitHub Issues](https://img.shields.io/github/issues/cirvine-MSFT/editless)](https://github.com/cirvine-MSFT/editless/issues)
+[![GitHub Forks](https://img.shields.io/github/forks/cirvine-MSFT/editless)](https://github.com/cirvine-MSFT/editless/network/members)
+[![Last Commit](https://img.shields.io/github/last-commit/cirvine-MSFT/editless)](https://github.com/cirvine-MSFT/editless/commits)
 [![MIT License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 > 🎉 **Hey there!** EditLess is still in preview — we're building it in the open and **we'd love your feedback.** If you hit any snags, rough edges, or brilliant ideas, [please open an issue](https://github.com/cirvine-MSFT/editless/issues). We read every one, and your input shapes what's next. This is a living project, and you're part of making it better.
@@ -85,6 +92,12 @@ No experience with agentic development required. No complex setup. Just install,
 - **Use [SquadUI](https://marketplace.visualstudio.com/items?itemName=csharpfritz.squadui) for a richer dashboard.** It adds team visualization, skill management, and a squad dashboard right in VS Code. EditLess integrates with it — you'll see "Open in Squad UI" in your context menus.
 
 - **Use [git worktrees](https://git-scm.com/docs/git-worktree) for parallel agent work.** Worktrees let multiple agents work on the same repo simultaneously — each in its own branch, each in its own directory. No checkout conflicts, no stepping on each other's work. You don't even need to set them up yourself — just ask your agent to create a worktree and get to work.
+
+- **Turbocharge with yolo mode (`--yolo`).** When you trust your agents completely, use the `--yolo` flag in your agent's launch command to auto-approve all changes — no manual review gates, no "waiting for approval" delays. Your agents move at full speed. LLMs can make mistakes, so be aware of the risks — but honestly, it's so nice not having to manually approve every single operation. You can mitigate risks by giving your agents strong safety directives. Use yolo mode for experiments, low-stakes work, or when you've set tight constraints you're confident in.
+
+- **Go autonomous with autopilot mode.** Switch to autopilot when you're stepping away from GitHub Copilot CLI — your agents will plan, delegate to other agents, execute, and report back without waiting for you. Perfect for overnight runs, background tasks, or when you want to free your mind completely and check in later.
+
+- **Use your agents to create your agents.** Don't hand-edit your agent files (charters, configs, skills) except for maybe basic boilerplate. Let your agents do their own editing and refinement instead. You hired them to be builders — give them the keys to their own workshop.
 
 ## Documentation
 
