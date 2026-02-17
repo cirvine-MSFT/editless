@@ -86,6 +86,10 @@ No experience with agentic development required. No complex setup. Just install,
 
 - **Use [git worktrees](https://git-scm.com/docs/git-worktree) for parallel agent work.** Worktrees let multiple agents work on the same repo simultaneously — each in its own branch, each in its own directory. No checkout conflicts, no stepping on each other's work. You don't even need to set them up yourself — just ask your agent to create a worktree and get to work.
 
+- **Turbocharge with yolo mode (`--yolo`).** When you trust your agents completely, use the `--yolo` flag in your squad's launch command to auto-approve all changes — no manual review gates, no "waiting for approval" delays. Your agents move at full speed. Use it for experiments, low-stakes work, or when you've already set tight constraints that you're confident in.
+
+- **Go autonomous with autopilot mode.** For truly hands-off work, configure your agents to run in autopilot — they'll plan, delegate to other agents, execute, and report back without waiting for you. Perfect for overnight runs, background tasks, or when you want to free your mind completely and check in later. Set it up in your squad config and go.
+
 ## Documentation
 
 - [The EditLess Story](docs/story.md) — How EditLess came to be
