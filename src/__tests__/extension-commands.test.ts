@@ -411,6 +411,7 @@ vi.mock('../ado-auth', () => ({
   getAdoToken: vi.fn(),
   promptAdoSignIn: mockPromptAdoSignIn,
   clearAzTokenCache: vi.fn(),
+  setAdoAuthOutput: vi.fn(),
 }));
 
 vi.mock('../ado-client', () => ({
@@ -1697,6 +1698,28 @@ describe('extension command handlers', () => {
       getLastCloseCallback()(unrelatedTerminal);
 
       expect(mockAddSquads).not.toHaveBeenCalled();
+    });
+  });
+
+  // --- #252 regression: QuickPick labels should not mention PAT ----------------
+
+  describe('QuickPick ADO labels (#252)', () => {
+    it('configureWorkItems ADO option should not mention PAT', async () => {
+      mockShowQuickPick.mockResolvedValueOnce(undefined);
+      await getHandler('editless.configureWorkItems')();
+      const items = mockShowQuickPick.mock.calls[0][0] as Array<{ label: string; description: string }>;
+      const adoItem = items.find(i => i.label === 'Azure DevOps');
+      expect(adoItem).toBeDefined();
+      expect(adoItem!.description).not.toContain('PAT');
+    });
+
+    it('configurePRs ADO option should not mention PAT', async () => {
+      mockShowQuickPick.mockResolvedValueOnce(undefined);
+      await getHandler('editless.configurePRs')();
+      const items = mockShowQuickPick.mock.calls[0][0] as Array<{ label: string; description: string }>;
+      const adoItem = items.find(i => i.label === 'Azure DevOps');
+      expect(adoItem).toBeDefined();
+      expect(adoItem!.description).not.toContain('PAT');
     });
   });
 });
