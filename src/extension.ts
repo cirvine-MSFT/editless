@@ -953,7 +953,7 @@ export function deactivate(): void {
 
 let _terminalManagerRef: TerminalManager | undefined;
 
-function initAutoRefresh(
+export function initAutoRefresh(
   workItemsProvider: WorkItemsTreeProvider,
   prsProvider: PRsTreeProvider,
 ): vscode.Disposable {
