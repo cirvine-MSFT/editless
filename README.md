@@ -29,6 +29,8 @@ EditLess integrates with GitHub Copilot CLI and includes native support for [Squ
 
 New to agentic development? Start here — install EditLess, add a squad, and let the AI do the heavy lifting. You'll wonder how you ever worked without it.
 
+![EditLess sidebar showing agents, work items, and terminal sessions](docs/images/hero-screenshot.png)
+
 ## Installation
 
 ### VS Code Marketplace
