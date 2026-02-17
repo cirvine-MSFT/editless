@@ -854,6 +854,46 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         return;
       }
 
+      type SourceValue = 'create' | 'import';
+      const sourceItems: { label: string; description: string; value: SourceValue }[] = [
+        { label: '$(add) Create new', description: 'Create from template or CLI provider', value: 'create' },
+        { label: '$(file-symlink-file) Import from file', description: 'Copy an existing .md file', value: 'import' },
+      ];
+      const sourcePick = await vscode.window.showQuickPick(sourceItems, {
+        placeHolder: 'How should the agent be created?',
+      });
+      if (!sourcePick) return;
+
+      if (sourcePick.value === 'import') {
+        const uris = await vscode.window.showOpenDialog({
+          canSelectFiles: true,
+          canSelectFolders: false,
+          canSelectMany: false,
+          openLabel: 'Import agent file',
+          filters: { 'Markdown': ['md'] },
+        });
+        if (!uris || uris.length === 0) return;
+
+        const agentsDir = path.join(workspaceFolder.uri.fsPath, '.github', 'agents');
+        await vscode.workspace.fs.createDirectory(vscode.Uri.file(agentsDir));
+        const destPath = path.join(agentsDir, `${name.trim()}.agent.md`);
+        const destUri = vscode.Uri.file(destPath);
+
+        try {
+          await vscode.workspace.fs.copy(uris[0], destUri, { overwrite: false });
+        } catch (err: unknown) {
+          const msg = err instanceof Error ? err.message : String(err);
+          vscode.window.showWarningMessage(`Failed to import agent file: ${msg}`);
+          return;
+        }
+
+        const doc = await vscode.workspace.openTextDocument(destUri);
+        await vscode.window.showTextDocument(doc);
+        discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
+        treeProvider.setDiscoveredAgents(discoveredAgents);
+        return;
+      }
+
       const provider = getActiveCliProvider();
       const hasProviderCreate = !!provider?.createCommand?.trim();
 
