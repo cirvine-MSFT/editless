@@ -59,9 +59,8 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       return;
     }
     this._loading = true;
-    this._prs.clear();
-    this._onDidChangeTreeData.fire();
 
+    const nextPrs = new Map<string, GitHubPR[]>();
     const fetches: Promise<void>[] = [];
 
     // GitHub fetch — only if gh CLI is available and repos configured
@@ -72,7 +71,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
           ...this._repos.map(async (repo) => {
             const prs = await fetchMyPRs(repo);
             if (prs.length > 0) {
-              this._prs.set(repo, prs);
+              nextPrs.set(repo, prs);
             }
           }),
         );
@@ -86,6 +85,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
     await Promise.all(fetches);
 
+    this._prs = nextPrs;
     this._loading = false;
     this._onDidChangeTreeData.fire();
     if (this._pendingRefresh) {
@@ -100,7 +100,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
   getChildren(element?: PRsTreeItem): PRsTreeItem[] {
     if (!element) {
-      if (this._loading) {
+      if (this._loading && this._prs.size === 0 && this._adoPRs.length === 0) {
         const item = new PRsTreeItem('Loading...');
         item.iconPath = new vscode.ThemeIcon('loading~spin');
         return [item];
