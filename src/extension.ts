@@ -306,6 +306,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Refresh
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.refresh', () => {
+      discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
+      treeProvider.setDiscoveredAgents(discoveredAgents);
       treeProvider.refresh();
       output.appendLine('[refresh] Tree refreshed');
     }),
@@ -482,8 +484,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.hideAgent', (item?: EditlessTreeItem) => {
       if (!item) return;
-      const id = item.squadId ?? item.id;
-      if (!id) return;
+      const rawId = item.squadId ?? item.id;
+      if (!rawId) return;
+      // Discovered agents use 'discovered:{id}' as item.id but visibility checks raw id
+      const id = rawId.replace(/^discovered:/, '');
       visibilityManager.hide(id);
       treeProvider.refresh();
     }),
@@ -769,7 +773,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const terminalName = rawName.length <= MAX_SESSION_NAME
         ? rawName
         : rawName.slice(0, rawName.lastIndexOf(' ', MAX_SESSION_NAME)) + '…';
-      terminalManager.launchTerminal(cfg, terminalName);
+      const terminal = terminalManager.launchTerminal(cfg, terminalName);
+      labelManager.setLabel(terminalManager.getLabelKey(terminal), terminalName);
 
       await vscode.env.clipboard.writeText(issue.url);
       vscode.window.showInformationMessage(`Copied ${issue.url} to clipboard`);

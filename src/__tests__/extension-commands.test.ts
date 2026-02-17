@@ -640,6 +640,13 @@ describe('extension command handlers', () => {
       expect(mockHide).toHaveBeenCalledWith('agent-42');
     });
 
+    it('should strip discovered: prefix when hiding discovered agent', () => {
+      const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
+      item.id = 'discovered:my-agent';
+      getHandler('editless.hideAgent')(item);
+      expect(mockHide).toHaveBeenCalledWith('my-agent');
+    });
+
     it('should no-op when item is undefined', () => {
       getHandler('editless.hideAgent')(undefined);
       expect(mockHide).not.toHaveBeenCalled();
@@ -787,6 +794,13 @@ describe('extension command handlers', () => {
     it('should refresh tree provider', () => {
       getHandler('editless.refresh')();
       expect(mockTreeRefresh).toHaveBeenCalled();
+    });
+
+    it('should re-scan discovered agents on refresh', () => {
+      mockDiscoverAllAgents.mockClear();
+      getHandler('editless.refresh')();
+      expect(mockDiscoverAllAgents).toHaveBeenCalled();
+      expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
     });
   });
 
@@ -1522,6 +1536,21 @@ describe('extension command handlers', () => {
       await getHandler('editless.launchFromWorkItem')(item);
 
       expect(mockLaunchTerminal).toHaveBeenCalledWith(squad, '#42 Fix bug');
+    });
+
+    it('should persist terminal name as sticky label after launch', async () => {
+      const squad = makeSquad();
+      const item = { issue: { number: 42, title: 'Fix bug', url: 'https://example.com/42', repository: 'owner/repo' } };
+      const mockTerminal = { name: '#42 Fix bug' };
+      mockLoadSquads.mockReturnValue([squad]);
+      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', squad });
+      mockLaunchTerminal.mockReturnValue(mockTerminal);
+      mockGetLabelKey.mockReturnValue('terminal:squad-1-123-1');
+
+      await getHandler('editless.launchFromWorkItem')(item);
+
+      expect(mockGetLabelKey).toHaveBeenCalledWith(mockTerminal);
+      expect(mockSetLabel).toHaveBeenCalledWith('terminal:squad-1-123-1', '#42 Fix bug');
     });
 
     it('should no-op when item has no issue', async () => {
