@@ -1,40 +1,36 @@
-# Create a new agent or squad
+# Create a New Agent or Squad
 
-Add an agent or squad to your EditLess workspace in seconds.
-
-## Steps
-
-1. In the **Agents** panel (left sidebar), click the **+** (Add...) button in the panel header
-2. Choose **Add Agent** or **Add Squad** from the quick-pick menu
-3. **For agents:** Enter the path to your agent file (e.g., `.github/agents/my-agent.md`, `.copilot/agents/*.md`)
-4. **For squads:** Enter the path to your squad directory (e.g., `.squad/`, `.ai-team/`)
-5. Press Enter — the new agent or squad appears in the sidebar tree
-6. You're ready to launch sessions!
-
-## How to know if you need this
-
-- You have agents or squads in your workspace that aren't showing up
-- EditLess hasn't auto-discovered them yet
-- You're adding a new agent or squad and want to register it immediately
-
-## Auto-discovery
-
-EditLess automatically discovers agents in standard locations:
-- `.github/agents/`
-- `.copilot/agents/`
-- `.agent.md` files in your workspace
-- Squad directories (`.squad/`, `.ai-team/`)
-
-You might not need to manually add anything — check the Agents panel first.
+Add an AI agent or squad to your EditLess workspace so you can launch sessions, delegate work, and manage everything from the sidebar.
 
 <!-- TODO: Add GIF recording for this workflow -->
 
----
+## Before You Start
 
-💡 **Tip:** Once you add an agent or squad, use the **Launch Session** button (▶️) next to it to start working.
+EditLess **auto-discovers** agents in your workspace. If you've already set up a [Squad](https://github.com/bradygaster/squad) or placed agent files in `.github/agents/`, `.copilot/agents/`, or similar locations, they'll appear in the sidebar automatically — no manual steps needed.
 
-📖 **See Also:**
-- [Create a session and name it](create-session.md)
-- [Open a session from a work item](launch-from-work-item.md)
+This guide covers adding agents or squads that aren't auto-discovered, or adding them from a different location.
+
+## Steps
+
+1. **Open the Agents panel** in the EditLess sidebar.
+
+2. **Click the `+` (Add...) button** in the panel header.
+
+3. **Choose what to add:**
+   - **Add Agent** — point to a single agent definition file (e.g., `.github/agents/my-agent.md`)
+   - **Add Squad** — point to a squad directory that contains your team configuration
+
+4. **Provide the path** when prompted. For agents, this is the path to the agent file. For squads, this is the directory containing the squad configuration.
+
+5. **Your agent or squad appears** in the sidebar tree, ready to launch sessions.
+
+## 💡 Tip
+
+You can also right-click a discovered agent and select **Add to Registry** to promote it from auto-discovered to a permanent entry. This is useful when you want to ensure an agent always appears, even if the auto-discovery path changes.
+
+## 📖 See Also
+
+- [Create and Name a Session](create-session.md) — launch your first session with the new agent
+- [Getting Started](../getting-started.md) — full onboarding guide
 
 ← [Back to Common Workflows](README.md)

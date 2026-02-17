@@ -68,6 +68,8 @@
 
 📌 Quick tips documentation pattern (2026-02-16): README Quick Tips section follows consistent format — actionable, problem-focused tips with conversational tone matching Casey's voice. Each tip starts with bold headline + backtick code reference, explains *why* and *when*, ends with benefit or context. Added two new tips for yolo mode (`--yolo` flag auto-approves, use for low-stakes work) and autopilot mode (autonomous agent operation, perfect for overnight/background tasks). PR #264. — documented by Summer
 
+📌 **Workflow documentation pattern (2026-02-16):** EditLess workflow how-to guides follow a consistent structure: (1) One-sentence intro, (2) Numbered steps (5–8 steps), (3) Context subsection explaining when/why, (4) GIF placeholder comment, (5) 💡 Tip callout, (6) 📖 See Also links, (7) Back-link to index. Index uses two sections: "Getting Started" (new how-to guides) and "Advanced Workflows" (integration-specific). Files live in `docs/workflows/`. This pattern scales: easy to add new workflows, easy to spot missing steps. — documented by Summer
+
 # Project Context
 
 - **Owner:** Casey Irvine (cirvine@microsoft.com)
