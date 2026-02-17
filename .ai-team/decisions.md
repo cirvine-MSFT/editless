@@ -2004,3 +2004,27 @@ editless/
 **What:** When Casey discovers a bug during usage, Meeseeks should write regression tests for that specific scenario BEFORE Morty fixes it. Tests-first approach for all user-discovered bugs.
 **Why:** User request — ensures bugs have proper test coverage and we know exactly what to verify when the fix lands.
 
+
+
+### 2026-02-17: Always assign Casey on new issues
+**By:** Casey (via Copilot)
+**What:** All new issues filed in cirvine-MSFT/editless should be assigned to @me (cirvine-MSFT) so they appear in the Work Items pane. The pane uses --assignee @me to fetch issues.
+**Why:** User request — Casey wants visibility of all issues from the extension's Work Items view.
+
+### 2026-02-16: Meeseeks writes regression tests for every bug Casey discovers
+**By:** Casey Irvine (via Copilot)
+**What:** When Casey discovers a bug during usage, Meeseeks should write regression tests for that specific scenario BEFORE Morty fixes it. Tests-first approach for all user-discovered bugs.
+**Why:** User request — ensures bugs have proper test coverage and we know exactly what to verify when the fix lands.
+
+### 2026-02-17: User directive
+**By:** Casey (via Copilot)
+**What:** When doing a clean reinstall of the editless extension, only clear editless-specific state (e.g., `globalStorage/cirvine-msft.editless`). Never wipe all of VS Code's `workspaceStorage` — that affects every extension.
+**Why:** User request — captured for team memory. Broad wipe caused collateral damage to other extensions' cached state.
+
+### 2026-02-16: Use context keys for menu visibility based on dynamic state
+
+**By:** Morty
+
+**What:** Gate menu items on VS Code context keys when visibility depends on runtime state that can't be expressed through `viewItem` checks. For the "Upgrade All Squads" button, we use `editless.squadUpgradeAvailable` set via `vscode.commands.executeCommand('setContext', ...)` in `checkSquadUpgradesOnStartup()`.
+
+**Why:** VS Code's TreeView API doesn't support dynamic menu visibility based on tree contents — you can only use `view == <viewId>` (always visible) or `viewItem == <contextValue>` (per-item inline buttons). When a menu action should appear based on aggregate state (e.g., "any squad upgradeable"), a context key is the only option. This pattern should be used for other view-level actions that depend on computed state.
