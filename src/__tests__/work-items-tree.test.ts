@@ -125,7 +125,7 @@ async function getIssueItems(issues: GitHubIssue[]): Promise<WorkItemsTreeItem[]
   const listener = vi.fn();
   provider.onDidChangeTreeData(listener);
   provider.setRepos(['owner/repo']);
-  await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
   return provider.getChildren();
 }
@@ -314,7 +314,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['owner/repo']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     provider.setFilter({
       repos: filter.repos ?? [],
@@ -369,7 +369,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['owner/repo']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     provider.setFilter({ repos: [], labels: [], states: [] });
     const items = provider.getChildren();
@@ -384,7 +384,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['owner/repo']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     provider.setFilter({ repos: [], labels: ['bug'], states: [] });
     expect(provider.getChildren()).toHaveLength(1);
@@ -428,7 +428,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
     provider.setRepos(['owner/repo']);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     const labels = provider.getAllLabels();
     expect(labels).toEqual(['bug', 'feature', 'urgent']);
