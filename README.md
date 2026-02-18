@@ -35,7 +35,7 @@ New to agentic development? Start here — install EditLess, add a squad, and le
 
 ### VS Code Marketplace
 
-> 🚧 Coming soon — EditLess will be available directly from the [VS Code Marketplace](https://marketplace.visualstudio.com/).
+**[Install EditLess from the VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=cirvine-MSFT.editless)** — or search for "EditLess" in the Extensions view (`Ctrl+Shift+X`).
 
 ### Manual Install (VSIX)
 
@@ -85,6 +85,14 @@ That's it. One extension, one sidebar, one conversation. You'll go from zero to 
 
 No experience with agentic development required. No complex setup. Just install, point, and let the AI do the heavy lifting. The editorless revolution starts with a single click.
 
+### Still Not Ready to Leave Your Editor Behind?
+
+Look, I'll level with you — I get it. A lot of the above reads like the manifesto of someone who wears a tinfoil hat to dinner parties. And the truth is, I *do* believe a lot of what's said here. But I also recognize that there are still plenty of valid scenarios where you might need to open an editor — to review code, watch what the AIs are doing, or just plan effectively. At least today.
+
+I want those of you still clinging to your editors to know: **I care about you, your scenarios, and your workflows.** I want to hear how EditLess can fit into your life to make your work with AI better — even if you're not ready to go fully editorless.
+
+Use EditLess to manage your AI sessions and agents. Open it in a separate VS Code instance. Pair it with your existing workflow. Whatever works for you. [File an issue](https://github.com/cirvine-MSFT/editless/issues/new) for your use case — we want to hear about it.
+
 ## 💡 Quick Tips
 
 - **Try squads without touching your team's repo.** You don't need to add [Squad](https://github.com/bradygaster/squad) to your work project to try it out. Create a personal repo, add a squad there, and tell your agents to work across your other repos. It's a great way to experiment without changing anything in your team's workspace.
@@ -111,6 +119,14 @@ No experience with agentic development required. No complex setup. Just install,
 - [Multi-Repo Workflow](docs/multi-repo-workflow.md) — Working across multiple repos
 - [GitHub Workflow](docs/workflows/github-workflow.md) — Managing work with AI agents on GitHub
 - [ADO Workflow](docs/workflows/ado-workflow.md) — Managing work with AI agents on Azure DevOps
+
+## Known Issues & Workarounds
+
+EditLess is in active development and some features have known issues. We document workarounds directly in the issue descriptions so you can keep moving while we work on fixes.
+
+👉 **[View issues with workarounds](https://github.com/cirvine-MSFT/editless/issues?q=is%3Aissue+is%3Aopen+label%3Ahas-workaround)** — look for the `has-workaround` label to find issues with documented solutions.
+
+If you run into something that isn't listed, [please open an issue](https://github.com/cirvine-MSFT/editless/issues/new) — we read every one.
 
 ## Companion Extensions
 
