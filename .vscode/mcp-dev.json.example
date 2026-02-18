@@ -1,0 +1,14 @@
+{
+  "$schema": "https://github.com/modelcontextprotocol/servers/blob/main/schema.json",
+  "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-chrome-devtools"
+      ],
+      "description": "Chrome DevTools MCP server for webview debugging. Use with EditLess when developing webviews."
+    }
+  },
+  "_comment": "Copy this file to .vscode/mcp.json to enable MCP servers for development. The mcp.json file is gitignored to avoid committing personal dev configurations."
+}
