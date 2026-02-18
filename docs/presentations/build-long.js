@@ -20,13 +20,24 @@ pres.layout = 'LAYOUT_16x9';
 pres.author = 'Product Team';
 pres.title = "The Developer's Journey to Agentic AI";
 
-// Convert all 10 slides
+// Convert all 11 slides
 async function build() {
-  for (let i = 1; i <= 10; i++) {
+  for (let i = 1; i <= 11; i++) {
     const htmlPath = path.join(workspaceDir, `slide${i}.html`);
     console.log(`Converting slide ${i}...`);
     
     await html2pptx(htmlPath, pres);
+    
+    // Slide 10 (index 9): add the capability curve chart image
+    if (i === 10) {
+      const slide = pres.slides[pres.slides.length - 1];
+      const imgPath = path.join(workspaceDir, 'capability-curve.png');
+      slide.addImage({
+        path: imgPath,
+        x: 1.2, y: 1.3, w: 7.6, h: 3.5,
+        sizing: { type: 'contain', w: 7.6, h: 3.5 }
+      });
+    }
   }
 
   await pres.writeFile({ fileName: outputPath });
