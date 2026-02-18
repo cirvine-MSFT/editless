@@ -51,6 +51,7 @@
 
 📌 Pipeline update (2026-02-16): Removed `go:` label namespace — `go:yes`, `go:no`, `go:needs-research` all retired. Triage now applies `status:needs-plan` as default (respects existing `status:` labels). Release labels trimmed to `release:v0.1` and `release:backlog` only. Enforcement workflow no longer manages `go:` mutual exclusivity or go→release side effects. — requested by Casey
 
+📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
 📌 Pipeline audit complete (2026-02-16): **CI/CD Pipeline Status Report** — All core test pipelines executing correctly. CI workflow (lint, build, unit tests via vitest) runs on every push/PR targeting main/master (~17s). Integration tests run on separate workflow with xvfb display server (~14s). Both have 100% pass rate on recent runs (200 CI runs, 170 integration runs reviewed). Release pipeline active (1 successful tag-based release). **Gap identified**: No coverage reporting configured (vitest supports coverage but not enabled in config). **Recommendation**: Add optional coverage report upload step. Branch protection status: **unknown** (no access to branch protection API in this session). Squad CI (separate test runner in .ai-team/) checks .ai-team tests on PR/push to dev branch.
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 

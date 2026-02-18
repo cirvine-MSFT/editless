@@ -156,3 +156,5 @@
 
 
 
+
+📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick

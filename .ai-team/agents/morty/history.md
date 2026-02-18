@@ -138,3 +138,5 @@
 - **Upgrade All button context key (#228):** The "Upgrade All Squads" button now uses a context key `editless.squadUpgradeAvailable` to gate visibility instead of always showing when the Agents view is active. VS Code's TreeView API doesn't support dynamic menu visibility based on tree contents, so we use `vscode.commands.executeCommand('setContext', ...)` in `checkSquadUpgradesOnStartup()` to track whether any squad has an upgrade available. The `onUpgradeComplete` callback re-runs the check to update the context key. The per-squad inline button already used `viewItem == squad-upgradeable`, now both buttons are gated consistently.
 
 
+
+📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
