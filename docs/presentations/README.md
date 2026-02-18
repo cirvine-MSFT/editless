@@ -1,8 +1,6 @@
 # Mark's Journey: Executive Presentation
 
-**File:** `marks-journey-short.pptx`  
 **Format:** PowerPoint (16:9 widescreen)  
-**Slides:** 6  
 **Audience:** Leadership and high-level customers (non-technical)
 
 ## Overview
@@ -35,9 +33,7 @@ This presentation tells the story of "Mark," a fictional developer's journey dis
 - Tools change monthly; process is what endures
 - Developers are becoming managers of AI teams
 
-## Technical Notes
+## Files
 
-- Built using `html2pptx` tool for precise HTML-to-PowerPoint conversion
-- All slides validated for proper margins and overflow
-- Source HTML files in `workspace/short/`
-- Build script: `build-short.js`
+- `marks-journey-short.pptx` — Condensed 7-slide executive version
+- `marks-journey-long.pptx` — Detailed 11-slide version
