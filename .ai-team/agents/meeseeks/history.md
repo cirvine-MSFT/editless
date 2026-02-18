@@ -100,3 +100,5 @@
 - **2026-02-17 — addSquad command regression tests (#232), PR #237:** Added 11 regression tests for the `addSquad` command flow in `extension-commands.test.ts`. Extended the squad-upgrader mock to include `checkNpxAvailable`, `promptInstallNode`, and `isSquadInitialized`. Extended hoisted mocks to include `mockCreateTerminal` so terminal creation and command execution could be verified. Covered: npx availability check and early return, folder picker dialog with correct options, cancellation (undefined and empty array), squad init vs upgrade command selection based on `isSquadInitialized()`, terminal creation with correct name/cwd/command, success notifications (different messages for init vs upgrade), nested directory path handling, and full happy path flows for both init and upgrade scenarios. Total tests: 541 (up from 530).
 
 
+
+📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick

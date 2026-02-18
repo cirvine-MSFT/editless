@@ -11,6 +11,30 @@
 
 ## Learnings
 
+### 2026-02-17: v0.1 Retrospective — Speed vs. Quality Tradeoffs
+Completed comprehensive retrospective analysis of v0.1 release cycle (103 closed issues, 96 merged PRs, 275+ commits in 3 days). **Key patterns identified:**
+
+**Duplicate work:** PR#207 and PR#210 are literally the same fix merged twice (deduplicate squads in registry). Issues #11/#52 (toast re-appearing), #12/#54 (sessions not surviving reload) are duplicates. This represents pure waste from coordination gaps in parallel work.
+
+**Features shipped then removed:** Custom Commands (#16) went through full build-ship-remove cycle: implemented in PR#24, discovered broken (#130 — config key mismatch), completely removed in PR#131 (P0), reimagined for backlog (#100). F2 keybinding added then removed twice (PR#233, PR#260). These represent wasted implementation effort that should have been caught in design or code review.
+
+**Repeated fixes to same problem:** Session state touched in 4 PRs (PR#137, PR#173, PR#200, PR#236) yet #279 says it's still broken. Tree ID collisions fixed 3 times (PR#207, PR#210, PR#235). Filter logic fixed twice (PR#186, PR#214). Philosophy doc rewritten twice (PR#192, PR#221). README polished 3 times (PR#203, PR#205, PR#271). **Pattern:** Treating symptoms instead of root cause, unclear vision early on.
+
+**P0s open post-release:** #277 (Resume Session rework) and #278 (Add Agent rework) both labeled `release:v0.1` + `priority:p0` but still open after ship. If flows were broken enough to need rework immediately after release, they should have blocked v0.1.
+
+**Post-release quality gaps:** 20+ issues (#277-#300) filed immediately after v0.1 representing UX validation failures: session status icons don't represent state (#279), clicking sessions doesn't switch terminal (#298), adding squad feels buggy (#283), 5s cold start (#300), squad update detection broken (#288), decisions view not updating (#287).
+
+**Test quality vs. quantity:** 200+ tests but #247 identifies pervasive antipatterns: ~25+ mock-call assertions without result validation, 16 tautological tests, 18+ shallow smoke tests, ~40 instances of fragile mock coupling, missing edge case coverage. High line coverage provides false confidence — suite checks that code runs but doesn't validate correct behavior.
+
+**Root cause:** Speed prioritized over validation. Aggressive parallel execution (96 PRs in 3 days) without sync points led to duplicate work, insufficient code review, and UX validation gaps.
+
+**What went well:** Shipped functional extension with deep GitHub/ADO integration, robust session persistence, working CI/CD pipeline, comprehensive docs. Architectural wins: CLI Provider system (PR#165), session persistence design (PR#55, PR#157), .squad folder migration (PR#154).
+
+**Recommendations for v0.2:** (1) Rethink session state model — stop iterating on implementation, fix the abstraction. (2) Tighten code review — check for duplicates, end-to-end functionality, config consistency, test quality. (3) Gate releases on P0s — enforce `release:vX.Y` + `priority:p0` must be closed before ship. (4) Manual core workflow validation — don't rely on unit tests alone. (5) Coordination for parallel work — daily check-ins, assign issues before starting, PR titles must reference issue numbers. (6) Reduce god objects (#246) — break down extension.ts (943 lines), editless-tree.ts (453 lines), terminal-manager.ts (496 lines). (7) Improve test signal (#247) — rewrite tests to validate behavior, not mock calls.
+
+**Key learning:** v0.1 shipped functional but rough. The technical foundation is solid. v0.2 should focus on refinement and quality over speed. The right architecture decisions were made; execution needs better validation gates.
+
+**Decision record:** Created `.ai-team/decisions/inbox/rick-v01-retro.md` documenting quality gates for future releases: P0 issue gate, core workflow validation checklist, code review standards, release label discipline, coordination for parallel work.
 
 📌 **Team update (2026-02-16):** Documentation animation strategy — EditLess uses optimized GIFs stored in docs/media/ directory. Primary tool: ScreenToGif (Windows). Files must be <1 MB, max 800px width, 3–8 seconds duration. File naming is descriptive kebab-case (e.g., planning-feature.gif). Re-recording triggers documented: UI structure changes, command/shortcut changes, label changes, layout changes. Team reviews animations on code review checklist. — decided by Summer
 
@@ -106,3 +130,5 @@ Reviewed terminal session persistence implementation. Solves the Developer Windo
 Final triage session before Monday v0.1 deadline. Analyzed all 25 open issues and produced prioritized action plan. **Key decisions:** (1) **#148 (session labels off-by-one)** — new critical bug filed by Casey, assigned to Morty for investigation. Likely edge case in terminal-manager.ts reconciliation logic introduced by PR #12. Labeled as P0/must-fix. (2) **#38 (Squad UI integration)** — issue body explicitly says "future work — not blocking first release." Removed from v0.1, moved to backlog. (3) **#36, #37, #43 (docs polish)** — deferred to post-v0.1. README and workflow docs are complete enough; GIFs/high-level narrative can ship as post-release patch. (4) **#42 (marketplace publishing)** — deferred to post-release patch. Marketplace work is an internal process, not part of extension code. (5) **#96, #101 (Agency/CLI provider refactor)** — both P1 but need scope review. #101 is architectural (generic provider system) and likely blocks #96 (Agency settings re-eval). May need to defer one or both if Morty+Birdperson are at capacity. **Locked P0/P1 for v0.1:** 7 P0 (builtins, session persistence, work item UX), 8 P1 (documentation, filtering, auto-detection). All have clear acceptance criteria or assigned squad members. Squad can execute to this list with confidence.
 
 
+
+📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick

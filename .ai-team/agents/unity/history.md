@@ -48,3 +48,5 @@
 📌 Team update (2026-02-16): Label taxonomy simplified — `go:` namespace (go:yes, go:no, go:needs-research) removed. Triage now applies `status:needs-plan` only when no existing `status:` label exists. Release labels limited to `release:v0.1` and `release:backlog`. When integrating ADO labels, these same status and release categories apply. — decided by Birdperson
 
 
+
+📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
