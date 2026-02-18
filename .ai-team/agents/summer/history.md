@@ -96,6 +96,8 @@
 📌 Keybinding: Focus Session (2026-02-17): The keybinding for `editless.focusSession` is `Ctrl+Shift+S` / `Cmd+Shift+S` (package.json). The create-session.md workflow doc had `Ctrl+Shift+;` which was wrong. Always verify keybindings against package.json `contributes.keybindings`. — audited by Summer
 📌 **Workflow documentation pattern (2026-02-16):** EditLess workflow how-to guides follow a consistent structure: (1) One-sentence intro, (2) Numbered steps (5–8 steps), (3) Context subsection explaining when/why, (4) GIF placeholder comment, (5) 💡 Tip callout, (6) 📖 See Also links, (7) Back-link to index. Index uses two sections: "Getting Started" (new how-to guides) and "Advanced Workflows" (integration-specific). Files live in `docs/workflows/`. This pattern scales: easy to add new workflows, easy to spot missing steps. — documented by Summer
 
+📌 **Team update (2026-02-18):** v0.1.1 quality release scoped — 7 features to remove, 3-5 bugs to fix, extension.ts refactor planned. See decisions.md for full scope — decided by Rick + Casey
+
 # Project Context
 
 - **Owner:** Casey Irvine (cirvine@microsoft.com)
@@ -156,3 +158,7 @@
 
 
 
+
+📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
+
+📌 Local development guide created (2026-02-18): `docs/local-development.md` covers side-by-side extension instances (VS Code Profiles, `--user-data-dir`, PowerShell aliases), local UX validation (TreeView testing, terminal session persistence, multi-root workspace validation), MCP servers for agent-based debugging (chrome-devtools-mcp, vscode-test-mcp with workspace-scoped `.vscode/mcp.json`), worktree safety policy, and test commands. Document follows the comprehensive guide format (not the numbered-steps workflow pattern) with comparison tables, command references, and practical examples. Emphasizes production safety — developers use the tool they're building, so the stable VSIX in the daily driver can't break. — created by Summer

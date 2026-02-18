@@ -4,9 +4,9 @@
 
 /** A single entry in the agent team registry. */
 export interface AgentTeamConfig {
-  /** Kebab-case slug, e.g. "internal-project-squad" */
+  /** Kebab-case slug, e.g. "my-squad" */
   id: string;
-  /** Display name, e.g. "Internal-Project Squad" */
+  /** Display name, e.g. "My Squad" */
   name: string;
   /** Absolute path to squad root */
   path: string;

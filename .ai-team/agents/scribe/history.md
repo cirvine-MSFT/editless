@@ -23,3 +23,5 @@
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
 
+
+📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
