@@ -113,7 +113,7 @@ When you just need an isolated VS Code without worktree creation (e.g., testing 
 ## Anti-Patterns & Gotchas
 
 ### ❌ Don't use `Manage-Worktree.ps1`
-This script does NOT exist for EditLess. (It was a caseybot bootstrapping tool for other projects.) Use `dev-worktree.ps1` instead.
+This script does NOT exist for EditLess. Use `dev-worktree.ps1` instead.
 
 ### ❌ Don't checkout branches in the main clone
 Always use worktrees for feature work. Checking out in the main clone breaks isolation and shared tooling.
