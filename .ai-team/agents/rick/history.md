@@ -132,3 +132,27 @@ Final triage session before Monday v0.1 deadline. Analyzed all 25 open issues an
 
 
 📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
+
+### 2026-02-18: v0.1.1 Quality Release Scope — Full Codebase Audit
+
+**Codebase coupling findings:**
+- `extension.ts` (1310 lines) is the god object — it's the only file that wires everything together. Every feature removal requires touching it. The activation function is ~1150 lines of sequential command registrations. This is the #1 refactor target.
+- Removed features are surprisingly well-isolated. `inbox-flusher.ts`, `terminal-layout.ts`, `squad-ui-integration.ts`, and `notifications.ts` each have ZERO inbound dependencies outside of `extension.ts` wiring. This is good architecture — the god object pattern actually helped containment.
+- `squad-upgrader.ts` has a dual-purpose problem: it mixes upgrade infrastructure (removable) with utility functions (`checkNpxAvailable`, `isSquadInitialized`) needed by `addSquad`. These must be extracted before deletion.
+- `editless-tree.ts` imports from `squad-upgrader.ts` for version tooltip display and has upgrade badge rendering. It also renders orphaned sessions from `terminal-manager.ts`. Both are low-coupling touchpoints.
+- `cli-provider.ts` has a clean internal boundary: detection/resolution (lines 1-124) vs update checking (lines 126-238). The update half can be deleted with no impact on the detection half.
+- `terminal-manager.ts` mixes three concerns: (1) terminal launch/tracking, (2) session state detection, (3) orphan management/reconciliation. The orphan code builds on reconciliation which must stay for session label survival across reloads.
+
+**Key observations about removable features:**
+- 7 features identified for removal, totaling ~550 lines of production code and 5 test files
+- The notification system (`notifications.ts`) only has two consumers: inbox toast and update prompt gating. Both are being removed, so the entire module goes.
+- The `--resume` flag in `relaunchSession()` is the broken bit from #277, but the broader orphan management UI (tree items, dismiss, relaunch-all) should go too — it's UX complexity for a feature that doesn't work.
+- `TerminalLayoutManager` auto-maximize is a "clever" feature that Casey finds annoying. 53 lines of event listener logic for a feature nobody asked for.
+- Squad UI integration is dead code — the SquadUI extension isn't widely installed and the deep-link API (#293) was never built.
+
+**Module boundaries identified for refactoring:**
+- `extension.ts` → split into `extension.ts` (activation wiring, ~150 lines) + `commands/` folder (3-4 files, organized by domain: agent, session, work-item, browser)
+- `initGitHubIntegration` and `initAdoIntegration` should move to `integration/` subfolder
+- `initAutoRefresh` is already a named function — just move it to its own file
+- After removals: 20 source files (down from 25), each with a single clear concern
+- The `CliProvider` interface should drop `updateCommand`, `updateRunCommand`, `upToDatePattern` fields after removing update logic

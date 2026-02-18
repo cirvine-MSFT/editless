@@ -86,6 +86,8 @@
 
 - **PR filter system (#269):** Added `PRsFilter` interface with `repos`, `labels`, and `statuses` arrays to `prs-tree.ts`, mirroring the `WorkItemsFilter` pattern. Extended `GitHubPR` with `labels` (parsed from `gh` CLI `--json labels`) and `autoMergeRequest` (nullable object). `derivePRState()` now detects `auto-merge` status when `autoMergeRequest` is non-null. Extracted `parsePR()` helper in `github-client.ts` to DRY the `fetchMyPRs`/`fetchLinkedPRs` parsing. Changed PRs tree from `registerTreeDataProvider` to `createTreeView` to support the `description` property for filter status display. Filter methods (`applyRuntimeFilter`, `applyAdoRuntimeFilter`, `matchesLabelFilter`) are public for testability. PR status values: draft, open, approved, changes-requested, auto-merge. 20 new tests (7 prs-tree filter, 8 prs-tree derivePRState/empty, 5 extension-commands), 676 total pass, tsc clean. PR #270.
 
+📌 **Team update (2026-02-18):** v0.1.1 quality release scoped — 7 features to remove, 3-5 bugs to fix, extension.ts refactor planned. See decisions.md for full scope — decided by Rick + Casey
+
 
 
 📌 **Team update (2026-02-16):** Default release target — All new issues default to elease:v0.1 unless Casey explicitly directs otherwise. This ensures v0.1 work is automatically tagged correctly. — decided by Casey Irvine
