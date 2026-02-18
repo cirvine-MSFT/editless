@@ -6,12 +6,25 @@ export function isSquadUiInstalled(): boolean {
   return vscode.extensions.getExtension(SQUAD_UI_EXTENSION_ID) !== undefined;
 }
 
+/** Check if the installed SquadUI version supports deep-link (onUri activation event). */
+export function squadUiSupportsDeepLink(): boolean {
+  const ext = vscode.extensions.getExtension(SQUAD_UI_EXTENSION_ID);
+  if (!ext) { return false; }
+  const events: unknown[] | undefined = ext.packageJSON?.activationEvents;
+  return Array.isArray(events) && events.includes('onUri');
+}
+
 export function initSquadUiContext(context: vscode.ExtensionContext): void {
-  vscode.commands.executeCommand('setContext', 'editless.squadUiAvailable', isSquadUiInstalled());
+  const updateContext = () => {
+    vscode.commands.executeCommand('setContext', 'editless.squadUiAvailable', isSquadUiInstalled());
+    vscode.commands.executeCommand('setContext', 'editless.squadUiSupportsDeepLink', squadUiSupportsDeepLink());
+  };
+
+  updateContext();
 
   context.subscriptions.push(
     vscode.extensions.onDidChange(() => {
-      vscode.commands.executeCommand('setContext', 'editless.squadUiAvailable', isSquadUiInstalled());
+      updateContext();
     }),
   );
 }

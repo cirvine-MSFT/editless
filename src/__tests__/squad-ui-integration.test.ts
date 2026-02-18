@@ -21,6 +21,7 @@ import {
   initSquadUiContext,
   openSquadUiDashboard,
   openSquadUiCharter,
+  squadUiSupportsDeepLink,
 } from '../squad-ui-integration';
 import type * as vscode from 'vscode';
 
@@ -53,17 +54,53 @@ describe('squad-ui-integration', () => {
     });
   });
 
+  describe('squadUiSupportsDeepLink', () => {
+    it('should return true when SquadUI has onUri activation event', () => {
+      mockGetExtension.mockReturnValue({
+        id: 'csharpfritz.squadui',
+        packageJSON: { activationEvents: ['onUri', 'onView:squadTeam'] },
+      });
+      expect(squadUiSupportsDeepLink()).toBe(true);
+    });
+
+    it('should return false when SquadUI lacks onUri activation event', () => {
+      mockGetExtension.mockReturnValue({
+        id: 'csharpfritz.squadui',
+        packageJSON: { activationEvents: ['onView:squadTeam'] },
+      });
+      expect(squadUiSupportsDeepLink()).toBe(false);
+    });
+
+    it('should return false when SquadUI is not installed', () => {
+      mockGetExtension.mockReturnValue(undefined);
+      expect(squadUiSupportsDeepLink()).toBe(false);
+    });
+
+    it('should return false when activationEvents is missing', () => {
+      mockGetExtension.mockReturnValue({
+        id: 'csharpfritz.squadui',
+        packageJSON: {},
+      });
+      expect(squadUiSupportsDeepLink()).toBe(false);
+    });
+  });
+
   describe('initSquadUiContext', () => {
     it('should set context key to true when SquadUI is installed', () => {
-      mockGetExtension.mockReturnValue({ id: 'csharpfritz.squadui' });
+      mockGetExtension.mockReturnValue({
+        id: 'csharpfritz.squadui',
+        packageJSON: { activationEvents: ['onUri'] },
+      });
       initSquadUiContext(makeMockContext());
       expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiAvailable', true);
+      expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiSupportsDeepLink', true);
     });
 
     it('should set context key to false when SquadUI is not installed', () => {
       mockGetExtension.mockReturnValue(undefined);
       initSquadUiContext(makeMockContext());
       expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiAvailable', false);
+      expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiSupportsDeepLink', false);
     });
 
     it('should register onDidChange listener for extension install/uninstall', () => {
@@ -81,11 +118,15 @@ describe('squad-ui-integration', () => {
       mockGetExtension.mockReturnValue(undefined);
       initSquadUiContext(makeMockContext());
 
-      // Simulate SquadUI being installed
-      mockGetExtension.mockReturnValue({ id: 'csharpfritz.squadui' });
+      // Simulate SquadUI being installed with deep-link support
+      mockGetExtension.mockReturnValue({
+        id: 'csharpfritz.squadui',
+        packageJSON: { activationEvents: ['onUri'] },
+      });
       mockExecuteCommand.mockClear();
       changeListener!();
       expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiAvailable', true);
+      expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiSupportsDeepLink', true);
     });
 
     it('should push disposable to subscriptions', () => {
