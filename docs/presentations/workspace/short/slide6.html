@@ -10,43 +10,50 @@
             background-color: #1C1C2E;
             display: flex;
             flex-direction: column;
+            align-items: center;
             justify-content: center;
-            align-items: flex-start;
             font-family: Arial, sans-serif;
-            padding-left: 50pt;
-            padding-right: 50pt;
             box-sizing: border-box;
+            padding: 20pt 40pt 40pt 40pt;
         }
         h2 {
-            color: #5EA8A7;
-            font-size: 34pt;
+            color: #FF6B6B;
+            font-size: 26pt;
             font-weight: bold;
-            margin: 0 0 25pt 0;
+            margin: 0 0 4pt 0;
+            text-align: center;
         }
         p {
-            color: #FFFFFF;
-            font-size: 17pt;
-            line-height: 1.4;
-            margin: 0 0 14pt 0;
-        }
-        .transformation {
             color: #B8C0CC;
-            font-size: 16pt;
-            line-height: 1.5;
-            margin-top: 16pt;
+            font-size: 13pt;
+            margin: 0 0 8pt 0;
+            text-align: center;
+            line-height: 1.3;
         }
-        .final-thought {
-            color: #FF6B6B;
-            font-size: 19pt;
+        .chart-container {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .chart-container img {
+            width: 480pt;
+            height: auto;
+            border-radius: 6pt;
+        }
+        .caption {
+            color: #5EA8A7;
+            font-size: 12pt;
             font-weight: bold;
-            margin-top: 18pt;
+            margin-top: 6pt;
+            text-align: center;
         }
     </style>
 </head>
 <body>
-    <h2>The New Developer</h2>
-    <p>The modern developer delegates to agents: resolve merge conflicts, create work items, triage issues, submit PRs, review PRs, do exploratory testing, spike multiple solutions — even create PowerPoint slides.</p>
-    <p class="transformation"><i>(Yes — this presentation was generated with AI.)</i></p>
-    <p class="final-thought">The craft shifts from "how do I write this?" to "who should write this, and what are the constraints?"</p>
+    <h2>The Gap Is Widening</h2>
+    <p>Developers who adopt AI aren't just keeping up — they're pulling away.</p>
+    <div class="chart-container">
+    </div>
+    <p class="caption">AI-first developers ride the capability curve. Everyone else falls behind it.</p>
 </body>
 </html>

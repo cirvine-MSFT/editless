@@ -22,16 +22,29 @@ async function buildPresentation() {
         'slide3.html',
         'slide4.html',
         'slide5.html',
-        'slide6.html'
+        'slide6.html',
+        'slide7.html'
     ];
     
     console.log('Converting HTML slides to PowerPoint...');
     
-    for (const slideFile of slides) {
+    for (let i = 0; i < slides.length; i++) {
+        const slideFile = slides[i];
         const htmlPath = path.join(workspaceDir, slideFile);
         console.log(`Processing ${slideFile}...`);
         
         await html2pptx(htmlPath, pres);
+        
+        // Slide 6 (index 5): add the capability curve chart image
+        if (i === 5) {
+            const slide = pres.slides[pres.slides.length - 1];
+            const imgPath = path.join(workspaceDir, 'capability-curve.png');
+            slide.addImage({
+                path: imgPath,
+                x: 1.2, y: 1.3, w: 7.6, h: 3.5,
+                sizing: { type: 'contain', w: 7.6, h: 3.5 }
+            });
+        }
     }
     
     const outputPath = path.join(__dirname, 'marks-journey-short.pptx');
