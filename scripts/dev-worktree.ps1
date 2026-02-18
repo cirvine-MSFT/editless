@@ -106,7 +106,9 @@ Write-Host "📍 Worktree parent: $worktreeParent" -ForegroundColor DarkGray
 if (-not $Slug) {
     Write-Host "🔍 Fetching issue #$Issue title..." -ForegroundColor Cyan
     try {
-        $title = & gh issue view $Issue --repo cirvine-MSFT/editless --json title --jq ".title" 2>&1
+        $repo = (& gh repo view --json nameWithOwner --jq ".nameWithOwner" 2>$null)
+        if (-not $repo) { $repo = "cirvine-MSFT/editless" }
+        $title = & gh issue view $Issue --repo $repo --json title --jq ".title" 2>&1
         if ($LASTEXITCODE -ne 0) { throw "gh failed: $title" }
         # Convert to kebab-case: lowercase, replace non-alphanumeric with dashes, trim
         $Slug = ($title.ToLower() -replace '[^a-z0-9]+', '-').Trim('-')
@@ -139,7 +141,7 @@ else {
     # Create the worktree with a new branch off main
     Push-Location $mainClone
     try {
-        git worktree add $worktreePath -b $branchName origin/main 2>&1 | ForEach-Object { Write-Host "   $_" -ForegroundColor DarkGray }
+        git worktree add $worktreePath -b $branchName origin/master 2>&1 | ForEach-Object { Write-Host "   $_" -ForegroundColor DarkGray }
         if ($LASTEXITCODE -ne 0) {
             # Branch may already exist — try without -b
             Write-Host "   Branch may already exist, trying checkout..." -ForegroundColor Yellow
