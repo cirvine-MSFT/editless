@@ -4,20 +4,11 @@
 Launch VS Code with an isolated development environment for EditLess extension testing.
 
 .DESCRIPTION
-Creates an isolated VS Code environment with its own user data and extensions directories.
-This ensures a clean slate for testing extension behavior without interference from your
-personal VS Code configuration, settings, or other installed extensions.
+Quick isolated launch for the CURRENT working directory. For worktree-based feature
+development (the primary workflow), use dev-worktree.ps1 instead.
 
-The isolation strategy:
-- User data (settings, keybindings, state) → .editless-dev/user-data/
-- Extensions (other extensions are disabled) → system default, but --disable-extensions flag used
-- EditLess extension → loaded from dist/ via --extensionDevelopmentPath
-
-This is particularly useful for:
-- Testing first-run experience
-- Reproducing bugs in clean environments
-- Verifying extension activation and settings defaults
-- Ensuring no conflicts with other extensions
+Creates an isolated VS Code environment with its own user data directory and disables
+other extensions, ensuring a clean slate for testing.
 
 .PARAMETER Clean
 Reset the isolated environment by deleting .editless-dev/ before launching.
@@ -29,6 +20,9 @@ Launch VS Code with isolated dev environment (preserves existing state).
 .EXAMPLE
 .\scripts\dev-isolated.ps1 -Clean
 Reset the isolated environment and launch fresh.
+
+.LINK
+.\scripts\dev-worktree.ps1 — primary workflow for feature branch development
 #>
 
 param(

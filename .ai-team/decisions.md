@@ -27,13 +27,13 @@ EditLess uses isolated VS Code environments for extension development to ensure 
    - Includes `-Clean` switch to reset environment
    - Validates extension build before launching
 
-4. **`.vscode/mcp-dev.json.example`** — Example MCP configuration:
-   - chrome-devtools-mcp for webview debugging
-   - Template to copy to `.vscode/mcp.json` (gitignored)
+4. **`scripts/dev-worktree.ps1`** — Primary workflow script:
+   - Creates worktree + branch for an issue
+   - Runs npm install + build
+   - Launches isolated VS Code instance
 
 5. **`.gitignore`** — Updated to exclude:
    - `.editless-dev/` — isolated test environments
-   - `.vscode/mcp.json` — personal MCP dev configs
    - `.vscode/launch.json` IS committed (team-wide config)
 
 ## Rationale
@@ -51,7 +51,7 @@ The three-way approach (debug config, tasks, and script) supports different work
 - **Isolation flags:** `--user-data-dir=<path>` + `--disable-extensions` + `--extensionDevelopmentPath=<path>`
 - **preLaunchTask:** All debug configs reference `${defaultBuildTask}` so esbuild runs before launch
 - **Hidden terminals:** Build tasks use `hideFromUser: true` (see #127 decision)
-- **Personal vs team config:** `.vscode/launch.json` and `.vscode/tasks.json` are committed; `.vscode/mcp.json` is gitignored
+- **Personal vs team config:** `.vscode/launch.json` and `.vscode/tasks.json` are committed
 
 ## Impact
 

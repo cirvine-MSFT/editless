@@ -2,9 +2,62 @@
 
 > How to develop EditLess locally while keeping your production setup safe.
 
-EditLess developers face a unique challenge: we use the tool we're building. This guide covers how to test changes without breaking your daily workflow, validate UX decisions live, and leverage MCPs for agent-based debugging.
+EditLess developers face a unique challenge: we use the tool we're building. This guide covers how to test changes without breaking your daily workflow.
 
 <!-- TODO: Add GIF recording showing side-by-side extension instances in use -->
+
+---
+
+## Worktree Dev Workflow (Recommended)
+
+The primary workflow uses `scripts/dev-worktree.ps1` to create a git worktree for an issue and launch an isolated VS Code instance — all in one command.
+
+### Quick Start
+
+```powershell
+# From your daily driver terminal (main clone or any worktree):
+.\scripts\dev-worktree.ps1 -Issue 42
+```
+
+This will:
+1. Fetch the issue title from GitHub and generate a branch slug
+2. Create a worktree at `../editless.wt/{slug}` with branch `squad/42-{slug}`
+3. Run `npm install` and `npm run build`
+4. Launch VS Code with isolation flags (Dev profile by default)
+
+### Common Usage
+
+```powershell
+# Auto-slug from issue title
+.\scripts\dev-worktree.ps1 -Issue 42
+
+# Explicit slug
+.\scripts\dev-worktree.ps1 -Issue 42 -Slug "fix-auth-timeout"
+
+# Use a named profile for lighter isolation
+.\scripts\dev-worktree.ps1 -Issue 42 -Profile "Dev"
+
+# Re-enter an existing worktree without rebuilding
+.\scripts\dev-worktree.ps1 -Issue 42 -NoBuild
+
+# Fresh start — wipe isolated env before launch
+.\scripts\dev-worktree.ps1 -Issue 42 -Clean
+
+# Full user-data-dir isolation (no profile)
+.\scripts\dev-worktree.ps1 -Issue 42 -Profile ""
+```
+
+### How It Works
+
+| Flag | Effect |
+|------|--------|
+| `-Issue` | **(Required)** GitHub issue number. Determines branch name. |
+| `-Slug` | Branch slug. Auto-generated from issue title if omitted. |
+| `-Profile` | VS Code profile name (default: "Dev"). Uses `--profile` for lighter isolation. Pass `""` for full `--user-data-dir` isolation. |
+| `-NoBuild` | Skip `npm install` + `npm run build`. Use when the worktree is already set up. |
+| `-Clean` | Delete `.editless-dev/` in the worktree before launching. |
+
+The script detects whether it's run from the main clone or a worktree and resolves the main clone root automatically.
 
 ---
 
@@ -34,55 +87,31 @@ Use profiles to isolate extension sets without duplicating all your settings.
 
 ### Approach 2: Isolated User Data Directories (Full Isolation)
 
-Use `--user-data-dir` and `--extensions-dir` for complete separation. No shared state between instances.
+Use `--user-data-dir` for complete separation. No shared state between instances.
 
-1. **Create isolated directories:**
-   ```powershell
-   mkdir ~/.editless-dev/extensions
-   mkdir ~/.editless-dev/user-data
-   ```
+For a quick isolated launch of the current directory (no worktree creation), use:
 
-2. **Launch VS Code with isolated storage:**
-   ```powershell
-   code --user-data-dir="$HOME/.editless-dev/user-data" --extensions-dir="$HOME/.editless-dev/extensions"
-   ```
+```powershell
+.\scripts\dev-isolated.ps1          # launch isolated instance
+.\scripts\dev-isolated.ps1 -Clean   # reset env first
+```
 
-3. **Install only the extensions you need for dev** in this instance
-
-4. **Add custom launch configuration** to `.vscode/launch.json`:
-   ```json
-   {
-     "type": "extensionHost",
-     "request": "launch",
-     "name": "Launch Extension (Isolated)",
-     "runtimeExecutable": "${execPath}",
-     "args": [
-       "--user-data-dir=${env:HOME}/.editless-dev/user-data",
-       "--disable-extensions",
-       "--extensionDevelopmentPath=${workspaceFolder}"
-     ]
-   }
-   ```
+Or add a custom launch configuration to `.vscode/launch.json`:
+```json
+{
+  "type": "extensionHost",
+  "request": "launch",
+  "name": "Launch Extension (Isolated)",
+  "runtimeExecutable": "${execPath}",
+  "args": [
+    "--user-data-dir=${env:HOME}/.editless-dev/user-data",
+    "--disable-extensions",
+    "--extensionDevelopmentPath=${workspaceFolder}"
+  ]
+}
+```
 
 **When to use this:** Testing extension conflicts, debugging installation issues, validating fresh-install UX, or when you need a completely clean slate.
-
-### Approach 3: PowerShell Aliases (Convenience Layer)
-
-Set up quick launch commands for each environment.
-
-```powershell
-# Add to your PowerShell profile ($PROFILE)
-function code-prod { code --profile "Production" $args }
-function code-dev { code --profile "Dev" $args }
-function code-isolated { code --user-data-dir="$HOME/.editless-dev/user-data" --extensions-dir="$HOME/.editless-dev/extensions" $args }
-```
-
-**Usage:**
-```powershell
-code-prod       # Launch with stable extension
-code-dev        # Launch with dev profile
-code-isolated   # Launch fully isolated instance
-```
 
 **💡 Tip:** Profiles are lighter-weight than full isolation, but they do share some global state (installed extensions, workspace history). If you see interference between instances, switch to `--user-data-dir` for true isolation.
 
@@ -134,100 +163,42 @@ You're building a UI extension. Seeing is believing.
 
 ---
 
-## MCP Servers for Agent-Based Debugging
+## MCP Servers
 
-MCPs (Model Context Protocol servers) bridge VS Code, browser DevTools, and AI agents. Use them to debug EditLess features interactively with AI.
+MCPs (Model Context Protocol servers) can bridge VS Code, browser DevTools, and AI agents. EditLess doesn't use webviews today, so MCPs aren't critical for daily development — but they're worth knowing about for integration test authoring and future debugging.
 
-### Recommended MCPs for EditLess Development
+MCPs can be scoped to a workspace via `.vscode/mcp.json` (gitignored) so they only activate in your dev worktree.
 
 | MCP | Use Case |
 |-----|----------|
-| **chrome-devtools-mcp** | Live DOM inspection, console logs, screenshots, performance traces. Perfect for debugging webview-based UX or browser-integrated workflows. |
-| **vscode-test-mcp** | Run extension tests and simulate user actions via AI agents. Great for integration test authoring. |
-
-### Installing MCPs (Workspace-Scoped)
-
-MCPs can be scoped to a workspace via `.vscode/mcp.json` so they only activate in your dev worktree, not your daily driver instance.
-
-1. **Create `.vscode/mcp.json` in your dev worktree:**
-   ```json
-   {
-     "mcps": [
-       {
-         "name": "chrome-devtools",
-         "command": "npx",
-         "args": ["-y", "@modelcontextprotocol/server-chrome-devtools"],
-         "disabled": false
-       },
-       {
-         "name": "vscode-test",
-         "command": "npx",
-         "args": ["-y", "@vscode/test-mcp"],
-         "disabled": false
-       }
-     ]
-   }
-   ```
-
-2. **Restart VS Code** in the dev worktree to activate the MCPs
-
-3. **Verify MCP availability** in Copilot CLI:
-   ```bash
-   copilot --list-mcps
-   ```
-
-4. **Use the MCP in a session:**
-   ```bash
-   copilot --mcp chrome-devtools "Show me all console errors in the Extension Development Host window"
-   copilot --mcp vscode-test "Run the agent discovery integration tests"
-   ```
-
-### Chrome DevTools MCP Workflow
-
-When testing webview-heavy features (future PR previews, embedded docs, settings UI):
-
-1. Open the Extension Development Host with Developer Tools visible (`Help → Toggle Developer Tools`)
-2. Launch a Copilot CLI session with the chrome-devtools MCP
-3. Ask the agent to inspect the DOM, pull console logs, or capture screenshots
-4. Iterate on the webview code based on agent feedback
-
-**Example:**
-```bash
-copilot --mcp chrome-devtools "Find all elements with the class 'tree-node' and tell me their computed styles"
-```
-
-### VS Code Test MCP Workflow
-
-When writing integration tests for new commands or tree view interactions:
-
-1. Add a test case stub in `src/__integration__/`
-2. Launch a session with vscode-test MCP
-3. Ask the agent to scaffold a test that simulates user actions (command execution, tree item clicks)
-4. Run the test via `npm run test:integration`
-
-**💡 Tip:** MCPs are workspace-scoped by design. If you accidentally install them globally, they'll activate in every VS Code window — including your production instance. Always scope them via `.vscode/mcp.json` in the dev worktree.
+| **vscode-test-mcp** | Run extension tests and simulate user actions via AI agents. Useful for integration test authoring. |
+| **chrome-devtools-mcp** | Live DOM inspection and console logs. Only relevant if EditLess adds webview features in the future. |
 
 ---
 
 ## Keeping Production Dev Safe
 
-The EditLess worktree policy exists for a reason: Casey's main clone (`C:\Users\cirvine\code\work\editless`) is pull-only. All feature work happens in worktrees. Here's how to respect that boundary.
+The EditLess worktree policy exists for a reason: Casey's main clone (`C:\Users\cirvine\code\work\editless`) is pull-only. All feature work happens in worktrees.
+
+**The easiest way to stay safe:** use `scripts/dev-worktree.ps1`. It creates worktrees, builds, and launches isolated VS Code automatically.
 
 1. **Never check out a branch in the main clone:**
    - If `git status` in the main clone shows a branch other than `main`, **stop immediately**
    - Run `git checkout main` in the main clone to restore it
-   - Move your work to a worktree: `git worktree add ../editless.wt/my-feature squad/123-my-feature`
 
 2. **Use worktrees for all feature branches:**
    ```powershell
-   # From the main clone
-   git worktree add ..\editless.wt\local-dev-guide squad/999-local-dev-guide
-   cd ..\editless.wt\local-dev-guide
+   # Preferred — one command does everything:
+   .\scripts\dev-worktree.ps1 -Issue 42
+
+   # Manual alternative:
+   git worktree add ..\editless.wt\my-feature squad/123-my-feature
+   cd ..\editless.wt\my-feature
    ```
 
 3. **Open the worktree in a separate VS Code window:**
    ```powershell
-   code ..\editless.wt\local-dev-guide
+   code ..\editless.wt\my-feature
    ```
 
 4. **Keep the stable VSIX installed in your main VS Code instance:**
@@ -244,7 +215,7 @@ The EditLess worktree policy exists for a reason: Casey's main clone (`C:\Users\
    npm run build      # esbuild compiles to dist/
    npm run package    # vsce creates .vsix
    ```
-   - Install the VSIX in an isolated instance (`code-dev` or `code-isolated`) before rolling it out to your daily driver
+   - Install the VSIX in an isolated instance before rolling it out to your daily driver
 
 7. **Sync the main clone regularly:**
    ```powershell
@@ -315,9 +286,9 @@ Or add `--user-data-dir` and `--disable-extensions` to the test runner config.
 
 ## Why This Matters
 
-You're building an extension for managing AI agents. The terminal is your interface. The extension can't break — if it does, you lose access to your agents mid-session. Side-by-side instances, MCPs, and worktrees are your safety net.
+You're building an extension for managing AI agents. The terminal is your interface. The extension can't break — if it does, you lose access to your agents mid-session. Side-by-side instances and worktrees are your safety net.
 
-**TL;DR:** Use profiles for speed, `--user-data-dir` for isolation, MCPs for agent-driven debugging, and worktrees to keep production safe. Never check out branches in the main clone. Test live, rebuild often, and trust the workflow.
+**TL;DR:** Use `dev-worktree.ps1` for feature work, profiles for quick testing, `--user-data-dir` for full isolation, and worktrees to keep production safe. Never check out branches in the main clone. Test live, rebuild often, and trust the workflow.
 
 ---
 
