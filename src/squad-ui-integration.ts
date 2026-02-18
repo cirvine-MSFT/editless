@@ -18,7 +18,7 @@ export function initSquadUiContext(context: vscode.ExtensionContext): void {
 
 export async function openSquadUiDashboard(teamRoot?: string): Promise<void> {
   try {
-    await vscode.commands.executeCommand('squadui.openDashboard', teamRoot ? { teamRoot } : undefined);
+    await vscode.commands.executeCommand('squadui.openDashboard', teamRoot);
   } catch {
     // SquadUI command may not exist in older versions
   }
@@ -26,8 +26,7 @@ export async function openSquadUiDashboard(teamRoot?: string): Promise<void> {
 
 export async function openSquadUiCharter(memberName?: string, teamRoot?: string): Promise<void> {
   try {
-    const args = memberName || teamRoot ? { memberName, teamRoot } : undefined;
-    await vscode.commands.executeCommand('squadui.viewCharter', args);
+    await vscode.commands.executeCommand('squadui.viewCharter', memberName, teamRoot);
   } catch {
     // SquadUI command may not exist in older versions
   }

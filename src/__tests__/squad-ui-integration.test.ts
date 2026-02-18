@@ -103,7 +103,7 @@ describe('squad-ui-integration', () => {
 
     it('should pass teamRoot when provided', async () => {
       await openSquadUiDashboard('/path/to/squad');
-      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.openDashboard', { teamRoot: '/path/to/squad' });
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.openDashboard', '/path/to/squad');
     });
 
     it('should not throw when command is unavailable', async () => {
@@ -115,17 +115,17 @@ describe('squad-ui-integration', () => {
   describe('openSquadUiCharter', () => {
     it('should call squadui.viewCharter command with no args when no params', async () => {
       await openSquadUiCharter();
-      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.viewCharter', undefined);
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.viewCharter', undefined, undefined);
     });
 
     it('should pass memberName and teamRoot when provided', async () => {
       await openSquadUiCharter('alice', '/path/to/squad');
-      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.viewCharter', { memberName: 'alice', teamRoot: '/path/to/squad' });
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.viewCharter', 'alice', '/path/to/squad');
     });
 
     it('should pass only memberName when teamRoot is omitted', async () => {
       await openSquadUiCharter('bob');
-      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.viewCharter', { memberName: 'bob', teamRoot: undefined });
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.viewCharter', 'bob', undefined);
     });
 
     it('should not throw when command is unavailable', async () => {
