@@ -912,10 +912,9 @@ describe('TerminalManager', () => {
           'waiting-on-input',
           'idle',
           'stale',
-          'needs-attention',
           'orphaned',
         ];
-        expect(validStates).toHaveLength(6);
+        expect(validStates).toHaveLength(5);
       });
     });
 
@@ -1101,10 +1100,6 @@ describe('TerminalManager', () => {
         expect(staleIcon).toBeDefined();
         expect(staleIcon.id).toBe('clock');
 
-        const needsAttentionIcon = mgr.getStateIcon('needs-attention');
-        expect(needsAttentionIcon).toBeDefined();
-        expect(needsAttentionIcon.id).toBe('warning');
-
         const orphanedIcon = mgr.getStateIcon('orphaned');
         expect(orphanedIcon).toBeDefined();
         expect(orphanedIcon.id).toBe('debug-disconnect');
@@ -1113,7 +1108,7 @@ describe('TerminalManager', () => {
       it('should return unique icons for all session states', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
-        const states: SessionState[] = ['working', 'waiting-on-input', 'idle', 'stale', 'needs-attention', 'orphaned'];
+        const states: SessionState[] = ['working', 'waiting-on-input', 'idle', 'stale', 'orphaned'];
         const icons = states.map(s => mgr.getStateIcon(s).id);
         expect(new Set(icons).size).toBe(states.length);
       });
@@ -1136,9 +1131,6 @@ describe('TerminalManager', () => {
         const staleDesc = mgr.getStateDescription('stale', info);
         expect(staleDesc).toMatch(/stale/i);
 
-        const needsAttentionDesc = mgr.getStateDescription('needs-attention', info);
-        expect(needsAttentionDesc).toMatch(/attention/i);
-
         const orphanedDesc = mgr.getStateDescription('orphaned', info);
         expect(orphanedDesc).toMatch(/orphan/i);
       });
@@ -1153,74 +1145,6 @@ describe('TerminalManager', () => {
 
         const desc = mgr.getStateDescription('idle', info);
         expect(desc).toMatch(/\d+m/);
-      });
-    });
-
-    describe('needs-attention integration', () => {
-      it('should return needs-attention when squad has inbox items', () => {
-        const ctx = makeMockContext();
-        const mgr = new TerminalManager(ctx);
-        const config = makeSquadConfig();
-        const terminal = mgr.launchTerminal(config);
-
-        // Simulate squad having inbox items
-        mgr.setSquadInboxCount('test-squad', 2);
-
-        const state = mgr.getSessionState(terminal);
-        expect(state).toBe('needs-attention');
-      });
-
-      it('should override stale with needs-attention when inbox has items', () => {
-        const staleEntry = makePersistedEntry({
-          id: 'stale-needs-attention',
-          terminalName: '🧪 Stale #1',
-          lastSeenAt: Date.now() - 61 * 60 * 1000,
-        });
-        const liveTerminal = makeMockTerminal('🧪 Stale #1');
-        mockTerminals.push(liveTerminal);
-
-        const ctx = makeMockContext([staleEntry]);
-        const mgr = new TerminalManager(ctx);
-        mgr.reconcile();
-
-        // Reconnected terminal with old lastSeenAt shows as stale
-        const beforeState = mgr.getSessionState(liveTerminal);
-        expect(beforeState).toBe('stale');
-
-        // After inbox items — needs-attention overrides
-        mgr.setSquadInboxCount('test-squad', 3);
-        const afterState = mgr.getSessionState(liveTerminal);
-        expect(afterState).toBe('needs-attention');
-      });
-
-      it('should NOT override working with needs-attention', () => {
-        const ctx = makeMockContext();
-        const mgr = new TerminalManager(ctx);
-        const config = makeSquadConfig();
-        const terminal = mgr.launchTerminal(config);
-
-        const execution = { commandLine: { value: 'npm test' } } as vscode.TerminalShellExecution;
-        capturedShellStartListener({ terminal, execution });
-
-        mgr.setSquadInboxCount('test-squad', 5);
-
-        // Working takes precedence over needs-attention
-        const state = mgr.getSessionState(terminal);
-        expect(state).toBe('working');
-      });
-
-      it('should clear needs-attention when inbox count becomes zero', () => {
-        const ctx = makeMockContext();
-        const mgr = new TerminalManager(ctx);
-        const config = makeSquadConfig();
-        const terminal = mgr.launchTerminal(config);
-
-        mgr.setSquadInboxCount('test-squad', 2);
-        expect(mgr.getSessionState(terminal)).toBe('needs-attention');
-
-        mgr.setSquadInboxCount('test-squad', 0);
-        const state = mgr.getSessionState(terminal);
-        expect(state).toBe('idle');
       });
     });
 
@@ -1746,41 +1670,32 @@ describe('TerminalManager', () => {
         'assistant.message', 'tool.execution_start', 'tool.execution_complete',
       ];
       for (const type of midTurnTypes) {
-        expect(stateFromEvent({ type, timestamp: new Date().toISOString() }, 0)).toBe('working');
+        expect(stateFromEvent({ type, timestamp: new Date().toISOString() })).toBe('working');
       }
     });
 
     it('returns waiting-on-input for recent turn_end', () => {
       const recent = new Date().toISOString();
-      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: recent }, 0)).toBe('waiting-on-input');
+      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: recent })).toBe('waiting-on-input');
     });
 
     it('returns idle for turn_end older than 5 minutes', () => {
       const old = new Date(Date.now() - 6 * 60 * 1000).toISOString();
-      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: old }, 0)).toBe('idle');
+      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: old })).toBe('idle');
     });
 
     it('returns stale for turn_end older than 1 hour', () => {
       const veryOld = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: veryOld }, 0)).toBe('stale');
+      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: veryOld })).toBe('stale');
     });
 
-    it('returns needs-attention for turn_end with inbox items', () => {
+    it('returns working even with recent mid-turn event', () => {
       const recent = new Date().toISOString();
-      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: recent }, 3)).toBe('needs-attention');
-    });
-
-    it('returns working even with inbox items when mid-turn', () => {
-      const recent = new Date().toISOString();
-      expect(stateFromEvent({ type: 'tool.execution_start', timestamp: recent }, 5)).toBe('working');
+      expect(stateFromEvent({ type: 'tool.execution_start', timestamp: recent })).toBe('working');
     });
 
     it('returns idle for unknown event types', () => {
-      expect(stateFromEvent({ type: 'unknown.event', timestamp: new Date().toISOString() }, 0)).toBe('idle');
-    });
-
-    it('returns needs-attention for unknown event with inbox', () => {
-      expect(stateFromEvent({ type: 'unknown.event', timestamp: new Date().toISOString() }, 1)).toBe('needs-attention');
+      expect(stateFromEvent({ type: 'unknown.event', timestamp: new Date().toISOString() })).toBe('idle');
     });
   });
 

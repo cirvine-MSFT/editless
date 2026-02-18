@@ -361,12 +361,6 @@ vi.mock('../status-bar', () => ({
   }),
 }));
 
-vi.mock('../notifications', () => ({
-  NotificationManager: vi.fn(function () {
-    return { checkAndNotify: vi.fn() };
-  }),
-}));
-
 vi.mock('../session-context', () => ({
   SessionContextResolver: vi.fn(function () {
     return {};

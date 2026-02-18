@@ -38,32 +38,6 @@ export type SquadStatus =
 // Parsed Content Entries
 // ---------------------------------------------------------------------------
 
-/** A parsed decision from decisions.md. */
-export interface DecisionEntry {
-  date: string;
-  title: string;
-  author: string;
-  summary: string;
-}
-
-/** A parsed session log entry. */
-export interface LogEntry {
-  date: string;
-  filename: string;
-  topic: string;
-  /** Agents who worked in this session */
-  agents: string[];
-  summary: string;
-}
-
-/** A parsed orchestration log entry. */
-export interface OrchestrationEntry {
-  timestamp: string;
-  agent: string;
-  task: string;
-  outcome: string;
-}
-
 /** A single agent in a squad roster. */
 export interface AgentInfo {
   name: string;
@@ -104,20 +78,6 @@ export interface SessionContext {
   references: WorkReference[];
 }
 
-/** A single recent activity entry from orchestration logs. */
-export interface RecentActivity {
-  /** Agent name */
-  agent: string;
-  /** Task description (from "routed because" field) */
-  task: string;
-  /** Outcome text */
-  outcome: string;
-  /** When this activity occurred */
-  timestamp: string;
-  /** Extracted references (PR/WI/US numbers from task or outcome) */
-  references: WorkReference[];
-}
-
 // ---------------------------------------------------------------------------
 // Runtime State
 // ---------------------------------------------------------------------------
@@ -128,24 +88,12 @@ export interface SquadState {
   status: SquadStatus;
   /** ISO timestamp of most recent file change, or null if unknown */
   lastActivity: string | null;
-  /** Last 5 decisions */
-  recentDecisions: DecisionEntry[];
-  /** Last 5 session logs */
-  recentLogs: LogEntry[];
-  /** Last 10 orchestration entries */
-  recentOrchestration: OrchestrationEntry[];
-  /** Agents with recent orchestration entries */
-  activeAgents: string[];
-  /** Number of files in decisions/inbox/ */
-  inboxCount: number;
   /** Set if squad path is inaccessible or scanning failed */
   error?: string;
   /** Squad roster parsed from .squad/team.md (or .ai-team/team.md) */
   roster: AgentInfo[];
   /** Squad charter/description (from agent-registry.json or team.md header) */
   charter: string;
-  /** Recent activity entries (last 3-5 orchestration entries) */
-  recentActivity: RecentActivity[];
 }
 
 
