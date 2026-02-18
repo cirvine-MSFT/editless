@@ -1,5 +1,66 @@
 
 
+### 2026-02-18: Dev Tooling: Isolated Environment Strategy
+
+**Date:** 2026-02-18  
+**Status:** Implemented  
+**Context:** Local development setup for EditLess extension
+
+## Decision
+
+EditLess uses isolated VS Code environments for extension development to ensure clean testing without interference from personal VS Code configurations or other extensions.
+
+## Implementation
+
+1. **`.vscode/launch.json`** — Three debug configurations:
+   - "Run Extension" — standard F5 Extension Development Host with pre-build task
+   - "Run Extension (Isolated)" — clean environment using `--user-data-dir` and `--disable-extensions`
+   - "Extension Tests" — runs vitest integration tests in Extension Development Host
+
+2. **`.vscode/tasks.json`** — Build automation:
+   - `npm: build` — default build task (required by launch configs)
+   - `npm: watch` — background watch task with esbuild problem matcher
+
+3. **`scripts/dev-isolated.ps1`** — PowerShell script for manual isolated launches:
+   - Creates `.editless-dev/user-data/` directories
+   - Launches VS Code with isolation flags
+   - Includes `-Clean` switch to reset environment
+   - Validates extension build before launching
+
+4. **`scripts/dev-worktree.ps1`** — Primary workflow script:
+   - Creates worktree + branch for an issue
+   - Runs npm install + build
+   - Launches isolated VS Code instance
+
+5. **`.gitignore`** — Updated to exclude:
+   - `.editless-dev/` — isolated test environments
+   - `.vscode/launch.json` IS committed (team-wide config)
+
+## Rationale
+
+Isolated environments are critical for:
+- Testing first-run activation and default settings
+- Reproducing bugs without personal config interference  
+- Verifying no conflicts with other extensions
+- Clean state for each test run (via `-Clean` flag)
+
+The three-way approach (debug config, tasks, and script) supports different workflows: F5 debugging in VS Code, manual script launches for testing, and automated builds.
+
+## Key Patterns
+
+- **Isolation flags:** `--user-data-dir=<path>` + `--disable-extensions` + `--extensionDevelopmentPath=<path>`
+- **preLaunchTask:** All debug configs reference `${defaultBuildTask}` so esbuild runs before launch
+- **Hidden terminals:** Build tasks use `hideFromUser: true` (see #127 decision)
+- **Personal vs team config:** `.vscode/launch.json` and `.vscode/tasks.json` are committed
+
+## Impact
+
+This tooling is now the standard for all EditLess extension development. Team members should use "Run Extension (Isolated)" for bug reproduction and first-run testing, and the standard "Run Extension" config for daily development with their personal setup.
+
+---
+
+**Author:** Morty (Extension Dev)
+
 # Workflow Documentation Structure
 
 **Decided by:** Summer  
@@ -436,6 +497,58 @@ The codebase has 25 source files and 30 test files. After this release, we shoul
 **Fix:** Investigate the `focusTerminal` command handler and the `onDidChangeActiveTerminal` listener for mutual exclusion issues.
 **Effort:** Medium (2-4 hours)
 **Priority:** P1 — core UX issue
+
+---
+
+### 2026-02-18: Worktree Dev Launcher as Primary Workflow
+
+**Author:** Morty (Extension Dev)
+**Date:** 2026-02-18
+
+## Decision
+
+`scripts/dev-worktree.ps1` is now the recommended primary workflow for EditLess feature development. It replaces the manual worktree + isolated launch steps with a single command.
+
+## What Changed
+
+- **New:** `scripts/dev-worktree.ps1` — one command creates worktree, installs deps, builds, launches isolated VS Code
+- **Removed:** `.vscode/mcp-dev.json.example` — EditLess doesn't use webviews; the chrome-devtools MCP example was speculative
+- **Removed:** `.vscode/mcp.json` from `.gitignore` — no MCP example to copy from
+- **Updated:** `scripts/dev-isolated.ps1` — still available for quick isolated launches but references `dev-worktree.ps1` as primary
+- **Updated:** `docs/local-development.md` — worktree workflow is now the first section; MCP section trimmed to a short note
+
+## Impact
+
+- All team members should use `dev-worktree.ps1` for issue-based feature work
+- `dev-isolated.ps1` remains for quick one-off isolated launches (no worktree creation)
+- The "Dev Tooling: Isolated Environment Strategy" decision was updated to reflect the removal of the MCP example
+
+---
+
+### 2026-02-18: EditLess Dev Workflow Skill Created
+
+**By:** Morty (Extension Dev)
+
+## Decision
+
+Created `.ai-team/skills/editless-dev-workflow/SKILL.md` documenting `scripts/dev-worktree.ps1` as the primary workflow for issue-driven development.
+
+## What
+
+Documented the dev workflow skill with:
+- Parameters and usage for `scripts/dev-worktree.ps1`
+- Branch naming conventions
+- Integration notes for agents
+- Anti-patterns and gotchas
+
+## Why
+
+Agents need to discover and use the dev-worktree script when asked to work on issues. Without the skill documentation:
+- They'd try to use missing Manage-Worktree.ps1 (bootstrap-only tool)
+- Fall back to manual git commands
+- Miss the optimized all-in-one workflow pattern
+
+This skill makes adoption immediate and unambiguous for all team members.
 
 ### B3: #278 — Add Agent flow needs rework
 **Affects:** Core agent creation

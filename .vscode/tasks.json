@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "npm",
+      "script": "build",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": [],
+      "label": "npm: build",
+      "detail": "node esbuild.mjs"
+    },
+    {
+      "type": "npm",
+      "script": "watch",
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "esbuild",
+        "fileLocation": "relative",
+        "pattern": {
+          "regexp": "^([^\\s].*?):(\\d+):(\\d+): (warning|error): (.*)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "^.*Watching for changes.*$",
+          "endsPattern": "^.*Watching for changes.*$"
+        }
+      },
+      "label": "npm: watch",
+      "detail": "node esbuild.mjs --watch"
+    }
+  ]
+}

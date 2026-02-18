@@ -48,7 +48,7 @@ When work completes a step with a known successor, fire the next step automatica
 - Never close/resolve until associated PR is merged.
 
 ### External Communication
-- AI attribution required: prefix with `🤖 *internal-project:*`
+- AI attribution required: prefix with `🤖 *AI-generated:*`
 - No internal agent names externally (say "the team", not agent names)
 - Emails: formal tone, no emoji, "drafted by AI" in footer
 

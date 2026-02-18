@@ -160,3 +160,5 @@
 
 
 📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
+
+📌 Local development guide created (2026-02-18): `docs/local-development.md` covers side-by-side extension instances (VS Code Profiles, `--user-data-dir`, PowerShell aliases), local UX validation (TreeView testing, terminal session persistence, multi-root workspace validation), MCP servers for agent-based debugging (chrome-devtools-mcp, vscode-test-mcp with workspace-scoped `.vscode/mcp.json`), worktree safety policy, and test commands. Document follows the comprehensive guide format (not the numbered-steps workflow pattern) with comparison tables, command references, and practical examples. Emphasizes production safety — developers use the tool they're building, so the stable VSIX in the daily driver can't break. — created by Summer
