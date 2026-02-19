@@ -51,7 +51,6 @@ vi.mock('../ado-auth', () => ({ getAdoToken: vi.fn(), promptAdoSignIn: vi.fn(), 
 vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn() }));
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn(), openSquadUiDashboard: vi.fn() }));
 vi.mock('../team-dir', () => ({ resolveTeamDir: vi.fn() }));
-vi.mock('../terminal-layout', () => ({ TerminalLayoutManager: vi.fn(function () { return { dispose: vi.fn() }; }) }));
 
 import { initAutoRefresh } from '../extension';
 

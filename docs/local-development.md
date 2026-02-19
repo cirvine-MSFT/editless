@@ -159,8 +159,6 @@ You're building a UI extension. Seeing is believing.
    - The default keybinding for "Focus Session" is `Ctrl+Shift+S` / `Cmd+Shift+S` (see `package.json`)
    - Test it works in both the main editor and when focus is in the terminal
 
-**💡 Tip:** The Extension Development Host launches with the Terminal panel maximized (if `editless.restoreTerminalLayout` is enabled). If you're testing UX for first-time users, toggle this setting to see the default layout experience.
-
 ---
 
 ## MCP Servers
