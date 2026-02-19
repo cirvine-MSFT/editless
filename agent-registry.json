@@ -1,0 +1,49 @@
+{
+  "version": "1.0",
+  "squads": [
+    {
+      "id": "304-remove-decisions-activity",
+      "name": "304-remove-decisions-activity",
+      "description": "EditLess — a VS Code extension for managing AI agents, terminal sessions, and work items. Plan, delegate, and review your AI team's work.",
+      "path": "c:\\Users\\cirvine\\code\\work\\editless.wt\\304-remove-decisions-activity",
+      "icon": "🔷",
+      "universe": "unknown",
+      "launchCommand": ""
+    },
+    {
+      "id": "caseybot-squad",
+      "name": "caseybot-squad",
+      "description": "Coeus — secure AI inferencing stack for frontier LLMs (PowerShell, Helm, K8s, Azure Local, OneBranch)",
+      "path": "c:\\users\\cirvine\\code\\work\\caseybot-squad",
+      "icon": "🔷",
+      "universe": "unknown",
+      "launchCommand": ""
+    },
+    {
+      "id": "editless",
+      "name": "editless",
+      "description": "EditLess — a VS Code extension for managing AI agents, terminal sessions, and work items. Plan, delegate, and review your AI team's work.",
+      "path": "c:\\users\\cirvine\\code\\work\\editless",
+      "icon": "🔷",
+      "universe": "unknown",
+      "launchCommand": ""
+    },
+    {
+      "id": "external-squad",
+      "name": "External Squad",
+      "path": "c:\\users\\cirvine\\code\\work\\external-squad",
+      "icon": "🔷",
+      "universe": "unknown",
+      "launchCommand": ""
+    },
+    {
+      "id": "squad-ui",
+      "name": "SquadUI",
+      "description": "VS Code extension for visualizing Squad team members and their tasks",
+      "path": "c:\\users\\cirvine\\code\\work\\SquadUI",
+      "icon": "🔷",
+      "universe": "unknown",
+      "launchCommand": ""
+    }
+  ]
+}

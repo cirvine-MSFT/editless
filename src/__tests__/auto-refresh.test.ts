@@ -41,7 +41,6 @@ vi.mock('../discovery', () => ({ registerDiscoveryCommand: vi.fn(() => ({ dispos
 vi.mock('../agent-discovery', () => ({ discoverAllAgents: vi.fn(() => []) }));
 vi.mock('../watcher', () => ({ SquadWatcher: vi.fn(function () { return { dispose: vi.fn(), updateSquads: vi.fn() }; }) }));
 vi.mock('../status-bar', () => ({ EditlessStatusBar: vi.fn(function () { return { update: vi.fn(), updateSessionsOnly: vi.fn(), dispose: vi.fn() }; }) }));
-vi.mock('../notifications', () => ({ NotificationManager: vi.fn(function () { return { checkAndNotify: vi.fn() }; }) }));
 vi.mock('../session-context', () => ({ SessionContextResolver: vi.fn(function () { return {}; }) }));
 vi.mock('../scanner', () => ({ scanSquad: vi.fn() }));
 vi.mock('../work-items-tree', () => ({ WorkItemsTreeProvider: vi.fn(function () { return { setRepos: vi.fn(), refresh: vi.fn(), setTreeView: vi.fn(), setFilter: vi.fn(), clearFilter: vi.fn(), filter: {}, isFiltered: false, getAllRepos: vi.fn().mockReturnValue([]), getAllLabels: vi.fn().mockReturnValue([]), setAdoItems: vi.fn(), setAdoRefresh: vi.fn() }; }), WorkItemsTreeItem: class { constructor(public label: string) {} } }));
@@ -51,7 +50,6 @@ vi.mock('../vscode-compat', () => ({ getEdition: vi.fn(() => 'VS Code') }));
 vi.mock('../ado-auth', () => ({ getAdoToken: vi.fn(), promptAdoSignIn: vi.fn(), clearAzTokenCache: vi.fn() }));
 vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn() }));
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn(), openSquadUiDashboard: vi.fn() }));
-vi.mock('../inbox-flusher', () => ({ flushDecisionsInbox: vi.fn() }));
 vi.mock('../team-dir', () => ({ resolveTeamDir: vi.fn() }));
 vi.mock('../terminal-layout', () => ({ TerminalLayoutManager: vi.fn(function () { return { dispose: vi.fn() }; }) }));
 
