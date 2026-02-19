@@ -443,12 +443,6 @@ vi.mock('../team-dir', () => ({
   TEAM_DIR_NAMES: ['.squad', '.ai-team'],
 }));
 
-vi.mock('../terminal-layout', () => ({
-  TerminalLayoutManager: vi.fn(function () {
-    return { dispose: vi.fn() };
-  }),
-}));
-
 import { activate } from '../extension';
 
 // ----- Helpers --------------------------------------------------------------
