@@ -7,7 +7,7 @@ import { getStateIcon, getStateDescription } from './terminal-manager';
 import type { TerminalManager, PersistedTerminalInfo, SessionState } from './terminal-manager';
 import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
-import type { AgentTeamConfig, SquadState, AgentInfo, DecisionEntry, RecentActivity, SessionContext } from './types';
+import type { AgentTeamConfig, SquadState, AgentInfo, SessionContext } from './types';
 import type { DiscoveredAgent } from './agent-discovery';
 import type { AgentVisibilityManager } from './visibility';
 
@@ -15,8 +15,8 @@ import type { AgentVisibilityManager } from './visibility';
 // Tree item types
 // ---------------------------------------------------------------------------
 
-export type TreeItemType = 'squad' | 'category' | 'agent' | 'decision' | 'activity' | 'terminal' | 'discovered-agent' | 'orphanedSession';
-type CategoryKind = 'roster' | 'decisions' | 'activity';
+export type TreeItemType = 'squad' | 'category' | 'agent' | 'terminal' | 'discovered-agent' | 'orphanedSession';
+type CategoryKind = 'roster';
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
 function normalizeSquadDisplayName(name: string, fallback: string): string {
@@ -201,10 +201,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const cached = this._cache.get(cfg.id);
     if (cached) {
       descParts.push(cached.status);
-      // Inbox badge hidden (#204) — inboxCount not reliably updated yet
-      // if (cached.inboxCount > 0) {
-      //   descParts.push(`📥 ${cached.inboxCount}`);
-      // }
     }
     if (this.terminalManager) {
       const count = this.terminalManager.getTerminalsForSquad(cfg.id).length;
@@ -231,10 +227,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       if (cached.lastActivity) {
         tooltipLines.push(`Last activity: ${cached.lastActivity}`);
       }
-      // Inbox tooltip hidden (#204) — inboxCount not reliably updated yet
-      // if (cached.inboxCount > 0) {
-      //   tooltipLines.push(`Inbox: ${cached.inboxCount} item(s) — agents have submitted decisions for your review`);
-      // }
     }
     item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
     item.iconPath = new vscode.ThemeIcon('organization');
@@ -308,36 +300,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     rosterItem.iconPath = new vscode.ThemeIcon('organization');
     children.push(rosterItem);
 
-    // Decisions
-    const decisionItem = new EditlessTreeItem(
-      `Recent Decisions (${state.recentDecisions.length})`,
-      'category',
-      state.recentDecisions.length > 0
-        ? vscode.TreeItemCollapsibleState.Collapsed
-        : vscode.TreeItemCollapsibleState.None,
-      squadId,
-      'decisions',
-    );
-    decisionItem.iconPath = new vscode.ThemeIcon('law');
-    // Inbox badge hidden (#204) — inboxCount not reliably updated yet
-    // if (state.inboxCount > 0) {
-    //   decisionItem.description = `📥 ${state.inboxCount} pending review`;
-    // }
-    children.push(decisionItem);
-
-    // Activity
-    const activityItem = new EditlessTreeItem(
-      `Recent Activity (${state.recentActivity.length})`,
-      'category',
-      state.recentActivity.length > 0
-        ? vscode.TreeItemCollapsibleState.Collapsed
-        : vscode.TreeItemCollapsibleState.None,
-      squadId,
-      'activity',
-    );
-    activityItem.iconPath = new vscode.ThemeIcon('pulse');
-    children.push(activityItem);
-
     if (parentItem) {
       for (const child of children) {
         child.parent = parentItem;
@@ -357,12 +319,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     switch (kind) {
       case 'roster':
         children = state.roster.map(a => this.buildAgentItem(a, squadId));
-        break;
-      case 'decisions':
-        children = state.recentDecisions.map((d, i) => this.buildDecisionItem(d, squadId, i));
-        break;
-      case 'activity':
-        children = state.recentActivity.map((a, i) => this.buildActivityItem(a, squadId, i));
         break;
     }
 
@@ -384,33 +340,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     }
     item.description = agent.role;
     item.iconPath = new vscode.ThemeIcon('person');
-    return item;
-  }
-
-  private buildDecisionItem(decision: DecisionEntry, squadId?: string, index?: number): EditlessTreeItem {
-    const item = new EditlessTreeItem(decision.title, 'decision');
-    if (squadId) {
-      const state = this.getState(squadId);
-      const squadPath = state?.config.path ?? squadId;
-      const contentId = stableHash(`${decision.title}:${decision.date}:${decision.author}`);
-      item.id = `${stableHash(squadPath)}:decision:${contentId}`;
-    }
-    item.description = `${decision.date} by ${decision.author}`;
-    item.iconPath = new vscode.ThemeIcon('law');
-    item.tooltip = decision.summary || undefined;
-    return item;
-  }
-
-  private buildActivityItem(activity: RecentActivity, squadId?: string, index?: number): EditlessTreeItem {
-    const item = new EditlessTreeItem(`${activity.agent}: ${activity.task}`, 'activity');
-    if (squadId) {
-      const state = this.getState(squadId);
-      const squadPath = state?.config.path ?? squadId;
-      const contentId = stableHash(`${activity.agent}:${activity.task}:${activity.outcome}`);
-      item.id = `${stableHash(squadPath)}:activity:${contentId}`;
-    }
-    item.description = activity.outcome;
-    item.iconPath = new vscode.ThemeIcon('pulse');
     return item;
   }
 

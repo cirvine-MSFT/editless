@@ -356,12 +356,6 @@ vi.mock('../status-bar', () => ({
   }),
 }));
 
-vi.mock('../notifications', () => ({
-  NotificationManager: vi.fn(function () {
-    return { checkAndNotify: vi.fn() };
-  }),
-}));
-
 vi.mock('../session-context', () => ({
   SessionContextResolver: vi.fn(function () {
     return {};
@@ -441,10 +435,6 @@ vi.mock('../ado-client', () => ({
 vi.mock('../squad-ui-integration', () => ({
   initSquadUiContext: vi.fn(),
   openSquadUiDashboard: mockOpenSquadUiDashboard,
-}));
-
-vi.mock('../inbox-flusher', () => ({
-  flushDecisionsInbox: vi.fn(),
 }));
 
 vi.mock('../team-dir', () => ({

@@ -21,6 +21,7 @@ import {
   initSquadUiContext,
   openSquadUiDashboard,
   openSquadUiCharter,
+  squadUiSupportsDeepLink,
 } from '../squad-ui-integration';
 import type * as vscode from 'vscode';
 
@@ -53,17 +54,53 @@ describe('squad-ui-integration', () => {
     });
   });
 
+  describe('squadUiSupportsDeepLink', () => {
+    it('should return true when SquadUI has onUri activation event', () => {
+      mockGetExtension.mockReturnValue({
+        id: 'csharpfritz.squadui',
+        packageJSON: { activationEvents: ['onUri', 'onView:squadTeam'] },
+      });
+      expect(squadUiSupportsDeepLink()).toBe(true);
+    });
+
+    it('should return false when SquadUI lacks onUri activation event', () => {
+      mockGetExtension.mockReturnValue({
+        id: 'csharpfritz.squadui',
+        packageJSON: { activationEvents: ['onView:squadTeam'] },
+      });
+      expect(squadUiSupportsDeepLink()).toBe(false);
+    });
+
+    it('should return false when SquadUI is not installed', () => {
+      mockGetExtension.mockReturnValue(undefined);
+      expect(squadUiSupportsDeepLink()).toBe(false);
+    });
+
+    it('should return false when activationEvents is missing', () => {
+      mockGetExtension.mockReturnValue({
+        id: 'csharpfritz.squadui',
+        packageJSON: {},
+      });
+      expect(squadUiSupportsDeepLink()).toBe(false);
+    });
+  });
+
   describe('initSquadUiContext', () => {
     it('should set context key to true when SquadUI is installed', () => {
-      mockGetExtension.mockReturnValue({ id: 'csharpfritz.squadui' });
+      mockGetExtension.mockReturnValue({
+        id: 'csharpfritz.squadui',
+        packageJSON: { activationEvents: ['onUri'] },
+      });
       initSquadUiContext(makeMockContext());
       expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiAvailable', true);
+      expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiSupportsDeepLink', true);
     });
 
     it('should set context key to false when SquadUI is not installed', () => {
       mockGetExtension.mockReturnValue(undefined);
       initSquadUiContext(makeMockContext());
       expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiAvailable', false);
+      expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiSupportsDeepLink', false);
     });
 
     it('should register onDidChange listener for extension install/uninstall', () => {
@@ -81,11 +118,15 @@ describe('squad-ui-integration', () => {
       mockGetExtension.mockReturnValue(undefined);
       initSquadUiContext(makeMockContext());
 
-      // Simulate SquadUI being installed
-      mockGetExtension.mockReturnValue({ id: 'csharpfritz.squadui' });
+      // Simulate SquadUI being installed with deep-link support
+      mockGetExtension.mockReturnValue({
+        id: 'csharpfritz.squadui',
+        packageJSON: { activationEvents: ['onUri'] },
+      });
       mockExecuteCommand.mockClear();
       changeListener!();
       expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiAvailable', true);
+      expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.squadUiSupportsDeepLink', true);
     });
 
     it('should push disposable to subscriptions', () => {
@@ -96,9 +137,14 @@ describe('squad-ui-integration', () => {
   });
 
   describe('openSquadUiDashboard', () => {
-    it('should call squadui.openDashboard command', async () => {
+    it('should call squadui.openDashboard command with no args when no teamRoot', async () => {
       await openSquadUiDashboard();
-      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.openDashboard');
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.openDashboard', undefined);
+    });
+
+    it('should pass teamRoot when provided', async () => {
+      await openSquadUiDashboard('/path/to/squad');
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.openDashboard', '/path/to/squad');
     });
 
     it('should not throw when command is unavailable', async () => {
@@ -108,9 +154,19 @@ describe('squad-ui-integration', () => {
   });
 
   describe('openSquadUiCharter', () => {
-    it('should call squadui.viewCharter command', async () => {
+    it('should call squadui.viewCharter command with no args when no params', async () => {
       await openSquadUiCharter();
-      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.viewCharter');
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.viewCharter', undefined, undefined);
+    });
+
+    it('should pass memberName and teamRoot when provided', async () => {
+      await openSquadUiCharter('alice', '/path/to/squad');
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.viewCharter', 'alice', '/path/to/squad');
+    });
+
+    it('should pass only memberName when teamRoot is omitted', async () => {
+      await openSquadUiCharter('bob');
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.viewCharter', 'bob', undefined);
     });
 
     it('should not throw when command is unavailable', async () => {

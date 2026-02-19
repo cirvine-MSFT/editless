@@ -15,10 +15,8 @@ import type { AgentTeamConfig } from './types';
 import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
-import { NotificationManager } from './notifications';
 import { SessionContextResolver } from './session-context';
 import { scanSquad } from './scanner';
-import { flushDecisionsInbox } from './inbox-flusher';
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
 import { resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
 import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState } from './work-items-tree';
@@ -50,20 +48,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- Auto-register workspace squads (#201) --------------------------------
   autoRegisterWorkspaceSquads(registry);
 
-  // --- Auto-flush decisions inbox (#66) ------------------------------------
-  for (const squad of registry.loadSquads()) {
-    const teamDir = resolveTeamDir(squad.path);
-    if (teamDir) {
-      const result = flushDecisionsInbox(teamDir);
-      if (result.flushed > 0) {
-        output.appendLine(`[inbox-flush] ${squad.name}: flushed ${result.flushed} decision(s)`);
-      }
-      for (const err of result.errors) {
-        output.appendLine(`[inbox-flush] ${squad.name}: ${err}`);
-      }
-    }
-  }
-
   // --- Terminal manager --------------------------------------------------
   const terminalManager = new TerminalManager(context);
   _terminalManagerRef = terminalManager;
@@ -71,9 +55,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // --- Session label manager ---------------------------------------------
   const labelManager = new SessionLabelManager(context);
-
-  // --- Notification manager -----------------------------------------------
-  const notificationManager = new NotificationManager();
 
   // --- Session context resolver -------------------------------------------
   const sessionContextResolver = new SessionContextResolver();
@@ -185,8 +166,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   const squadWatcher = new SquadWatcher(registry.loadSquads(), (squadId) => {
     const config = registry.getSquad(squadId);
     if (config) {
-      const state = scanSquad(config);
-      notificationManager.checkAndNotify(config, state);
+      scanSquad(config);
     }
     treeProvider.invalidate(squadId);
     treeProvider.refresh();
@@ -731,7 +711,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // Open in Squad UI (context menu on squads — visible only when SquadUI is installed)
   context.subscriptions.push(
-    vscode.commands.registerCommand('editless.openInSquadUi', () => openSquadUiDashboard()),
+    vscode.commands.registerCommand('editless.openInSquadUi', (item?: EditlessTreeItem) => {
+      const config = item?.squadId ? registry.getSquad(item.squadId) : undefined;
+      return openSquadUiDashboard(config?.path);
+    }),
   );
 
   // Open in Browser (context menu for work items and PRs)
