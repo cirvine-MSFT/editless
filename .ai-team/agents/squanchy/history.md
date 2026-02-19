@@ -69,3 +69,6 @@
 📌 **Team update (2026-02-19):** Squad-specific terminal integration research merged — Squanchy's mental model work (one terminal = one coordinator session, NOT one per agent) shaped the entire Phase 3-4 direction. Key integration signals: `decisions/inbox/` as heartbeat, `workspace.yaml` summary for naming, `orchestration-log/*.md` for recent activity, `workspace.yaml` branch for worktree support. The activity signal hierarchy (inbox badge → summary → spawn evidence) informs both terminal state detection and tree view context. Research document filed in decisions.md. — decided by Rick
 
 📌 **Team update (2026-02-19):** Terminal integration research session complete — 4-phase architecture plan and 27-item priority matrix. Session log at .ai-team/log/2026-02-19-terminal-integration-research.md. — documented by Scribe
+
+
+📌 Team update (2026-02-19): Session rename & resume architectural decisions finalized. Key decisions: (1) Display dual names (EditLess + Copilot summary), (2) Fix #277 with TerminalOptions, (3) Create custom Copilot Sessions tree view, (4) No write-access to workspace.yaml. — decided by Casey Irvine

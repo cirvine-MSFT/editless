@@ -205,3 +205,6 @@ Reviewed Morty's feature removal PR. Code removal was surgical and complete — 
 - **Observation:** The `TerminalLayoutManager` was well-isolated (zero inbound deps outside extension.ts wiring) — good architecture that made removal trivial. The pattern of self-contained auxiliary modules continues to pay dividends.
 
 📌 **Team update (2026-02-19):** Terminal integration research session complete — 4-phase architecture plan and 27-item priority matrix. Session log at .ai-team/log/2026-02-19-terminal-integration-research.md. — documented by Scribe
+
+
+📌 Team update (2026-02-19): Session rename & resume architectural decisions finalized. Key decisions: (1) Display dual names (EditLess + Copilot summary), (2) Fix #277 with TerminalOptions, (3) Create custom Copilot Sessions tree view, (4) No write-access to workspace.yaml. — decided by Casey Irvine

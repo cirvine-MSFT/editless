@@ -28,3 +28,35 @@
 📌 **Team update (2026-02-19):** Terminal Integration audit merged — Research findings synthesized into unified plan. Jaguar's API surface analysis and stable/proposed API categorization was critical for distinguishing which patterns to build on (TerminalOptions, shell integration) vs defer (pseudoterminals). Key confidence points: sendText race fix, env var injection for session metadata, shell execution APIs. Synthesis document filed in decisions.md. — decided by Rick
 
 📌 **Team update (2026-02-19):** Terminal integration research session complete — 4-phase architecture plan and 27-item priority matrix. Session log at .ai-team/log/2026-02-19-terminal-integration-research.md. — documented by Scribe
+
+## Deep Dive: Session Rename & Resume (2026-02-19)
+
+Researched three questions about Copilot CLI session management for EditLess integration:
+
+**Session Rename:**
+- ❌ Cannot safely write to `workspace.yaml` while CLI is running (risk of corruption)
+- ✅ CLI supports `/rename` interactive command (but unreliable via sendText)
+- ❌ No pre-launch naming flags (`--session-name` does not exist)
+- 🎯 Recommended: Display both names (EditLess + Copilot summary) in UI
+
+**Session Resume:**
+- ✅ `--resume [sessionId]` is reliable and first-class CLI feature
+- ✅ Resumes: conversation history, file context, cwd, checkpoints
+- ✅ Alternative flags: `--continue` (resume latest), `--allow-all-tools`, `--model`
+- ✅ Can detect resumability via file system checks (`workspace.yaml` + `events.jsonl`)
+- ❌ VS Code Copilot extension has NO public API for CLI session resume
+- 🎯 Fix for #277: Replace `sendText()` with `TerminalOptions` + `executeCommand`
+
+**"Resume in EditLess" Button:**
+- ❌ Cannot add button to native Copilot Chat history sidebar (no extension point)
+- 🟡 Chat Participant (`@editless /resume`) possible but limited to chat input
+- 🟡 Language Model Tool possible but LLM-driven (not UI button)
+- ✅ Custom "Copilot Sessions" tree view is BEST option (full control, best UX)
+- 🎯 Recommended: Create custom view that reads `~/.copilot/session-state/`
+
+**Key architectural insight:** Copilot Chat sessions (in VS Code panel) and Copilot CLI sessions (in terminal) are DIFFERENT session types stored in DIFFERENT locations. No cross-surface resume exists.
+
+Full findings: `.ai-team/decisions/inbox/jaguar-session-rename-resume.md`
+
+
+📌 Team update (2026-02-19): Session rename & resume architectural decisions finalized. Key decisions: (1) Display dual names (EditLess + Copilot summary), (2) Fix #277 with TerminalOptions, (3) Create custom Copilot Sessions tree view, (4) No write-access to workspace.yaml. — decided by Casey Irvine
