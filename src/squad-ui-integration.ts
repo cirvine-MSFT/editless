@@ -16,11 +16,17 @@ export function squadUiSupportsDeepLink(): boolean {
 
 export function initSquadUiContext(context: vscode.ExtensionContext): void {
   const updateContext = () => {
-    vscode.commands.executeCommand('setContext', 'editless.squadUiAvailable', isSquadUiInstalled());
-    vscode.commands.executeCommand('setContext', 'editless.squadUiSupportsDeepLink', squadUiSupportsDeepLink());
+    const installed = isSquadUiInstalled();
+    const deepLink = squadUiSupportsDeepLink();
+    vscode.commands.executeCommand('setContext', 'editless.squadUiAvailable', installed);
+    vscode.commands.executeCommand('setContext', 'editless.squadUiSupportsDeepLink', deepLink);
   };
 
+  // Set immediately (covers no-SquadUI case on startup)
   updateContext();
+
+  // Re-check after other extensions finish activating
+  setTimeout(updateContext, 2000);
 
   context.subscriptions.push(
     vscode.extensions.onDidChange(() => {
