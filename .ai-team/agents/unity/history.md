@@ -52,3 +52,6 @@
 📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
 
 - SquadUI's `extension.ts` had 14 hardcoded `workspaceRoot` / `workspaceFolders[0]` references across commands (viewSkill, openLogEntry, removeSkill, finishAllocationIfReady, onTerminalClose, fileWatcher). When adding a deep-link API (`switchToRoot()`), these must all be migrated to `currentRoot` — the workspace variable should only be used for initialization. Command-registration functions like `registerAddSkillCommand` and `registerRemoveMemberCommand` need a `getCurrentRoot` callback parameter to break their direct workspace dependency. The pattern: `getCurrentRoot?.() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath` provides backward compatibility while enabling external root switching.
+
+
+📌 **Team update (2026-02-19):** Squad↔Copilot API integration — Research completed on API surface and integration patterns. Copilot APIs now support Chat Participants, Language Model Tools, and LM API for inference. Key constraint: tools must be both declared in package.json AND registered in code. MCP overlap identified with Squad's own MCP discovery logic. See decisions.md for phased integration plan (Tier 1: Language Model Tools and Chat Participant via stable APIs). — documented by Scribe

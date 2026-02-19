@@ -174,3 +174,6 @@ Final triage session before Monday v0.1 deadline. Analyzed all 25 open issues an
 **Implementation order:** (1) squad-upgrader.ts cleanup, (2) extension.ts + editless-tree.ts + package.json in parallel, (3) test updates, (4) CHANGELOG update, (5) verify with lint/test/build.
 
 Files involved: `src/squad-upgrader.ts`, `src/extension.ts`, `src/editless-tree.ts`, `package.json`, test files. Module count stays the same (no new files created).
+
+
+📌 **Team update (2026-02-19):** Squad↔Copilot integration research — Squanchy completed comprehensive Squad framework analysis (14 ranked integration points, phased rollout plan). Jaguar completed Copilot SDK analysis (7 integration scenarios, stable APIs). Both flagged overlap areas for cross-review. See decisions.md for full details. Key insight for architectural planning: EditLess watcher already fires on .ai-team/ changes; work is in reacting differently to different file paths. — documented by Scribe

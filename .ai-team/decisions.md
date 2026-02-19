@@ -932,3 +932,309 @@ The design is **sound and practical for the stated goal**. It balances security 
 **Blockers:** None. Proceed to implementation.
 
 **Next:** Birdperson implements hook + test cases. Rick reviews PR for compliance with this design.
+
+---
+
+### 2026-02-20: Squad Framework Integration Research
+
+**By:** Squanchy (Squad Platform Expert)  
+**What:** Comprehensive analysis of the `bradygaster/squad` framework (v0.4.1) and its integration surface with EditLess. This document maps every Squad state file, CLI command, and runtime pattern to concrete integration opportunities for EditLess.
+
+**Why:** EditLess is the UI layer for Squad-managed teams. To build the integration plan, we need a ground-truth understanding of what Squad produces, what EditLess already consumes, and what's left on the table.
+
+---
+
+## 1. Squad Framework Overview
+
+**Package:** `@bradygaster/create-squad` v0.4.1 (npm, installed via `npx github:bradygaster/squad`)
+**Architecture:** No runtime daemon, no IPC, no event bus. Squad is a file-based coordination framework. All state lives in `.ai-team/` as Markdown and JSON files that agents read and write.
+
+### CLI Commands
+
+| Command | What it does | Integration potential |
+|---------|-------------|----------------------|
+| `(default)` | Initialize a squad — scaffolds `.ai-team/`, `.github/agents/squad.agent.md`, workflows | Squad Init Wizard |
+| `upgrade` | Overwrites Squad-owned files (governance, templates, workflows). Never touches `.ai-team/` | Already integrated (squad-upgrader.ts) |
+| `copilot` | Add/remove @copilot coding agent from roster | Toggle command in EditLess |
+| `copilot --off` | Remove @copilot from team | Toggle command |
+| `plugin marketplace add\|remove\|list\|browse` | Manage plugin marketplace sources | Plugin browser UI |
+| `export` | Snapshot squad to JSON (agents, casting, skills) | Export command with file picker |
+| `import` | Import squad from JSON snapshot | Import command with file picker |
+
+### Governance File (`squad.agent.md`)
+
+~1,771 lines. The brain of Squad. Key sections the coordinator reads at runtime:
+
+- **Init Mode (Phase 1 & 2):** Team proposal → user confirmation → file creation
+- **Team Mode:** Routing table, response modes (Direct/Lightweight/Standard/Full), parallel fan-out, model selection (4-layer hierarchy with fallback chains)
+- **Spawn Templates:** Standard, lightweight, ceremony — all use the `task` tool
+- **Drop-Box Pattern:** Agents write to `decisions/inbox/`, Scribe merges to `decisions.md`
+- **Ceremonies:** Auto/manual triggers, before/after execution, facilitator pattern
+- **Ralph (Work Monitor):** Autonomous backlog processor, GitHub Issues → agent spawns
+- **Casting:** 33 fictional universes, persistent naming via registry.json
+- **Worktree Awareness:** worktree-local vs main-checkout strategies
+- **VS Code Compatibility:** Uses `runSubagent` instead of `task`, no per-spawn model selection
+- **Source of Truth Hierarchy:** Explicit ownership table for every `.ai-team/` file
+
+---
+
+## 2. `.ai-team/` Directory — The State Surface
+
+This is the integration API. Every file here is a potential data source for EditLess.
+
+```
+.ai-team/
+├── team.md                          # ✅ ALREADY PARSED (scanner.ts → parseRoster)
+├── routing.md                       # ❌ Not read by EditLess
+├── decisions.md                     # ❌ Not read — high value
+├── ceremonies.md                    # ❌ Not read
+├── workflow.md                      # ✅ Project-specific (EditLess uses)
+├── casting/
+│   ├── policy.json                  # ❌ Universe allowlist — low value
+│   ├── registry.json                # ❌ Agent→name mappings — medium value
+│   └── history.json                 # ❌ Assignment snapshots — low value
+├── agents/
+│   ├── {name}/
+│   │   ├── charter.md               # ❌ Not surfaced — high value
+│   │   └── history.md               # ❌ Not surfaced — high value
+│   └── _alumni/                     # ❌ Not surfaced — low value
+├── decisions/
+│   └── inbox/                       # ❌ Not watched — HIGH VALUE (real-time signal)
+├── orchestration-log/               # ✅ MTIME ONLY (for status) — log content not read
+├── log/                             # ✅ MTIME ONLY — log content not read
+├── skills/
+│   └── {name}/SKILL.md              # ❌ Not surfaced — medium value
+├── plugins/
+│   └── marketplaces.json            # ❌ Not read — low value
+└── plans/                           # ❌ Project-specific planning docs
+```
+
+**Legend:** ✅ = EditLess reads today | ❌ = Not yet surfaced
+
+---
+
+## 3. Potential Integration Points (Ranked by Value)
+
+### 🔴 Tier 1 — Highest Value (File-based, straightforward)
+
+**1. Decision Inbox Monitor**
+- **Watch:** `.ai-team/decisions/inbox/` file count
+- **Surface:** Badge on squad node ("3 pending decisions"), notification when new files appear
+- **Why highest:** This is the primary real-time signal that work is happening. When agents work, they drop decisions here. It's the heartbeat.
+- **Cost:** Low — just count files in a directory, trigger on watcher events
+
+**2. Agent Detail Panel**
+- **Watch:** `.ai-team/agents/{name}/charter.md` and `history.md`
+- **Surface:** Click agent in roster → open charter.md preview; show recent learnings in tooltip
+- **Why highest:** Agents are first-class entities in Squad. Their charter defines who they are, their history defines what they know. Users need to see this without leaving VS Code.
+- **Cost:** Low — file read + Markdown preview (VS Code has native Markdown support)
+
+**3. Orchestration Timeline**
+- **Watch:** `.ai-team/orchestration-log/*.md`
+- **Surface:** Sub-tree under squad showing recent spawns: "🔧 Morty: Refactoring auth module (completed, 3m ago)"
+- **Why highest:** This is the team's work history. Users come back and want to know what happened. Today they have to read raw Markdown files.
+- **Cost:** Medium — parse orchestration log Markdown tables for agent, outcome, timestamp
+
+**4. Session Log Browser**
+- **Watch:** `.ai-team/log/*.md`
+- **Surface:** "Session Logs" sub-tree or Quick Pick list. Click to preview.
+- **Why highest:** Session logs are Scribe's output — the team's diary. Browsing them should be one click.
+- **Cost:** Low — list files, open preview
+
+### 🟡 Tier 2 — Medium Value (Enrichment features)
+
+**5. Decisions Viewer**
+- **Watch:** `.ai-team/decisions.md`
+- **Surface:** Webview panel or tree showing parsed decision blocks (date, author, what, why). Searchable.
+- **Cost:** Medium — need a Markdown block parser
+
+**6. Skills Browser**
+- **Watch:** `.ai-team/skills/*/SKILL.md`
+- **Surface:** "Skills" sub-tree showing skill name, confidence level, description
+- **Cost:** Low — list directories, parse SKILL.md frontmatter
+
+**7. Squad CLI Commands**
+- **Wrap:** `squad copilot`, `squad export`, `squad import`
+- **Surface:** Command palette entries for toggle Copilot agent, export squad, import squad
+- **Cost:** Low — exec child process, file pickers for import/export
+
+**8. Ceremony Display**
+- **Watch:** `.ai-team/ceremonies.md`
+- **Surface:** Show enabled ceremonies in squad tooltip. "Design Review ✅, Retrospective ✅"
+- **Cost:** Low — parse Markdown tables
+
+**9. Casting Enrichment**
+- **Read:** `casting/registry.json`
+- **Surface:** Show agent count (active/retired) in squad description. Universe name already shown.
+- **Cost:** Trivial — JSON parse
+
+### 🟢 Tier 3 — Strategic Value (Requires deeper integration)
+
+**10. GitHub Issue per Agent**
+- **Source:** GitHub API (via MCP or `gh` CLI)
+- **Surface:** Show `squad:{name}` labeled issues under each agent in the roster. "Morty: #42 Fix auth timeout"
+- **Cost:** High — requires GitHub API integration, already partially possible via work-items-tree
+
+**11. Ralph Heartbeat Dashboard**
+- **Source:** GitHub Actions workflow runs (squad-heartbeat.yml)
+- **Surface:** Ralph's status: last run, success/failure, issues processed
+- **Cost:** High — requires Actions API integration
+
+**12. Squad Init Wizard**
+- **Trigger:** "Add Squad" command when no `.ai-team/` exists
+- **Surface:** Multi-step VS Code input flow → exec `npx github:bradygaster/squad`
+- **Cost:** Medium — custom VS Code wizard UI
+
+**13. Migration Helper (`.ai-team/` → `.squad/`)**
+- **Trigger:** Detect v0.5.0 upgrade or user request
+- **Surface:** Command to run the migration tool when it ships in Squad v0.5.0
+- **Cost:** Low once Squad ships the tool — just wrap the CLI command
+
+**14. Plugin Marketplace Browser**
+- **Read:** `.ai-team/plugins/marketplaces.json`
+- **Surface:** Browse marketplace repos, install plugins via UI
+- **Cost:** High — requires GitHub API + UI for browsing
+
+---
+
+## 4. Recommended Integration Scenarios for the Plan
+
+**Phase 1 — Quick Wins (file reads, minimal new UI):**
+1. Decision inbox badge (Tier 1, #1)
+2. Agent charter/history click-through (Tier 1, #2)
+3. Session log Quick Pick (Tier 1, #4)
+
+**Phase 2 — Rich State Display (new sub-trees, parsers):**
+4. Orchestration timeline (Tier 1, #3)
+5. Skills browser (Tier 2, #6)
+6. Decisions viewer (Tier 2, #5)
+
+**Phase 3 — CLI Wrapping (commands, wizards):**
+7. Copilot agent toggle (Tier 2, #7)
+8. Export/Import commands (Tier 2, #7)
+9. Squad Init Wizard (Tier 3, #12)
+
+**Phase 4 — Deep Integration (API calls, workflows):**
+10. GitHub Issues per agent (Tier 3, #10)
+11. Ralph heartbeat dashboard (Tier 3, #11)
+
+---
+
+### 2026-02-20: Copilot Integration Research
+
+**By:** Jaguar (Copilot SDK Expert)  
+**Status:** Research Complete — Ready for Integration Planning  
+**Audience:** Squanchy (Squad overlap), Morty (Extension Dev), Casey (Product)
+
+---
+
+## 1. Copilot API Surface Overview
+
+### Stable APIs (Safe to Build On)
+
+| API | Stable Since | Min VS Code | What It Does |
+|-----|-------------|-------------|--------------|
+| **Chat Participant API** | v1.93+ | ^1.93.0 | Register `@participant` handlers in Copilot Chat. Extension declares in `package.json` under `contributes.chatParticipants`, implements via `vscode.chat.createChatParticipant(id, handler)`. Receives request, context, stream, token. |
+| **Language Model API** | v1.90+ | ^1.90.0 | `vscode.lm.selectChatModels({ vendor, family })` → returns model handles. `model.sendRequest(messages, options, token)` → streamed response. Extensions can call Copilot's LLM directly for inference. |
+| **Language Model Tool API** | v1.95+ | ^1.95.0 | `vscode.lm.registerTool(name, implementation)` + `contributes.languageModelTools` in package.json. Extensions expose callable tools that Copilot Agent Mode can invoke. Both declaration and registration required. |
+| **Shell Execution API** | v1.93+ | ^1.93.0 | `onDidStartTerminalShellExecution` / `onDidEndTerminalShellExecution` — EditLess already uses this. |
+
+### Key Constraints
+
+- **Tools MUST be declared in package.json** (`contributes.languageModelTools`) AND registered in code. Declaration-only = visible but broken. Code-only = invisible to Copilot.
+- **No dynamic tool registration** — tools are static per extension version. Runtime-only tools are not discoverable by Copilot agent mode. Community discussions are ongoing but no timeline.
+- **Chat participants require Copilot extension** — the `vscode.chat` namespace only activates when GitHub Copilot Chat is installed.
+- **LM API requires Copilot or another model provider** — `selectChatModels()` returns empty if no provider is active.
+
+---
+
+## 2. Current EditLess ↔ Copilot Integration State
+
+### What EditLess Already Does
+
+| Feature | File | Mechanism |
+|---------|------|-----------|
+| **CLI detection** | `cli-provider.ts` | Probes `copilot version`, detects presence, tracks version. Self-heals if Copilot provider removed from config. |
+| **Session launches** | `terminal-manager.ts` | Launches terminals with `copilot --agent $(agent)`. Supports `--resume` for orphan re-launch. |
+| **Session ID detection** | `terminal-manager.ts` + `session-context.ts` | Scans `~/.copilot/session-state/` directories, matches by cwd and creation time. |
+| **State monitoring** | `terminal-manager.ts` | Reads `events.jsonl` last line, maps event types to working/waiting/idle/stale states. |
+| **Agent discovery** | `agent-discovery.ts` | Scans `~/.copilot/agents/` and `~/.copilot/` for `.agent.md` files. Merges with workspace agents. |
+| **Session context extraction** | `session-context.ts` | Reads workspace.yaml (summary, branch, cwd) and plan.md (work item references). |
+| **CLI updates** | `cli-provider.ts` | Checks for Copilot CLI updates, prompts user, runs update command. |
+
+### Potential Integration Points (Ranked)
+
+#### Tier 1: High Value, Stable API — Build Now
+
+**1A. Language Model Tools — Expose Squad Operations to Copilot**
+
+Register EditLess tools that Copilot Agent Mode can invoke:
+- `editless_listSquads` — List all registered squads/teams and status
+- `editless_getSquadState` — Get current state of a squad
+- `editless_launchSession` — Launch a new terminal session
+- `editless_getSessionState` — Get current state of an active session
+
+**Why this matters:** Copilot Agent Mode becomes Squad-aware. User can say "launch a session for my-squad" in chat and Copilot invokes EditLess's tool.
+
+**1B. Chat Participant — `@editless` in Copilot Chat**
+
+Register an `@editless` chat participant for:
+- `@editless what squads are active?` → list squads with status
+- `@editless show sessions for my-squad` → terminal states
+- `@editless what work items are assigned?` → work items summary
+- `@editless launch my-squad` → start a new session
+
+**Why this matters:** EditLess becomes conversational. Users interact with Squad through natural language in Copilot Chat.
+
+#### Tier 2: High Value, Requires Careful Implementation
+
+**2A. LM API — AI-Powered Squad Features**
+
+Use Copilot's LLM directly for:
+- Session summarization — feed events.jsonl to LM, get human-readable summary
+- Work item triage — analyze open issues, suggest squad member assignment
+- Decision summarization — summarize decisions.md for team overview
+- Intelligent notifications — use LM to decide if state change is worth notifying
+
+**Caution:** Couples EditLess features to Copilot availability. Must degrade gracefully when no model is available.
+
+**2B. Custom Agent Generation — `.agent.md` for Squads**
+
+EditLess could generate `.github/agents/{squad-name}.agent.md` files that make each squad member available as a custom Copilot agent.
+
+---
+
+## 3. Copilot ↔ Squad Overlap Areas (For Squanchy)
+
+| Area | Copilot's Surface | Squad's Surface | Integration Point |
+|------|-------------------|-----------------|-------------------|
+| **Agent definitions** | `.agent.md` files in `.github/agents/` or `~/.copilot/agents/` | `.ai-team/agents/{name}/charter.md` | EditLess could generate .agent.md from charter.md |
+| **Instructions** | `copilot-instructions.md`, `.instructions.md` | `.ai-team/routing.md`, `.ai-team/decisions.md` | Already bridged — copilot-instructions.md references .ai-team/ |
+| **Skills** | `SKILL.md` in `.github/skills/` or `~/.copilot/skills/` | `.ai-team/skills/` | EditLess already has skills in `.ai-team/skills/`. Format is compatible. |
+| **Agent spawning** | Copilot coding agent picks up issues autonomously | Squad routing assigns work to team members | Copilot coding agent IS a squad member (`@copilot` in team.md) |
+| **Session state** | `~/.copilot/session-state/` | EditLess terminal manager tracking | Already integrated via session-context.ts |
+| **Branch conventions** | Agent creates `copilot/fix-{slug}` branches | Squad uses `squad/{issue}-{slug}` | Bridged via copilot-instructions.md override |
+
+---
+
+## 4. Recommended Integration Scenarios
+
+### Phase 1 (Immediate — uses stable APIs only)
+
+1. Register Language Model Tools for squad listing, session state, and session launch. Purely additive — no existing behavior changes.
+2. Register `@editless` Chat Participant with basic squad status and session management commands.
+3. Both require Copilot to be present but EditLess continues working without it (progressive detection).
+
+### Phase 2 (Short-term — after Phase 1 validates)
+
+4. Use LM API for session summarization — replace static events.jsonl last-line with LM-generated summaries when available.
+5. Generate .agent.md files from squad charters — make squad members available in Copilot Chat.
+
+---
+
+### 2026-02-19: User Directive — PR Review Requirement
+
+**By:** Casey Irvine (via Copilot)  
+**Date:** 2026-02-19  
+**What:** Every PR should be reviewed by at least 2 squad members before merging.  
+**Why:** User request — captured for team memory.

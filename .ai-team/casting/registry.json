@@ -41,6 +41,20 @@
       "created_at": "2026-02-15T19:48:00Z",
       "legacy_named": false,
       "status": "active"
+    },
+    "squanchy": {
+      "persistent_name": "Squanchy",
+      "universe": "Rick and Morty",
+      "created_at": "2026-02-19T21:21:00Z",
+      "legacy_named": false,
+      "status": "active"
+    },
+    "jaguar": {
+      "persistent_name": "Jaguar",
+      "universe": "Rick and Morty",
+      "created_at": "2026-02-19T21:21:00Z",
+      "legacy_named": false,
+      "status": "active"
     }
   }
 }

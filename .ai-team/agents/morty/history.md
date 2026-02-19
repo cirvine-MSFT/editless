@@ -154,3 +154,6 @@
 📌 **Team update (2026-02-18):** Worktree Dev Launcher as Primary Workflow — scripts/dev-worktree.ps1 is now the recommended primary workflow for EditLess feature development. One command creates worktree, installs deps, builds, and launches isolated VS Code. .vscode/mcp.json example removed (EditLess doesn't use webviews). docs/local-development.md updated. All team members should use dev-worktree.ps1 for issue-based feature work. — decided by Morty
 
 📌 **Team update (2026-02-18):** EditLess Dev Workflow Skill Created — Documented scripts/dev-worktree.ps1 in .ai-team/skills/editless-dev-workflow/SKILL.md with parameters, usage, branch naming conventions, and integration notes. Ensures agents discover and use the optimized workflow immediately without falling back to bootstrap tools or manual git commands. — decided by Morty
+
+
+📌 **Team update (2026-02-19):** Squad↔Copilot integration research — Squanchy and Jaguar completed research on integration opportunities. Identified 14 Squad framework integration points and 7 Copilot API scenarios. Key data shape contracts documented for extension development (AgentDetail, DecisionInboxState, OrchestrationEntry). Watcher enhancement needed: pass changed file path to callback for per-file-type reactions. See decisions.md for full design. — documented by Scribe

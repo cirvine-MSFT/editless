@@ -18,6 +18,8 @@
 | Meeseeks | Tester | `.ai-team/agents/meeseeks/charter.md` | ✅ Active |
 | Summer | Product Designer | `.ai-team/agents/summer/charter.md` | ✅ Active |
 | Unity | Integration Dev | `.ai-team/agents/unity/charter.md` | ✅ Active |
+| Squanchy | Squad Platform Expert | `.ai-team/agents/squanchy/charter.md` | ✅ Active |
+| Jaguar | Copilot SDK Expert | `.ai-team/agents/jaguar/charter.md` | ✅ Active |
 | Scribe | Session Logger | `.ai-team/agents/scribe/charter.md` | 📋 Silent |
 | Ralph | Work Monitor | — | 🔄 Monitor |
 
