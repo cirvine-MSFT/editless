@@ -32,7 +32,7 @@ export interface AgentTeamConfig {
 export type SquadStatus =
   | 'active'          // recent activity (file changes within last hour)
   | 'idle'            // no recent activity
-  | 'needs-attention'; // stale inbox, unmerged decisions, errors
+  | 'needs-attention'; // no activity for >1 day
 
 // ---------------------------------------------------------------------------
 // Parsed Content Entries

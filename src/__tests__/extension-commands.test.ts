@@ -442,10 +442,6 @@ vi.mock('../squad-ui-integration', () => ({
   openSquadUiDashboard: mockOpenSquadUiDashboard,
 }));
 
-vi.mock('../inbox-flusher', () => ({
-  flushDecisionsInbox: vi.fn(),
-}));
-
 vi.mock('../team-dir', () => ({
   resolveTeamDir: vi.fn(),
   resolveTeamMd: vi.fn(),
