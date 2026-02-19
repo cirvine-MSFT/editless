@@ -203,3 +203,5 @@ Reviewed Morty's feature removal PR. Code removal was surgical and complete — 
 - **Pattern confirmed:** Feature removals consistently miss docs cleanup. Same gap as #303. Created decision record (`rick-pr320-review.md`) to formalize docs as a required step in the feature-removal checklist.
 - **Minor code hygiene:** Removal left a double blank line in `extension.ts` (lines 1149-1150). Not a blocker but worth cleaning.
 - **Observation:** The `TerminalLayoutManager` was well-isolated (zero inbound deps outside extension.ts wiring) — good architecture that made removal trivial. The pattern of self-contained auxiliary modules continues to pay dividends.
+
+📌 **Team update (2026-02-19):** Terminal integration research session complete — 4-phase architecture plan and 27-item priority matrix. Session log at .ai-team/log/2026-02-19-terminal-integration-research.md. — documented by Scribe

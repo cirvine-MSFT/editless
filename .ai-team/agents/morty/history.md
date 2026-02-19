@@ -163,3 +163,5 @@
 
 
 📌 **Team update (2026-02-19):** Squad↔Copilot integration research — Squanchy and Jaguar completed research on integration opportunities. Identified 14 Squad framework integration points and 7 Copilot API scenarios. Key data shape contracts documented for extension development (AgentDetail, DecisionInboxState, OrchestrationEntry). Watcher enhancement needed: pass changed file path to callback for per-file-type reactions. See decisions.md for full design. — documented by Scribe
+
+📌 **Team update (2026-02-19):** Terminal integration research session complete — 4-phase architecture plan and 27-item priority matrix. Session log at .ai-team/log/2026-02-19-terminal-integration-research.md. — documented by Scribe
