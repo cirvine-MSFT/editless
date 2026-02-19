@@ -11,7 +11,7 @@
 - Pull Requests panel — track PRs across repos with linked issue navigation
 - GitHub integration with auto-detection from `git remote`
 - Azure DevOps integration with organization/project configuration
-- Squad upgrader for Squad CLI teams
+- Squad upgrader for Squad CLI teams (removed in 0.1.1 — see below)
 - Status bar with inbox monitoring
 - Session context and labeling
 - Notifications for inbox items and CLI updates
@@ -27,3 +27,8 @@
 
 ### Removed
 - Redactor module (not needed for public release)
+
+## [Unreleased]
+
+### Removed
+- Squad update detection and upgrade indicator (#303) — version checking, persistent badge, `editless.upgradeSquad` / `editless.upgradeAllSquads` commands. Shared utilities extracted to `squad-utils.ts`. Already-initialized squads now silently register without running a terminal.

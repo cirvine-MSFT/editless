@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import { EditlessRegistry } from './registry';
 import { scanSquad } from './scanner';
-import { getLocalSquadVersion } from './squad-upgrader';
+import { getLocalSquadVersion } from './squad-utils';
 import { getStateIcon, getStateDescription } from './terminal-manager';
 import type { TerminalManager, PersistedTerminalInfo, SessionState } from './terminal-manager';
 import type { SessionLabelManager } from './session-labels';
@@ -75,7 +75,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private _cache = new Map<string, SquadState>();
   private _discoveredAgents: DiscoveredAgent[] = [];
-  private _upgradeAvailable = new Map<string, boolean>();
 
   private readonly _terminalSub: vscode.Disposable | undefined;
   private readonly _labelSub: vscode.Disposable | undefined;
@@ -108,11 +107,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   setDiscoveredAgents(agents: DiscoveredAgent[]): void {
     this._discoveredAgents = agents;
-    this._onDidChangeTreeData.fire();
-  }
-
-  setUpgradeAvailable(squadId: string, available: boolean): void {
-    this._upgradeAvailable.set(squadId, available);
     this._onDidChangeTreeData.fire();
   }
 
@@ -219,16 +213,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       }
     }
 
-    const upgradeAvailable = this._upgradeAvailable.get(cfg.id) ?? false;
-    if (upgradeAvailable) {
-      descParts.push('upgrade available');
-    }
-
     item.description = descParts.join(' · ');
-
-    if (upgradeAvailable) {
-      item.contextValue = 'squad-upgradeable';
-    }
 
     const tooltipLines = [
       `**${cfg.icon} ${displayName}**`,

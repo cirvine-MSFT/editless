@@ -249,7 +249,6 @@ vi.mock('../editless-tree', () => ({
     return {
       refresh: mockTreeRefresh,
       setDiscoveredAgents: mockTreeSetDiscoveredAgents,
-      setUpgradeAvailable: vi.fn(),
       invalidate: vi.fn(),
       findTerminalItem: vi.fn(),
     };
@@ -319,11 +318,7 @@ vi.mock('../visibility', () => ({
   }),
 }));
 
-vi.mock('../squad-upgrader', () => ({
-  registerSquadUpgradeCommand: vi.fn(() => ({ dispose: vi.fn() })),
-  registerSquadUpgradeAllCommand: vi.fn(() => ({ dispose: vi.fn() })),
-  checkSquadUpgradesOnStartup: vi.fn(() => Promise.resolve()),
-  clearLatestVersionCache: vi.fn(),
+vi.mock('../squad-utils', () => ({
   checkNpxAvailable: mockCheckNpxAvailable,
   promptInstallNode: mockPromptInstallNode,
   isSquadInitialized: mockIsSquadInitialized,
@@ -1767,20 +1762,15 @@ describe('extension command handlers', () => {
       expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx -y github:bradygaster/squad init; exit');
     });
 
-    it('should run squad upgrade command for existing squad directory', async () => {
+    it('should silently skip terminal for already-initialized squad directory', async () => {
       mockIsSquadInitialized.mockReturnValue(true);
-      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
-      mockCreateTerminal.mockReturnValue(mockTerminal);
+      mockDiscoverAgentTeams.mockReturnValue([{ id: 'squad', name: 'squad', path: '/path/to/squad', icon: '🔷', universe: 'unknown' }]);
       
       await getHandler('editless.addSquad')();
       
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/path/to/squad');
-      expect(mockCreateTerminal).toHaveBeenCalledWith({
-        name: 'Squad Upgrade: squad',
-        cwd: '/path/to/squad',
-        hideFromUser: true,
-      });
-      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx -y github:bradygaster/squad upgrade; exit');
+      expect(mockCreateTerminal).not.toHaveBeenCalled();
+      expect(mockAddSquads).toHaveBeenCalled();
     });
 
     it('should show success notification for new squad', async () => {
@@ -1793,13 +1783,14 @@ describe('extension command handlers', () => {
       );
     });
 
-    it('should show success notification for squad upgrade', async () => {
+    it('should show success notification for already-initialized squad', async () => {
       mockIsSquadInitialized.mockReturnValue(true);
+      mockDiscoverAgentTeams.mockReturnValue([{ id: 'squad', name: 'squad', path: '/path/to/squad', icon: '🔷', universe: 'unknown' }]);
       
       await getHandler('editless.addSquad')();
       
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
-        'Squad upgrade started in squad.',
+        'Squad "squad" added to registry.',
       );
     });
 
@@ -1836,22 +1827,21 @@ describe('extension command handlers', () => {
       expect(mockShowInformationMessage).toHaveBeenCalled();
     });
 
-    it('should execute full flow for happy path (upgrade)', async () => {
+    it('should execute full flow for happy path (already initialized)', async () => {
       mockCheckNpxAvailable.mockResolvedValue(true);
       mockShowOpenDialog.mockResolvedValue([{ fsPath: '/existing-squad', toString: () => '/existing-squad' }]);
       mockIsSquadInitialized.mockReturnValue(true);
-      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
-      mockCreateTerminal.mockReturnValue(mockTerminal);
+      mockDiscoverAgentTeams.mockReturnValue([{ id: 'existing-squad', name: 'existing-squad', path: '/existing-squad', icon: '🔷', universe: 'unknown' }]);
       
       await getHandler('editless.addSquad')();
       
       expect(mockCheckNpxAvailable).toHaveBeenCalled();
       expect(mockShowOpenDialog).toHaveBeenCalled();
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/existing-squad');
-      expect(mockCreateTerminal).toHaveBeenCalled();
-      expect(mockTerminal.sendText).toHaveBeenCalledWith('npx -y github:bradygaster/squad upgrade; exit');
+      expect(mockCreateTerminal).not.toHaveBeenCalled();
+      expect(mockAddSquads).toHaveBeenCalled();
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
-        'Squad upgrade started in existing-squad.',
+        'Squad "existing-squad" added to registry.',
       );
     });
 

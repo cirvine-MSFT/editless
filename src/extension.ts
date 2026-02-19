@@ -7,7 +7,7 @@ import { createRegistry, watchRegistry } from './registry';
 import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
-import { registerSquadUpgradeCommand, registerSquadUpgradeAllCommand, checkSquadUpgradesOnStartup, clearLatestVersionCache } from './squad-upgrader';
+
 import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider, getActiveProviderLaunchCommand } from './cli-provider';
 import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
@@ -204,30 +204,11 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // --- Commands ----------------------------------------------------------
 
-  // Squad upgrade commands
-  const onUpgradeComplete = (squadId: string): void => {
-    clearLatestVersionCache();
-    treeProvider.setUpgradeAvailable(squadId, false);
-    treeProvider.invalidate(squadId);
-    
-    // Re-check all squads after upgrade to update the context key
-    checkSquadUpgradesOnStartup(registry.loadSquads(), (sid, available) => {
-      treeProvider.setUpgradeAvailable(sid, available);
-    });
-  };
-  context.subscriptions.push(registerSquadUpgradeCommand(context, registry, onUpgradeComplete));
-  context.subscriptions.push(registerSquadUpgradeAllCommand(context, registry, onUpgradeComplete));
-
   // CLI provider update command
   context.subscriptions.push(registerCliUpdateCommand(context));
 
   // Check for CLI provider updates on startup
   checkProviderUpdatesOnStartup(context);
-
-  // Check for squad upgrades on startup (async, non-blocking)
-  checkSquadUpgradesOnStartup(registry.loadSquads(), (squadId, available) => {
-    treeProvider.setUpgradeAvailable(squadId, available);
-  });
 
   // Squad discovery command
   context.subscriptions.push(registerDiscoveryCommand(context, registry));
@@ -1095,7 +1076,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Add Squad — open a folder picker, git init, and run squad init in a terminal
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.addSquad', async () => {
-      const { checkNpxAvailable, promptInstallNode, isSquadInitialized } = await import('./squad-upgrader');
+      const { checkNpxAvailable, promptInstallNode, isSquadInitialized } = await import('./squad-utils');
       
       const npxAvailable = await checkNpxAvailable();
       if (!npxAvailable) {
@@ -1112,35 +1093,17 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!uris || uris.length === 0) return;
 
       const dirPath = uris[0].fsPath;
-      const squadExists = isSquadInitialized(dirPath);
-      const command = squadExists 
-        ? 'npx -y github:bradygaster/squad upgrade'
-        : 'git init && npx -y github:bradygaster/squad init';
-      const action = squadExists ? 'Upgrade' : 'Init';
 
-      const terminal = vscode.window.createTerminal({
-        name: `Squad ${action}: ${path.basename(dirPath)}`,
-        cwd: dirPath,
-        hideFromUser: true,
-      });
-      terminal.sendText(command + '; exit');
-
-      // Auto-register the squad when the hidden terminal closes
-      const listener = vscode.window.onDidCloseTerminal(closedTerminal => {
-        if (closedTerminal !== terminal) { return; }
-        listener.dispose();
-
+      if (isSquadInitialized(dirPath)) {
+        // Already initialized — discover and register without running a terminal
         const parentDir = path.dirname(dirPath);
         const discovered = discoverAgentTeams(parentDir, registry.loadSquads());
         const match = discovered.filter(s => s.path.toLowerCase() === dirPath.toLowerCase());
         if (match.length > 0) {
           registry.addSquads(match);
           treeProvider.refresh();
-          vscode.window.showInformationMessage(
-            `Squad "${match[0].name}" added to registry.`,
-          );
-        } else if (resolveTeamDir(dirPath)) {
-          // squad init creates .ai-team/ before the coordinator writes team.md
+          vscode.window.showInformationMessage(`Squad "${match[0].name}" added to registry.`);
+        } else {
           const existing = registry.loadSquads();
           const alreadyRegistered = existing.some(s => s.path.toLowerCase() === dirPath.toLowerCase());
           if (!alreadyRegistered) {
@@ -1154,19 +1117,51 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               launchCommand: getActiveProviderLaunchCommand(),
             }]);
             treeProvider.refresh();
-            vscode.window.showInformationMessage(
-              `Squad "${folderName}" added to registry.`,
-            );
+            vscode.window.showInformationMessage(`Squad "${folderName}" added to registry.`);
+          }
+        }
+        return;
+      }
+
+      const terminal = vscode.window.createTerminal({
+        name: `Squad Init: ${path.basename(dirPath)}`,
+        cwd: dirPath,
+        hideFromUser: true,
+      });
+      terminal.sendText('git init && npx -y github:bradygaster/squad init; exit');
+
+      const listener = vscode.window.onDidCloseTerminal(closedTerminal => {
+        if (closedTerminal !== terminal) { return; }
+        listener.dispose();
+
+        const parentDir = path.dirname(dirPath);
+        const discovered = discoverAgentTeams(parentDir, registry.loadSquads());
+        const match = discovered.filter(s => s.path.toLowerCase() === dirPath.toLowerCase());
+        if (match.length > 0) {
+          registry.addSquads(match);
+          treeProvider.refresh();
+          vscode.window.showInformationMessage(`Squad "${match[0].name}" added to registry.`);
+        } else if (resolveTeamDir(dirPath)) {
+          const existing = registry.loadSquads();
+          const alreadyRegistered = existing.some(s => s.path.toLowerCase() === dirPath.toLowerCase());
+          if (!alreadyRegistered) {
+            const folderName = path.basename(dirPath);
+            registry.addSquads([{
+              id: folderName.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase(),
+              name: folderName,
+              path: dirPath,
+              icon: '🔷',
+              universe: 'unknown',
+              launchCommand: getActiveProviderLaunchCommand(),
+            }]);
+            treeProvider.refresh();
+            vscode.window.showInformationMessage(`Squad "${folderName}" added to registry.`);
           }
         }
       });
       context.subscriptions.push(listener);
 
-      vscode.window.showInformationMessage(
-        squadExists
-          ? `Squad upgrade started in ${path.basename(dirPath)}.`
-          : `Squad initialization started in ${path.basename(dirPath)}.`,
-      );
+      vscode.window.showInformationMessage(`Squad initialization started in ${path.basename(dirPath)}.`);
     }),
   );
 
