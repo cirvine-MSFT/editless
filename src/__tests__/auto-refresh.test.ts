@@ -27,7 +27,7 @@ vi.mock('vscode', () => ({
 // Stub remaining module mocks so extension.ts doesn't blow up at import time
 vi.mock('../editless-tree', () => ({
   EditlessTreeProvider: vi.fn(function () {
-    return { refresh: vi.fn(), setDiscoveredAgents: vi.fn(), setUpgradeAvailable: vi.fn(), invalidate: vi.fn(), findTerminalItem: vi.fn() };
+    return { refresh: vi.fn(), setDiscoveredAgents: vi.fn(), invalidate: vi.fn(), findTerminalItem: vi.fn() };
   }),
   EditlessTreeItem: class {},
 }));
@@ -35,7 +35,7 @@ vi.mock('../registry', () => ({ createRegistry: vi.fn(() => ({ loadSquads: vi.fn
 vi.mock('../terminal-manager', () => ({ TerminalManager: vi.fn(function () { return { persist: vi.fn(), reconcile: vi.fn(), setSessionResolver: vi.fn(), setAgentSessionId: vi.fn(), getOrphanedSessions: vi.fn().mockReturnValue([]), onDidChange: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn(), getAllTerminals: vi.fn().mockReturnValue([]) }; }), getStateIcon: vi.fn(), getStateDescription: vi.fn() }));
 vi.mock('../session-labels', () => ({ SessionLabelManager: vi.fn(function () { return { getLabel: vi.fn(), setLabel: vi.fn(), clearLabel: vi.fn() }; }), promptClearLabel: vi.fn(), promptRenameSession: vi.fn() }));
 vi.mock('../visibility', () => ({ AgentVisibilityManager: vi.fn(function () { return { hide: vi.fn(), show: vi.fn(), showAll: vi.fn(), getHiddenIds: vi.fn().mockReturnValue([]), isHidden: vi.fn() }; }) }));
-vi.mock('../squad-upgrader', () => ({ registerSquadUpgradeCommand: vi.fn(() => ({ dispose: vi.fn() })), registerSquadUpgradeAllCommand: vi.fn(() => ({ dispose: vi.fn() })), checkSquadUpgradesOnStartup: vi.fn(() => Promise.resolve()), clearLatestVersionCache: vi.fn(), checkNpxAvailable: vi.fn().mockResolvedValue(true), promptInstallNode: vi.fn(), isSquadInitialized: vi.fn() }));
+vi.mock('../squad-utils', () => ({ checkNpxAvailable: vi.fn().mockResolvedValue(true), promptInstallNode: vi.fn(), isSquadInitialized: vi.fn() }));
 vi.mock('../cli-provider', () => ({ registerCliUpdateCommand: vi.fn(() => ({ dispose: vi.fn() })), checkProviderUpdatesOnStartup: vi.fn(), probeAllProviders: vi.fn(() => Promise.resolve()), resolveActiveProvider: vi.fn(), getActiveCliProvider: vi.fn() }));
 vi.mock('../discovery', () => ({ registerDiscoveryCommand: vi.fn(() => ({ dispose: vi.fn() })), checkDiscoveryOnStartup: vi.fn(), autoRegisterWorkspaceSquads: vi.fn() }));
 vi.mock('../agent-discovery', () => ({ discoverAllAgents: vi.fn(() => []) }));

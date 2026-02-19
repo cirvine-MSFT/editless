@@ -100,18 +100,6 @@
         "icon": "$(cloud-download)"
       },
       {
-        "command": "editless.upgradeSquad",
-        "title": "Upgrade Squad Package",
-        "category": "EditLess",
-        "icon": "$(arrow-up)"
-      },
-      {
-        "command": "editless.upgradeAllSquads",
-        "title": "Upgrade All Squad Packages",
-        "category": "EditLess",
-        "icon": "$(arrow-up)"
-      },
-      {
         "command": "editless.renameSquad",
         "title": "Rename"
       },
@@ -323,7 +311,6 @@
         { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@2" },
         { "command": "editless.addNew", "when": "view == editlessTree", "group": "navigation@3" },
         { "command": "editless.updateCliProvider", "when": "view == editlessTree && editless.cliUpdateAvailable", "group": "1_updates" },
-        { "command": "editless.upgradeAllSquads", "when": "view == editlessTree && editless.squadUpgradeAvailable", "group": "1_updates" },
         { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation@1" },
         { "command": "editless.filterWorkItems", "when": "view == editlessWorkItems", "group": "navigation@2" },
         { "command": "editless.clearWorkItemsFilter", "when": "view == editlessWorkItems && editless.workItemsFiltered", "group": "navigation@3" },
@@ -336,7 +323,6 @@
       "view/item/context": [
         { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent$/", "group": "inline@0" },
         { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent|discovered-agent$/", "group": "session@0" },
-        { "command": "editless.upgradeSquad", "when": "view == editlessTree && viewItem == squad-upgradeable", "group": "inline@1" },
         { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@1" },
         { "command": "editless.changeModel", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@2" },
         { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@3" },

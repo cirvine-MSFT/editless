@@ -76,7 +76,7 @@ vi.mock('../scanner', () => ({
   })),
 }));
 
-vi.mock('../squad-upgrader', () => ({
+vi.mock('../squad-utils', () => ({
   getLocalSquadVersion: vi.fn(() => null),
 }));
 
@@ -689,72 +689,6 @@ describe('EditlessTreeProvider — squad item description', () => {
 
     expect(squadItem.description).toContain('1 session');
     expect(squadItem.description).not.toContain('1 sessions');
-  });
-});
-
-// ---------------------------------------------------------------------------
-// EditlessTreeProvider — upgrade indicator
-// ---------------------------------------------------------------------------
-
-describe('EditlessTreeProvider — upgrade indicator', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
-    return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
-    };
-  }
-
-  it('shows "upgrade available" in description when upgrade is set', () => {
-    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
-
-    provider.setUpgradeAvailable('squad-a', true);
-    const roots = provider.getChildren();
-    const squadItem = roots.find(r => r.type === 'squad')!;
-
-    expect(squadItem.description).toContain('upgrade available');
-    expect(squadItem.contextValue).toBe('squad-upgradeable');
-  });
-
-  it('does not show upgrade indicator when no upgrade is available', () => {
-    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
-
-    const roots = provider.getChildren();
-    const squadItem = roots.find(r => r.type === 'squad')!;
-
-    expect(squadItem.description).not.toContain('upgrade available');
-    expect(squadItem.contextValue).toBe('squad');
-  });
-
-  it('clears indicator when upgrade is set to false', () => {
-    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
-
-    provider.setUpgradeAvailable('squad-a', true);
-    provider.setUpgradeAvailable('squad-a', false);
-    const roots = provider.getChildren();
-    const squadItem = roots.find(r => r.type === 'squad')!;
-
-    expect(squadItem.description).not.toContain('upgrade available');
-    expect(squadItem.contextValue).toBe('squad');
-  });
-
-  it('fires onDidChangeTreeData when upgrade state changes', () => {
-    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
-    const listener = vi.fn();
-    provider.onDidChangeTreeData(listener);
-
-    provider.setUpgradeAvailable('squad-a', true);
-
-    expect(listener).toHaveBeenCalledOnce();
   });
 });
 
