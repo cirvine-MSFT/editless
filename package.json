@@ -340,7 +340,7 @@
         { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@1" },
         { "command": "editless.changeModel", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@2" },
         { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@3" },
-        { "command": "editless.openInSquadUi", "when": "view == editlessTree && viewItem =~ /^squad/ && editless.squadUiAvailable", "group": "squad@4" },
+        { "command": "editless.openInSquadUi", "when": "view == editlessTree && viewItem =~ /^squad/ && editless.squadUiSupportsDeepLink", "group": "squad@4" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@5" },
         { "command": "editless.promoteDiscoveredAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },

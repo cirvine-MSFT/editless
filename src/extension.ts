@@ -730,7 +730,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // Open in Squad UI (context menu on squads — visible only when SquadUI is installed)
   context.subscriptions.push(
-    vscode.commands.registerCommand('editless.openInSquadUi', () => openSquadUiDashboard()),
+    vscode.commands.registerCommand('editless.openInSquadUi', (item?: EditlessTreeItem) => {
+      const config = item?.squadId ? registry.getSquad(item.squadId) : undefined;
+      return openSquadUiDashboard(config?.path);
+    }),
   );
 
   // Open in Browser (context menu for work items and PRs)
