@@ -7,7 +7,7 @@ import { getActiveProviderLaunchCommand } from './cli-provider';
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------
 
-export type SessionState = 'working' | 'waiting-on-input' | 'idle' | 'stale' | 'needs-attention' | 'orphaned';
+export type SessionState = 'working' | 'waiting-on-input' | 'idle' | 'stale' | 'orphaned';
 
 export interface TerminalInfo {
   id: string;
@@ -331,8 +331,6 @@ export class TerminalManager implements vscode.Disposable {
 
   // -- Public API: state detection ------------------------------------------
 
-  private readonly _squadInboxCounts = new Map<string, number>();
-
   getSessionState(terminalOrId: vscode.Terminal | string): SessionState | undefined {
     if (typeof terminalOrId === 'string') {
       const orphan = this._pendingSaved.find(e => e.id === terminalOrId);
@@ -343,13 +341,11 @@ export class TerminalManager implements vscode.Disposable {
     const info = this._terminals.get(terminal);
     if (!info) { return undefined; }
 
-    const inboxCount = this._squadInboxCounts.get(info.squadId) ?? 0;
-
     // Primary: events.jsonl for Copilot sessions with a resolved session ID
     if (info.agentSessionId && this._sessionResolver) {
       const lastEvent = this._sessionResolver.getLastEvent(info.agentSessionId);
       if (lastEvent) {
-        return stateFromEvent(lastEvent, inboxCount);
+        return stateFromEvent(lastEvent);
       }
     }
 
@@ -359,15 +355,13 @@ export class TerminalManager implements vscode.Disposable {
 
     const lastActivity = this._lastActivityAt.get(terminal);
     if (!lastActivity) {
-      return inboxCount > 0 ? 'needs-attention' : 'idle';
+      return 'idle';
     }
 
     const ageMs = Date.now() - lastActivity;
     if (ageMs < IDLE_THRESHOLD_MS) {
-      return inboxCount > 0 ? 'needs-attention' : 'idle';
+      return 'idle';
     }
-
-    if (inboxCount > 0) { return 'needs-attention'; }
 
     if (ageMs < STALE_THRESHOLD_MS) { return 'idle'; }
     return 'stale';
@@ -380,11 +374,6 @@ export class TerminalManager implements vscode.Disposable {
   getStateDescription(state: SessionState, info: PersistedTerminalInfo | TerminalInfo): string {
     const lastActivityAt = 'lastSeenAt' in info ? (info as PersistedTerminalInfo).lastSeenAt : undefined;
     return getStateDescription(state, lastActivityAt);
-  }
-
-  setSquadInboxCount(squadId: string, count: number): void {
-    this._squadInboxCounts.set(squadId, count);
-    this._onDidChange.fire();
   }
 
   // -- Persistence & reconciliation -----------------------------------------
@@ -547,8 +536,6 @@ export function getStateIcon(state: SessionState): vscode.ThemeIcon {
       return new vscode.ThemeIcon('loading~spin');
     case 'waiting-on-input':
       return new vscode.ThemeIcon('bell-dot');
-    case 'needs-attention':
-      return new vscode.ThemeIcon('warning');
     case 'idle':
       return new vscode.ThemeIcon('check');
     case 'stale':
@@ -566,8 +553,6 @@ export function getStateDescription(state: SessionState, lastActivityAt?: number
       return '· working';
     case 'waiting-on-input':
       return '· waiting on input';
-    case 'needs-attention':
-      return '· needs attention';
     case 'orphaned':
       return '· orphaned — re-launch?';
     case 'stale':
@@ -601,7 +586,7 @@ const WORKING_EVENT_TYPES = new Set([
   'tool.execution_complete',
 ]);
 
-export function stateFromEvent(event: SessionEvent, inboxCount: number): SessionState {
+export function stateFromEvent(event: SessionEvent): SessionState {
   if (WORKING_EVENT_TYPES.has(event.type)) {
     return 'working';
   }
@@ -609,11 +594,10 @@ export function stateFromEvent(event: SessionEvent, inboxCount: number): Session
   const ageMs = Date.now() - new Date(event.timestamp).getTime();
 
   if (event.type === 'assistant.turn_end') {
-    if (inboxCount > 0) { return 'needs-attention'; }
     if (ageMs < IDLE_THRESHOLD_MS) { return 'waiting-on-input'; }
     if (ageMs < STALE_THRESHOLD_MS) { return 'idle'; }
     return 'stale';
   }
 
-  return inboxCount > 0 ? 'needs-attention' : 'idle';
+  return 'idle';
 }

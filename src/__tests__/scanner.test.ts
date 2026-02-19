@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { parseDecisions, parseRoster, extractReferences, determineStatus, scanSquad } from '../scanner';
+import { parseRoster, extractReferences, determineStatus, scanSquad } from '../scanner';
 import type { AgentTeamConfig } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -24,90 +24,6 @@ function writeFixture(relPath: string, content: string): string {
 
 beforeEach(() => { tmpDir = makeTmp(); });
 afterEach(() => { fs.rmSync(tmpDir, { recursive: true, force: true }); });
-
-// ---------------------------------------------------------------------------
-// parseDecisions
-// ---------------------------------------------------------------------------
-
-describe('parseDecisions', () => {
-  it('parses valid decisions.md with 3 entries', () => {
-    const content = `# Decisions
-
-### 2025-01-15: Adopt TypeScript strict mode
-**By:** Alice
-Switched the entire codebase to strict mode for better safety.
-
-### 2025-01-10: Use Vitest for testing
-**By:** Bob
-Vitest is faster and supports TypeScript natively.
-
-### 2025-01-05: Monorepo structure
-**By:** Carol
-We will use a monorepo with npm workspaces.
-`;
-    const file = writeFixture('decisions.md', content);
-    const result = parseDecisions(file, 10);
-
-    expect(result).toHaveLength(3);
-    expect(result[0]).toEqual({
-      date: '2025-01-15',
-      title: 'Adopt TypeScript strict mode',
-      author: 'Alice',
-      summary: 'Switched the entire codebase to strict mode for better safety.',
-    });
-    expect(result[1].date).toBe('2025-01-10');
-    expect(result[1].author).toBe('Bob');
-    expect(result[2].title).toBe('Monorepo structure');
-    expect(result[2].author).toBe('Carol');
-  });
-
-  it('returns empty array for empty file', () => {
-    const file = writeFixture('empty.md', '');
-    expect(parseDecisions(file, 10)).toEqual([]);
-  });
-
-  it('handles malformed entries with missing author', () => {
-    const content = `### 2025-02-01: No author decision
-Some summary text here.
-
-### 2025-02-02: Has author
-**By:** Dave
-Real summary.
-`;
-    const file = writeFixture('malformed.md', content);
-    const result = parseDecisions(file, 10);
-
-    expect(result).toHaveLength(2);
-    expect(result[0].author).toBe('unknown');
-    expect(result[1].author).toBe('Dave');
-  });
-
-  it('respects limit parameter', () => {
-    const content = `### 2025-03-01: First
-**By:** A
-Summary one.
-
-### 2025-03-02: Second
-**By:** B
-Summary two.
-
-### 2025-03-03: Third
-**By:** C
-Summary three.
-`;
-    const file = writeFixture('limited.md', content);
-    const result = parseDecisions(file, 2);
-
-    expect(result).toHaveLength(2);
-    expect(result[0].title).toBe('First');
-    expect(result[1].title).toBe('Second');
-  });
-
-  it('returns empty array when file does not exist', () => {
-    const bogus = path.join(tmpDir, 'nonexistent.md');
-    expect(parseDecisions(bogus, 10)).toEqual([]);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // parseRoster
@@ -217,26 +133,21 @@ describe('extractReferences', () => {
 describe('determineStatus', () => {
   it('returns active for recent activity (< 1 hour)', () => {
     const recent = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago
-    expect(determineStatus(recent, 0)).toBe('active');
+    expect(determineStatus(recent)).toBe('active');
   });
 
   it('returns needs-attention for old activity (> 1 day)', () => {
     const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // 2 days ago
-    expect(determineStatus(old, 0)).toBe('needs-attention');
+    expect(determineStatus(old)).toBe('needs-attention');
   });
 
-  it('returns needs-attention when no activity but inbox has files', () => {
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-    expect(determineStatus(twoHoursAgo, 3)).toBe('needs-attention');
-  });
-
-  it('returns idle for activity between 1 hour and 1 day with no inbox', () => {
+  it('returns idle for activity between 1 hour and 1 day', () => {
     const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000);
-    expect(determineStatus(fiveHoursAgo, 0)).toBe('idle');
+    expect(determineStatus(fiveHoursAgo)).toBe('idle');
   });
 
   it('returns needs-attention when lastActivity is null', () => {
-    expect(determineStatus(null, 0)).toBe('needs-attention');
+    expect(determineStatus(null)).toBe('needs-attention');
   });
 });
 
@@ -290,8 +201,6 @@ We chose vitest.
     expect(state.error).toBeUndefined();
     expect(state.roster).toHaveLength(1);
     expect(state.roster[0].name).toBe('Tester');
-    expect(state.recentDecisions).toHaveLength(1);
-    expect(state.inboxCount).toBe(1);
   });
 
   it('scans a fully populated .ai-team directory', () => {
@@ -336,10 +245,6 @@ We chose vitest.
     expect(state.error).toBeUndefined();
     expect(state.roster).toHaveLength(1);
     expect(state.roster[0].name).toBe('Tester');
-    expect(state.recentDecisions).toHaveLength(1);
-    expect(state.recentDecisions[0].title).toBe('Use vitest');
-    expect(state.inboxCount).toBe(1);
     expect(state.charter).toBe('A test squad for unit tests.');
-    expect(state.activeAgents).toContain('Tester');
   });
 });

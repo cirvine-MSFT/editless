@@ -424,14 +424,6 @@
           "scope": "window",
           "order": 10
         },
-        "editless.notifications.inbox": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable notifications for inbox items (new decisions, pending work)",
-          "markdownDescription": "Show notifications when new inbox items arrive (pending decisions, work items). A toast fires when the count transitions from 0 → N.\n\nRequires `#editless.notifications.enabled#` to be on.",
-          "scope": "window",
-          "order": 11
-        },
         "editless.notifications.updates": {
           "type": "boolean",
           "default": true,
