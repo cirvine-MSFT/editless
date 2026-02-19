@@ -48,7 +48,9 @@ Completed comprehensive retrospective analysis of v0.1 release cycle (103 closed
 
 📌 **Team update (2026-02-16):** Meeseeks writes regression tests for every bug Casey discovers — When Casey discovers a bug during usage, Meeseeks should write regression tests for that specific scenario BEFORE Morty fixes it. Tests-first approach for all user-discovered bugs ensures proper coverage and clear verification criteria when the fix lands. — decided by Casey Irvine
 📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
-### 2026-02-16: Go-live audit findings — one critical enum mismatch
+### 2026-02-19: Git redaction system design review — pre-commit hook + local patterns
+Designed and approved the git redaction system for blocking sensitive patterns from commits. Key decisions: (1) **pre-commit hook is the right mechanism** — not clean/smudge filters (too complex) or pre-push (too late). Sanitizes content before it enters git history. (2) **Local pattern storage is secure** — `.ai-team/redacted.json` stays in `.gitignore`, patterns never committed, per-developer config prevents accidental leaks. (3) **Replacement format:** Use `[REDACTED: alias]` (concise, grep-friendly) instead of verbose format pointing to config. (4) **Binary file handling:** Skip via extension check. (5) **US phone regex:** `\(?(\d{3})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})` covers all common formats (dashes, dots, spaces, parens). (6) **Edge cases:** Merge commits and rebases work automatically (hook runs on all commits); no size threshold needed initially. Design approved for implementation. Decision record: `.ai-team/decisions/inbox/rick-redaction-design.md`.
+<!-- Append new learnings below. Each entry is something lasting about the project. -->
 Pre-release audit (issue #87) found EditLess is production-ready except for one critical blocker: `cli.provider` enum includes `"custom"` but KNOWN_PROFILES in cli-provider.ts does not define a custom profile. When user sets the setting to "custom", resolution fails silently and falls back to auto-detection, confusing UX. Fix: add `{ name: 'custom', command: '', versionCommand: '' }` to KNOWN_PROFILES so custom provider registers with no version/update capabilities (matches decision: custom CLIs get presence-only detection). Secondary findings: settings all follow naming conventions and have sensible defaults, no sensitive terms found (internal project names completely removed per decisions), test fixtures use generic names, feature detection is progressive and correct, notification toggles work properly. Documentation gap: README doesn't explain available settings yet (non-blocking, can be post-release patch).
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
@@ -156,3 +158,19 @@ Final triage session before Monday v0.1 deadline. Analyzed all 25 open issues an
 - `initAutoRefresh` is already a named function — just move it to its own file
 - After removals: 20 source files (down from 25), each with a single clear concern
 - The `CliProvider` interface should drop `updateCommand`, `updateRunCommand`, `upToDatePattern` fields after removing update logic
+
+### 2026-02-19: Design review for #303 squad update removal — key decisions
+
+**Context:** Pre-implementation review with Morty (Extension Dev) and Meeseeks (Tester) for removing squad update detection and persistent upgrade indicator.
+
+**Critical architectural decision:** Keep `squad-upgrader.ts` file but gut upgrade detection code, leaving only shared utilities (`checkNpxAvailable`, `promptInstallNode`, `isSquadInitialized`, `getLocalSquadVersion`). Original plan proposed extracting to new `squad-utils.ts`, but Meeseeks flagged that all test mocks would need updating. Keeping the file name avoids test churn while achieving the same outcome (dead upgrade code removed).
+
+**UX decision for addSquad behavior:** When `addSquad` detects a squad is already initialized, silently skip terminal creation AND remove the "Squad upgrade started" toast. Proceed directly to discovery/registration flow. Cleaner UX — don't notify users about a no-op.
+
+**Blocking issue caught in review:** Original plan missed package.json cleanup. Commands `editless.upgradeSquad` and `editless.upgradeAllSquads` must be removed from package.json (command definitions, menu entries, context checks) or users will see broken commands in Command Palette. This is mandatory for the removal.
+
+**Test strategy:** Delete upgrade test blocks from `squad-upgrader.test.ts`, delete entire "EditlessTreeProvider — upgrade indicator" describe block (lines 737-797) from `tree-providers.test.ts`, update `addSquad` tests in `extension-commands.test.ts` for silent skip behavior. Keep utility tests (`checkNpxAvailable`, `isSquadInitialized`, `getLocalSquadVersion`). Update mocks by removing upgrade-related function mocks, keeping utility mocks.
+
+**Implementation order:** (1) squad-upgrader.ts cleanup, (2) extension.ts + editless-tree.ts + package.json in parallel, (3) test updates, (4) CHANGELOG update, (5) verify with lint/test/build.
+
+Files involved: `src/squad-upgrader.ts`, `src/extension.ts`, `src/editless-tree.ts`, `package.json`, test files. Module count stays the same (no new files created).

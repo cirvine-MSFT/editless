@@ -50,3 +50,5 @@
 
 
 📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
+
+- SquadUI's `extension.ts` had 14 hardcoded `workspaceRoot` / `workspaceFolders[0]` references across commands (viewSkill, openLogEntry, removeSkill, finishAllocationIfReady, onTerminalClose, fileWatcher). When adding a deep-link API (`switchToRoot()`), these must all be migrated to `currentRoot` — the workspace variable should only be used for initialization. Command-registration functions like `registerAddSkillCommand` and `registerRemoveMemberCommand` need a `getCurrentRoot` callback parameter to break their direct workspace dependency. The pattern: `getCurrentRoot?.() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath` provides backward compatibility while enabling external root switching.

@@ -748,3 +748,187 @@ Phase 1-7 (removals) ──→ Phase 8 (test cleanup) ──→ Phase 13 (valida
 ```
 
 Removals can be done as one atomic PR. Bug fixes are independent. Refactor should come after removals land (less code to move).
+
+
+# Decision: SquadUI commands must use `currentRoot`, not `workspaceRoot`
+
+**Author:** Unity (Integration Dev)
+**Date:** 2026-02-18
+**Status:** Implemented
+
+## Context
+
+SquadUI's deep-link API (`switchToRoot()`) allows external extensions like EditLess to point SquadUI at an arbitrary filesystem path. However, 14 command handlers were hardcoded to `workspaceRoot` or `workspaceFolders[0]`, ignoring the deep-linked path entirely.
+
+## Decision
+
+- **`workspaceRoot`** is for initialization only (detecting squad folder, creating the data provider, setting initial `currentRoot`).
+- **`currentRoot`** must be used in all command handlers that read/write squad data (viewSkill, removeSkill, openLogEntry, finishAllocationIfReady, onTerminalClose, fileWatcher).
+- Command registration functions (`registerAddSkillCommand`, `registerRemoveMemberCommand`) accept an optional `getCurrentRoot?: () => string` callback. When provided, it takes precedence over `workspaceFolders[0]`.
+- The fallback pattern is: `getCurrentRoot?.() ?? vscode.workspace.workspaceFolders?.[0]?.uri.fsPath`
+
+## Impact
+
+Any future SquadUI command that reads from the squad directory must use `currentRoot` (or the `getCurrentRoot` callback), never `workspaceRoot` directly. This applies to EditLess integration and any other extension using the deep-link API.
+
+### 2026-02-19: User directive — Unified discovery/add flow for squads and agents
+
+**By:** Casey Irvine (via Copilot)  
+**What:** Squads and standalone agents should share roughly the same flow through the code for discovery and add. Special-casing is fine for details (which dirs to scan, how to register), but the user-facing experience should be unified — squads get a squad icon, agents get their own icon, but the paths (discovery, add, refresh) should be the same.  
+**Why:** User request — captured for team memory. Current code has completely separate paths for squad discovery vs agent discovery, which leads to inconsistencies (e.g., refresh only does agent discovery, not squad discovery).
+
+### 2026-02-19: User directive — Delete squad-upgrader.ts entirely (overrides prior design decision)
+
+**By:** Casey Irvine (via Copilot)  
+**What:** Delete squad-upgrader.ts entirely. Don't keep it around just for shared utilities — move the 4 kept functions elsewhere and delete the file. The design review decision to keep the file name is overridden.  
+**Why:** User request — the file has no reason to exist once upgrade detection is removed. Cleaner to extract utilities and delete.  
+**Override note:** This supersedes the 2026-02-19 Rick design review decision (#303) to keep squad-upgrader.ts. Proceeding with full file deletion.
+
+### 2026-02-19: Redaction System Design Review
+
+**Author:** Rick  
+**Date:** 2026-02-19
+
+## Summary
+
+The design is **sound and practical for the stated goal**. It balances security (patterns stay local), usability (transparent replacement, not blocking), and low friction (no merge conflicts, per-machine config). Greenlight for implementation.
+
+## Findings
+
+### ✅ Pre-commit Hook — Right Choice
+
+**Verdict:** Correct mechanism for this use case.
+
+- **Pre-commit:** Best choice here. Sanitizes content before it even gets staged, which matches your goal ("replace any match"). Catches secrets before they enter git history.
+- **Alternatives considered:**
+  - Clean/smudge filters: Add complexity (need .gitattributes, requires git config on each machine). Overkill for this use case where you want to replace at commit time, not on every read.
+  - Pre-push: Too late. By then, the commit already references the redacted content in the commit message or log. Better to sanitize earlier.
+  - `.gitignore` alone: Doesn't solve the problem — doesn't redact content already in files, only excludes new files.
+
+**Recommendation:** Stick with pre-commit. Simple, effective, clear semantics.
+
+### ✅ Security Model — redacted.json as `.gitignore`d Local Config
+
+**Verdict:** Good design. Patterns stay local, never committed.
+
+**Strengths:**
+- Patterns are developer-local. No accidental leaks of what you're protecting.
+- `.gitignore` prevents the config file itself from being committed (add `redacted.json` to `.gitignore`).
+- Each developer can have their own redactions. No centralized config means no single point of failure.
+
+**Considerations (not blockers):**
+- **If you later want team-wide patterns:** You could add a `.github/redaction-patterns.example.json` as documentation (no actual secrets, just examples). But the hook always checks local `redacted.json` first.
+- **Audit trail:** No history of what was redacted (by design). If you need audit trails later, you'd need to log replacement operations separately.
+
+**Recommendation:** Add `.ai-team/redacted.json` to `.gitignore` explicitly (not just `redacted.json`). This signals to the team that this file is local-only.
+
+### ⚠️ Replacement String Format — Minor Adjustment Recommended
+
+**Current proposal:** `<alias> found in <relative path to redacted.json>`  
+**Example:** `"phone-us" found in .ai-team/redacted.json`
+
+**Issues:**
+1. **Ugly in diffs:** This string is visible in git diffs and PR reviews. It signals "something was sanitized here," which is good, but the format is verbose.
+2. **Path confusion:** `<relative path to redacted.json>` always points to the config file location, not the file being sanitized. This is confusing — a reviewer sees `"phone-us" found in .ai-team/redacted.json` in a file like `src/app.ts` and doesn't immediately understand which file was redacted.
+
+**Alternative recommendations:**
+- **Option A (minimal):** `[REDACTED: alias]`  
+  - Example: `[REDACTED: phone-us]`
+  - Pros: Clear, scannable, not too verbose
+  - Cons: Doesn't hint at config location (but that's fine — developers know to check `.ai-team/redacted.json` if needed)
+
+- **Option B (informative):** `[REDACTED: alias] (see .ai-team/redacted.json)`  
+  - Example: `[REDACTED: phone-us] (see .ai-team/redacted.json)`
+  - Pros: Explicitly points to config
+  - Cons: Still verbose in diffs
+
+**Recommendation:** Use **Option A** (`[REDACTED: alias]`). It's clear, concise, and grep-friendly. If someone wants to know the regex, they can check `.ai-team/redacted.json` — that's expected.
+
+### ✅ Edge Cases — Solid Plan
+
+#### Binary Files
+- **Decision:** Don't sanitize binary files (images, PDFs, compiled objects).
+- **How:** Check MIME type or file extension before regex matching. Skip if binary.
+- **Rationale:** Regex on binary can corrupt the file. Safe to skip.
+- **Recommendation:** Document this in the hook with a comment.
+
+#### Large Files
+- **Decision:** Sanitize all sizes. Regex on large files will be slower but won't break.
+- **How:** If performance is a concern later, add a file size threshold (e.g., skip files >10 MB).
+- **Rationale:** Most code files are small; this is unlikely to be a bottleneck. Don't over-optimize.
+- **Recommendation:** Don't add size checks initially. Benchmark and add only if needed.
+
+#### Merge Commits
+- **Decision:** Pre-commit runs on merge commits too. This is correct.
+- **How:** The hook runs before *any* commit, including merges. No special handling needed.
+- **Rationale:** You want every commit sanitized, merge or not.
+- **Recommendation:** Verify the hook runs on `git merge --no-ff` commits during implementation. Should be automatic.
+
+#### Interactive Rebases
+- **Decision:** Pre-commit runs on each commit during rebase. Correct.
+- **How:** When the user runs `git rebase -i` and picks/squashes/rewrites commits, each becomes a new commit and pre-commit fires.
+- **Rationale:** You want the final history sanitized.
+- **Recommendation:** Document this behavior so developers know rebases are safe — they can't accidentally unskip redaction.
+
+### 🎯 Phone Number Regex — Pattern
+
+**Formats to cover:**
+- 555-666-7891
+- 555.666.7891
+- (555)-666-7891
+- (555) 666-7891
+- 555 666 7891
+- 5556667891
+
+**Recommended regex:**
+```
+\(?(\d{3})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})
+```
+
+**Breakdown:**
+- `\(?` — optional opening paren
+- `(\d{3})` — capture 3 digits (area code)
+- `\)?` — optional closing paren (only if opening paren exists, but this regex doesn't enforce that — it's loose by design)
+- `[\s.-]?` — optional space, dot, or dash
+- `(\d{3})` — capture 3 digits
+- `[\s.-]?` — optional separator
+- `(\d{4})` — capture 4 digits
+
+**Edge cases this covers:**
+- ✅ 555-666-7891
+- ✅ 555.666.7891
+- ✅ (555)-666-7891
+- ✅ (555) 666-7891
+- ✅ 555 666 7891
+- ✅ 5556667891
+- ⚠️ (555-666-7891 (mismatched parens, but will match) — OK, false positive is safer than a miss
+
+**Caveat:** This regex will also match non-US phone number formats. If you want US-only, add a negative lookbehind or enforce stricter formatting. For now, this is reasonable.
+
+**Recommendation:** Document the regex in `redacted.json` with a comment explaining what it matches. If there are false positives (e.g., dates like 02-15-2026 being flagged), refine to require digit context or adjust.
+
+## Implementation Checklist
+
+- [ ] Add `.ai-team/redacted.json` to `.gitignore` (and document why in a comment)
+- [ ] Pre-commit hook script: read `.ai-team/redacted.json`, iterate over alias → regex, sanitize staged files
+- [ ] Replacement format: `[REDACTED: alias]`
+- [ ] Skip binary files (check extension or MIME type)
+- [ ] Handle merge commits and rebases (should work automatically)
+- [ ] Verify hook runs on Windows (use PowerShell if needed; git hooks work cross-platform, but Windows sometimes has path/encoding quirks)
+- [ ] Document the phone regex in `redacted.json` with example patterns
+
+## Questions for Birdperson
+
+1. **Hook install:** How should the hook be made available to team? (a) Check it in to `.git/hooks/` (local, requires post-clone setup)? (b) Create a setup script to install it? (c) Use `husky` or similar to manage hooks?
+2. **Performance:** Any concerns about regex matching large diffs (e.g., 50+ MB PRs)? Suggest benchmarking during implementation.
+3. **Bypass:** Should developers be able to `--no-verify` the hook? (Normally yes for flexibility, but if this is a hard compliance boundary, consider adding a check that prevents bypass on certain branches.)
+
+## Decision
+
+**Status:** APPROVED for implementation.
+
+**Rationale:** The design is pragmatic, solves the stated problem without over-engineering, and handles edge cases correctly. The pre-commit hook is the right mechanism. Local pattern storage is secure. Replacement format can be improved (use `[REDACTED: alias]`). Phone regex is solid.
+
+**Blockers:** None. Proceed to implementation.
+
+**Next:** Birdperson implements hook + test cases. Rick reviews PR for compliance with this design.
