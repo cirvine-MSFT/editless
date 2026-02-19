@@ -1147,7 +1147,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
-
   output.appendLine(`EditLess activated (${getEdition()})`);
 
   return { terminalManager, context };
