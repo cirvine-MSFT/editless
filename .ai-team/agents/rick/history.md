@@ -50,6 +50,23 @@ Completed comprehensive retrospective analysis of v0.1 release cycle (103 closed
 📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
 ### 2026-02-19: Git redaction system design review — pre-commit hook + local patterns
 Designed and approved the git redaction system for blocking sensitive patterns from commits. Key decisions: (1) **pre-commit hook is the right mechanism** — not clean/smudge filters (too complex) or pre-push (too late). Sanitizes content before it enters git history. (2) **Local pattern storage is secure** — `.ai-team/redacted.json` stays in `.gitignore`, patterns never committed, per-developer config prevents accidental leaks. (3) **Replacement format:** Use `[REDACTED: alias]` (concise, grep-friendly) instead of verbose format pointing to config. (4) **Binary file handling:** Skip via extension check. (5) **US phone regex:** `\(?(\d{3})\)?[\s.-]?(\d{3})[\s.-]?(\d{4})` covers all common formats (dashes, dots, spaces, parens). (6) **Edge cases:** Merge commits and rebases work automatically (hook runs on all commits); no size threshold needed initially. Design approved for implementation. Decision record: `.ai-team/decisions/inbox/rick-redaction-design.md`.
+
+### 2026-02-20: Terminal integration synthesis — 4-phase architecture plan
+Synthesized research from Jaguar (Copilot SDK), Morty (code audit), and Squanchy (squad platform) into a unified terminal integration architecture. **Key findings:**
+
+1. **Two P0 race conditions confirmed:** (a) `sendText()` called after `show()` — commands can execute before shell CWD is set. Fix: reorder. (b) Session ID detection uses `resolveAll()` which returns only the latest session per CWD — when two terminals share a CWD, both claim the same session. Fix: `resolveAllSessions()` with timestamp-proximity matching.
+
+2. **VS Code APIs we're ignoring:** `isTransient` (prevents zombie terminals on reload), `iconPath`/`color` (visual distinction), `env` (inject `EDITLESS_TERMINAL_ID` for 100% accurate reconciliation), `terminal.state.isInteractedWith` (user activity signal), `onDidEndTerminalShellExecution` exit codes (crash detection). All stable APIs since VS Code 1.93.
+
+3. **Session scan performance:** Current `resolveAll()` reads every directory in `~/.copilot/session-state/` (100+ sessions × 2 file reads = ~100ms) every 30 seconds. Fix: CWD index cache (100ms → 5ms).
+
+4. **Squad mental model:** One terminal = one coordinator session. Sub-agents (Rick, Morty, etc.) are invisible subprocesses spawned via the `task` tool. EditLess should never show N terminals for N agents. The `decisions/inbox/` directory is the real-time heartbeat — files appear when agents work, disappear when Scribe merges.
+
+5. **Phase plan:** Phase 1 (v0.1.1) = P0 fixes + TerminalOptions + constant tuning. Phase 2 (v0.2.0) = CWD index + exit tracking + link provider + CLI builder. Phase 3 (v0.2.x) = rich naming from workspace.yaml + inbox badges + orchestration tooltips. Phase 4 (v0.3.0+) = dashboard webview + Agent Mode tracking + multi-agent progress.
+
+6. **Three decisions for Casey:** (a) Use `isTransient: true`? (recommended yes), (b) Invest in pseudoterminals? (recommended no — too much cost for marginal gain), (c) Track Agent Mode sessions? (recommended defer to Phase 4).
+
+Decision record: `.ai-team/decisions/inbox/rick-terminal-integration-synthesis.md`.
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 Pre-release audit (issue #87) found EditLess is production-ready except for one critical blocker: `cli.provider` enum includes `"custom"` but KNOWN_PROFILES in cli-provider.ts does not define a custom profile. When user sets the setting to "custom", resolution fails silently and falls back to auto-detection, confusing UX. Fix: add `{ name: 'custom', command: '', versionCommand: '' }` to KNOWN_PROFILES so custom provider registers with no version/update capabilities (matches decision: custom CLIs get presence-only detection). Secondary findings: settings all follow naming conventions and have sensible defaults, no sensitive terms found (internal project names completely removed per decisions), test fixtures use generic names, feature detection is progressive and correct, notification toggles work properly. Documentation gap: README doesn't explain available settings yet (non-blocking, can be post-release patch).
 
@@ -174,6 +191,8 @@ Final triage session before Monday v0.1 deadline. Analyzed all 25 open issues an
 **Implementation order:** (1) squad-upgrader.ts cleanup, (2) extension.ts + editless-tree.ts + package.json in parallel, (3) test updates, (4) CHANGELOG update, (5) verify with lint/test/build.
 
 Files involved: `src/squad-upgrader.ts`, `src/extension.ts`, `src/editless-tree.ts`, `package.json`, test files. Module count stays the same (no new files created).
+
+📌 **Team update (2026-02-19):** Feature removal checklist expanded — PR #320 (remove terminal-layout) established that feature removals must include documentation cleanup. Expanded checklist: (1) source file, (2) test file, (3) extension wiring, (4) test mocks, (5) settings in package.json, (6) all doc references (docs/architecture.md, SETTINGS.md, local-development.md, etc.), (7) CHANGELOG. This pattern prevents recurring gaps seen in #303 (squad upgrade removal). — decided by Rick
 
 
 📌 **Team update (2026-02-19):** Squad↔Copilot integration research — Squanchy completed comprehensive Squad framework analysis (14 ranked integration points, phased rollout plan). Jaguar completed Copilot SDK analysis (7 integration scenarios, stable APIs). Both flagged overlap areas for cross-review. See decisions.md for full details. Key insight for architectural planning: EditLess watcher already fires on .ai-team/ changes; work is in reacting differently to different file paths. — documented by Scribe

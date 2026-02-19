@@ -27,3 +27,43 @@
 - **EditLess gap analysis:** Today EditLess reads `team.md` (roster), checks mtimes in `log/` and `orchestration-log/`, and watches `.ai-team/**/*`. It does NOT read: `decisions.md`, `decisions/inbox/`, `agents/*/charter.md`, `agents/*/history.md`, `orchestration-log/*.md` content, `log/*.md` content, `skills/`, `ceremonies.md`, `casting/`, or `plugins/`.
 - **Highest-value integration points:** (1) Decision inbox monitor (badge/notification), (2) Agent detail click-through (charter + history preview), (3) Orchestration timeline, (4) Session log browser. All are file-read operations that work with the existing watcher.
 - **Watcher enhancement needed:** Current `SquadWatcher` fires a single callback for ANY `.ai-team/` change. To support per-file-type reactions (inbox badge vs roster refresh), should pass the changed file path to the callback.
+
+### 2026-02-20: Squad Terminal Integration Research
+
+**Core insight:** Squad operations are NOT one-terminal-per-agent. The coordinator orchestrates in ONE session; agents run as subprocesses (CLI: `task` tool with `mode: "background"`, VS Code: `runSubagent` parallel). When coordinator says "Team: 4 agents working," that's ONE terminal doing orchestration, not 4 terminals. EditLess must never show "N terminals for N agents."
+
+**Terminal state mapping:**
+- Current SessionState enum ('working', 'idle', 'waiting-on-input', 'stale', 'orphaned') maps cleanly to squad operations EXCEPT Ralph
+- Ralph (work monitor) is a long-running loop (scan → spawn → scan) that needs a new 'monitoring' state
+- Ceremonies and parallel fan-outs are transient "working" states — no new states needed
+
+**Activity signals (highest value → lowest):**
+1. **`decisions/inbox/` is the heartbeat** — files appear when agents work, disappear when Scribe merges. Badge count = real-time activity indicator.
+2. **`workspace.yaml` summary field** — tells you exactly what the session is doing. Use in terminal names: `🚀 EditLess — Rick: auth refactor`
+3. **`orchestration-log/*.md` spawn evidence** — shows which agents were spawned, when, why, outcomes. Parse for "recent activity" tooltip.
+4. **`workspace.yaml` branch field** — critical for worktree workflows. Include in name when multiple terminals exist.
+5. **`events.jsonl` tool calls** — parse for agent names in `task` tool arguments. Enables progress tracking ("3/4 agents complete").
+
+**Terminal naming strategy (tiered):**
+- Tier 1: Auto-detect from summary: `🚀 EditLess — Rick: refactoring auth`
+- Tier 2: Detect ceremonies: `🚀 EditLess — 📋 Design Review`
+- Tier 3: Detect Ralph: `🚀 EditLess — 🔄 Ralph: monitoring`
+- Tier 4: Fallback: `🚀 EditLess #1`
+
+**Special terminal types:**
+- **Ralph:** Detached long-runner, 'monitoring' state, shows elapsed time + recent spawns in tooltip
+- **Ceremonies:** Facilitator-led sequential participant spawns, show progress ("2/3 participants collected")
+- **Worktree sessions:** Include branch in name when multiple terminals for same squad
+
+**Agent Mode vs CLI:** Same `workspace.yaml`/`events.jsonl` structure. SessionContextResolver doesn't care which. EditLess should track both as "owned" (launched by EditLess) vs "unowned" (Agent Mode / external CLI) sessions.
+
+**Prioritized improvements (MVP):**
+1. Decision inbox badge (`📥 3` when non-empty) — 1-2h, high value
+2. Session summary in terminal name (from `workspace.yaml`) — 2-3h, high value
+3. Branch in terminal name (when multiple per squad) — 1h, medium value
+4. Parse orchestration log for agent activity tooltip — 4-6h, high value
+5. Ralph 'monitoring' state — 2-3h, medium value
+
+**Data that should NOT drive terminal UX:** `agents/*/charter.md`, `agents/*/history.md`, `decisions.md` content, `ceremonies.md` config. These are orchestration inputs, not terminal state signals.
+
+📌 **Team update (2026-02-19):** Squad-specific terminal integration research merged — Squanchy's mental model work (one terminal = one coordinator session, NOT one per agent) shaped the entire Phase 3-4 direction. Key integration signals: `decisions/inbox/` as heartbeat, `workspace.yaml` summary for naming, `orchestration-log/*.md` for recent activity, `workspace.yaml` branch for worktree support. The activity signal hierarchy (inbox badge → summary → spawn evidence) informs both terminal state detection and tree view context. Research document filed in decisions.md. — decided by Rick
