@@ -5844,3 +5844,292 @@ buildCopilotCommand({
 // Note: --model gpt-3.5 from extraArgs is deduped (typed --model wins); unknown flags pass through
 // Console warns: "Deduped extraArg --model (typed value takes precedence)"
 ```
+
+(agent) was never interpolated at runtime, causing broken CLI commands. Direct typed construction is safer and extensible (supports --resume, --model, --add-dir, etc.)
+
+---
+
+# Decision: Unified Discovery Architecture for Agents & Squads
+
+**Date:** 2026-02-20  
+**Author:** Rick (Lead)  
+**Scope:** EditLess extension discovery and registration flows
+**Status:** Decision filed for v0.2 planning
+
+## Current State
+
+**Two separate code paths:**
+
+- **Squads:** `autoRegisterWorkspaceSquads()` (startup), `checkDiscoveryOnStartup()` (config scan), `editless.discoverSquads` (manual + file picker), `editless.addSquad` (folder init). Discovered squads → toast notification → add flow.
+- **Agents:** `discoverAllAgents()` (workspace + ~/.copilot scan), no toast, displayed in sidebar under "Discovered Agents" section. Agents are read-only from the tree (can be promoted but no "add" flow).
+- **Refresh command:** Only re-discovers agents, not squads (bug fixed in PR #364).
+- **"Add New" menu:** Branches to different commands for Squad vs Agent.
+
+**Problems identified by Casey:**
+- Different user flows feel inconsistent (toasts for squads, sidebar for agents).
+- Discovery directory concept unclear — users add workspace folders but also configure scan paths for squads only.
+- Not obvious that discovered items can be hidden/shown.
+
+## Target State (v0.2)
+
+**One unified discovery flow:**
+
+1. **Scan phase** (unified): Discover both standalone agents AND squads from the same sources
+   - Workspace roots (`.github/agents/*.agent.md` + root `*.agent.md`, `.squad/` or `.ai-team/` folders)
+   - Optional: `~/.copilot/agents/` (agents only, for personal agent library)
+
+2. **List phase** (unified): Display discovered items in the tree view in a single section
+   - Same row format for agents and squads: `[icon] [name] [universe/type]`
+   - Squads show `🔷`, agents show icon TBD (e.g., `🤖` or `⚙️`)
+   - Items come from registry (already-added) and discovered (new)
+
+3. **Action phase** (unified): Hide/add from the same quick-pick menu
+   - Single "Add agents/squads" flow with multi-select
+   - Items can be hidden via visibility manager (same for both types)
+   - No separate toast flow
+
+**Key architectural decisions:**
+
+- **Discovery dirs:** Replace `editless.discovery.scanPaths` config with workspace-folder-based discovery only. Users add squad directories to their workspace root — no separate config needed. (Aligns with Shayne's workspace integration vision.)
+- **Agent library:** Keep `~/.copilot/agents/` scanning optional (personal agent library), always enabled, no config.
+- **Refresh:** Runs unified discovery (agents + squads from all sources).
+- **Visibility:** Single hide/show mechanism for agents and squads.
+
+## Impact on Issues
+
+| Issue | Action | Timeline |
+|-------|--------|----------|
+| **#317 (Refresh button bug)** | **MERGE PR #364** | Now (v0.1.1 patch) |
+| **#318 (Unify discovery/add flows)** | **SCOPE EXPANSION FOR v0.2** | Backlog (v0.2 architecture) |
+
+## Recommendation
+
+- **PR #364:** APPROVE & MERGE (surgical refresh discovery fix, ships now)
+- **#318 (feature work):** Promote to v0.2; assign architectural refactor to Morty
+- **Discovery dirs:** Deprecate `editless.discovery.scanPaths` in v0.2; remove in v0.3
+
+## Why This Approach
+
+- PR #364 is a **surgical fix** to a real bug (refresh not discovering squads). It's small, testable, and has no side effects.
+- Casey's broader vision (unified flow, workspace-centric discovery) is **architecture work for v0.2**, not blocking v0.1.1.
+- Removing discovery dirs aligns with workspace integration — users already manage workspace folders in their workspace settings; forcing them to also configure scan paths is redundant.
+- Keeping the PR small and shipping it now maintains momentum on bug fixes while planning the larger architecture refactor.
+
+---
+
+# Decision: Unified Discovery UX — Agents & Squads
+
+**Date:** 2026-02-21  
+**Author:** Summer (Product Designer)  
+**For:** Casey Irvine (issue #317 refresh + #318 add from existing)
+
+## Proposed Solution
+
+### 1. **Unified "Discovered" Section** (Tree View)
+
+A collapsible root section that shows:
+- All newly found agents **and** squads
+- Visual distinction: agents ≠ squads
+- Action buttons per item: **Add**, **Hide**
+
+**Tree structure:**
+```
+📦 Agents (registered)
+   🤖 Agent Name
+📦 Squads (registered)
+   🔷 Squad Name
+🔍 Discovered (X)           ← New collapsible section
+   🤖 agent-name            ← Icon = agent
+      description/source    ← Description (25 chars max)
+   🔷 squad-name            ← Icon = squad
+      Universe/path         ← Description (25 chars max)
+🚫 Hidden (Y)               ← Optional: if user has hidden items
+```
+
+**Behavior:**
+- Discovered section shows only NEW items (not in registry + not hidden)
+- Sorting: squads first, then agents (alphabetical within each)
+- Count badge on "Discovered": updates live as user adds/hides
+- Expands by default on first discovery
+
+### 2. **Item Actions** (Context Menu)
+
+For each discovered item:
+- **Add to Registry** — moves item from "Discovered" → active section (Agents/Squads)
+- **Hide** — moves item to "Hidden" section; no longer offered
+
+### 3. **Visual Distinction** (Icons & Styling)
+
+| Item Type | Icon | Example |
+|-----------|------|---------|
+| Agent (workspace) | 🤖 (hubot) | `my-agent` |
+| Agent (system) | 🤖 (hubot) | `copilot-agent` |
+| Squad | 🔷 (organization) | `my-squad` |
+
+**Tree item structure:**
+- **Label:** Icon + Name (e.g., `🤖 my-agent`)
+- **Description:** Source/universe (25 chars max, right-aligned)
+- **Tooltip:** Full path, universe, file location, all metadata
+
+### 4. **"Add from Existing" (#318) Integration**
+
+**Command:** `editless.addAgentFromExisting`
+
+**Flow:**
+```
+User: Right-click "Discovered" section
+      → "Add Existing Agent/Squad"
+      → Opens file picker
+      → User picks file/folder
+      → Item added to registry
+      → Item removed from "Discovered"
+```
+
+## Code Changes Required (Sketch)
+
+1. **`editless-tree.ts`**
+   - Add new TreeItemType: `'discovered'`
+   - Add `DiscoveredSquad` type alongside `DiscoveredAgent`
+   - Merge discovered section logic
+
+2. **`visibility.ts` (new or existing)**
+   - Track hidden IDs (agents + squads)
+   - `hideItem(id)` and `revealItem(id)`
+   - Persist to `context.globalState`
+
+3. **`discovery.ts`**
+   - Keep existing agents/squads discovery functions
+   - New function: `getDiscoveredItems()` — returns both types, minus registry + hidden
+
+4. **`extension.ts`**
+   - Register commands: `editless.addDiscovered`, `editless.hideDiscovered`, `editless.revealHidden`
+
+5. **`package.json` (contributes.menus)**
+   - Add context menu for `discovered-agent` and `discovered-squad`
+
+## Information Hierarchy
+
+### At-a-Glance (Tree Item)
+- Icon (state/type)
+- Name (label)
+- Source/description (25 chars, right-aligned)
+
+### On Hover (Tooltip)
+```
+🤖 agent-name
+
+Source: workspace
+File: /Users/me/my-repo/.agent.md
+Last seen: just now
+```
+
+## Implementation Phases
+
+### MVP (v0.2.0)
+1. Add "Discovered" section to tree (agents only, initially)
+2. Context menu: "Add to Registry" + "Hide"
+3. Persist hidden items to `context.globalState`
+4. Refresh command re-scans and updates tree
+
+### Phase 2 (v0.2.x, if time)
+1. Include squads in discovered section
+2. "Add Existing" command with file picker
+3. "Hidden" section with unhide option
+
+## Q&A
+
+**Q: Should discovered items auto-add on workspace open?**  
+A: No — keeps UX deliberate. User explicitly reviews and accepts. Reduces clutter.
+
+**Q: What if user clears "Hidden" later?**  
+A: Items re-appear in "Discovered" on next refresh. No data loss.
+
+**Q: How does this interact with auto-register squads?**  
+A: Squads in workspace root auto-register immediately. Squads from `discovery.scanPaths` appear in "Discovered" for user confirmation first.
+
+---
+
+# Decision: extraArgs Dedup Strategy for CLI Builder
+
+**Date:** 2026-02-20  
+**Author:** Morty (Extension Dev)  
+**Context:** PR #366 review feedback on `copilot-cli-builder.ts`
+
+## Decision
+
+`CopilotCommandOptions.extraArgs` accepts arbitrary CLI flags appended after typed flags. Intelligent dedup prevents conflicts:
+
+- **Typed flag is set + same flag in extraArgs** → typed value wins, extraArgs duplicate silently dropped (with `console.warn` for debugging)
+- **Typed flag NOT set + flag in extraArgs** → passes through (user providing via freeform)
+- **Unknown flags** (e.g. `--yolo`) → always pass through
+
+## Rationale
+
+Users need escape-hatch for flags we haven't typed yet, but we can't let them accidentally override typed options. Silent drop with warn is least-surprising: typed options are the "source of truth," and the warn helps developers debug without cluttering the UI.
+
+## Implementation
+
+- `src/copilot-cli-builder.ts` — implementation
+- `src/__tests__/copilot-cli-builder.test.ts` — 7 new tests covering all dedup scenarios
+
+## Example
+
+```typescript
+// All typed flags (model, agent, resume)
+buildCopilotCommand({
+  model: 'gpt-4',
+  agent: 'squad',
+  resume: 'session-123',
+  extraArgs: ['--model', 'gpt-3.5', '--unknown-flag', 'value']
+});
+
+// Result: `copilot --agent squad --resume session-123 --model gpt-4 --unknown-flag value`
+// Note: --model gpt-3.5 from extraArgs is deduped (typed --model wins); unknown flags pass through
+// Console warns: "Deduped extraArg --model (typed value takes precedence)"
+```
+
+---
+
+### 2026-02-20T13:56:12Z: User directive — Unified discovery is v0.1.1, not v0.2
+**By:** Casey Irvine (via Copilot)
+**What:** The unified discovery flow for agents and squads is NOT a v0.2 feature — it's a v0.1.1 fix. The current divergent flows don't make sense and need to be unified now. PR #364 should be closed and replaced with a unified implementation. This is a code simplification, not a new feature.
+**Why:** User request — overrides Rick's "merge now, rework later" recommendation. Casey wants it fixed properly now.
+
+
+---
+
+# Decision: Unified Discovery Flow — Agents & Squads
+
+**Date:** 2026-02-21
+**Author:** Morty (Extension Dev)
+**For:** Issues #317 (refresh discovery) and #318 (add from existing)
+
+## Decision
+
+Agent and squad discovery are now unified into a single tree section and code path.
+
+## What Changed
+
+1. **New module: `src/unified-discovery.ts`** — exports `DiscoveredItem` interface and `discoverAll()` function that scans workspace folders for both `.agent.md` files AND `.squad/team.md` directories in one pass, plus `~/.copilot/agents/` for personal agent library. Returns items minus already-registered.
+
+2. **Unified "Discovered" tree section** — replaces the old "Discovered Agents" header. Shows both agents (🤖 hubot icon) and squads (🔷 organization icon) with a count badge ("3 new"). Squads sort first, then agents.
+
+3. **No more toast notifications** — `checkDiscoveryOnStartup()` with its modal toast + QuickPick flow is removed from extension activation. Discovered items appear passively in the tree.
+
+4. **Single refresh path** — `refreshDiscovery()` in extension.ts re-runs both `discoverAllAgents()` and `discoverAll()` in one go. Used by the refresh command, workspace folder changes, and post-promote cleanup.
+
+5. **Promote handles both types** — `editless.promoteDiscoveredAgent` command now checks unified `discoveredItems` first (handles both agents and squads), then falls back to legacy `discoveredAgents`.
+
+6. **Deprecated settings** — `editless.discoveryDir` and `editless.discovery.scanPaths` marked deprecated in package.json descriptions. Not removed yet for backward compat.
+
+## Why
+
+Casey directed: "I want the unified flow NOW to simplify the code." Two completely separate discovery flows (agents: silent sidebar, squads: toast+QuickPick) created confusion and code duplication. Summer's UX spec (in decisions.md) defined the target state.
+
+## Impact
+
+- Tree view shows unified section instead of flat discovered agents list
+- `discovered-squad` is a new TreeItemType with context menu actions
+- `CategoryKind` expanded: `'roster' | 'discovered' | 'hidden'`
+- The old `promptAndAddSquads()` and `registerDiscoveryCommand()` still exist in `discovery.ts` for the manual `editless.discoverSquads` command
+

@@ -408,4 +408,71 @@ summary: Modified`,
       expect(event?.type).toBe('tool.execution_start');
     });
   });
+
+  describe('isSessionResumable', () => {
+    let resolver: any;
+
+    beforeEach(async () => {
+      const module = await import('../session-context');
+      resolver = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+    });
+
+    function createSession(sessionId: string, opts: { workspace?: boolean; events?: boolean; staleEvents?: boolean } = {}): void {
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+      if (opts.workspace !== false) {
+        fs.writeFileSync(path.join(sessionDir, 'workspace.yaml'), 'cwd: /test\nsummary: test', 'utf-8');
+      }
+      if (opts.events !== false) {
+        const eventsPath = path.join(sessionDir, 'events.jsonl');
+        fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
+        if (opts.staleEvents) {
+          // Set mtime to 10 days ago
+          const staleTime = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+          fs.utimesSync(eventsPath, staleTime, staleTime);
+        }
+      }
+    }
+
+    it('returns resumable when workspace.yaml and events.jsonl both exist', () => {
+      createSession('good-session');
+      const result = resolver.isSessionResumable('good-session');
+      expect(result.resumable).toBe(true);
+      expect(result.stale).toBe(false);
+    });
+
+    it('returns not resumable when workspace.yaml is missing', () => {
+      createSession('no-workspace', { workspace: false });
+      const result = resolver.isSessionResumable('no-workspace');
+      expect(result.resumable).toBe(false);
+      expect(result.reason).toContain('workspace.yaml');
+    });
+
+    it('returns not resumable when events.jsonl is missing', () => {
+      createSession('no-events', { events: false });
+      const result = resolver.isSessionResumable('no-events');
+      expect(result.resumable).toBe(false);
+      expect(result.reason).toContain('events.jsonl');
+    });
+
+    it('returns not resumable when session directory does not exist', () => {
+      const result = resolver.isSessionResumable('nonexistent-session');
+      expect(result.resumable).toBe(false);
+    });
+
+    it('flags stale sessions (events.jsonl older than 7 days)', () => {
+      createSession('stale-session', { staleEvents: true });
+      const result = resolver.isSessionResumable('stale-session');
+      expect(result.resumable).toBe(true);
+      expect(result.stale).toBe(true);
+    });
+
+    it('does not flag recent sessions as stale', () => {
+      createSession('fresh-session');
+      const result = resolver.isSessionResumable('fresh-session');
+      expect(result.resumable).toBe(true);
+      expect(result.stale).toBe(false);
+    });
+  });
 });

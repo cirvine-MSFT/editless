@@ -1,5 +1,9 @@
-import * as vscode from 'vscode';
+import { buildDefaultLaunchCommand } from './copilot-cli-builder';
 
+/**
+ * @deprecated Use `buildCopilotCommand()` or `buildDefaultLaunchCommand()` from
+ * `copilot-cli-builder.ts` instead. Kept temporarily for call-site compatibility.
+ */
 export function getLaunchCommand(): string {
-  return vscode.workspace.getConfiguration('editless.cli').get<string>('launchCommand', 'copilot --agent $(agent)');
+  return buildDefaultLaunchCommand();
 }

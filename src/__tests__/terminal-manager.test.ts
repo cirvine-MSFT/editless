@@ -32,14 +32,15 @@ vi.mock('vscode', () => ({
     onDidOpenTerminal: mockOnDidOpenTerminal,
     onDidStartTerminalShellExecution: mockOnDidStartTerminalShellExecution,
     onDidEndTerminalShellExecution: mockOnDidEndTerminalShellExecution,
+    showErrorMessage: vi.fn(),
+    showWarningMessage: vi.fn(),
     get terminals() { return mockTerminals; },
   },
   workspace: {
-    getConfiguration: (section?: string) => ({
+    getConfiguration: () => ({
       get: (key: string, defaultValue?: unknown) => {
-        if (section === 'editless.cli' && key === 'launchCommand') {
-          return 'copilot --agent $(agent)';
-        }
+        if (key === 'command') return 'copilot';
+        if (key === 'defaultAgent') return 'squad';
         return defaultValue;
       },
     }),
@@ -61,6 +62,7 @@ vi.mock('vscode', () => ({
 }));
 
 import { TerminalManager, type PersistedTerminalInfo, type SessionState } from '../terminal-manager';
+import * as vscodeModule from 'vscode';
 
 function makeMockTerminal(name: string): vscode.Terminal {
   return {
@@ -1624,4 +1626,164 @@ describe('TerminalManager', () => {
   // =========================================================================
   // events.jsonl-based state detection
   // =========================================================================
+
+  // =========================================================================
+  // Session resume validation (#322)
+  // =========================================================================
+
+  describe('session resume validation (#322)', () => {
+    function makeResumableResolver(result: { resumable: boolean; reason?: string; stale: boolean }) {
+      return {
+        isSessionResumable: vi.fn().mockReturnValue(result),
+        resolveAll: vi.fn().mockReturnValue(new Map()),
+      };
+    }
+
+    it('should show error message when session is not resumable', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'resume-validate-1',
+        terminalName: '🧪 No Match',
+        launchCommand: 'copilot --agent squad',
+        agentSessionId: 'bad-session',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const resolver = makeResumableResolver({
+        resumable: false,
+        reason: 'Session bad-session has no workspace.yaml — session state is missing or corrupted.',
+        stale: false,
+      });
+      mgr.setSessionResolver(resolver as unknown as import('../session-context').SessionContextResolver);
+
+      mgr.relaunchSession(orphanEntry);
+
+      expect(vscodeModule.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Cannot resume session'),
+      );
+    });
+
+    it('should show stale warning when session is older than 7 days', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'resume-stale-1',
+        terminalName: '🧪 No Match',
+        launchCommand: 'copilot --agent squad',
+        agentSessionId: 'stale-session',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const resolver = makeResumableResolver({ resumable: true, stale: true });
+      mgr.setSessionResolver(resolver as unknown as import('../session-context').SessionContextResolver);
+
+      mgr.relaunchSession(orphanEntry);
+
+      expect(vscodeModule.window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('not been updated in over 7 days'),
+      );
+    });
+
+    it('should call sendText BEFORE show to queue command before terminal is visible', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'resume-order-1',
+        terminalName: '🧪 No Match',
+        launchCommand: 'copilot --agent squad',
+        agentSessionId: 'order-session',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const terminal = mgr.relaunchSession(orphanEntry);
+
+      const sendTextMock = vi.mocked(terminal.sendText);
+      const showMock = vi.mocked(terminal.show);
+
+      expect(sendTextMock).toHaveBeenCalled();
+      expect(showMock).toHaveBeenCalled();
+
+      // sendText must have been called before show
+      const sendTextOrder = sendTextMock.mock.invocationCallOrder[0];
+      const showOrder = showMock.mock.invocationCallOrder[0];
+      expect(sendTextOrder).toBeLessThan(showOrder);
+    });
+
+    it('should use --continue flag when continueLatest is true', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'resume-continue-1',
+        terminalName: '🧪 No Match',
+        launchCommand: 'copilot --agent squad',
+        agentSessionId: 'continue-session',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const terminal = mgr.relaunchSession(orphanEntry, true);
+
+      expect(terminal.sendText).toHaveBeenCalledWith('copilot --agent squad --continue');
+    });
+
+    it('should pass EDITLESS env vars via TerminalOptions.env', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'resume-env-1',
+        terminalName: '🧪 No Match',
+        launchCommand: 'copilot --agent squad',
+        agentSessionId: 'env-session',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      mgr.relaunchSession(orphanEntry);
+
+      expect(mockCreateTerminal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          env: {
+            EDITLESS_SESSION_ID: 'resume-env-1',
+            EDITLESS_AGENT_SESSION_ID: 'env-session',
+          },
+        }),
+      );
+    });
+
+    it('should not pass env when no agentSessionId', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'resume-no-env-1',
+        terminalName: '🧪 No Match',
+        launchCommand: 'copilot --agent squad',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      mgr.relaunchSession(orphanEntry);
+
+      expect(mockCreateTerminal).toHaveBeenCalledWith(
+        expect.objectContaining({
+          env: undefined,
+        }),
+      );
+    });
+
+    it('should skip validation when no session resolver is set', () => {
+      const orphanEntry = makePersistedEntry({
+        id: 'resume-no-resolver-1',
+        terminalName: '🧪 No Match',
+        launchCommand: 'copilot --agent squad',
+        agentSessionId: 'some-session',
+      });
+      const ctx = makeMockContext([orphanEntry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+      // No setSessionResolver call
+
+      const terminal = mgr.relaunchSession(orphanEntry);
+
+      // Should still launch without errors
+      expect(terminal.sendText).toHaveBeenCalledWith('copilot --agent squad --resume some-session');
+    });
+  });
 });
