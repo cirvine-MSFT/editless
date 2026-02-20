@@ -61,41 +61,20 @@ describe('copilot-cli-builder', () => {
       expect(buildCopilotCommand({ resume: 'abc-123' })).toBe('copilot --resume abc-123');
     });
 
-    it('adds --continue flag', () => {
-      expect(buildCopilotCommand({ continue: true })).toBe('copilot --continue');
-    });
-
-    it('omits --continue when false', () => {
-      expect(buildCopilotCommand({ continue: false })).toBe('copilot');
-    });
-
-    it('adds --model flag', () => {
-      expect(buildCopilotCommand({ model: 'gpt-5' })).toBe('copilot --model gpt-5');
-    });
-
     it('adds multiple --add-dir flags', () => {
       const cmd = buildCopilotCommand({ addDirs: ['/path/a', '/path/b'] });
       expect(cmd).toBe('copilot --add-dir /path/a --add-dir /path/b');
     });
 
-    it('adds --allow-all-tools flag', () => {
-      expect(buildCopilotCommand({ allowAllTools: true })).toBe('copilot --allow-all-tools');
-    });
-
-    it('omits --allow-all-tools when false', () => {
-      expect(buildCopilotCommand({ allowAllTools: false })).toBe('copilot');
-    });
-
-    it('combines all flags in correct order', () => {
+    it('combines typed flags with extraArgs in correct order', () => {
       const opts: CopilotCommandOptions = {
         agent: 'my-agent',
         resume: 'sess-42',
-        model: 'claude-sonnet-4',
         addDirs: ['/extra'],
-        allowAllTools: true,
+        extraArgs: ['--model', 'claude-sonnet-4', '--yolo'],
       };
       expect(buildCopilotCommand(opts)).toBe(
-        'copilot --agent my-agent --resume sess-42 --model claude-sonnet-4 --add-dir /extra --allow-all-tools',
+        'copilot --agent my-agent --resume sess-42 --add-dir /extra --model claude-sonnet-4 --yolo',
       );
     });
 
@@ -136,10 +115,12 @@ describe('copilot-cli-builder', () => {
       warnSpy.mockRestore();
     });
 
-    it('lets typed flags through extraArgs when not set in typed options', () => {
+    it('passes through CLI flags like --model, --yolo, --continue via extraArgs', () => {
       expect(buildCopilotCommand({ extraArgs: ['--model', 'gpt-5'] })).toBe(
         'copilot --model gpt-5',
       );
+      expect(buildCopilotCommand({ extraArgs: ['--yolo'] })).toBe('copilot --yolo');
+      expect(buildCopilotCommand({ extraArgs: ['--continue'] })).toBe('copilot --continue');
     });
 
     it('does not affect output when empty', () => {
@@ -148,10 +129,10 @@ describe('copilot-cli-builder', () => {
 
     it('warns on console when dedup occurs', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      buildCopilotCommand({ allowAllTools: true, extraArgs: ['--allow-all-tools'] });
+      buildCopilotCommand({ agent: 'squad', extraArgs: ['--agent', 'other'] });
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('--allow-all-tools'),
+        expect.stringContaining('--agent'),
       );
       warnSpy.mockRestore();
     });
