@@ -9,7 +9,7 @@ import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 
 
-import { autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
+import { discoverAgentTeams } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import { discoverAll } from './unified-discovery';
 import type { DiscoveredItem } from './unified-discovery';
@@ -46,9 +46,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- Registry ----------------------------------------------------------
   const registry = createRegistry(context);
   registry.loadSquads();
-
-  // --- Auto-register workspace squads (#201) --------------------------------
-  autoRegisterWorkspaceSquads(registry);
 
   // --- Terminal manager --------------------------------------------------
   const terminalManager = new TerminalManager(context);
@@ -148,7 +145,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const pattern = new vscode.RelativePattern(folder, `${dirName}/team.md`);
       const teamMdWatcher = vscode.workspace.createFileSystemWatcher(pattern);
       teamMdWatcher.onDidCreate(() => {
-        autoRegisterWorkspaceSquads(registry);
+        refreshDiscovery();
         treeProvider.refresh();
         squadWatcher.updateSquads(registry.loadSquads());
         statusBar.update();
