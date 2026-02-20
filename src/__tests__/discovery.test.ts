@@ -9,8 +9,13 @@ import type { AgentTeamConfig } from '../types';
 const mockWorkspaceFolders: Array<{ name: string; uri: { fsPath: string } }> = [];
 vi.mock('vscode', () => ({
   workspace: {
-    getConfiguration: () => ({
-      get: (key: string) => undefined,
+    getConfiguration: (section?: string) => ({
+      get: (key: string, defaultValue?: unknown) => {
+        if (section === 'editless.cli' && key === 'launchCommand') {
+          return 'copilot --agent $(agent)';
+        }
+        return defaultValue;
+      },
     }),
     get workspaceFolders() { return mockWorkspaceFolders.length > 0 ? mockWorkspaceFolders : undefined; },
   },
@@ -21,10 +26,6 @@ vi.mock('vscode', () => ({
   commands: {
     registerCommand: () => ({ dispose: () => {} }),
   },
-}));
-
-vi.mock('../cli-provider', () => ({
-  getActiveProviderLaunchCommand: () => 'copilot --agent $(agent)',
 }));
 
 // ---------------------------------------------------------------------------

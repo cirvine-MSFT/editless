@@ -40,7 +40,18 @@ vi.mock('vscode', () => {
       showOpenDialog: mockShowOpenDialog,
     },
     workspace: {
-      getConfiguration: mockGetConfiguration,
+      getConfiguration: (section?: string) => {
+        if (section === 'editless.cli') {
+          return {
+            get: (key: string, defaultValue?: unknown) => {
+              if (key === 'launchCommand') return 'copilot --agent $(agent)';
+              return defaultValue;
+            },
+          };
+        }
+        const mock = mockGetConfiguration(section);
+        return mock || { get: vi.fn() };
+      },
       workspaceFolders: [],
     },
     commands: {
@@ -48,10 +59,6 @@ vi.mock('vscode', () => {
     },
   };
 });
-
-vi.mock('../cli-provider', () => ({
-  getActiveProviderLaunchCommand: () => 'copilot --agent $(agent)',
-}));
 
 vi.mock('../team-dir', () => ({
   resolveTeamMd: vi.fn(),
