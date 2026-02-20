@@ -6,3 +6,4 @@ out/
 coverage/
 .DS_Store
 .editless-dev/
+agent-registry.json
