@@ -413,11 +413,19 @@
         },
         "editless.cli.launchCommand": {
           "type": "string",
-          "default": "copilot --agent $(agent)",
-          "description": "Command to launch an agent session. Use $(agent) as placeholder for agent name.",
-          "markdownDescription": "Command to launch an agent session. Use `$(agent)` as a placeholder for the agent name.\n\nDefault: `\"copilot --agent $(agent)\"`",
+          "default": "",
+          "description": "Override the full launch command for agent sessions. When empty, the command is built from CLI settings automatically.",
+          "markdownDescription": "Override the full launch command for agent sessions. When empty, the command is built automatically from `editless.cli.command` and `editless.cli.defaultAgent`.\n\nLeave empty to use the built-in flag builder.",
           "scope": "window",
           "order": 21
+        },
+        "editless.cli.defaultAgent": {
+          "type": "string",
+          "default": "squad",
+          "description": "Default agent type for launch commands (e.g. squad, my-agent).",
+          "markdownDescription": "Default agent type passed to `--agent` when building launch commands.\n\nDefault: `\"squad\"`",
+          "scope": "window",
+          "order": 22
         },
         "editless.cli.createCommand": {
           "type": "string",
@@ -425,7 +433,7 @@
           "description": "Command to create a new agent. Empty string uses built-in creation flow.",
           "markdownDescription": "Command to create a new agent. Leave empty to use the built-in creation flow (markdown file in `.github/agents/`).\n\nDefault: `\"\"`",
           "scope": "window",
-          "order": 22
+          "order": 23
         },
         "editless.github.repos": {
           "type": "array",
