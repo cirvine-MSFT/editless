@@ -9,7 +9,7 @@ import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 
 
-import { discoverAgentTeams } from './discovery';
+import { discoverAgentTeams, parseTeamMd, toKebabCase } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import { discoverAll } from './unified-discovery';
 import type { DiscoveredItem } from './unified-discovery';
@@ -145,6 +145,29 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const pattern = new vscode.RelativePattern(folder, `${dirName}/team.md`);
       const teamMdWatcher = vscode.workspace.createFileSystemWatcher(pattern);
       teamMdWatcher.onDidCreate(() => {
+        // Auto-register workspace folder squads when team.md is created via + button
+        const folderPath = folder.uri.fsPath;
+        const existing = registry.loadSquads();
+        const alreadyRegistered = existing.some(s => s.path.toLowerCase() === folderPath.toLowerCase());
+        if (!alreadyRegistered) {
+          const teamMdPath = path.join(folderPath, dirName, 'team.md');
+          try {
+            const content = fs.readFileSync(teamMdPath, 'utf-8');
+            const parsed = parseTeamMd(content, path.basename(folderPath));
+            const id = toKebabCase(path.basename(folderPath));
+            registry.addSquads([{
+              id,
+              name: parsed.name,
+              path: folderPath,
+              icon: '🔷',
+              universe: parsed.universe ?? 'unknown',
+              description: parsed.description,
+              launchCommand: buildDefaultLaunchCommand(),
+            }]);
+          } catch {
+            // team.md may not be readable yet; fall through to discovery
+          }
+        }
         refreshDiscovery();
         treeProvider.refresh();
         squadWatcher.updateSquads(registry.loadSquads());
@@ -980,7 +1003,17 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
         const doc = await vscode.workspace.openTextDocument(destUri);
         await vscode.window.showTextDocument(doc);
+        const agentId = name.trim().replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
+        registry.addSquads([{
+          id: agentId,
+          name: name.trim(),
+          path: agentsDir,
+          icon: '🤖',
+          universe: 'standalone',
+          launchCommand: buildDefaultLaunchCommand(),
+        }]);
         refreshDiscovery();
+        treeProvider.refresh();
         return;
       }
 
@@ -1049,7 +1082,17 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const doc = await vscode.workspace.openTextDocument(filePath);
       await vscode.window.showTextDocument(doc);
 
+      const agentId = name.trim().replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
+      registry.addSquads([{
+        id: agentId,
+        name: name.trim(),
+        path: agentsDir,
+        icon: '🤖',
+        universe: 'standalone',
+        launchCommand: buildDefaultLaunchCommand(),
+      }]);
       refreshDiscovery();
+      treeProvider.refresh();
     }),
   );
 
