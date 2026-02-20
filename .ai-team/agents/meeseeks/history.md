@@ -137,3 +137,5 @@
 
 📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
 
+- **2026-02-20 — PR #359 test coverage review (#358):** Terminal session item display changed: label now uses `info.displayName` (stable) instead of session summary, description is just the relative creation time (`just now` / `Nm ago` / `Nh ago`), and `_buildTerminalDescription` (30-line method) was deleted. No existing tests were invalidated — prior tests didn't assert label/description content on terminal items. No dead tests for the deleted method (it was private, never directly tested). Added 7 new tests in `tree-providers.test.ts` under "terminal session item display": label uses `info.displayName`, custom label override via `labelManager` with 🏷️ prefix, fallback to `displayName` when no custom label, "just now" for <1min sessions, "Nm ago" for minute-old sessions, "Nh ago" for hour-old sessions, and a negative assertion that description contains only the time string (no separators or state text). Total tests: 576 (up from 569).
+
