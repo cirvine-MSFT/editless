@@ -8,7 +8,7 @@ import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 
-import { registerCliUpdateCommand, checkProviderUpdatesOnStartup, probeAllProviders, resolveActiveProvider, getActiveCliProvider, getActiveProviderLaunchCommand } from './cli-provider';
+import { probeAllProviders, resolveActiveProvider, getActiveCliProvider, getActiveProviderLaunchCommand } from './cli-provider';
 import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import type { AgentTeamConfig } from './types';
@@ -34,7 +34,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   setAdoAuthOutput(output);
 
   // --- CLI provider detection (async, non-blocking) -------------------------
-  vscode.commands.executeCommand('setContext', 'editless.cliUpdateAvailable', false);
   probeAllProviders().then(() => resolveActiveProvider());
 
   // --- Squad UI integration (#38) ------------------------------------------
@@ -182,12 +181,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(registryWatcher);
 
   // --- Commands ----------------------------------------------------------
-
-  // CLI provider update command
-  context.subscriptions.push(registerCliUpdateCommand(context));
-
-  // Check for CLI provider updates on startup
-  checkProviderUpdatesOnStartup(context);
 
   // Squad discovery command
   context.subscriptions.push(registerDiscoveryCommand(context, registry));

@@ -325,8 +325,6 @@ vi.mock('../squad-utils', () => ({
 }));
 
 vi.mock('../cli-provider', () => ({
-  registerCliUpdateCommand: vi.fn(() => ({ dispose: vi.fn() })),
-  checkProviderUpdatesOnStartup: vi.fn(),
   probeAllProviders: vi.fn(() => Promise.resolve()),
   resolveActiveProvider: vi.fn(),
   getActiveCliProvider: mockGetActiveCliProvider,

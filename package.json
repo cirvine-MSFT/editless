@@ -94,12 +94,6 @@
         "category": "EditLess"
       },
       {
-        "command": "editless.updateCliProvider",
-        "title": "Update CLI Provider",
-        "category": "EditLess",
-        "icon": "$(cloud-download)"
-      },
-      {
         "command": "editless.renameSquad",
         "title": "Rename"
       },
@@ -310,7 +304,6 @@
         { "command": "editless.refresh", "when": "view == editlessTree", "group": "navigation@1" },
         { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@2" },
         { "command": "editless.addNew", "when": "view == editlessTree", "group": "navigation@3" },
-        { "command": "editless.updateCliProvider", "when": "view == editlessTree && editless.cliUpdateAvailable", "group": "1_updates" },
         { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation@1" },
         { "command": "editless.filterWorkItems", "when": "view == editlessWorkItems", "group": "navigation@2" },
         { "command": "editless.clearWorkItemsFilter", "when": "view == editlessWorkItems && editless.workItemsFiltered", "group": "navigation@3" },
@@ -402,22 +395,6 @@
             "type": "string"
           }
         },
-        "editless.notifications.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable desktop notifications for squad events",
-          "markdownDescription": "Master toggle for all EditLess notifications. When disabled, **all** EditLess toasts are suppressed — including inbox and update notifications.",
-          "scope": "window",
-          "order": 10
-        },
-        "editless.notifications.updates": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable notifications for CLI update availability",
-          "markdownDescription": "Show notifications when a CLI provider update is available. EditLess checks each detected provider on startup and displays a toast with the installed and available versions.\n\nRequires `#editless.notifications.enabled#` to be on.",
-          "scope": "window",
-          "order": 12
-        },
         "editless.scanDebounceMs": {
           "type": "number",
           "default": 500,
@@ -435,14 +412,11 @@
               "versionCommand": "copilot --version",
               "versionRegex": "(\\d+\\.\\d+[\\d.]*)",
               "launchCommand": "copilot --agent $(agent)",
-              "createCommand": "",
-              "updateCommand": "",
-              "updateRunCommand": "",
-              "upToDatePattern": "up to date"
+              "createCommand": ""
             }
           ],
-          "description": "CLI providers for agent sessions. Each provider defines how to launch, detect, and update a CLI tool.",
-          "markdownDescription": "CLI providers for agent sessions. Each entry defines a CLI tool with version detection, launch command, and optional update support.\n\nThe first detected provider is used by default (override with `editless.cli.activeProvider`).\n\nCopilot CLI is included by default and will be re-added if removed.",
+          "description": "CLI providers for agent sessions. Each provider defines how to launch and detect a CLI tool.",
+          "markdownDescription": "CLI providers for agent sessions. Each entry defines a CLI tool with version detection and launch command.\n\nThe first detected provider is used by default (override with `editless.cli.activeProvider`).\n\nCopilot CLI is included by default and will be re-added if removed.",
           "scope": "window",
           "order": 20
         },

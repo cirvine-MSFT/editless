@@ -36,7 +36,7 @@ vi.mock('../terminal-manager', () => ({ TerminalManager: vi.fn(function () { ret
 vi.mock('../session-labels', () => ({ SessionLabelManager: vi.fn(function () { return { getLabel: vi.fn(), setLabel: vi.fn(), clearLabel: vi.fn() }; }), promptClearLabel: vi.fn(), promptRenameSession: vi.fn() }));
 vi.mock('../visibility', () => ({ AgentVisibilityManager: vi.fn(function () { return { hide: vi.fn(), show: vi.fn(), showAll: vi.fn(), getHiddenIds: vi.fn().mockReturnValue([]), isHidden: vi.fn() }; }) }));
 vi.mock('../squad-utils', () => ({ checkNpxAvailable: vi.fn().mockResolvedValue(true), promptInstallNode: vi.fn(), isSquadInitialized: vi.fn() }));
-vi.mock('../cli-provider', () => ({ registerCliUpdateCommand: vi.fn(() => ({ dispose: vi.fn() })), checkProviderUpdatesOnStartup: vi.fn(), probeAllProviders: vi.fn(() => Promise.resolve()), resolveActiveProvider: vi.fn(), getActiveCliProvider: vi.fn() }));
+vi.mock('../cli-provider', () => ({ probeAllProviders: vi.fn(() => Promise.resolve()), resolveActiveProvider: vi.fn(), getActiveCliProvider: vi.fn() }));
 vi.mock('../discovery', () => ({ registerDiscoveryCommand: vi.fn(() => ({ dispose: vi.fn() })), checkDiscoveryOnStartup: vi.fn(), autoRegisterWorkspaceSquads: vi.fn() }));
 vi.mock('../agent-discovery', () => ({ discoverAllAgents: vi.fn(() => []) }));
 vi.mock('../watcher', () => ({ SquadWatcher: vi.fn(function () { return { dispose: vi.fn(), updateSquads: vi.fn() }; }) }));
