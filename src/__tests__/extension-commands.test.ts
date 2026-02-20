@@ -2080,6 +2080,35 @@ describe('editless.promoteDiscoveredAgent', () => {
     expect(mockTreeRefresh).toHaveBeenCalled();
   });
 
+  it('should promote a discovered squad with squad-specific properties', () => {
+    vi.clearAllMocks();
+    commandHandlers.clear();
+    mockLoadSquads.mockReturnValue([]);
+    mockGetHiddenIds.mockReturnValue([]);
+    mockDiscoverAllAgents.mockReturnValue([]);
+    mockDiscoverAll.mockReturnValue([
+      { id: 'my-squad', name: 'My Squad', type: 'squad', source: 'workspace', path: '/workspace/my-squad', description: 'A squad', universe: 'acme-corp' },
+    ]);
+    activate(makeContext());
+
+    const item = new MockEditlessTreeItem('My Squad', 'discovered-squad', 0);
+    item.id = 'discovered:my-squad';
+
+    getHandler('editless.promoteDiscoveredAgent')(item);
+
+    expect(mockAddSquads).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'my-squad',
+        name: 'My Squad',
+        path: '/workspace/my-squad',
+        icon: '🔷',
+        universe: 'acme-corp',
+        description: 'A squad',
+        launchCommand: 'copilot --agent squad',
+      }),
+    ]);
+  });
+
   // --- editless.goToWorkItem -------------------------------------------------
 
   describe('editless.goToWorkItem', () => {

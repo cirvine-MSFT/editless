@@ -637,6 +637,44 @@ describe('EditlessTreeProvider — discovered agents', () => {
 });
 
 // ---------------------------------------------------------------------------
+// EditlessTreeProvider — setDiscoveredItems (unified agents + squads)
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — setDiscoveredItems', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('shows both agents and squads from unified discovery, squads first', () => {
+    const registry = createMockRegistry([]);
+    const provider = new EditlessTreeProvider(registry as never);
+    provider.setDiscoveredItems([
+      { id: 'agent-1', name: 'Solo Agent', type: 'agent' as const, source: 'workspace' as const, path: '/agents/solo.agent.md', description: 'An agent' },
+      { id: 'squad-1', name: 'Team Alpha', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', description: 'A squad', universe: 'acme' },
+    ]);
+
+    const roots = provider.getChildren();
+
+    const squadItems = roots.filter(r => r.type === 'discovered-squad');
+    const agentItems = roots.filter(r => r.type === 'discovered-agent');
+    expect(squadItems).toHaveLength(1);
+    expect(agentItems).toHaveLength(1);
+    expect(squadItems[0].label).toBe('Team Alpha');
+    expect(agentItems[0].label).toBe('Solo Agent');
+
+    // Squads render before agents in the discovered section
+    const discoveredRoots = roots.filter(r => r.type === 'discovered-squad' || r.type === 'discovered-agent');
+    expect(discoveredRoots[0].type).toBe('discovered-squad');
+    expect(discoveredRoots[1].type).toBe('discovered-agent');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // EditlessTreeProvider — squad item description
 // ---------------------------------------------------------------------------
 

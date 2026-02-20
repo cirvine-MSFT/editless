@@ -97,54 +97,6 @@ export function discoverAgentTeams(dirPath: string, existingSquads: AgentTeamCon
   return discovered;
 }
 
-export function discoverAgentTeamsInMultiplePaths(
-  scanPaths: string[],
-  existingSquads: AgentTeamConfig[],
-): AgentTeamConfig[] {
-  const discovered: AgentTeamConfig[] = [];
-  const seenIds = new Set<string>();
-  const existingPaths = new Set(existingSquads.map(s => s.path.toLowerCase()));
-
-  for (const scanPath of scanPaths) {
-    if (!scanPath.trim()) { continue; }
-
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(scanPath, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) { continue; }
-
-      const folderPath = path.resolve(scanPath, entry.name);
-      const teamMdPath = resolveTeamMd(folderPath);
-
-      if (!teamMdPath) { continue; }
-      if (existingPaths.has(folderPath.toLowerCase())) { continue; }
-
-      const id = toKebabCase(entry.name);
-      if (seenIds.has(id)) { continue; }
-      seenIds.add(id);
-
-      const content = fs.readFileSync(teamMdPath, 'utf-8');
-      const parsed = parseTeamMd(content, entry.name);
-
-      discovered.push({
-        id,
-        name: parsed.name,
-        description: parsed.description,
-        path: folderPath,
-        icon: '🔷',
-        universe: parsed.universe,
-        launchCommand: buildDefaultLaunchCommand(),
-      });
-    }
-  }
-
-  return discovered;
-}
 
 export async function promptAndAddSquads(
   discovered: AgentTeamConfig[],

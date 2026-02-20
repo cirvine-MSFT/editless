@@ -478,8 +478,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const disc = discoveredItems.find(d => d.id === itemId);
       if (disc) {
         const config: AgentTeamConfig = disc.type === 'squad'
-          ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description, launchCommand: getLaunchCommand() }
-          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description, launchCommand: getLaunchCommand() };
+          ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description, launchCommand: buildDefaultLaunchCommand() }
+          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description, launchCommand: buildDefaultLaunchCommand() };
         registry.addSquads([config]);
         refreshDiscovery();
         treeProvider.refresh();
