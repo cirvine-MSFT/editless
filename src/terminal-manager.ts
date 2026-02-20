@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent } from './session-context';
-import { getActiveProviderLaunchCommand } from './cli-provider';
+
+function getLaunchCommand(): string {
+  return vscode.workspace.getConfiguration('editless.cli').get<string>('launchCommand', 'copilot --agent $(agent)');
+}
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
@@ -102,7 +105,7 @@ export class TerminalManager implements vscode.Disposable {
       cwd: config.path,
     });
 
-    terminal.sendText(config.launchCommand || getActiveProviderLaunchCommand());
+    terminal.sendText(config.launchCommand || getLaunchCommand());
     terminal.show();
 
     this._terminals.set(terminal, {

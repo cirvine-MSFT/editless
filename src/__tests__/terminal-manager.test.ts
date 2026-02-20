@@ -34,6 +34,16 @@ vi.mock('vscode', () => ({
     onDidEndTerminalShellExecution: mockOnDidEndTerminalShellExecution,
     get terminals() { return mockTerminals; },
   },
+  workspace: {
+    getConfiguration: (section?: string) => ({
+      get: (key: string, defaultValue?: unknown) => {
+        if (section === 'editless.cli' && key === 'launchCommand') {
+          return 'copilot --agent $(agent)';
+        }
+        return defaultValue;
+      },
+    }),
+  },
   EventEmitter: class {
     private listeners: Function[] = [];
     get event() {
@@ -48,10 +58,6 @@ vi.mock('vscode', () => ({
   ThemeIcon: class {
     constructor(public id: string) {}
   },
-}));
-
-vi.mock('../cli-provider', () => ({
-  getActiveProviderLaunchCommand: () => '',
 }));
 
 import { TerminalManager, type PersistedTerminalInfo, type SessionState } from '../terminal-manager';

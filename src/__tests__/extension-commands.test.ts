@@ -36,7 +36,6 @@ const {
   mockWorkItemsRefresh,
   mockPRsRefresh,
   mockOpenExternal,
-  mockGetActiveCliProvider,
   mockSetFilter,
   mockClearFilter,
   mockGetAllRepos,
@@ -56,7 +55,6 @@ const {
   mockCreateTerminal,
   mockWorkspaceFsCopy,
   mockAddSquads,
-  mockGetActiveProviderLaunchCommand,
   mockDiscoverAllAgents,
   mockDiscoverAgentTeams,
   mockOnDidCloseTerminal,
@@ -113,7 +111,6 @@ const {
     mockWorkItemsRefresh: vi.fn(),
     mockPRsRefresh: vi.fn(),
     mockOpenExternal: vi.fn(),
-    mockGetActiveCliProvider: vi.fn(),
     mockSetFilter: vi.fn(),
     mockClearFilter: vi.fn(),
     mockGetAllRepos: vi.fn().mockReturnValue([]),
@@ -133,7 +130,6 @@ const {
     mockCreateTerminal: vi.fn(() => ({ sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
     mockWorkspaceFsCopy: vi.fn(),
     mockAddSquads: vi.fn(),
-    mockGetActiveProviderLaunchCommand: vi.fn().mockReturnValue('copilot --agent'),
     mockDiscoverAllAgents: vi.fn().mockReturnValue([]),
     mockDiscoverAgentTeams: vi.fn().mockReturnValue([]),
     mockOnDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
@@ -220,8 +216,14 @@ vi.mock('vscode', () => {
       showTextDocument: mockShowTextDocument,
     },
     workspace: {
-      getConfiguration: () => ({
-        get: vi.fn().mockReturnValue([]),
+      getConfiguration: (section?: string) => ({
+        get: (key: string, defaultValue?: unknown) => {
+          if (section === 'editless.cli') {
+            if (key === 'launchCommand') return 'copilot --agent $(agent)';
+            if (key === 'createCommand') return '';
+          }
+          return defaultValue ?? [];
+        },
       }),
       onDidChangeWorkspaceFolders: vi.fn(() => ({ dispose: vi.fn() })),
       onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
@@ -322,13 +324,6 @@ vi.mock('../squad-utils', () => ({
   checkNpxAvailable: mockCheckNpxAvailable,
   promptInstallNode: mockPromptInstallNode,
   isSquadInitialized: mockIsSquadInitialized,
-}));
-
-vi.mock('../cli-provider', () => ({
-  probeAllProviders: vi.fn(() => Promise.resolve()),
-  resolveActiveProvider: vi.fn(),
-  getActiveCliProvider: mockGetActiveCliProvider,
-  getActiveProviderLaunchCommand: mockGetActiveProviderLaunchCommand,
 }));
 
 vi.mock('../discovery', () => ({
@@ -1184,7 +1179,6 @@ describe('extension command handlers', () => {
     });
 
     it('should show source picker with Create new and Import from file', async () => {
-      mockGetActiveCliProvider.mockReturnValue(undefined);
       const vscodeModule = await import('vscode');
       const os = await import('os');
       const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
@@ -1214,8 +1208,7 @@ describe('extension command handlers', () => {
       Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
     });
 
-    it('should skip mode picker under Create new when no provider has createCommand', async () => {
-      mockGetActiveCliProvider.mockReturnValue(undefined);
+    it('should skip mode picker under Create new when no createCommand configured', async () => {
       const vscodeModule = await import('vscode');
       const os = await import('os');
       const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
@@ -1228,25 +1221,40 @@ describe('extension command handlers', () => {
       Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
     });
 
-    it('should show mode picker under Create new when provider has createCommand', async () => {
-      mockGetActiveCliProvider.mockReturnValue({ name: 'TestCLI', createCommand: 'test-cli create $(agent)' });
+    it('should show mode picker under Create new when createCommand is configured', async () => {
       const vscodeModule = await import('vscode');
       const os = await import('os');
       const testFolders = [{ uri: { fsPath: os.tmpdir() } }];
+      
+      // Override getConfiguration to return a createCommand
+      const origGetConfiguration = vscodeModule.workspace.getConfiguration;
+      (vscodeModule.workspace as any).getConfiguration = (section?: string) => ({
+        get: (key: string, defaultValue?: unknown) => {
+          if (section === 'editless.cli') {
+            if (key === 'launchCommand') return 'copilot --agent $(agent)';
+            if (key === 'createCommand') return 'test-cli create $(agent)';
+          }
+          return defaultValue ?? [];
+        },
+      });
+      
       Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
       mockShowInputBox.mockResolvedValueOnce('test-agent');
       mockShowQuickPick
         .mockResolvedValueOnce({ value: 'create' })
-        .mockResolvedValueOnce({ value: 'provider' });
+        .mockResolvedValueOnce({ value: 'cli' });
       await getHandler('editless.addAgent')();
       expect(mockShowQuickPick).toHaveBeenCalledTimes(2);
       expect(mockShowQuickPick).toHaveBeenNthCalledWith(2,
         expect.arrayContaining([
-          expect.objectContaining({ value: 'provider' }),
+          expect.objectContaining({ value: 'cli' }),
           expect.objectContaining({ value: 'repo' }),
         ]),
         expect.any(Object),
       );
+      
+      // Restore
+      (vscodeModule.workspace as any).getConfiguration = origGetConfiguration;
       Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
     });
 
@@ -1974,7 +1982,6 @@ describe('editless.promoteDiscoveredAgent', () => {
     mockLoadSquads.mockReturnValue([]);
     mockGetHiddenIds.mockReturnValue([]);
     mockDiscoverAllAgents.mockReturnValue([testAgent]);
-    mockGetActiveProviderLaunchCommand.mockReturnValue('copilot --agent');
     activate(makeContext());
   });
 
@@ -1992,7 +1999,7 @@ describe('editless.promoteDiscoveredAgent', () => {
         icon: '🤖',
         universe: 'standalone',
         description: 'A test agent',
-        launchCommand: 'copilot --agent',
+        launchCommand: 'copilot --agent $(agent)',
       }),
     ]);
   });
@@ -2053,7 +2060,6 @@ describe('editless.promoteDiscoveredAgent', () => {
       testAgent,
       { id: 'other-agent', name: 'Other', filePath: '/workspace/other.agent.md', source: 'workspace' as const },
     ]);
-    mockGetActiveProviderLaunchCommand.mockReturnValue('copilot --agent');
     activate(makeContext());
 
     const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);

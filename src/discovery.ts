@@ -4,9 +4,12 @@ import * as path from 'path';
 import { AgentTeamConfig } from './types';
 import { EditlessRegistry } from './registry';
 import { resolveTeamMd, resolveTeamDir } from './team-dir';
-import { getActiveProviderLaunchCommand } from './cli-provider';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
+
+function getLaunchCommand(): string {
+  return vscode.workspace.getConfiguration('editless.cli').get<string>('launchCommand', 'copilot --agent $(agent)');
+}
 
 function normalizeSquadName(name: string, fallback: string): string {
   const trimmed = name.trim();
@@ -90,7 +93,7 @@ export function discoverAgentTeams(dirPath: string, existingSquads: AgentTeamCon
       path: folderPath,
       icon: '🔷',
       universe: parsed.universe,
-      launchCommand: getActiveProviderLaunchCommand(),
+      launchCommand: getLaunchCommand(),
     });
   }
 
@@ -138,7 +141,7 @@ export function discoverAgentTeamsInMultiplePaths(
         path: folderPath,
         icon: '🔷',
         universe: parsed.universe,
-        launchCommand: getActiveProviderLaunchCommand(),
+        launchCommand: getLaunchCommand(),
       });
     }
   }
@@ -249,7 +252,7 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
         path: folderPath,
         icon: '🔷',
         universe: parsed.universe,
-        launchCommand: getActiveProviderLaunchCommand(),
+        launchCommand: getLaunchCommand(),
       });
     } else if (resolveTeamDir(folderPath)) {
       // squad init creates .ai-team/ before the coordinator writes team.md
@@ -259,7 +262,7 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
         path: folderPath,
         icon: '🔷',
         universe: 'unknown',
-        launchCommand: getActiveProviderLaunchCommand(),
+        launchCommand: getLaunchCommand(),
       });
     }
   }
