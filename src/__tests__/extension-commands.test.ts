@@ -1667,25 +1667,21 @@ describe('extension command handlers', () => {
       expect(mockAddSquads).toHaveBeenCalled();
     });
 
-    it('should show success notification for new squad', async () => {
+    it('should not show toast for new squad (silent add)', async () => {
       mockIsSquadInitialized.mockReturnValue(false);
       
       await getHandler('editless.addSquad')();
       
-      expect(mockShowInformationMessage).toHaveBeenCalledWith(
-        'Squad initialization started in squad.',
-      );
+      expect(mockShowInformationMessage).not.toHaveBeenCalled();
     });
 
-    it('should show success notification for already-initialized squad', async () => {
+    it('should not show toast for already-initialized squad (silent add)', async () => {
       mockIsSquadInitialized.mockReturnValue(true);
       mockDiscoverAgentTeams.mockReturnValue([{ id: 'squad', name: 'squad', path: '/path/to/squad', icon: '🔷', universe: 'unknown' }]);
       
       await getHandler('editless.addSquad')();
       
-      expect(mockShowInformationMessage).toHaveBeenCalledWith(
-        'Squad "squad" added to registry.',
-      );
+      expect(mockShowInformationMessage).not.toHaveBeenCalled();
     });
 
     it('should handle nested directory paths correctly', async () => {
@@ -1718,7 +1714,7 @@ describe('extension command handlers', () => {
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/squad-dir');
       expect(mockCreateTerminal).toHaveBeenCalled();
       expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx -y github:bradygaster/squad init; exit');
-      expect(mockShowInformationMessage).toHaveBeenCalled();
+      expect(mockShowInformationMessage).not.toHaveBeenCalled();
     });
 
     it('should execute full flow for happy path (already initialized)', async () => {
@@ -1734,9 +1730,7 @@ describe('extension command handlers', () => {
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/existing-squad');
       expect(mockCreateTerminal).not.toHaveBeenCalled();
       expect(mockAddSquads).toHaveBeenCalled();
-      expect(mockShowInformationMessage).toHaveBeenCalledWith(
-        'Squad "existing-squad" added to registry.',
-      );
+      expect(mockShowInformationMessage).not.toHaveBeenCalled();
     });
 
     // --- Regression tests for #232: addSquad silently fails -------------------
@@ -1920,13 +1914,13 @@ describe('editless.promoteDiscoveredAgent', () => {
     expect(mockTreeSetDiscoveredItems).toHaveBeenCalled();
   });
 
-  it('should show confirmation message', () => {
+  it('should not show toast on promote (silent add)', () => {
     const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
     item.id = 'discovered:my-agent';
 
     getHandler('editless.promoteDiscoveredAgent')(item);
 
-    expect(mockShowInformationMessage).toHaveBeenCalledWith('Added "My Agent" to registry.');
+    expect(mockShowInformationMessage).not.toHaveBeenCalled();
   });
 
   it('should no-op when item has no id', () => {

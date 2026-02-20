@@ -504,7 +504,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         registry.addSquads([config]);
         refreshDiscovery();
         treeProvider.refresh();
-        vscode.window.showInformationMessage(`Added "${disc.name}" to registry.`);
         return;
       }
 
@@ -525,7 +524,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       registry.addSquads([config]);
       refreshDiscovery();
       treeProvider.refresh();
-      vscode.window.showInformationMessage(`Added "${agent.name}" to registry.`);
     }),
   );
 
@@ -1067,7 +1065,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         if (match.length > 0) {
           registry.addSquads(match);
           treeProvider.refresh();
-          vscode.window.showInformationMessage(`Squad "${match[0].name}" added to registry.`);
         } else {
           const existing = registry.loadSquads();
           const alreadyRegistered = existing.some(s => s.path.toLowerCase() === dirPath.toLowerCase());
@@ -1082,7 +1079,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               launchCommand: buildDefaultLaunchCommand(),
             }]);
             treeProvider.refresh();
-            vscode.window.showInformationMessage(`Squad "${folderName}" added to registry.`);
           }
         }
         return;
@@ -1105,7 +1101,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         if (match.length > 0) {
           registry.addSquads(match);
           treeProvider.refresh();
-          vscode.window.showInformationMessage(`Squad "${match[0].name}" added to registry.`);
         } else if (resolveTeamDir(dirPath)) {
           const existing = registry.loadSquads();
           const alreadyRegistered = existing.some(s => s.path.toLowerCase() === dirPath.toLowerCase());
@@ -1120,13 +1115,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               launchCommand: buildDefaultLaunchCommand(),
             }]);
             treeProvider.refresh();
-            vscode.window.showInformationMessage(`Squad "${folderName}" added to registry.`);
           }
         }
       });
       context.subscriptions.push(listener);
-
-      vscode.window.showInformationMessage(`Squad initialization started in ${path.basename(dirPath)}.`);
     }),
   );
 
