@@ -61,3 +61,37 @@ Full findings: `.ai-team/decisions/inbox/jaguar-session-rename-resume.md`
 
 📌 Team update (2026-02-19): Session rename & resume architectural decisions finalized. Key decisions: (1) Display dual names (EditLess + Copilot summary), (2) Fix #277 with TerminalOptions, (3) Create custom Copilot Sessions tree view, (4) No write-access to workspace.yaml. — decided by Casey Irvine
 
+## Deep Dive: Pseudoterminal Spike (2026-02-20)
+
+Investigated ExtensionTerminal (pseudoterminal) as replacement for standard terminals in EditLess Copilot CLI sessions. Goal: eliminate sendText race, gain I/O control for state detection, and enable session ID extraction from output.
+
+**Prototype Built:**
+- `src/copilot-pseudoterminal.ts` — Full `vscode.Pseudoterminal` implementation
+- `CopilotPseudoterminal` class with child process management (spawn, I/O piping, lifecycle)
+- State detection via pattern matching on output buffer (idle/working/waiting/starting/closed)
+- Session ID extraction from CLI startup output (`/Session ID:\s*([a-f0-9-]+)/i`)
+- Status injection capability (overlay messages without affecting child stdin)
+- Ctrl+C forwarding (SIGINT), graceful shutdown, exit code capture
+- 30 unit tests, 100% pass rate
+
+**Key Findings:**
+- ✅ Real-time stdout/stderr access — Captured via `child_process` event streams, no shell integration needed
+- ✅ State detection — Reliable pattern matching on prompts (`>`, `copilot>`) and tool markers (`🔧 Running tool:`)
+- ✅ Session ID detection — Regex extraction from output, callback fires once
+- ✅ No sendText race — Direct process control eliminates timing issues
+- ⚠️ Loss of shell features — No tab completion, oh-my-posh, shell history (acceptable: Copilot CLI is a REPL, not a shell)
+- ✅ Cross-platform — stdio pipes work on Windows + Unix (no node-pty dependency needed)
+
+**Architecture Insight:** Pseudoterminals are the correct foundation. Shell integration APIs (onDidStartTerminalShellExecution) provide only exit codes, not output or state. Filesystem polling (SessionContextResolver) is fragile. Direct I/O control is the only reliable approach for Copilot CLI session management.
+
+**Recommendation:** ADOPT pseudoterminal as default. Migration path: (1) Feature flag, (2) Parallel implementation, (3) Deprecate shell integration dependencies, (4) Flip default after validation.
+
+Full findings: `.squad/decisions/inbox/jaguar-pseudoterminal-spike.md`
+
+**Related Issues Resolved:**
+- #277 (sendText race) → Eliminated (direct process control)
+- #322 (state detection) → Pattern matching on output
+- #323 (exit codes) → `onDidClose` event
+- #324 (resume detection) → Session ID from output
+- #326 (session ID via CWD) → Direct extraction, no heuristic
+
