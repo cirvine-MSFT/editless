@@ -1,13 +1,16 @@
 import * as vscode from 'vscode';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent } from './session-context';
-import { getActiveProviderLaunchCommand } from './cli-provider';
+
+function getLaunchCommand(): string {
+  return vscode.workspace.getConfiguration('editless.cli').get<string>('launchCommand', 'copilot --agent $(agent)');
+}
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------
 
-export type SessionState = 'working' | 'waiting-on-input' | 'idle' | 'stale' | 'orphaned';
+export type SessionState = 'active' | 'inactive' | 'orphaned';
 
 export interface TerminalInfo {
   id: string;
@@ -44,8 +47,6 @@ export interface PersistedTerminalInfo {
 }
 
 const STORAGE_KEY = 'editless.terminalSessions';
-const IDLE_THRESHOLD_MS = 5 * 60 * 1000;
-const STALE_THRESHOLD_MS = 60 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // TerminalManager
@@ -104,7 +105,7 @@ export class TerminalManager implements vscode.Disposable {
       cwd: config.path,
     });
 
-    terminal.sendText(config.launchCommand || getActiveProviderLaunchCommand());
+    terminal.sendText(config.launchCommand || getLaunchCommand());
     terminal.show();
 
     this._terminals.set(terminal, {
@@ -341,30 +342,8 @@ export class TerminalManager implements vscode.Disposable {
     const info = this._terminals.get(terminal);
     if (!info) { return undefined; }
 
-    // Primary: events.jsonl for Copilot sessions with a resolved session ID
-    if (info.agentSessionId && this._sessionResolver) {
-      const lastEvent = this._sessionResolver.getLastEvent(info.agentSessionId);
-      if (lastEvent) {
-        return stateFromEvent(lastEvent);
-      }
-    }
-
-    // Fallback: shell execution API for non-Copilot terminals
     const isExecuting = this._shellExecutionActive.get(terminal);
-    if (isExecuting) { return 'working'; }
-
-    const lastActivity = this._lastActivityAt.get(terminal);
-    if (!lastActivity) {
-      return 'idle';
-    }
-
-    const ageMs = Date.now() - lastActivity;
-    if (ageMs < IDLE_THRESHOLD_MS) {
-      return 'idle';
-    }
-
-    if (ageMs < STALE_THRESHOLD_MS) { return 'idle'; }
-    return 'stale';
+    return isExecuting ? 'active' : 'inactive';
   }
 
   getStateIcon(state: SessionState): vscode.ThemeIcon {
@@ -532,16 +511,12 @@ export class TerminalManager implements vscode.Disposable {
 
 export function getStateIcon(state: SessionState): vscode.ThemeIcon {
   switch (state) {
-    case 'working':
+    case 'active':
       return new vscode.ThemeIcon('loading~spin');
-    case 'waiting-on-input':
-      return new vscode.ThemeIcon('bell-dot');
-    case 'idle':
-      return new vscode.ThemeIcon('check');
-    case 'stale':
-      return new vscode.ThemeIcon('clock');
+    case 'inactive':
+      return new vscode.ThemeIcon('circle-outline');
     case 'orphaned':
-      return new vscode.ThemeIcon('debug-disconnect');
+      return new vscode.ThemeIcon('eye-closed');
     default:
       return new vscode.ThemeIcon('terminal');
   }
@@ -549,55 +524,27 @@ export function getStateIcon(state: SessionState): vscode.ThemeIcon {
 
 export function getStateDescription(state: SessionState, lastActivityAt?: number): string {
   switch (state) {
-    case 'working':
-      return '· working';
-    case 'waiting-on-input':
-      return '· waiting on input';
     case 'orphaned':
-      return '· orphaned — re-launch?';
-    case 'stale':
-      return '· stale — re-launch?';
-    case 'idle': {
+      return 'previous session';
+    case 'active':
+    case 'inactive': {
       if (!lastActivityAt) {
-        return '· idle';
+        return '';
       }
       const ageMs = Date.now() - lastActivityAt;
       const mins = Math.floor(ageMs / 60_000);
       if (mins < 1) {
-        return '· idle just now';
+        return 'just now';
       }
       if (mins < 60) {
-        return `· idle ${mins}m`;
+        return `${mins}m`;
       }
       const hours = Math.floor(mins / 60);
-      return `· idle ${hours}h`;
+      return `${hours}h`;
     }
     default:
       return '';
   }
 }
 
-const WORKING_EVENT_TYPES = new Set([
-  'session.start',
-  'user.message',
-  'assistant.turn_start',
-  'assistant.message',
-  'tool.execution_start',
-  'tool.execution_complete',
-]);
 
-export function stateFromEvent(event: SessionEvent): SessionState {
-  if (WORKING_EVENT_TYPES.has(event.type)) {
-    return 'working';
-  }
-
-  const ageMs = Date.now() - new Date(event.timestamp).getTime();
-
-  if (event.type === 'assistant.turn_end') {
-    if (ageMs < IDLE_THRESHOLD_MS) { return 'waiting-on-input'; }
-    if (ageMs < STALE_THRESHOLD_MS) { return 'idle'; }
-    return 'stale';
-  }
-
-  return 'idle';
-}

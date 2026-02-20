@@ -34,6 +34,16 @@ vi.mock('vscode', () => ({
     onDidEndTerminalShellExecution: mockOnDidEndTerminalShellExecution,
     get terminals() { return mockTerminals; },
   },
+  workspace: {
+    getConfiguration: (section?: string) => ({
+      get: (key: string, defaultValue?: unknown) => {
+        if (section === 'editless.cli' && key === 'launchCommand') {
+          return 'copilot --agent $(agent)';
+        }
+        return defaultValue;
+      },
+    }),
+  },
   EventEmitter: class {
     private listeners: Function[] = [];
     get event() {
@@ -50,11 +60,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-vi.mock('../cli-provider', () => ({
-  getActiveProviderLaunchCommand: () => '',
-}));
-
-import { TerminalManager, stateFromEvent, type PersistedTerminalInfo, type SessionState } from '../terminal-manager';
+import { TerminalManager, type PersistedTerminalInfo, type SessionState } from '../terminal-manager';
 
 function makeMockTerminal(name: string): vscode.Terminal {
   return {
@@ -908,18 +914,16 @@ describe('TerminalManager', () => {
     describe('SessionState type', () => {
       it('should export SessionState type with expected values', () => {
         const validStates: Array<import('../terminal-manager').SessionState> = [
-          'working',
-          'waiting-on-input',
-          'idle',
-          'stale',
+          'active',
+          'inactive',
           'orphaned',
         ];
-        expect(validStates).toHaveLength(5);
+        expect(validStates).toHaveLength(3);
       });
     });
 
     describe('shell integration tracking', () => {
-      it('should transition to working state when shell execution starts', () => {
+      it('should transition to active state when shell execution starts', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -932,10 +936,10 @@ describe('TerminalManager', () => {
         capturedShellStartListener({ terminal, execution });
 
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('working');
+        expect(state).toBe('active');
       });
 
-      it('should show idle immediately after shell execution ends', () => {
+      it('should show inactive immediately after shell execution ends', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -946,12 +950,12 @@ describe('TerminalManager', () => {
         } as vscode.TerminalShellExecution;
 
         capturedShellStartListener({ terminal, execution });
-        expect(mgr.getSessionState(terminal)).toBe('working');
+        expect(mgr.getSessionState(terminal)).toBe('active');
 
         capturedShellEndListener({ terminal, execution });
         
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('idle');
+        expect(state).toBe('inactive');
       });
 
       it('should handle multiple rapid start/end cycles correctly', () => {
@@ -972,13 +976,13 @@ describe('TerminalManager', () => {
         
         capturedShellStartListener({ terminal, execution: exec3 });
 
-        // Last execution is still running — should be working
-        expect(mgr.getSessionState(terminal)).toBe('working');
+        // Last execution is still running — should be active
+        expect(mgr.getSessionState(terminal)).toBe('active');
       });
     });
 
     describe('state computation', () => {
-      it('should return working for terminal with shell execution in progress', () => {
+      it('should return active for terminal with shell execution in progress', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -987,27 +991,27 @@ describe('TerminalManager', () => {
         const execution = { commandLine: { value: 'npm run build' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
 
-        expect(mgr.getSessionState(terminal)).toBe('working');
+        expect(mgr.getSessionState(terminal)).toBe('active');
       });
 
-      it('should return idle for terminal with recent activity but no execution', () => {
+      it('should return inactive for terminal with recent activity but no execution', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
-        // Simulate recent activity (just created, <5 min)
+        // Simulate recent activity (just created)
         const state = mgr.getSessionState(terminal);
-        expect(['waiting-on-input', 'idle']).toContain(state);
+        expect(state).toBe('inactive');
       });
 
-      it('should return stale for recently-reconnected terminal with old lastSeenAt', () => {
+      it('should return inactive for recently-reconnected terminal with old lastSeenAt', () => {
         const staleEntry = makePersistedEntry({
-          id: 'stale-session-1',
-          terminalName: '🧪 Stale #1',
+          id: 'old-session-1',
+          terminalName: '🧪 Old #1',
           lastSeenAt: Date.now() - 61 * 60 * 1000,
         });
-        const liveTerminal = makeMockTerminal('🧪 Stale #1');
+        const liveTerminal = makeMockTerminal('🧪 Old #1');
         mockTerminals.push(liveTerminal);
 
         const ctx = makeMockContext([staleEntry]);
@@ -1015,7 +1019,7 @@ describe('TerminalManager', () => {
         mgr.reconcile();
 
         const state = mgr.getSessionState(liveTerminal);
-        expect(state).toBe('stale');
+        expect(state).toBe('inactive');
       });
 
       it('should return orphaned for persisted session with no live terminal', () => {
@@ -1040,7 +1044,7 @@ describe('TerminalManager', () => {
         const terminal = mgr.launchTerminal(config);
 
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('idle');
+        expect(state).toBe('inactive');
       });
 
       it('should return orphaned for persisted-only session', () => {
@@ -1084,31 +1088,23 @@ describe('TerminalManager', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
 
-        const workingIcon = mgr.getStateIcon('working');
-        expect(workingIcon).toBeDefined();
-        expect(workingIcon.id).toBe('loading~spin');
+        const activeIcon = mgr.getStateIcon('active');
+        expect(activeIcon).toBeDefined();
+        expect(activeIcon.id).toBe('loading~spin');
 
-        const waitingIcon = mgr.getStateIcon('waiting-on-input');
-        expect(waitingIcon).toBeDefined();
-        expect(waitingIcon.id).toBe('bell-dot');
-
-        const idleIcon = mgr.getStateIcon('idle');
-        expect(idleIcon).toBeDefined();
-        expect(idleIcon.id).toBe('check');
-
-        const staleIcon = mgr.getStateIcon('stale');
-        expect(staleIcon).toBeDefined();
-        expect(staleIcon.id).toBe('clock');
+        const inactiveIcon = mgr.getStateIcon('inactive');
+        expect(inactiveIcon).toBeDefined();
+        expect(inactiveIcon.id).toBe('circle-outline');
 
         const orphanedIcon = mgr.getStateIcon('orphaned');
         expect(orphanedIcon).toBeDefined();
-        expect(orphanedIcon.id).toBe('debug-disconnect');
+        expect(orphanedIcon.id).toBe('eye-closed');
       });
 
       it('should return unique icons for all session states', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
-        const states: SessionState[] = ['working', 'waiting-on-input', 'idle', 'stale', 'orphaned'];
+        const states: SessionState[] = ['active', 'inactive', 'orphaned'];
         const icons = states.map(s => mgr.getStateIcon(s).id);
         expect(new Set(icons).size).toBe(states.length);
       });
@@ -1119,23 +1115,17 @@ describe('TerminalManager', () => {
 
         const info = makePersistedEntry();
 
-        const workingDesc = mgr.getStateDescription('working', info);
-        expect(workingDesc).toContain('working');
+        const activeDesc = mgr.getStateDescription('active', info);
+        expect(activeDesc.length).toBeGreaterThan(0);
 
-        const waitingDesc = mgr.getStateDescription('waiting-on-input', info);
-        expect(waitingDesc).toContain('waiting');
-
-        const idleDesc = mgr.getStateDescription('idle', info);
-        expect(idleDesc).toMatch(/idle/i);
-
-        const staleDesc = mgr.getStateDescription('stale', info);
-        expect(staleDesc).toMatch(/stale/i);
+        const inactiveDesc = mgr.getStateDescription('inactive', info);
+        expect(inactiveDesc.length).toBeGreaterThan(0);
 
         const orphanedDesc = mgr.getStateDescription('orphaned', info);
-        expect(orphanedDesc).toMatch(/orphan/i);
+        expect(orphanedDesc).toContain('previous');
       });
 
-      it('should include time elapsed in idle state description', () => {
+      it('should include time elapsed in inactive state description', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
 
@@ -1143,23 +1133,23 @@ describe('TerminalManager', () => {
           lastSeenAt: Date.now() - 23 * 60 * 1000, // 23 minutes ago
         });
 
-        const desc = mgr.getStateDescription('idle', info);
+        const desc = mgr.getStateDescription('inactive', info);
         expect(desc).toMatch(/\d+m/);
       });
     });
 
     describe('session state defaults (regression tests for #226)', () => {
-      it('should default to idle when no shell execution is active', () => {
+      it('should default to inactive when no shell execution is active', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('idle');
+        expect(state).toBe('inactive');
       });
 
-      it('should show idle after shell execution completes', () => {
+      it('should show inactive after shell execution completes', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -1167,55 +1157,27 @@ describe('TerminalManager', () => {
 
         const execution = { commandLine: { value: 'echo "test"' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
-        expect(mgr.getSessionState(terminal)).toBe('working');
+        expect(mgr.getSessionState(terminal)).toBe('active');
 
         capturedShellEndListener({ terminal, execution });
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('idle');
+        expect(state).toBe('inactive');
       });
 
-      it('should NOT default to waiting-on-input without positive signal', () => {
+      it('should transition from inactive to active when execution starts', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
-        // No shell execution, no inbox items — should be idle, not waiting-on-input
-        const state = mgr.getSessionState(terminal);
-        expect(state).not.toBe('waiting-on-input');
-        expect(state).toBe('idle');
-      });
-
-      it('should transition from idle to working when execution starts', () => {
-        const ctx = makeMockContext();
-        const mgr = new TerminalManager(ctx);
-        const config = makeSquadConfig();
-        const terminal = mgr.launchTerminal(config);
-
-        expect(mgr.getSessionState(terminal)).toBe('idle');
+        expect(mgr.getSessionState(terminal)).toBe('inactive');
 
         const execution = { commandLine: { value: 'npm test' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
         
-        expect(mgr.getSessionState(terminal)).toBe('working');
+        expect(mgr.getSessionState(terminal)).toBe('active');
       });
 
-      it('should transition to stale after idle threshold passes', () => {
-        const staleEntry = makePersistedEntry({
-          id: 'stale-test',
-          terminalName: '🧪 Stale Terminal',
-          lastSeenAt: Date.now() - 61 * 60 * 1000, // 61 minutes ago
-        });
-        const liveTerminal = makeMockTerminal('🧪 Stale Terminal');
-        mockTerminals.push(liveTerminal);
-
-        const ctx = makeMockContext([staleEntry]);
-        const mgr = new TerminalManager(ctx);
-        mgr.reconcile();
-
-        const state = mgr.getSessionState(liveTerminal);
-        expect(state).toBe('stale');
-      });
     });
   });
 
@@ -1662,137 +1624,4 @@ describe('TerminalManager', () => {
   // =========================================================================
   // events.jsonl-based state detection
   // =========================================================================
-
-  describe('stateFromEvent', () => {
-    it('returns working for mid-turn events', () => {
-      const midTurnTypes = [
-        'session.start', 'user.message', 'assistant.turn_start',
-        'assistant.message', 'tool.execution_start', 'tool.execution_complete',
-      ];
-      for (const type of midTurnTypes) {
-        expect(stateFromEvent({ type, timestamp: new Date().toISOString() })).toBe('working');
-      }
-    });
-
-    it('returns waiting-on-input for recent turn_end', () => {
-      const recent = new Date().toISOString();
-      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: recent })).toBe('waiting-on-input');
-    });
-
-    it('returns idle for turn_end older than 5 minutes', () => {
-      const old = new Date(Date.now() - 6 * 60 * 1000).toISOString();
-      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: old })).toBe('idle');
-    });
-
-    it('returns stale for turn_end older than 1 hour', () => {
-      const veryOld = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-      expect(stateFromEvent({ type: 'assistant.turn_end', timestamp: veryOld })).toBe('stale');
-    });
-
-    it('returns working even with recent mid-turn event', () => {
-      const recent = new Date().toISOString();
-      expect(stateFromEvent({ type: 'tool.execution_start', timestamp: recent })).toBe('working');
-    });
-
-    it('returns idle for unknown event types', () => {
-      expect(stateFromEvent({ type: 'unknown.event', timestamp: new Date().toISOString() })).toBe('idle');
-    });
-  });
-
-  describe('getSessionState with events.jsonl', () => {
-    function makeResolverWithEvents(eventsBySession: Map<string, { type: string; timestamp: string } | null>) {
-      return {
-        resolveAll: vi.fn(() => new Map()),
-        getLastEvent: vi.fn((sessionId: string) => eventsBySession.get(sessionId) ?? null),
-      };
-    }
-
-    it('uses events.jsonl when agentSessionId is set', () => {
-      const ctx = makeMockContext();
-      const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig();
-      const terminal = mgr.launchTerminal(config);
-      mgr.setAgentSessionId(terminal, 'test-session');
-
-      const events = new Map([
-        ['test-session', { type: 'assistant.turn_end', timestamp: new Date().toISOString() }],
-      ]);
-      mgr.setSessionResolver(makeResolverWithEvents(events) as unknown as import('../session-context').SessionContextResolver);
-
-      expect(mgr.getSessionState(terminal)).toBe('waiting-on-input');
-    });
-
-    it('returns working when events.jsonl shows mid-turn', () => {
-      const ctx = makeMockContext();
-      const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig();
-      const terminal = mgr.launchTerminal(config);
-      mgr.setAgentSessionId(terminal, 'busy-session');
-
-      const events = new Map([
-        ['busy-session', { type: 'tool.execution_start', timestamp: new Date().toISOString() }],
-      ]);
-      mgr.setSessionResolver(makeResolverWithEvents(events) as unknown as import('../session-context').SessionContextResolver);
-
-      // Even if shell execution says active, events.jsonl takes priority
-      const execution = { commandLine: { value: 'copilot' } } as vscode.TerminalShellExecution;
-      capturedShellStartListener({ terminal, execution });
-
-      expect(mgr.getSessionState(terminal)).toBe('working');
-    });
-
-    it('falls back to shell execution when no agentSessionId', () => {
-      const ctx = makeMockContext();
-      const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig();
-      const terminal = mgr.launchTerminal(config);
-
-      // No agentSessionId set — should use shell execution fallback
-      const execution = { commandLine: { value: 'npm test' } } as vscode.TerminalShellExecution;
-      capturedShellStartListener({ terminal, execution });
-
-      expect(mgr.getSessionState(terminal)).toBe('working');
-    });
-
-    it('falls back to shell execution when events.jsonl returns null', () => {
-      const ctx = makeMockContext();
-      const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig();
-      const terminal = mgr.launchTerminal(config);
-      mgr.setAgentSessionId(terminal, 'empty-session');
-
-      const events = new Map<string, { type: string; timestamp: string } | null>([
-        ['empty-session', null],
-      ]);
-      mgr.setSessionResolver(makeResolverWithEvents(events) as unknown as import('../session-context').SessionContextResolver);
-
-      const execution = { commandLine: { value: 'copilot' } } as vscode.TerminalShellExecution;
-      capturedShellStartListener({ terminal, execution });
-
-      // Falls back to shell execution → working
-      expect(mgr.getSessionState(terminal)).toBe('working');
-    });
-
-    it('events.jsonl overrides shell execution showing idle while shell says working', () => {
-      const ctx = makeMockContext();
-      const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig();
-      const terminal = mgr.launchTerminal(config);
-      mgr.setAgentSessionId(terminal, 'idle-session');
-
-      // Shell says working (copilot process running)
-      const execution = { commandLine: { value: 'copilot' } } as vscode.TerminalShellExecution;
-      capturedShellStartListener({ terminal, execution });
-
-      // But events.jsonl says turn ended 10 minutes ago
-      const tenMinAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      const events = new Map([
-        ['idle-session', { type: 'assistant.turn_end', timestamp: tenMinAgo }],
-      ]);
-      mgr.setSessionResolver(makeResolverWithEvents(events) as unknown as import('../session-context').SessionContextResolver);
-
-      // events.jsonl wins — should show idle, not working
-      expect(mgr.getSessionState(terminal)).toBe('idle');
-    });
-  });
 });

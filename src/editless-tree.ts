@@ -257,7 +257,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         : null;
 
       for (const { terminal, info } of this.terminalManager.getTerminalsForSquad(squadId)) {
-        const sessionState = this.terminalManager.getSessionState(terminal) ?? 'idle';
+        const sessionState = this.terminalManager.getSessionState(terminal) ?? 'inactive';
         const lastActivityAt = this.terminalManager.getLastActivityAt(terminal);
 
         const elapsed = Date.now() - info.createdAt.getTime();

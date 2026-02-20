@@ -8,7 +8,7 @@ import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 
-import { probeAllProviders, resolveActiveProvider, getActiveCliProvider, getActiveProviderLaunchCommand } from './cli-provider';
+
 import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import type { AgentTeamConfig } from './types';
@@ -28,13 +28,18 @@ import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
 
 const execFileAsync = promisify(execFile);
 
+function getLaunchCommand(): string {
+  return vscode.workspace.getConfiguration('editless.cli').get<string>('launchCommand', 'copilot --agent $(agent)');
+}
+
+function getCreateCommand(): string {
+  return vscode.workspace.getConfiguration('editless.cli').get<string>('createCommand', '');
+}
+
 export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {
   const output = vscode.window.createOutputChannel('EditLess');
   context.subscriptions.push(output);
   setAdoAuthOutput(output);
-
-  // --- CLI provider detection (async, non-blocking) -------------------------
-  probeAllProviders().then(() => resolveActiveProvider());
 
   // --- Squad UI integration (#38) ------------------------------------------
   initSquadUiContext(context);
@@ -477,7 +482,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         icon: '🤖',
         universe: 'standalone',
         description: agent.description,
-        launchCommand: getActiveProviderLaunchCommand(),
+        launchCommand: getLaunchCommand(),
       };
 
       registry.addSquads([config]);
@@ -924,20 +929,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       });
       if (!name) return;
 
-      const customCommand = vscode.workspace.getConfiguration('editless').get<string>('agentCreationCommand');
-      if (typeof customCommand === 'string' && customCommand.trim()) {
-        const command = customCommand
-          .replace(/\$\{workspaceFolder\}/g, workspaceFolder.uri.fsPath)
-          .replace(/\$\{agentName\}/g, name.trim());
-        const terminal = vscode.window.createTerminal({
-          name: `Add Agent: ${name.trim()}`,
-          cwd: workspaceFolder.uri.fsPath,
-        });
-        terminal.show();
-        terminal.sendText(command);
-        return;
-      }
-
       type SourceValue = 'create' | 'import';
       const sourceItems: { label: string; description: string; value: SourceValue }[] = [
         { label: '$(add) Create new', description: 'Create from template or CLI provider', value: 'create' },
@@ -978,18 +969,18 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         return;
       }
 
-      const provider = getActiveCliProvider();
-      const hasProviderCreate = !!provider?.createCommand?.trim();
+      const createCommand = getCreateCommand();
+      const hasCliCreate = !!createCommand.trim();
 
-      type ModeValue = 'repo' | 'provider';
+      type ModeValue = 'repo' | 'cli';
       const modeItems: { label: string; description: string; value: ModeValue }[] = [
         { label: '$(repo) Repo template', description: 'Create .github/agents/ markdown file', value: 'repo' },
       ];
-      if (hasProviderCreate) {
+      if (hasCliCreate) {
         modeItems.unshift({
-          label: `$(terminal) ${provider!.name}`,
-          description: `Create via ${provider!.name} CLI`,
-          value: 'provider',
+          label: '$(terminal) CLI command',
+          description: 'Create via configured CLI command',
+          value: 'cli',
         });
       }
 
@@ -1002,8 +993,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         mode = modePick.value;
       }
 
-      if (mode === 'provider' && provider?.createCommand) {
-        const command = provider.createCommand
+      if (mode === 'cli' && createCommand) {
+        const command = createCommand
           .replace(/\$\(agent\)/g, name.trim())
           .replace(/\$\{agentName\}/g, name.trim());
         const terminal = vscode.window.createTerminal({
@@ -1089,7 +1080,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               path: dirPath,
               icon: '🔷',
               universe: 'unknown',
-              launchCommand: getActiveProviderLaunchCommand(),
+              launchCommand: getLaunchCommand(),
             }]);
             treeProvider.refresh();
             vscode.window.showInformationMessage(`Squad "${folderName}" added to registry.`);
@@ -1127,7 +1118,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               path: dirPath,
               icon: '🔷',
               universe: 'unknown',
-              launchCommand: getActiveProviderLaunchCommand(),
+              launchCommand: getLaunchCommand(),
             }]);
             treeProvider.refresh();
             vscode.window.showInformationMessage(`Squad "${folderName}" added to registry.`);

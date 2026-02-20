@@ -172,24 +172,6 @@ Settings for controlling desktop toasts and notifications.
 
 ---
 
-## Agent Creation
-
-Settings for customizing the agent creation workflow.
-
-| Setting | Type | Default | Scope | Description |
-|---------|------|---------|-------|-------------|
-| `editless.agentCreationCommand` | `string` | `""` | resource | Custom command to run when adding an agent. Overrides the built-in agent creation flow. Supports variable substitution: `${workspaceFolder}` (workspace root path) and `${agentName}` (user-entered agent name). |
-
-**Example — use a custom initialization script:**
-
-```jsonc
-{
-  "editless.agentCreationCommand": "my-tool init --name ${agentName} --dir ${workspaceFolder}/squads"
-}
-```
-
----
-
 ## Complete Example `settings.json`
 
 ```jsonc
@@ -220,10 +202,7 @@ Settings for customizing the agent creation workflow.
   // Notifications
   "editless.notifications.enabled": true,
   "editless.notifications.inbox": true,
-  "editless.notifications.updates": true,
-
-  // Agent Creation
-  "editless.agentCreationCommand": ""
+  "editless.notifications.updates": true
 }
 ```
 

@@ -239,7 +239,6 @@ All settings are prefixed `editless.*` and defined in `package.json` contributes
 | **Azure DevOps** | `ado.organization`, `ado.project` |
 | **Notifications** | `notifications.enabled`, `notifications.inbox`, `notifications.updates` |
 | **Auto-refresh** | `refreshInterval`, `scanDebounceMs` |
-| **Display** | `agentCreationCommand` |
 
 ### Views & Tree Items
 

@@ -30,38 +30,7 @@ export interface WorkItemsFilter {
   states: UnifiedState[];
 }
 
-/** Map of item number → plan filename, built by scanning team plans directories. */
-export type PlanFileIndex = Map<number, string>;
 
-/**
- * Scan workspace team dirs for plan files and index them by issue/work-item number.
- * Plan files use the convention: `{slug}-{number(s)}.md` — numbers can appear
- * anywhere in the filename, and multi-number files (e.g. `toolbar-ux-60-64.md`)
- * map to all contained numbers.
- */
-export function buildPlanFileIndex(): PlanFileIndex {
-  const index: PlanFileIndex = new Map();
-  const folders = vscode.workspace.workspaceFolders ?? [];
-  for (const folder of folders) {
-    for (const dirName of TEAM_DIR_NAMES) {
-      const plansDir = path.join(folder.uri.fsPath, dirName, 'plans');
-      if (!fs.existsSync(plansDir)) continue;
-      try {
-        for (const file of fs.readdirSync(plansDir)) {
-          if (!file.endsWith('.md')) continue;
-          const numbers = file.replace(/\.md$/, '').match(/\d+/g);
-          if (!numbers) continue;
-          for (const n of numbers) {
-            index.set(parseInt(n, 10), file);
-          }
-        }
-      } catch {
-        // Directory read failed — skip
-      }
-    }
-  }
-  return index;
-}
 
 export class WorkItemsTreeItem extends vscode.TreeItem {
   public issue?: GitHubIssue;
@@ -87,7 +56,6 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   private _filter: WorkItemsFilter = { repos: [], labels: [], states: [] };
   private _filterSeq = 0;
   private _treeView?: vscode.TreeView<WorkItemsTreeItem>;
-  private _planIndex: PlanFileIndex = new Map();
   private _allLabels = new Set<string>();
 
   setRepos(repos: string[]): void {
@@ -224,7 +192,6 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
 
   getChildren(element?: WorkItemsTreeItem): WorkItemsTreeItem[] {
     if (!element) {
-      this._planIndex = buildPlanFileIndex();
       if (this._loading && this._issues.size === 0 && this._adoItems.length === 0) {
         const item = new WorkItemsTreeItem('Loading...');
         item.iconPath = new vscode.ThemeIcon('loading~spin');
@@ -429,41 +396,18 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   private buildIssueItem(issue: GitHubIssue): WorkItemsTreeItem {
-    const lowered = issue.labels.map(l => l.toLowerCase());
-    const hasLabelPlan = lowered.some(l =>
-      ['has plan', 'has-plan', 'plan', 'planned', 'status:planned'].includes(l),
-    );
-    const planFile = this._planIndex.get(issue.number);
-    const hasPlan = hasLabelPlan || !!planFile;
-    const needsPlan = !hasPlan && lowered.some(l =>
-      ['status:needs-plan', 'needs-plan', 'needs plan'].includes(l),
-    );
-
-    const planIndicator = hasPlan ? '📋' : needsPlan ? '❓' : '—';
-    const item = new WorkItemsTreeItem(`${planIndicator} #${issue.number} ${issue.title}`);
+    const item = new WorkItemsTreeItem(`#${issue.number} ${issue.title}`);
     item.issue = issue;
 
     const labelText = issue.labels.join(', ');
-    item.description = hasPlan
-      ? `✓ planned · ${labelText}`
-      : needsPlan
-        ? `needs plan · ${labelText}`
-        : labelText;
+    item.description = labelText;
 
-    item.iconPath = hasPlan
-      ? new vscode.ThemeIcon('pass', new vscode.ThemeColor('testing.iconPassed'))
-      : needsPlan
-        ? new vscode.ThemeIcon('question', new vscode.ThemeColor('editorWarning.foreground'))
-        : new vscode.ThemeIcon('issues');
+    item.iconPath = new vscode.ThemeIcon('issues');
     item.contextValue = 'work-item';
 
-    const planStatus = hasPlan
-      ? `✓ planned${planFile ? ` (${planFile})` : ''}`
-      : needsPlan ? '❓ needs plan' : 'no status';
     item.tooltip = new vscode.MarkdownString(
       [
         `**#${issue.number} ${issue.title}**`,
-        `Plan: ${planStatus}`,
         `Labels: ${labelText || 'none'}`,
         `Assignees: ${issue.assignees.join(', ')}`,
       ].join('\n\n'),
@@ -478,21 +422,15 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
 
   private buildAdoItem(wi: AdoWorkItem): WorkItemsTreeItem {
     const stateIcon = wi.state === 'Active' ? '🔵' : wi.state === 'New' ? '🟢' : '⚪';
-    const planFile = this._planIndex.get(wi.id);
-    const label = planFile ? `📋 #${wi.id} ${wi.title}` : `${stateIcon} #${wi.id} ${wi.title}`;
+    const label = `${stateIcon} #${wi.id} ${wi.title}`;
     const item = new WorkItemsTreeItem(label);
     item.adoWorkItem = wi;
-    item.description = planFile
-      ? `✓ planned · ${wi.type} · ${wi.state}`
-      : `${wi.type} · ${wi.state}`;
-    item.iconPath = planFile
-      ? new vscode.ThemeIcon('pass', new vscode.ThemeColor('testing.iconPassed'))
-      : new vscode.ThemeIcon('azure');
+    item.description = `${wi.type} · ${wi.state}`;
+    item.iconPath = new vscode.ThemeIcon('azure');
     item.contextValue = 'ado-work-item';
     item.tooltip = new vscode.MarkdownString(
       [
         `**#${wi.id} ${wi.title}**`,
-        planFile ? `Plan: ✓ planned (${planFile})` : '',
         `Type: ${wi.type}`,
         `State: ${wi.state}`,
         `Area: ${wi.areaPath}`,

@@ -403,30 +403,29 @@
           "scope": "resource",
           "order": 3
         },
-        "editless.cli.providers": {
-          "type": "array",
-          "default": [
-            {
-              "name": "Copilot CLI",
-              "command": "copilot",
-              "versionCommand": "copilot --version",
-              "versionRegex": "(\\d+\\.\\d+[\\d.]*)",
-              "launchCommand": "copilot --agent $(agent)",
-              "createCommand": ""
-            }
-          ],
-          "description": "CLI providers for agent sessions. Each provider defines how to launch and detect a CLI tool.",
-          "markdownDescription": "CLI providers for agent sessions. Each entry defines a CLI tool with version detection and launch command.\n\nThe first detected provider is used by default (override with `editless.cli.activeProvider`).\n\nCopilot CLI is included by default and will be re-added if removed.",
+        "editless.cli.command": {
+          "type": "string",
+          "default": "copilot",
+          "description": "CLI binary name for agent sessions.",
+          "markdownDescription": "CLI binary name for agent sessions.\n\nDefault: `\"copilot\"`",
           "scope": "window",
           "order": 20
         },
-        "editless.cli.activeProvider": {
+        "editless.cli.launchCommand": {
           "type": "string",
-          "default": "auto",
-          "description": "Active CLI provider name, or 'auto' to use the first detected provider.",
-          "markdownDescription": "Active CLI provider. Set to `\"auto\"` (default) to use the first detected provider, or specify a provider name from `editless.cli.providers`.",
+          "default": "copilot --agent $(agent)",
+          "description": "Command to launch an agent session. Use $(agent) as placeholder for agent name.",
+          "markdownDescription": "Command to launch an agent session. Use `$(agent)` as a placeholder for the agent name.\n\nDefault: `\"copilot --agent $(agent)\"`",
           "scope": "window",
           "order": 21
+        },
+        "editless.cli.createCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Command to create a new agent. Empty string uses built-in creation flow.",
+          "markdownDescription": "Command to create a new agent. Leave empty to use the built-in creation flow (markdown file in `.github/agents/`).\n\nDefault: `\"\"`",
+          "scope": "window",
+          "order": 22
         },
         "editless.github.repos": {
           "type": "array",
@@ -485,14 +484,6 @@
           "markdownDescription": "Auto-refresh interval in minutes for the **Work Items** and **Pull Requests** panels.\n\nEditLess also refreshes when the VS Code window regains focus.\n\nSet to `0` to disable auto-refresh entirely (manual refresh only).\n\nDefault: `5` minutes.",
           "scope": "window",
           "order": 34
-        },
-        "editless.agentCreationCommand": {
-          "type": "string",
-          "default": "",
-          "description": "Custom command to run when adding an agent. Overrides built-in flow. Supports ${workspaceFolder} and ${agentName}.",
-          "markdownDescription": "Custom command to run when adding an agent. Overrides the built-in agent creation flow.\n\nSupports variable substitution:\n- `${workspaceFolder}` — path to the current workspace\n- `${agentName}` — name entered by the user\n\nExample: `\"my-tool init --name ${agentName} --dir ${workspaceFolder}\"`",
-          "scope": "resource",
-          "order": 21
         }
       }
     }
