@@ -50,7 +50,6 @@ extension.ts (activate)
         ├── SessionLabelManager (session-labels.ts) — user labels on terminals
         ├── AgentVisibilityManager (visibility.ts) — hide/show agents
         ├── NotificationManager (notifications.ts) — toasts for events
-        ├── TerminalLayoutManager (terminal-layout.ts) — auto-maximize terminal
         └── Squad Upgrader (squad-upgrader.ts) — check for package updates
 ```
 
@@ -240,7 +239,7 @@ All settings are prefixed `editless.*` and defined in `package.json` contributes
 | **Azure DevOps** | `ado.organization`, `ado.project` |
 | **Notifications** | `notifications.enabled`, `notifications.inbox`, `notifications.updates` |
 | **Auto-refresh** | `refreshInterval`, `scanDebounceMs` |
-| **Display** | `restoreTerminalLayout`, `agentCreationCommand` |
+| **Display** | `agentCreationCommand` |
 
 ### Views & Tree Items
 
@@ -274,7 +273,6 @@ src/
 ├── visibility.ts                ← Hide/show agent visibility state
 ├── notifications.ts             ← Toast notifications
 ├── status-bar.ts                ← VS Code status bar integration
-├── terminal-layout.ts           ← Auto-maximize terminal panel
 ├── github-client.ts             ← GitHub API client
 ├── ado-client.ts                ← Azure DevOps API client
 ├── ado-auth.ts                  ← Azure DevOps authentication

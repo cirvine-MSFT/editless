@@ -139,14 +139,12 @@ Settings for auto-refresh behavior and terminal/panel display.
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
 | `editless.refreshInterval` | `number` | `5` | window | Auto-refresh interval in minutes for Work Items and Pull Requests panels. EditLess also refreshes when the VS Code window regains focus. Set to `0` to disable auto-refresh entirely (manual refresh only). Minimum: `0`. |
-| `editless.restoreTerminalLayout` | `boolean` | `true` | window | Automatically maximize the terminal panel when all editor tabs are closed. This enables the full-screen terminal workflow after peeking at a file. Disable if you prefer to manage panel layout manually. |
 
 **Example:**
 
 ```jsonc
 {
-  "editless.refreshInterval": 10,
-  "editless.restoreTerminalLayout": true
+  "editless.refreshInterval": 10
 }
 ```
 
@@ -218,7 +216,6 @@ Settings for customizing the agent creation workflow.
 
   // Refresh & Display
   "editless.refreshInterval": 5,
-  "editless.restoreTerminalLayout": true,
 
   // Notifications
   "editless.notifications.enabled": true,

@@ -4,10 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockShow, mockDispose, mockScanSquad } = vi.hoisted(() => ({
+const { mockShow, mockDispose } = vi.hoisted(() => ({
   mockShow: vi.fn(),
   mockDispose: vi.fn(),
-  mockScanSquad: vi.fn(),
 }));
 
 vi.mock('vscode', () => ({
@@ -21,10 +20,6 @@ vi.mock('vscode', () => ({
     })),
   },
   StatusBarAlignment: { Left: 1, Right: 2 },
-}));
-
-vi.mock('../scanner', () => ({
-  scanSquad: mockScanSquad,
 }));
 
 import { EditlessStatusBar } from '../status-bar';
@@ -47,7 +42,6 @@ function makeTerminalManager(count: number) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockScanSquad.mockReturnValue({ inboxCount: 0 });
 });
 
 // ---------------------------------------------------------------------------
@@ -61,30 +55,7 @@ describe('EditlessStatusBar — update()', () => {
 
     bar.update();
 
-    expect(mockScanSquad).toHaveBeenCalledTimes(2);
     expect(mockShow).toHaveBeenCalled();
-  });
-
-  it('should not show inbox badge even when inbox count > 0 (#204)', () => {
-    const squads = [makeSquad('a')];
-    mockScanSquad.mockReturnValue({ inboxCount: 5 });
-    const bar = new EditlessStatusBar(makeRegistry(squads), makeTerminalManager(1));
-
-    bar.update();
-
-    const item = (bar as any)._item;
-    expect(item.text).not.toContain('📥');
-  });
-
-  it('should not show inbox badge when inbox count is 0', () => {
-    const squads = [makeSquad('a')];
-    mockScanSquad.mockReturnValue({ inboxCount: 0 });
-    const bar = new EditlessStatusBar(makeRegistry(squads), makeTerminalManager(1));
-
-    bar.update();
-
-    const item = (bar as any)._item;
-    expect(item.text).not.toContain('📥');
   });
 
   it('should handle zero squads', () => {
@@ -104,19 +75,15 @@ describe('EditlessStatusBar — update()', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessStatusBar — updateSessionsOnly()', () => {
-  it('should use cached inbox count but not display it (#204)', () => {
+  it('should not rescan squads on session-only update', () => {
     const squads = [makeSquad('a')];
-    mockScanSquad.mockReturnValue({ inboxCount: 3 });
     const bar = new EditlessStatusBar(makeRegistry(squads), makeTerminalManager(1));
 
     bar.update();
-    mockScanSquad.mockClear();
 
     bar.updateSessionsOnly();
 
-    expect(mockScanSquad).not.toHaveBeenCalled();
-    const item = (bar as any)._item;
-    expect(item.text).not.toContain('📥');
+    expect(mockShow).toHaveBeenCalled();
   });
 });
 

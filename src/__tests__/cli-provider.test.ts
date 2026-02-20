@@ -1,5 +1,4 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import type * as vscode from 'vscode';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -23,10 +22,6 @@ vi.mock('child_process', () => ({
   exec: mockExec,
 }));
 
-vi.mock('../notifications', () => ({
-  isNotificationEnabled: () => true,
-}));
-
 vi.mock('vscode', () => ({
   workspace: {
     getConfiguration: () => ({
@@ -42,17 +37,12 @@ vi.mock('vscode', () => ({
     withProgress: mockWithProgress,
   },
   commands: {
-    registerCommand: vi.fn((_id: string, handler: Function) => {
-      (registerCommand as any).lastHandler = handler;
-      return { dispose: vi.fn() };
-    }),
+    registerCommand: vi.fn(),
     executeCommand: mockExecuteCommand,
   },
   ProgressLocation: { Notification: 15 },
   ConfigurationTarget: { Global: 1 },
 }));
-
-const registerCommand = vi.fn();
 
 import {
   probeAllProviders,
@@ -60,30 +50,11 @@ import {
   getActiveCliProvider,
   getActiveProviderLaunchCommand,
   getAllProviders,
-  checkProviderUpdatesOnStartup,
-  registerCliUpdateCommand,
 } from '../cli-provider';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function makeContext(data: Record<string, unknown> = {}): vscode.ExtensionContext {
-  const store = new Map<string, unknown>(Object.entries(data));
-  return {
-    globalState: {
-      get<T>(key: string): T | undefined {
-        return store.get(key) as T | undefined;
-      },
-      update(key: string, value: unknown): Thenable<void> {
-        store.set(key, value);
-        return Promise.resolve();
-      },
-      keys: () => [...store.keys()],
-      setKeysForSync: () => {},
-    },
-  } as unknown as vscode.ExtensionContext;
-}
 
 function mockConfigWithProviders(providers: unknown[], activeProvider = 'auto'): void {
   mockConfigGet.mockImplementation((key: string) => {
@@ -247,126 +218,5 @@ describe('cli-provider (generic)', () => {
 
       expect(getActiveProviderLaunchCommand()).toBe('');
     });
-  });
-
-  describe('checkProviderUpdatesOnStartup', () => {
-    it('should not check providers without updateCommand', async () => {
-      mockConfigWithProviders([
-        { name: 'Copilot CLI', command: 'copilot', versionCommand: 'copilot --version' },
-      ]);
-      setupCopilotDetected();
-      await probeAllProviders();
-
-      mockExec.mockClear();
-      checkProviderUpdatesOnStartup(makeContext());
-      // No update exec calls should be made
-      expect(mockExec).not.toHaveBeenCalled();
-    });
-
-    it('should check provider with updateCommand', async () => {
-      mockConfigWithProviders([
-        { name: 'Copilot CLI', command: 'copilot', versionCommand: 'copilot --version', updateCommand: 'copilot update --check' },
-      ]);
-      setupCopilotDetected();
-      await probeAllProviders();
-
-      mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
-        if (typeof opts === 'function') { cb = opts as ExecCallback; }
-        if (!cb) return;
-        cb(null, 'up to date', '');
-      });
-
-      checkProviderUpdatesOnStartup(makeContext());
-      expect(mockExec).toHaveBeenCalledWith(
-        'copilot update --check',
-        expect.anything(),
-        expect.any(Function),
-      );
-    });
-  });
-
-  describe('CLI upgrade detection', () => {
-    it('should detect update available when updateCommand output does not match upToDatePattern', async () => {
-      mockConfigWithProviders([
-        { 
-          name: 'Copilot CLI', 
-          command: 'copilot', 
-          versionCommand: 'copilot --version', 
-          updateCommand: 'copilot update', 
-          upToDatePattern: 'latest version' 
-        },
-      ]);
-      setupCopilotDetected();
-      await probeAllProviders();
-
-      mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
-        if (typeof opts === 'function') { cb = opts as ExecCallback; }
-        if (!cb) return;
-        if (cmd === 'copilot update') {
-          cb(null, 'A new version is available! Run copilot update to install.', '');
-        }
-      });
-
-      checkProviderUpdatesOnStartup(makeContext());
-      
-      // Wait for async exec to complete
-      await new Promise(resolve => setTimeout(resolve, 10));
-      expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.cliUpdateAvailable', true);
-    });
-
-    it('should detect up-to-date when output matches upToDatePattern', async () => {
-      mockConfigWithProviders([
-        { 
-          name: 'Copilot CLI', 
-          command: 'copilot', 
-          versionCommand: 'copilot --version', 
-          updateCommand: 'copilot update', 
-          upToDatePattern: 'latest version' 
-        },
-      ]);
-      setupCopilotDetected();
-      await probeAllProviders();
-
-      mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
-        if (typeof opts === 'function') { cb = opts as ExecCallback; }
-        if (!cb) return;
-        if (cmd === 'copilot update') {
-          cb(null, 'You are already running the latest version.', '');
-        }
-      });
-
-      checkProviderUpdatesOnStartup(makeContext());
-      
-      await new Promise(resolve => setTimeout(resolve, 10));
-      expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.cliUpdateAvailable', false);
-    });
-
-    it('should set editless.cliUpdateAvailable context to true when update available', async () => {
-      mockConfigWithProviders([
-        { 
-          name: 'Copilot CLI', 
-          command: 'copilot', 
-          versionCommand: 'copilot --version', 
-          updateCommand: 'copilot update', 
-          upToDatePattern: 'latest version' 
-        },
-      ]);
-      setupCopilotDetected();
-      await probeAllProviders();
-
-      mockExec.mockImplementation((cmd: string, opts: unknown, cb?: ExecCallback) => {
-        if (typeof opts === 'function') { cb = opts as ExecCallback; }
-        if (!cb) return;
-        if (cmd === 'copilot update') {
-          cb(null, 'Update available!', '');
-        }
-      });
-
-      checkProviderUpdatesOnStartup(makeContext());
-      
-      await new Promise(resolve => setTimeout(resolve, 10));
-      expect(mockExecuteCommand).toHaveBeenCalledWith('setContext', 'editless.cliUpdateAvailable', true);
-    });
-
   });
 });

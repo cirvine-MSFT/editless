@@ -94,24 +94,6 @@
         "category": "EditLess"
       },
       {
-        "command": "editless.updateCliProvider",
-        "title": "Update CLI Provider",
-        "category": "EditLess",
-        "icon": "$(cloud-download)"
-      },
-      {
-        "command": "editless.upgradeSquad",
-        "title": "Upgrade Squad Package",
-        "category": "EditLess",
-        "icon": "$(arrow-up)"
-      },
-      {
-        "command": "editless.upgradeAllSquads",
-        "title": "Upgrade All Squad Packages",
-        "category": "EditLess",
-        "icon": "$(arrow-up)"
-      },
-      {
         "command": "editless.renameSquad",
         "title": "Rename"
       },
@@ -322,8 +304,6 @@
         { "command": "editless.refresh", "when": "view == editlessTree", "group": "navigation@1" },
         { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@2" },
         { "command": "editless.addNew", "when": "view == editlessTree", "group": "navigation@3" },
-        { "command": "editless.updateCliProvider", "when": "view == editlessTree && editless.cliUpdateAvailable", "group": "1_updates" },
-        { "command": "editless.upgradeAllSquads", "when": "view == editlessTree && editless.squadUpgradeAvailable", "group": "1_updates" },
         { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation@1" },
         { "command": "editless.filterWorkItems", "when": "view == editlessWorkItems", "group": "navigation@2" },
         { "command": "editless.clearWorkItemsFilter", "when": "view == editlessWorkItems && editless.workItemsFiltered", "group": "navigation@3" },
@@ -336,11 +316,10 @@
       "view/item/context": [
         { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent$/", "group": "inline@0" },
         { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent|discovered-agent$/", "group": "session@0" },
-        { "command": "editless.upgradeSquad", "when": "view == editlessTree && viewItem == squad-upgradeable", "group": "inline@1" },
         { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@1" },
         { "command": "editless.changeModel", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@2" },
         { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@3" },
-        { "command": "editless.openInSquadUi", "when": "view == editlessTree && viewItem =~ /^squad/ && editless.squadUiAvailable", "group": "squad@4" },
+        { "command": "editless.openInSquadUi", "when": "view == editlessTree && viewItem =~ /^squad/ && editless.squadUiSupportsDeepLink", "group": "squad@4" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@5" },
         { "command": "editless.promoteDiscoveredAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
@@ -416,30 +395,6 @@
             "type": "string"
           }
         },
-        "editless.notifications.enabled": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable desktop notifications for squad events",
-          "markdownDescription": "Master toggle for all EditLess notifications. When disabled, **all** EditLess toasts are suppressed — including inbox and update notifications.",
-          "scope": "window",
-          "order": 10
-        },
-        "editless.notifications.inbox": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable notifications for inbox items (new decisions, pending work)",
-          "markdownDescription": "Show notifications when new inbox items arrive (pending decisions, work items). A toast fires when the count transitions from 0 → N.\n\nRequires `#editless.notifications.enabled#` to be on.",
-          "scope": "window",
-          "order": 11
-        },
-        "editless.notifications.updates": {
-          "type": "boolean",
-          "default": true,
-          "description": "Enable notifications for CLI update availability",
-          "markdownDescription": "Show notifications when a CLI provider update is available. EditLess checks each detected provider on startup and displays a toast with the installed and available versions.\n\nRequires `#editless.notifications.enabled#` to be on.",
-          "scope": "window",
-          "order": 12
-        },
         "editless.scanDebounceMs": {
           "type": "number",
           "default": 500,
@@ -457,14 +412,11 @@
               "versionCommand": "copilot --version",
               "versionRegex": "(\\d+\\.\\d+[\\d.]*)",
               "launchCommand": "copilot --agent $(agent)",
-              "createCommand": "",
-              "updateCommand": "",
-              "updateRunCommand": "",
-              "upToDatePattern": "up to date"
+              "createCommand": ""
             }
           ],
-          "description": "CLI providers for agent sessions. Each provider defines how to launch, detect, and update a CLI tool.",
-          "markdownDescription": "CLI providers for agent sessions. Each entry defines a CLI tool with version detection, launch command, and optional update support.\n\nThe first detected provider is used by default (override with `editless.cli.activeProvider`).\n\nCopilot CLI is included by default and will be re-added if removed.",
+          "description": "CLI providers for agent sessions. Each provider defines how to launch and detect a CLI tool.",
+          "markdownDescription": "CLI providers for agent sessions. Each entry defines a CLI tool with version detection and launch command.\n\nThe first detected provider is used by default (override with `editless.cli.activeProvider`).\n\nCopilot CLI is included by default and will be re-added if removed.",
           "scope": "window",
           "order": 20
         },
@@ -533,14 +485,6 @@
           "markdownDescription": "Auto-refresh interval in minutes for the **Work Items** and **Pull Requests** panels.\n\nEditLess also refreshes when the VS Code window regains focus.\n\nSet to `0` to disable auto-refresh entirely (manual refresh only).\n\nDefault: `5` minutes.",
           "scope": "window",
           "order": 34
-        },
-        "editless.restoreTerminalLayout": {
-          "type": "boolean",
-          "default": true,
-          "description": "Automatically maximize the terminal panel when all editor tabs are closed",
-          "markdownDescription": "Automatically maximize the terminal panel when all editor tabs are closed. This restores the full-screen terminal workflow after peeking at a file.\n\nDisable this if you prefer to manage panel layout manually.",
-          "scope": "window",
-          "order": 4
         },
         "editless.agentCreationCommand": {
           "type": "string",

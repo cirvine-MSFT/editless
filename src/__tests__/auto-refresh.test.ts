@@ -27,7 +27,7 @@ vi.mock('vscode', () => ({
 // Stub remaining module mocks so extension.ts doesn't blow up at import time
 vi.mock('../editless-tree', () => ({
   EditlessTreeProvider: vi.fn(function () {
-    return { refresh: vi.fn(), setDiscoveredAgents: vi.fn(), setUpgradeAvailable: vi.fn(), invalidate: vi.fn(), findTerminalItem: vi.fn() };
+    return { refresh: vi.fn(), setDiscoveredAgents: vi.fn(), invalidate: vi.fn(), findTerminalItem: vi.fn() };
   }),
   EditlessTreeItem: class {},
 }));
@@ -35,13 +35,12 @@ vi.mock('../registry', () => ({ createRegistry: vi.fn(() => ({ loadSquads: vi.fn
 vi.mock('../terminal-manager', () => ({ TerminalManager: vi.fn(function () { return { persist: vi.fn(), reconcile: vi.fn(), setSessionResolver: vi.fn(), setAgentSessionId: vi.fn(), getOrphanedSessions: vi.fn().mockReturnValue([]), onDidChange: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn(), getAllTerminals: vi.fn().mockReturnValue([]) }; }), getStateIcon: vi.fn(), getStateDescription: vi.fn() }));
 vi.mock('../session-labels', () => ({ SessionLabelManager: vi.fn(function () { return { getLabel: vi.fn(), setLabel: vi.fn(), clearLabel: vi.fn() }; }), promptClearLabel: vi.fn(), promptRenameSession: vi.fn() }));
 vi.mock('../visibility', () => ({ AgentVisibilityManager: vi.fn(function () { return { hide: vi.fn(), show: vi.fn(), showAll: vi.fn(), getHiddenIds: vi.fn().mockReturnValue([]), isHidden: vi.fn() }; }) }));
-vi.mock('../squad-upgrader', () => ({ registerSquadUpgradeCommand: vi.fn(() => ({ dispose: vi.fn() })), registerSquadUpgradeAllCommand: vi.fn(() => ({ dispose: vi.fn() })), checkSquadUpgradesOnStartup: vi.fn(() => Promise.resolve()), clearLatestVersionCache: vi.fn(), checkNpxAvailable: vi.fn().mockResolvedValue(true), promptInstallNode: vi.fn(), isSquadInitialized: vi.fn() }));
-vi.mock('../cli-provider', () => ({ registerCliUpdateCommand: vi.fn(() => ({ dispose: vi.fn() })), checkProviderUpdatesOnStartup: vi.fn(), probeAllProviders: vi.fn(() => Promise.resolve()), resolveActiveProvider: vi.fn(), getActiveCliProvider: vi.fn() }));
+vi.mock('../squad-utils', () => ({ checkNpxAvailable: vi.fn().mockResolvedValue(true), promptInstallNode: vi.fn(), isSquadInitialized: vi.fn() }));
+vi.mock('../cli-provider', () => ({ probeAllProviders: vi.fn(() => Promise.resolve()), resolveActiveProvider: vi.fn(), getActiveCliProvider: vi.fn() }));
 vi.mock('../discovery', () => ({ registerDiscoveryCommand: vi.fn(() => ({ dispose: vi.fn() })), checkDiscoveryOnStartup: vi.fn(), autoRegisterWorkspaceSquads: vi.fn() }));
 vi.mock('../agent-discovery', () => ({ discoverAllAgents: vi.fn(() => []) }));
 vi.mock('../watcher', () => ({ SquadWatcher: vi.fn(function () { return { dispose: vi.fn(), updateSquads: vi.fn() }; }) }));
 vi.mock('../status-bar', () => ({ EditlessStatusBar: vi.fn(function () { return { update: vi.fn(), updateSessionsOnly: vi.fn(), dispose: vi.fn() }; }) }));
-vi.mock('../notifications', () => ({ NotificationManager: vi.fn(function () { return { checkAndNotify: vi.fn() }; }) }));
 vi.mock('../session-context', () => ({ SessionContextResolver: vi.fn(function () { return {}; }) }));
 vi.mock('../scanner', () => ({ scanSquad: vi.fn() }));
 vi.mock('../work-items-tree', () => ({ WorkItemsTreeProvider: vi.fn(function () { return { setRepos: vi.fn(), refresh: vi.fn(), setTreeView: vi.fn(), setFilter: vi.fn(), clearFilter: vi.fn(), filter: {}, isFiltered: false, getAllRepos: vi.fn().mockReturnValue([]), getAllLabels: vi.fn().mockReturnValue([]), setAdoItems: vi.fn(), setAdoRefresh: vi.fn() }; }), WorkItemsTreeItem: class { constructor(public label: string) {} } }));
@@ -51,9 +50,7 @@ vi.mock('../vscode-compat', () => ({ getEdition: vi.fn(() => 'VS Code') }));
 vi.mock('../ado-auth', () => ({ getAdoToken: vi.fn(), promptAdoSignIn: vi.fn(), clearAzTokenCache: vi.fn() }));
 vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn() }));
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn(), openSquadUiDashboard: vi.fn() }));
-vi.mock('../inbox-flusher', () => ({ flushDecisionsInbox: vi.fn() }));
 vi.mock('../team-dir', () => ({ resolveTeamDir: vi.fn() }));
-vi.mock('../terminal-layout', () => ({ TerminalLayoutManager: vi.fn(function () { return { dispose: vi.fn() }; }) }));
 
 import { initAutoRefresh } from '../extension';
 

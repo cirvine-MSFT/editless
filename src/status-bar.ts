@@ -1,11 +1,9 @@
 import * as vscode from 'vscode';
 import type { EditlessRegistry } from './registry';
 import type { TerminalManager } from './terminal-manager';
-import { scanSquad } from './scanner';
 
 export class EditlessStatusBar implements vscode.Disposable {
   private readonly _item: vscode.StatusBarItem;
-  private _cachedInboxCount = 0;
 
   constructor(
     private readonly _registry: EditlessRegistry,
@@ -24,14 +22,7 @@ export class EditlessStatusBar implements vscode.Disposable {
     const squadCount = squads.length;
     const sessionCount = this._terminalManager.getAllTerminals().length;
 
-    let inboxCount = 0;
-    for (const squad of squads) {
-      const state = scanSquad(squad);
-      inboxCount += state.inboxCount;
-    }
-    this._cachedInboxCount = inboxCount;
-
-    this._render(squadCount, sessionCount, inboxCount);
+    this._render(squadCount, sessionCount);
   }
 
   updateSessionsOnly(): void {
@@ -39,19 +30,15 @@ export class EditlessStatusBar implements vscode.Disposable {
     const squadCount = squads.length;
     const sessionCount = this._terminalManager.getAllTerminals().length;
 
-    this._render(squadCount, sessionCount, this._cachedInboxCount);
+    this._render(squadCount, sessionCount);
   }
 
   dispose(): void {
     this._item.dispose();
   }
 
-  private _render(squadCount: number, sessionCount: number, _inboxCount: number): void {
+  private _render(squadCount: number, sessionCount: number): void {
     const text = `$(terminal) ${squadCount} agents · ${sessionCount} sessions`;
-    // Inbox badge hidden (#204) — inboxCount not reliably updated yet
-    // if (inboxCount > 0) {
-    //   text += ` · 📥 ${inboxCount}`;
-    // }
     this._item.text = text;
     this._item.show();
   }

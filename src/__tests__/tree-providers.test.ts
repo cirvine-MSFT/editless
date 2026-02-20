@@ -71,18 +71,12 @@ vi.mock('../scanner', () => ({
     config: cfg,
     status: 'idle',
     lastActivity: null,
-    recentDecisions: [{ title: 'Dec1', date: '2026-01-01', author: 'Rick', summary: '' }],
-    recentLogs: [],
-    recentOrchestration: [],
-    activeAgents: [],
-    inboxCount: 0,
     roster: [{ name: 'Morty', role: 'Dev' }],
     charter: '',
-    recentActivity: [{ agent: 'Morty', task: 'fix bug', outcome: 'done' }],
   })),
 }));
 
-vi.mock('../squad-upgrader', () => ({
+vi.mock('../squad-utils', () => ({
   getLocalSquadVersion: vi.fn(() => null),
 }));
 
@@ -324,7 +318,7 @@ describe('EditlessTreeProvider — getParent', () => {
     }
   });
 
-  it('should return category item as parent of roster/decision/activity children', () => {
+  it('should return category item as parent of roster children', () => {
     const registry = createMockRegistry([
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
     ]);
@@ -358,7 +352,7 @@ describe('EditlessTreeProvider — getChildren(squad)', () => {
     };
   }
 
-  it('returns terminal sessions + roster, decisions, activity categories', () => {
+  it('returns terminal sessions + roster category', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
     const registry = createMockRegistry(squads);
     const provider = new EditlessTreeProvider(registry as never);
@@ -369,8 +363,6 @@ describe('EditlessTreeProvider — getChildren(squad)', () => {
 
     const kinds = children.filter(c => c.type === 'category').map(c => c.categoryKind);
     expect(kinds).toContain('roster');
-    expect(kinds).toContain('decisions');
-    expect(kinds).toContain('activity');
   });
 
   it('returns empty array for unknown squad id', () => {
@@ -414,36 +406,6 @@ describe('EditlessTreeProvider — getChildren(category)', () => {
     expect(rosterChildren[0].type).toBe('agent');
     expect(rosterChildren[0].label).toBe('Morty');
     expect(rosterChildren[0].description).toBe('Dev');
-  });
-
-  it('returns decision items for decisions category', () => {
-    const registry = createMockRegistry(testSquads);
-    const provider = new EditlessTreeProvider(registry as never);
-    const roots = provider.getChildren();
-    const squadItem = roots.find(r => r.type === 'squad')!;
-    const squadChildren = provider.getChildren(squadItem);
-    const decisionsCategory = squadChildren.find(c => c.categoryKind === 'decisions')!;
-
-    const decisionChildren = provider.getChildren(decisionsCategory);
-
-    expect(decisionChildren.length).toBeGreaterThan(0);
-    expect(decisionChildren[0].type).toBe('decision');
-    expect(decisionChildren[0].label).toBe('Dec1');
-  });
-
-  it('returns activity items for activity category', () => {
-    const registry = createMockRegistry(testSquads);
-    const provider = new EditlessTreeProvider(registry as never);
-    const roots = provider.getChildren();
-    const squadItem = roots.find(r => r.type === 'squad')!;
-    const squadChildren = provider.getChildren(squadItem);
-    const activityCategory = squadChildren.find(c => c.categoryKind === 'activity')!;
-
-    const activityChildren = provider.getChildren(activityCategory);
-
-    expect(activityChildren.length).toBeGreaterThan(0);
-    expect(activityChildren[0].type).toBe('activity');
-    expect(activityChildren[0].label).toBe('Morty: fix bug');
   });
 
   it('returns empty for non-squad non-category element', () => {
@@ -731,72 +693,6 @@ describe('EditlessTreeProvider — squad item description', () => {
 });
 
 // ---------------------------------------------------------------------------
-// EditlessTreeProvider — upgrade indicator
-// ---------------------------------------------------------------------------
-
-describe('EditlessTreeProvider — upgrade indicator', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
-    return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
-    };
-  }
-
-  it('shows "upgrade available" in description when upgrade is set', () => {
-    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
-
-    provider.setUpgradeAvailable('squad-a', true);
-    const roots = provider.getChildren();
-    const squadItem = roots.find(r => r.type === 'squad')!;
-
-    expect(squadItem.description).toContain('upgrade available');
-    expect(squadItem.contextValue).toBe('squad-upgradeable');
-  });
-
-  it('does not show upgrade indicator when no upgrade is available', () => {
-    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
-
-    const roots = provider.getChildren();
-    const squadItem = roots.find(r => r.type === 'squad')!;
-
-    expect(squadItem.description).not.toContain('upgrade available');
-    expect(squadItem.contextValue).toBe('squad');
-  });
-
-  it('clears indicator when upgrade is set to false', () => {
-    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
-
-    provider.setUpgradeAvailable('squad-a', true);
-    provider.setUpgradeAvailable('squad-a', false);
-    const roots = provider.getChildren();
-    const squadItem = roots.find(r => r.type === 'squad')!;
-
-    expect(squadItem.description).not.toContain('upgrade available');
-    expect(squadItem.contextValue).toBe('squad');
-  });
-
-  it('fires onDidChangeTreeData when upgrade state changes', () => {
-    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
-    const listener = vi.fn();
-    provider.onDidChangeTreeData(listener);
-
-    provider.setUpgradeAvailable('squad-a', true);
-
-    expect(listener).toHaveBeenCalledOnce();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // EditlessTreeProvider — Tree Item ID Collision Prevention (Issue #227)
 // ---------------------------------------------------------------------------
 
@@ -859,44 +755,6 @@ describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
     const secondIds = getRosterIds();
 
     expect(firstIds).toEqual(secondIds);
-  });
-
-  it('decision items have unique IDs based on content, not index', () => {
-    const squads = [
-      { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
-    ];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
-
-    const roots = provider.getChildren();
-    const squadItem = roots.find(r => r.squadId === 'squad-a')!;
-    const squadChildren = provider.getChildren(squadItem);
-    const decisionsCategory = squadChildren.find(c => c.categoryKind === 'decisions')!;
-    const decisions = provider.getChildren(decisionsCategory);
-
-    expect(decisions.length).toBeGreaterThan(0);
-    expect(decisions[0].id).toBeDefined();
-    expect(decisions[0].id).not.toContain(':0');
-    expect(decisions[0].id).toMatch(/^[a-f0-9]{8}:decision:[a-f0-9]{8}$/);
-  });
-
-  it('activity items have unique IDs based on content, not index', () => {
-    const squads = [
-      { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
-    ];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
-
-    const roots = provider.getChildren();
-    const squadItem = roots.find(r => r.squadId === 'squad-a')!;
-    const squadChildren = provider.getChildren(squadItem);
-    const activityCategory = squadChildren.find(c => c.categoryKind === 'activity')!;
-    const activities = provider.getChildren(activityCategory);
-
-    expect(activities.length).toBeGreaterThan(0);
-    expect(activities[0].id).toBeDefined();
-    expect(activities[0].id).not.toContain(':0');
-    expect(activities[0].id).toMatch(/^[a-f0-9]{8}:activity:[a-f0-9]{8}$/);
   });
 
   it('all tree item IDs across multiple squads are unique', () => {
