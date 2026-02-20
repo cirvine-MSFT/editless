@@ -259,12 +259,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         const relative = mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`;
 
         const customLabel = this.labelManager?.getLabel(info.labelKey);
-        const renamedTitle = sessionCtx?.summary?.trim();
-        const fallbackTitle = renamedTitle && renamedTitle.length > 0 ? renamedTitle : info.displayName;
-        const title = customLabel ? `🏷️ ${customLabel}` : fallbackTitle;
+        const title = customLabel ? `🏷️ ${customLabel}` : info.displayName;
         const item = new EditlessTreeItem(title, 'terminal');
         item.terminal = terminal;
-        item.description = this._buildTerminalDescription(null, relative, sessionCtx, sessionState, lastActivityAt);
+        item.description = relative;
         item.iconPath = getStateIcon(sessionState);
         item.contextValue = 'terminal';
         item.tooltip = this._buildTerminalTooltip(info.displayName, relative, sessionCtx, sessionState, lastActivityAt);
@@ -383,34 +381,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   }
 
   // -- Session context helpers ----------------------------------------------
-
-  private _buildTerminalDescription(
-    terminalName: string | null,
-    relative: string,
-    ctx: SessionContext | null,
-    sessionState: SessionState,
-    lastActivityAt?: number,
-  ): string {
-    const parts: string[] = [];
-    if (terminalName) parts.push(terminalName);
-    
-    const stateDesc = getStateDescription(sessionState, lastActivityAt);
-    if (stateDesc) parts.push(stateDesc);
-
-    if (ctx) {
-      if (ctx.summary) {
-        parts.push(ctx.summary);
-      } else if (ctx.branch) {
-        parts.push(`⎇ ${ctx.branch}`);
-      }
-      if (ctx.references.length > 0) {
-        parts.push(ctx.references.map(r => r.label).join(' · '));
-      }
-    }
-
-    parts.push(relative);
-    return parts.join(' · ');
-  }
 
   private _buildTerminalTooltip(
     terminalName: string,
