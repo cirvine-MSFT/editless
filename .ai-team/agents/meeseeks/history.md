@@ -11,11 +11,20 @@
 ## Learnings
 
 
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
+
+
 📌 **Team update (2026-02-16):** Documentation animation strategy — EditLess uses optimized GIFs stored in docs/media/ directory. Primary tool: ScreenToGif (Windows). Files must be <1 MB, max 800px width, 3–8 seconds duration. File naming is descriptive kebab-case (e.g., planning-feature.gif). Re-recording triggers documented: UI structure changes, command/shortcut changes, label changes, layout changes. Team reviews animations on code review checklist. — decided by Summer
 
 📌 **Team update (2026-02-19):** User directive — Delete squad-upgrader.ts entirely — squad-upgrader.ts and its tests will be deleted entirely (not kept for utilities). The 4 kept functions (checkNpxAvailable, promptInstallNode, isSquadInitialized, getLocalSquadVersion) will be extracted to squad-utils.ts. This overrides prior Rick design review (#303) decision to keep the file name. Update test expectations accordingly when squad-utils is created and squad-upgrader tests are deleted. — directed by Casey Irvine
 
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
+
+
 📌 **Team update (2026-02-16):** Default release target — All new issues default to elease:v0.1 unless Casey explicitly directs otherwise. This ensures v0.1 work is automatically tagged correctly. — decided by Casey Irvine
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
+
 
 📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
@@ -44,14 +53,29 @@
 
 📌 **Team update (2026-02-16):** Default release target — All new issues default to elease:v0.1 unless Casey explicitly directs otherwise. This ensures v0.1 work is automatically tagged correctly. — decided by Casey Irvine
 
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
+
+
 📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
+
+
 📌 Team update (2026-02-16): Squad folder rename — `.squad/` support added with `.ai-team/` backward compatibility via `src/team-dir.ts` utility. Any future code that needs to locate the team directory must use `resolveTeamDir()` or `resolveTeamMd()` — never hardcode paths. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
+
 
 📌 Team update (2026-02-16): Label taxonomy simplified — `go:` namespace (go:yes, go:no, go:needs-research) removed. Triage now applies `status:needs-plan` only when no existing `status:` label exists. Release labels limited to `release:v0.1` and `release:backlog`. When testing label workflows, focus on these retained labels and test that triage respects pre-existing status labels. — decided by Birdperson
 
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
+
+
 📌 Team update (2026-02-16): Casey's voice in personal narratives — Conversational, enthusiastic, and authentic. Use short declarative sentences for impact and preserve casual phrasing. Edits should be light-touch—fixing grammar without changing the natural, personal tone. — decided by Summer
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
+
 
 📌 Team update (2026-02-16): Squad folder rename — `.squad/` support added with `.ai-team/` backward compatibility via `src/team-dir.ts` utility. Any future code that needs to locate the team directory must use `resolveTeamDir()` or `resolveTeamMd()` — never hardcode paths. — decided by Morty
 📌 Team update (2026-02-16): Session persistence — `launchCommand` now persisted in `PersistedTerminalInfo` rather than looked up from config at relaunch. When `agentSessionId` is set, relaunch appends `--resume <sessionId>` to the persisted command (team convention for resume flag). — decided by Morty
@@ -68,6 +92,9 @@
 - **2026-02-17 — Agency CLI surface area audit (#90), PR #141:** Guardrail test that scans all non-test `.ts` source files for `agency` references (case-insensitive) and asserts each line matches an approved pattern. Allowlist covers: CLI commands (`agency --version`, `agency update`, `agency copilot`), string literals (`'agency'`/`"agency"`), capitalized display text (`Agency`), camelCase identifiers (`agencyProvider`, etc.), and comment lines. Uses `fs.readdirSync` to recursively collect source files, skipping `__tests__/` and `__integration__/`. Three test cases: main audit, sanity check that files exist, sanity check that known references are found. Total tests: 353 (up from 350).
 - **2026-02-17 — P1 test coverage batch (#111, #113, #115, #118, #120), PR #128:** 51 new tests across 5 files. **squad-upgrader.test.ts** (10): mock `promisify(exec)` via `util` mock to control `execAsync`; mock `fs.existsSync`/`readFileSync` for file checks; tested `checkNpxAvailable` (success/error), `isSquadInitialized` (.ai-team path check), `getLocalSquadVersion` (valid frontmatter, missing file, no frontmatter, no version field, read error, whitespace trimming). **status-bar.test.ts** (7): mock `vscode.window.createStatusBarItem` to return object with mutable `text`; mock `scanSquad` for inbox counts; tested `update()` (scans all squads, renders counts, inbox badge conditional), `updateSessionsOnly()` (uses cached inbox, skips scanner), `dispose()` including double-dispose tolerance. **watcher.test.ts** (7): mock `createFileSystemWatcher` returning objects with event handlers; use `vi.useFakeTimers()` for debounce testing; tested constructor (watcher-per-squad, empty array), `updateSquads()` (disposes old, creates new), debounce (5 rapid events → 1 notification, custom debounce ms), `dispose()` (clears watchers + timers). **prs-tree.test.ts** (11): new file separate from tree-providers.test.ts; tested all 6 `derivePRState` cases (draft, merged, closed, approved, changes-requested, open/empty reviewDecision), multi-repo grouping (repo headers with contextValue `repo-group`) vs flat list (single repo), loading state, empty state, config placeholder. **github-client.test.ts** (16): mock `promisify(execFile)` via `util` mock; tested `isGhAvailable` (true/false), `fetchAssignedIssues` (valid parse, empty array, null milestone, malformed JSON, error), `fetchMyPRs` (valid parse, empty, null reviewDecision defaults to `''`, malformed JSON, error), `fetchLinkedPRs` (search by issue number, null reviewDecision, error). Total tests: 308 (up from 257).
 - **2026-02-17 — Full coverage audit (UX focus):** 478 tests across 24 files, all passing. Key findings: (1) **ADO modules have zero tests** — `ado-auth.ts` and `ado-client.ts` have no test files at all; these back the ADO Work Items and PR views plus 3 command handlers. (2) **12 command handlers untested** — `filterWorkItems`, `clearWorkItemsFilter`, `setAdoPat`, `adoSignIn`, `openInBrowser`, `launchFromWorkItem`, `goToPR`, `goToSquadSettings`, `openInSquadUi`, `openRegistry`, `addSquad` have no execution tests. (3) **Terminal UX rendering untested** — tooltip generation, state-based icons, session context rendering, relative time formatting, and orphan display details in `editless-tree.ts` have zero coverage. (4) **Work items tree missing UX tests** — loading state, configuration prompts, ADO rendering, milestone group headers, click handlers, and tree view description updates all untested. (5) **Discovery UX dialogs untested** — `promptAndAddSquads()`, `registerDiscoveryCommand()`, `checkDiscoveryOnStartup()` (QuickPick/info message flows) have no tests. (6) **CLI provider update UX flow untested** — `checkProviderUpdatesOnStartup()` notification → user click → progress display path not tested. (7) **`detectSessionIds()` in TerminalManager has zero tests** despite being core reconciliation logic. (8) Testing patterns are strong: descriptive names, `vi.hoisted()` used correctly, `Map`-backed workspace state mocks, consistent fixture factories. Files needing most attention: `ado-auth.ts`, `ado-client.ts`, `editless-tree.ts` (terminal rendering), `work-items-tree.ts` (ADO + loading), `extension.ts` (12 untested commands), `discovery.ts` (UX dialogs), `terminal-manager.ts` (detectSessionIds), `scanner.ts` (internal parsers).
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
+
 
 📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
 
@@ -104,4 +131,8 @@
 
 
 
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
+
+
 📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
+

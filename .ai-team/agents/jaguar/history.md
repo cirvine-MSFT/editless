@@ -60,3 +60,4 @@ Full findings: `.ai-team/decisions/inbox/jaguar-session-rename-resume.md`
 
 
 📌 Team update (2026-02-19): Session rename & resume architectural decisions finalized. Key decisions: (1) Display dual names (EditLess + Copilot summary), (2) Fix #277 with TerminalOptions, (3) Create custom Copilot Sessions tree view, (4) No write-access to workspace.yaml. — decided by Casey Irvine
+

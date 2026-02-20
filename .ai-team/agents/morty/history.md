@@ -17,7 +17,17 @@
 
 📌 **Team update (2026-02-16):** Documentation animation strategy — EditLess uses optimized GIFs stored in docs/media/ directory. Primary tool: ScreenToGif (Windows). Files must be <1 MB, max 800px width, 3–8 seconds duration. File naming is descriptive kebab-case (e.g., planning-feature.gif). Re-recording triggers documented: UI structure changes, command/shortcut changes, label changes, layout changes. Team reviews animations on code review checklist. — decided by Summer
 
+📌 **Team update (2026-02-20):** CLI provider abstraction removed, inlined as direct settings (editless.cli.command/launchCommand/createCommand). Removed src/cli-provider.ts module entirely. Eliminated startup probing blocking activation. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Removed time-based thresholds (IDLE_THRESHOLD, STALE_THRESHOLD) and events.jsonl parsing. New signal: shell execution tracking only. State icons: active=loading~spin, inactive=circle-outline, orphaned=eye-closed. Reduced code ~190 lines (prod+test). — decided by Morty
+
+
 📌 **Team update (2026-02-16):** Default release target — All new issues default to elease:v0.1 unless Casey explicitly directs otherwise. This ensures v0.1 work is automatically tagged correctly. — decided by Casey Irvine
+
+📌 **Team update (2026-02-20):** CLI provider abstraction removed, inlined as direct settings (editless.cli.command/launchCommand/createCommand). Removed src/cli-provider.ts module entirely. Eliminated startup probing blocking activation. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Removed time-based thresholds (IDLE_THRESHOLD, STALE_THRESHOLD) and events.jsonl parsing. New signal: shell execution tracking only. State icons: active=loading~spin, inactive=circle-outline, orphaned=eye-closed. Reduced code ~190 lines (prod+test). — decided by Morty
+
 
 📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
 
@@ -110,7 +120,17 @@
 - **Development tooling setup:** Created comprehensive local dev environment for EditLess extension. Added `.vscode/launch.json` with three debug configs: "Run Extension" (F5 standard), "Run Extension (Isolated)" (clean environment with user-data-dir and disable-extensions), and "Extension Tests" (integration test runner). Added `.vscode/tasks.json` with build and watch tasks. Created `scripts/dev-isolated.ps1` PowerShell script for isolated VS Code launches with `-Clean` switch to reset environment. Created `.vscode/mcp-dev.json.example` template with chrome-devtools MCP server config for webview debugging. Updated `.gitignore` to exclude `.editless-dev/` and `.vscode/mcp.json` (personal dev configs). Key pattern: isolated dev environments use `--user-data-dir` + `--disable-extensions` + `--extensionDevelopmentPath` to test first-run experience and avoid conflicts with personal VS Code setup.
 
 
+📌 **Team update (2026-02-20):** CLI provider abstraction removed, inlined as direct settings (editless.cli.command/launchCommand/createCommand). Removed src/cli-provider.ts module entirely. Eliminated startup probing blocking activation. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Removed time-based thresholds (IDLE_THRESHOLD, STALE_THRESHOLD) and events.jsonl parsing. New signal: shell execution tracking only. State icons: active=loading~spin, inactive=circle-outline, orphaned=eye-closed. Reduced code ~190 lines (prod+test). — decided by Morty
+
+
 📌 **Team update (2026-02-16):** Default release target — All new issues default to elease:v0.1 unless Casey explicitly directs otherwise. This ensures v0.1 work is automatically tagged correctly. — decided by Casey Irvine
+
+📌 **Team update (2026-02-20):** CLI provider abstraction removed, inlined as direct settings (editless.cli.command/launchCommand/createCommand). Removed src/cli-provider.ts module entirely. Eliminated startup probing blocking activation. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Removed time-based thresholds (IDLE_THRESHOLD, STALE_THRESHOLD) and events.jsonl parsing. New signal: shell execution tracking only. State icons: active=loading~spin, inactive=circle-outline, orphaned=eye-closed. Reduced code ~190 lines (prod+test). — decided by Morty
+
 
 📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
 📌 **Team update (2026-02-16):** All bug fixes must include regression tests AND UX tests — Bug fixes require both regression test coverage (prevents recurrence) and UX tests (validates user experience). For upgrade scenarios, create tests that either check current state or force an earlier version to validate upgrade paths. Copilot CLI version detection with default settings must be thoroughly tested. — decided by Casey Irvine
@@ -165,16 +185,46 @@
 
 
 
+📌 **Team update (2026-02-20):** CLI provider abstraction removed, inlined as direct settings (editless.cli.command/launchCommand/createCommand). Removed src/cli-provider.ts module entirely. Eliminated startup probing blocking activation. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Removed time-based thresholds (IDLE_THRESHOLD, STALE_THRESHOLD) and events.jsonl parsing. New signal: shell execution tracking only. State icons: active=loading~spin, inactive=circle-outline, orphaned=eye-closed. Reduced code ~190 lines (prod+test). — decided by Morty
+
+
 📌 Team update (2026-02-18): v0.2 quality gates established — decided by Rick
 
+📌 **Team update (2026-02-20):** CLI provider abstraction removed, inlined as direct settings (editless.cli.command/launchCommand/createCommand). Removed src/cli-provider.ts module entirely. Eliminated startup probing blocking activation. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Removed time-based thresholds (IDLE_THRESHOLD, STALE_THRESHOLD) and events.jsonl parsing. New signal: shell execution tracking only. State icons: active=loading~spin, inactive=circle-outline, orphaned=eye-closed. Reduced code ~190 lines (prod+test). — decided by Morty
+
+
 📌 **Team update (2026-02-18):** Worktree Dev Launcher as Primary Workflow — scripts/dev-worktree.ps1 is now the recommended primary workflow for EditLess feature development. One command creates worktree, installs deps, builds, and launches isolated VS Code. .vscode/mcp.json example removed (EditLess doesn't use webviews). docs/local-development.md updated. All team members should use dev-worktree.ps1 for issue-based feature work. — decided by Morty
+
+📌 **Team update (2026-02-20):** CLI provider abstraction removed, inlined as direct settings (editless.cli.command/launchCommand/createCommand). Removed src/cli-provider.ts module entirely. Eliminated startup probing blocking activation. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Removed time-based thresholds (IDLE_THRESHOLD, STALE_THRESHOLD) and events.jsonl parsing. New signal: shell execution tracking only. State icons: active=loading~spin, inactive=circle-outline, orphaned=eye-closed. Reduced code ~190 lines (prod+test). — decided by Morty
+
 
 📌 **Team update (2026-02-18):** EditLess Dev Workflow Skill Created — Documented scripts/dev-worktree.ps1 in .ai-team/skills/editless-dev-workflow/SKILL.md with parameters, usage, branch naming conventions, and integration notes. Ensures agents discover and use the optimized workflow immediately without falling back to bootstrap tools or manual git commands. — decided by Morty
 
 
+📌 **Team update (2026-02-20):** CLI provider abstraction removed, inlined as direct settings (editless.cli.command/launchCommand/createCommand). Removed src/cli-provider.ts module entirely. Eliminated startup probing blocking activation. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Removed time-based thresholds (IDLE_THRESHOLD, STALE_THRESHOLD) and events.jsonl parsing. New signal: shell execution tracking only. State icons: active=loading~spin, inactive=circle-outline, orphaned=eye-closed. Reduced code ~190 lines (prod+test). — decided by Morty
+
+
 📌 **Team update (2026-02-19):** Squad↔Copilot integration research — Squanchy and Jaguar completed research on integration opportunities. Identified 14 Squad framework integration points and 7 Copilot API scenarios. Key data shape contracts documented for extension development (AgentDetail, DecisionInboxState, OrchestrationEntry). Watcher enhancement needed: pass changed file path to callback for per-file-type reactions. See decisions.md for full design. — documented by Scribe
 
+📌 **Team update (2026-02-20):** CLI provider abstraction removed, inlined as direct settings (editless.cli.command/launchCommand/createCommand). Removed src/cli-provider.ts module entirely. Eliminated startup probing blocking activation. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Removed time-based thresholds (IDLE_THRESHOLD, STALE_THRESHOLD) and events.jsonl parsing. New signal: shell execution tracking only. State icons: active=loading~spin, inactive=circle-outline, orphaned=eye-closed. Reduced code ~190 lines (prod+test). — decided by Morty
+
+
 📌 **Team update (2026-02-19):** Terminal integration research session complete — 4-phase architecture plan and 27-item priority matrix. Session log at .ai-team/log/2026-02-19-terminal-integration-research.md. — documented by Scribe
+
+
+📌 **Team update (2026-02-20):** CLI provider abstraction removed, inlined as direct settings (editless.cli.command/launchCommand/createCommand). Removed src/cli-provider.ts module entirely. Eliminated startup probing blocking activation. — decided by Morty
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Removed time-based thresholds (IDLE_THRESHOLD, STALE_THRESHOLD) and events.jsonl parsing. New signal: shell execution tracking only. State icons: active=loading~spin, inactive=circle-outline, orphaned=eye-closed. Reduced code ~190 lines (prod+test). — decided by Morty
 
 
 📌 Team update (2026-02-19): Session rename & resume architectural decisions finalized. Key decisions: (1) Display dual names (EditLess + Copilot summary), (2) Fix #277 with TerminalOptions, (3) Create custom Copilot Sessions tree view, (4) No write-access to workspace.yaml. — decided by Casey Irvine
@@ -182,3 +232,4 @@
 ## Learnings
 
 - **CLI provider abstraction removed (#312):** Deleted `src/cli-provider.ts` (114 lines) and replaced the generic multi-provider infrastructure with direct inline settings. The abstraction had no purpose — there was only one provider (Copilot CLI), no UI to switch providers, and the version detection probing via `execSync` was blocking activation. Added three simple settings: `editless.cli.command` (binary name), `editless.cli.launchCommand` (session launch template with `$(agent)` placeholder), and `editless.cli.createCommand` (agent creation command, empty = use built-in flow). All consumers (`extension.ts`, `discovery.ts`, `terminal-manager.ts`) now read settings directly via a thin `getLaunchCommand()` helper. Tests were updated to mock `vscode.workspace.getConfiguration()` instead of the removed provider module exports. The `createCommand` logic in `editless.addAgent` was simplified — replaced "provider" with "cli" mode label and removed all references to `CliProvider` interface. This pattern should be applied to any future "provider" abstractions if there's only a single implementation and no need for runtime switching.
+
