@@ -23,7 +23,6 @@ interface WorkspaceFolder {
 function toKebabId(filename: string): string {
   return filename
     .replace(/\.agent\.md$/i, '')
-    .replace(/\.md$/i, '')
     .replace(/([a-z])([A-Z])/g, '$1-$2')
     .replace(/[\s_]+/g, '-')
     .toLowerCase();
@@ -56,16 +55,6 @@ function collectAgentMdFiles(dirPath: string): string[] {
   }
 }
 
-function collectAllMdFiles(dirPath: string): string[] {
-  try {
-    return fs.readdirSync(dirPath)
-      .filter(f => f.endsWith('.md'))
-      .map(f => path.join(dirPath, f));
-  } catch {
-    return [];
-  }
-}
-
 function readAndPushAgent(
   filePath: string,
   source: DiscoveredAgent['source'],
@@ -76,7 +65,7 @@ function readAndPushAgent(
   if (seen.has(id)) { return; }
   seen.add(id);
   const content = fs.readFileSync(filePath, 'utf-8');
-  const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '').replace(/\.md$/i, '');
+  const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '');
   const parsed = parseAgentFile(content, fallback);
   out.push({ id, name: parsed.name, filePath, source, description: parsed.description });
 }
@@ -89,7 +78,7 @@ export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFo
   for (const folder of workspaceFolders) {
     const root = folder.uri.fsPath;
     const ghAgentsDir = path.join(root, '.github', 'agents');
-    for (const fp of collectAllMdFiles(ghAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, agents); }
+    for (const fp of collectAgentMdFiles(ghAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, agents); }
     for (const fp of collectAgentMdFiles(root)) { readAndPushAgent(fp, 'workspace', seen, agents); }
   }
 
@@ -101,7 +90,7 @@ export function discoverAgentsInCopilotDir(): DiscoveredAgent[] {
   const copilotDir = path.join(os.homedir(), '.copilot');
   const agents: DiscoveredAgent[] = [];
   const seen = new Set<string>();
-  for (const fp of collectAllMdFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
+  for (const fp of collectAgentMdFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
   for (const fp of collectAgentMdFiles(copilotDir)) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
   return agents;
 }

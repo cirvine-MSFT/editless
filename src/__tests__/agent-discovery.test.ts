@@ -145,15 +145,15 @@ describe('discoverAgentsInWorkspace', () => {
     expect(result).toEqual([]);
   });
 
-  it('should discover all .md files in .github/agents/ and ignore non-.md files', () => {
-    writeFixture('ws/.github/agents/readme.md', '# Readme Agent\n');
+  it('should ignore non-.agent.md files', () => {
+    writeFixture('ws/.github/agents/readme.md', '# Not an agent\n');
     writeFixture('ws/.github/agents/test.agent.md', '# Real Agent\n');
     writeFixture('ws/.github/agents/config.json', '{}');
 
     const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
 
-    expect(result).toHaveLength(2);
-    expect(result.map(a => a.name).sort()).toEqual(['Readme Agent', 'Real Agent']);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Real Agent');
   });
 
   it('should store the correct filePath', () => {
@@ -206,47 +206,5 @@ describe('discoverAgentsInCopilotDir', () => {
     const result = discoverAgentsInCopilotDir();
 
     expect(result.find(a => a.id === 'foo')).toBeDefined();
-  });
-
-  it('should discover plain .md agent files in ~/.copilot/agents/', () => {
-    const fakeHome = process.env.HOME!;
-    const agentsDir = path.join(fakeHome, '.copilot', 'agents');
-    fs.mkdirSync(agentsDir, { recursive: true });
-    fs.writeFileSync(path.join(agentsDir, 'my-agent.md'), '# My Agent\n> My description\n', 'utf-8');
-    fs.writeFileSync(path.join(agentsDir, 'new-agent.md'), '# New Agent\n> New description\n', 'utf-8');
-    fs.writeFileSync(path.join(agentsDir, 'test-agent.agent.md'), '# Test Agent\n> Test description\n', 'utf-8');
-
-    const result = discoverAgentsInCopilotDir();
-
-    expect(result.find(a => a.id === 'my-agent')).toBeDefined();
-    expect(result.find(a => a.id === 'new-agent')).toBeDefined();
-    expect(result.find(a => a.id === 'test-agent')).toBeDefined();
-    expect(result).toHaveLength(3);
-  });
-
-  it('should NOT discover plain .md files in ~/.copilot/ root', () => {
-    const fakeHome = process.env.HOME!;
-    const copilotDir = path.join(fakeHome, '.copilot');
-    fs.mkdirSync(copilotDir, { recursive: true });
-    fs.writeFileSync(path.join(copilotDir, 'readme.md'), '# Readme\n', 'utf-8');
-    fs.writeFileSync(path.join(copilotDir, 'real.agent.md'), '# Real Agent\n', 'utf-8');
-
-    const result = discoverAgentsInCopilotDir();
-
-    expect(result.find(a => a.id === 'readme')).toBeUndefined();
-    expect(result.find(a => a.id === 'real')).toBeDefined();
-  });
-
-  it('should derive correct id and fallback name from plain .md files', () => {
-    const fakeHome = process.env.HOME!;
-    const agentsDir = path.join(fakeHome, '.copilot', 'agents');
-    fs.mkdirSync(agentsDir, { recursive: true });
-    fs.writeFileSync(path.join(agentsDir, 'totally-awesome-agent.md'), 'No heading here.\n', 'utf-8');
-
-    const result = discoverAgentsInCopilotDir();
-
-    const agent = result.find(a => a.id === 'totally-awesome-agent');
-    expect(agent).toBeDefined();
-    expect(agent!.name).toBe('totally-awesome-agent');
   });
 });
