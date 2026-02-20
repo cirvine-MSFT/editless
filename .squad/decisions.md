@@ -5506,3 +5506,4 @@ These 4 PRs all based on the same SHA. Merging #352/#353/#354 first caused confl
 - [ ] Extract `getLaunchCommand()` to shared module (`cli-settings.ts`)
 - [ ] Clean dead imports in `work-items-tree.ts` (`fs`, `path`, `TEAM_DIR_NAMES`)
 - [ ] Consider enabling `noUnusedLocals` in tsconfig if not already set
+
