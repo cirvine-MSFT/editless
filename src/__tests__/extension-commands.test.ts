@@ -220,12 +220,11 @@ vi.mock('vscode', () => {
       showTextDocument: mockShowTextDocument,
     },
     workspace: {
-      getConfiguration: (section?: string) => ({
+      getConfiguration: () => ({
         get: (key: string, defaultValue?: unknown) => {
-          if (section === 'editless.cli') {
-            if (key === 'launchCommand') return 'copilot --agent $(agent)';
-            if (key === 'createCommand') return '';
-          }
+          if (key === 'command') return 'copilot';
+          if (key === 'defaultAgent') return 'squad';
+          if (key === 'createCommand') return '';
           return defaultValue ?? [];
         },
       }),
@@ -1235,12 +1234,11 @@ describe('extension command handlers', () => {
       
       // Override getConfiguration to return a createCommand
       const origGetConfiguration = vscodeModule.workspace.getConfiguration;
-      (vscodeModule.workspace as any).getConfiguration = (section?: string) => ({
+      (vscodeModule.workspace as any).getConfiguration = () => ({
         get: (key: string, defaultValue?: unknown) => {
-          if (section === 'editless.cli') {
-            if (key === 'launchCommand') return 'copilot --agent $(agent)';
-            if (key === 'createCommand') return 'test-cli create $(agent)';
-          }
+          if (key === 'command') return 'copilot';
+          if (key === 'defaultAgent') return 'squad';
+          if (key === 'createCommand') return 'test-cli create squad';
           return defaultValue ?? [];
         },
       });
@@ -2006,7 +2004,7 @@ describe('editless.promoteDiscoveredAgent', () => {
         icon: '🤖',
         universe: 'standalone',
         description: 'A test agent',
-        launchCommand: 'copilot --agent $(agent)',
+        launchCommand: 'copilot --agent squad',
       }),
     ]);
   });

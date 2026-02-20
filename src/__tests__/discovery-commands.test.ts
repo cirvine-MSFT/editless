@@ -24,7 +24,8 @@ vi.mock('vscode', () => {
         if (section === 'editless.cli') {
           return {
             get: (key: string, defaultValue?: unknown) => {
-              if (key === 'launchCommand') return 'copilot --agent $(agent)';
+              if (key === 'command') return 'copilot';
+              if (key === 'defaultAgent') return 'squad';
               return defaultValue;
             },
           };
@@ -59,7 +60,7 @@ function makeSquad(overrides: Partial<AgentTeamConfig> = {}): AgentTeamConfig {
     icon: '🔷',
     universe: 'test',
     description: 'The alpha team.',
-    launchCommand: 'copilot --agent $(agent)',
+    launchCommand: 'copilot --agent squad',
     ...overrides,
   };
 }

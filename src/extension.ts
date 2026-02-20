@@ -27,7 +27,7 @@ import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
 import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
-import { getLaunchCommand } from './cli-settings';
+import { buildDefaultLaunchCommand, buildCopilotCommand } from './copilot-cli-builder';
 
 const execFileAsync = promisify(execFile);
 
@@ -498,7 +498,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         icon: '🤖',
         universe: 'standalone',
         description: agent.description,
-        launchCommand: getLaunchCommand(),
+        launchCommand: buildDefaultLaunchCommand(),
       };
 
       registry.addSquads([config]);
@@ -1097,7 +1097,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               path: dirPath,
               icon: '🔷',
               universe: 'unknown',
-              launchCommand: getLaunchCommand(),
+              launchCommand: buildDefaultLaunchCommand(),
             }]);
             treeProvider.refresh();
             vscode.window.showInformationMessage(`Squad "${folderName}" added to registry.`);
@@ -1135,7 +1135,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               path: dirPath,
               icon: '🔷',
               universe: 'unknown',
-              launchCommand: getLaunchCommand(),
+              launchCommand: buildDefaultLaunchCommand(),
             }]);
             treeProvider.refresh();
             vscode.window.showInformationMessage(`Squad "${folderName}" added to registry.`);

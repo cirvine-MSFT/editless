@@ -9,11 +9,10 @@ import type { AgentTeamConfig } from '../types';
 const mockWorkspaceFolders: Array<{ name: string; uri: { fsPath: string } }> = [];
 vi.mock('vscode', () => ({
   workspace: {
-    getConfiguration: (section?: string) => ({
+    getConfiguration: () => ({
       get: (key: string, defaultValue?: unknown) => {
-        if (section === 'editless.cli' && key === 'launchCommand') {
-          return 'copilot --agent $(agent)';
-        }
+        if (key === 'command') return 'copilot';
+        if (key === 'defaultAgent') return 'squad';
         return defaultValue;
       },
     }),
@@ -235,7 +234,7 @@ describe('discoverAgentTeams', () => {
 
     const result = discoverAgentTeams(tmpDir, []);
     
-    expect(result[0].launchCommand).toBe('copilot --agent $(agent)');
+    expect(result[0].launchCommand).toBe('copilot --agent squad');
   });
 
   describe('edge cases', () => {
