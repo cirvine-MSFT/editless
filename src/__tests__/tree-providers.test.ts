@@ -613,7 +613,7 @@ describe('EditlessTreeProvider — discovered agents', () => {
     ]);
 
     const roots = provider.getChildren();
-    const header = roots.find(r => r.label === 'Discovered Agents');
+    const header = roots.find(r => r.label === 'Discovered');
     expect(header).toBeDefined();
 
     const agentItems = roots.filter(r => r.type === 'discovered-agent');

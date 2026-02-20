@@ -315,14 +315,16 @@
       ],
       "view/item/context": [
         { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent$/", "group": "inline@0" },
-        { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent|discovered-agent$/", "group": "session@0" },
+        { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent|discovered-agent|discovered-squad$/", "group": "session@0" },
         { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@1" },
         { "command": "editless.changeModel", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@2" },
         { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@3" },
         { "command": "editless.openInSquadUi", "when": "view == editlessTree && viewItem =~ /^squad/ && editless.squadUiSupportsDeepLink", "group": "squad@4" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@5" },
         { "command": "editless.promoteDiscoveredAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
+        { "command": "editless.promoteDiscoveredAgent", "when": "view == editlessTree && viewItem == discovered-squad", "group": "inline" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
+        { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-squad", "group": "inline" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal", "group": "inline@99" },
         { "command": "editless.renameSession", "when": "viewItem == terminal" },
@@ -382,15 +384,16 @@
         "editless.discoveryDir": {
           "type": "string",
           "default": "",
-          "description": "Directory to scan for squad projects",
-          "markdownDescription": "Directory to scan for squad projects. EditLess watches this directory for folders containing `.squad/` (or `.ai-team/`) structures and adds them to the Agents pane automatically.\n\n_This setting will be replaced by `#editless.discovery.scanPaths#` in a future release._",
+          "description": "⚠️ Deprecated — discovery now uses workspace folders. Directory to scan for squad projects.",
+          "markdownDescription": "⚠️ **Deprecated** — discovery now uses workspace folders automatically. This setting is no longer used.\n\n_Was: Directory to scan for squad projects._",
           "scope": "resource",
           "order": 2
         },
         "editless.discovery.scanPaths": {
           "type": "array",
           "default": [],
-          "description": "Additional directories to scan for agents and squads on launch and config change",
+          "description": "⚠️ Deprecated — discovery now uses workspace folders. Additional directories to scan for agents and squads.",
+          "markdownDescription": "⚠️ **Deprecated** — discovery now uses workspace folders automatically. This setting is no longer used.\n\n_Was: Additional directories to scan for agents and squads on launch and config change._",
           "items": {
             "type": "string"
           }

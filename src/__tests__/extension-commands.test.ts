@@ -33,6 +33,7 @@ const {
   mockGetHiddenIds,
   mockTreeRefresh,
   mockTreeSetDiscoveredAgents,
+  mockTreeSetDiscoveredItems,
   mockWorkItemsRefresh,
   mockPRsRefresh,
   mockOpenExternal,
@@ -57,6 +58,7 @@ const {
   mockAddSquads,
   mockDiscoverAllAgents,
   mockDiscoverAgentTeams,
+  mockDiscoverAll,
   mockOnDidCloseTerminal,
   mockResolveTeamDir,
   MockEditlessTreeItem,
@@ -108,6 +110,7 @@ const {
     mockGetHiddenIds: vi.fn().mockReturnValue([]),
     mockTreeRefresh: vi.fn(),
     mockTreeSetDiscoveredAgents: vi.fn(),
+    mockTreeSetDiscoveredItems: vi.fn(),
     mockWorkItemsRefresh: vi.fn(),
     mockPRsRefresh: vi.fn(),
     mockOpenExternal: vi.fn(),
@@ -132,6 +135,7 @@ const {
     mockAddSquads: vi.fn(),
     mockDiscoverAllAgents: vi.fn().mockReturnValue([]),
     mockDiscoverAgentTeams: vi.fn().mockReturnValue([]),
+    mockDiscoverAll: vi.fn().mockReturnValue([]),
     mockOnDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
     mockResolveTeamDir: vi.fn(),
     MockEditlessTreeItem,
@@ -251,6 +255,7 @@ vi.mock('../editless-tree', () => ({
     return {
       refresh: mockTreeRefresh,
       setDiscoveredAgents: mockTreeSetDiscoveredAgents,
+      setDiscoveredItems: mockTreeSetDiscoveredItems,
       invalidate: vi.fn(),
       findTerminalItem: vi.fn(),
     };
@@ -335,6 +340,10 @@ vi.mock('../discovery', () => ({
 
 vi.mock('../agent-discovery', () => ({
   discoverAllAgents: mockDiscoverAllAgents,
+}));
+
+vi.mock('../unified-discovery', () => ({
+  discoverAll: mockDiscoverAll,
 }));
 
 vi.mock('../watcher', () => ({
@@ -2011,7 +2020,9 @@ describe('editless.promoteDiscoveredAgent', () => {
     getHandler('editless.promoteDiscoveredAgent')(item);
 
     expect(mockTreeRefresh).toHaveBeenCalled();
-    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalledWith([]);
+    // Unified flow re-discovers instead of manually filtering
+    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
+    expect(mockTreeSetDiscoveredItems).toHaveBeenCalled();
   });
 
   it('should show confirmation message', () => {
@@ -2047,7 +2058,7 @@ describe('editless.promoteDiscoveredAgent', () => {
     expect(mockAddSquads).not.toHaveBeenCalled();
   });
 
-  it('should remove promoted agent from discovered list', () => {
+  it('should re-discover after promotion to exclude promoted item', () => {
     mockDiscoverAllAgents.mockReturnValue([
       testAgent,
       { id: 'other-agent', name: 'Other', filePath: '/workspace/other.agent.md', source: 'workspace' as const },
@@ -2067,9 +2078,10 @@ describe('editless.promoteDiscoveredAgent', () => {
 
     getHandler('editless.promoteDiscoveredAgent')(item);
 
-    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'other-agent' }),
-    ]);
+    // Unified flow re-discovers (calls both setDiscoveredAgents and setDiscoveredItems)
+    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
+    expect(mockTreeSetDiscoveredItems).toHaveBeenCalled();
+    expect(mockTreeRefresh).toHaveBeenCalled();
   });
 
   // --- editless.goToWorkItem -------------------------------------------------
