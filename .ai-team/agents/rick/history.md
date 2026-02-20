@@ -208,3 +208,17 @@ Reviewed Morty's feature removal PR. Code removal was surgical and complete — 
 
 
 📌 Team update (2026-02-19): Session rename & resume architectural decisions finalized. Key decisions: (1) Display dual names (EditLess + Copilot summary), (2) Fix #277 with TerminalOptions, (3) Create custom Copilot Sessions tree view, (4) No write-access to workspace.yaml. — decided by Casey Irvine
+
+### 2026-02-20: v0.1.1 Removal Batch 2 — Architecture Review
+Reviewed and merged 4 removal PRs (#352, #353, #354, #355) from the v0.1.1 cleanup batch. All PRs targeted removal of v0.1 features identified as broken or unnecessary in the retrospective.
+
+- **PR #352 (custom commands):** Clean surgical removal. ✅
+- **PR #353 (plan detection):** Good removal but left 3 dead imports (fs, path, TEAM_DIR_NAMES) in work-items-tree.ts. ⚠️
+- **PR #354 (session state):** Best PR of the batch. Replaced broken 5-state model with honest active/inactive/orphaned. The old model was unreliable (4 PRs in v0.1 couldn't fix it). New model maps to what we can actually observe (shell execution API). ✅
+- **PR #355 (CLI provider):** Good removal of YAGNI abstraction, but introduced getLaunchCommand() duplication across 3 files. Needed rebase after earlier merges caused conflicts. ⚠️
+
+**Key architectural learning:** When removing abstractions, the replacement pattern matters as much as the removal. PR #355 replaced one abstraction with 3 copies of the same helper — that's a DRY debt that needs a follow-up extraction to cli-settings.ts.
+
+**Process learning:** Merge order matters for removal batches targeting the same base. PRs #352 and #353 merged cleanly. #354 merged cleanly. #355 conflicted on terminal-manager.test.ts because both #354 and #355 modified the import line differently. Resolved by taking the union of both changes (no cli-provider mock AND no stateFromEvent import).
+
+Decision record: `.ai-team/decisions/inbox/rick-removal-batch2-review.md`
