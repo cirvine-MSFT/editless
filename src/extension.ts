@@ -924,20 +924,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       });
       if (!name) return;
 
-      const customCommand = vscode.workspace.getConfiguration('editless').get<string>('agentCreationCommand');
-      if (typeof customCommand === 'string' && customCommand.trim()) {
-        const command = customCommand
-          .replace(/\$\{workspaceFolder\}/g, workspaceFolder.uri.fsPath)
-          .replace(/\$\{agentName\}/g, name.trim());
-        const terminal = vscode.window.createTerminal({
-          name: `Add Agent: ${name.trim()}`,
-          cwd: workspaceFolder.uri.fsPath,
-        });
-        terminal.show();
-        terminal.sendText(command);
-        return;
-      }
-
       type SourceValue = 'create' | 'import';
       const sourceItems: { label: string; description: string; value: SourceValue }[] = [
         { label: '$(add) Create new', description: 'Create from template or CLI provider', value: 'create' },
