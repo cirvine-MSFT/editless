@@ -25,16 +25,6 @@ export interface AgentTeamConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Squad Status
-// ---------------------------------------------------------------------------
-
-/** Runtime status of a squad. */
-export type SquadStatus =
-  | 'active'          // recent activity (file changes within last hour)
-  | 'idle'            // no recent activity
-  | 'needs-attention'; // no activity for >1 day
-
-// ---------------------------------------------------------------------------
 // Parsed Content Entries
 // ---------------------------------------------------------------------------
 
@@ -85,7 +75,6 @@ export interface SessionContext {
 /** Full runtime state of a squad — what the dashboard shows per squad. */
 export interface SquadState {
   config: AgentTeamConfig;
-  status: SquadStatus;
   /** ISO timestamp of most recent file change, or null if unknown */
   lastActivity: string | null;
   /** Set if squad path is inaccessible or scanning failed */

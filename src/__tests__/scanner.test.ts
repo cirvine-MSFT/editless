@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { parseRoster, extractReferences, determineStatus, scanSquad } from '../scanner';
+import { parseRoster, extractReferences, scanSquad } from '../scanner';
 import type { AgentTeamConfig } from '../types';
 
 // ---------------------------------------------------------------------------
@@ -127,31 +127,6 @@ describe('extractReferences', () => {
 });
 
 // ---------------------------------------------------------------------------
-// determineStatus
-// ---------------------------------------------------------------------------
-
-describe('determineStatus', () => {
-  it('returns active for recent activity (< 1 hour)', () => {
-    const recent = new Date(Date.now() - 10 * 60 * 1000); // 10 min ago
-    expect(determineStatus(recent)).toBe('active');
-  });
-
-  it('returns needs-attention for old activity (> 1 day)', () => {
-    const old = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000); // 2 days ago
-    expect(determineStatus(old)).toBe('needs-attention');
-  });
-
-  it('returns idle for activity between 1 hour and 1 day', () => {
-    const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000);
-    expect(determineStatus(fiveHoursAgo)).toBe('idle');
-  });
-
-  it('returns needs-attention when lastActivity is null', () => {
-    expect(determineStatus(null)).toBe('needs-attention');
-  });
-});
-
-// ---------------------------------------------------------------------------
 // scanSquad (integration)
 // ---------------------------------------------------------------------------
 
@@ -169,7 +144,6 @@ describe('scanSquad', () => {
 
   it('returns error state when neither .squad/ nor .ai-team/ exists', () => {
     const state = scanSquad(makeConfig());
-    expect(state.status).toBe('idle');
     expect(state.error).toContain('.squad/ (or .ai-team/) directory not found');
     expect(state.roster).toEqual([]);
   });
