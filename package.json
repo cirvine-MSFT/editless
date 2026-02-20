@@ -381,24 +381,7 @@
           "scope": "resource",
           "order": 1
         },
-        "editless.discoveryDir": {
-          "type": "string",
-          "default": "",
-          "description": "⚠️ Deprecated — discovery now uses workspace folders. Directory to scan for squad projects.",
-          "markdownDescription": "⚠️ **Deprecated** — discovery now uses workspace folders automatically. This setting is no longer used.\n\n_Was: Directory to scan for squad projects._",
-          "scope": "resource",
-          "order": 2
-        },
-        "editless.discovery.scanPaths": {
-          "type": "array",
-          "default": [],
-          "description": "⚠️ Deprecated — discovery now uses workspace folders. Additional directories to scan for agents and squads.",
-          "markdownDescription": "⚠️ **Deprecated** — discovery now uses workspace folders automatically. This setting is no longer used.\n\n_Was: Additional directories to scan for agents and squads on launch and config change._",
-          "items": {
-            "type": "string"
-          }
-        },
-        "editless.scanDebounceMs": {
+        "editless.scanDebounceMs":{
           "type": "number",
           "default": 500,
           "description": "Debounce interval in milliseconds for file system scanning",

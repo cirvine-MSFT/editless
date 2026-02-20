@@ -332,8 +332,6 @@ vi.mock('../squad-utils', () => ({
 }));
 
 vi.mock('../discovery', () => ({
-  registerDiscoveryCommand: vi.fn(() => ({ dispose: vi.fn() })),
-  checkDiscoveryOnStartup: vi.fn(),
   autoRegisterWorkspaceSquads: vi.fn(),
   discoverAgentTeams: mockDiscoverAgentTeams,
 }));

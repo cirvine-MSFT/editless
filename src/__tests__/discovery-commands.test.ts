@@ -8,36 +8,16 @@ import type { AgentTeamConfig } from '../types';
 const {
   mockShowInformationMessage,
   mockShowQuickPick,
-  mockShowOpenDialog,
-  mockRegisterCommand,
-  mockGetConfiguration,
-  mockAutoRegisterWorkspaceSquads,
-  mockDiscoverAgentTeams,
-  mockDiscoverAgentTeamsInMultiplePaths,
 } = vi.hoisted(() => ({
   mockShowInformationMessage: vi.fn(),
   mockShowQuickPick: vi.fn(),
-  mockShowOpenDialog: vi.fn(),
-  mockRegisterCommand: vi.fn<(id: string, handler: Function) => { dispose: () => void }>(),
-  mockGetConfiguration: vi.fn(),
-  mockAutoRegisterWorkspaceSquads: vi.fn(),
-  mockDiscoverAgentTeams: vi.fn().mockReturnValue([]),
-  mockDiscoverAgentTeamsInMultiplePaths: vi.fn().mockReturnValue([]),
 }));
 
-const commandHandlers = new Map<string, Function>();
-
 vi.mock('vscode', () => {
-  mockRegisterCommand.mockImplementation((id: string, handler: Function) => {
-    commandHandlers.set(id, handler);
-    return { dispose: vi.fn() };
-  });
-
   return {
     window: {
       showInformationMessage: mockShowInformationMessage,
       showQuickPick: mockShowQuickPick,
-      showOpenDialog: mockShowOpenDialog,
     },
     workspace: {
       getConfiguration: (section?: string) => {
@@ -49,13 +29,9 @@ vi.mock('vscode', () => {
             },
           };
         }
-        const mock = mockGetConfiguration(section);
-        return mock || { get: vi.fn() };
+        return { get: vi.fn() };
       },
       workspaceFolders: [],
-    },
-    commands: {
-      registerCommand: mockRegisterCommand,
     },
   };
 });
@@ -65,16 +41,9 @@ vi.mock('../team-dir', () => ({
 }));
 
 // We import the module under test AFTER mocks are set up.
-// For checkDiscoveryOnStartup we need to partially mock discovery.ts itself
-// so autoRegisterWorkspaceSquads and discoverAgentTeamsInMultiplePaths can be
-// controlled independently. We do this by re-exporting the real functions
-// but spying on the helpers.
 
 import {
   promptAndAddSquads,
-  registerDiscoveryCommand,
-  checkDiscoveryOnStartup,
-  discoverAgentTeams,
 } from '../discovery';
 import type { EditlessRegistry } from '../registry';
 
@@ -105,30 +74,8 @@ function makeRegistry(squads: AgentTeamConfig[] = []): EditlessRegistry {
   } as unknown as EditlessRegistry;
 }
 
-function makeContext() {
-  return { subscriptions: [] } as unknown as import('vscode').ExtensionContext;
-}
-
-function getHandler(id: string): Function {
-  const handler = commandHandlers.get(id);
-  if (!handler) throw new Error(`Command handler "${id}" not registered`);
-  return handler;
-}
-
-function makeConfig(discoveryDir: string = '', scanPaths: string[] = []) {
-  mockGetConfiguration.mockReturnValue({
-    get: vi.fn((key: string, defaultValue?: unknown) => {
-      if (key === 'discoveryDir') return discoveryDir;
-      if (key === 'discovery.scanPaths') return scanPaths;
-      return defaultValue;
-    }),
-  });
-}
-
 beforeEach(() => {
   vi.clearAllMocks();
-  commandHandlers.clear();
-  makeConfig();
 });
 
 // ---------------------------------------------------------------------------
@@ -233,178 +180,5 @@ describe('promptAndAddSquads', () => {
 
     const items = mockShowQuickPick.mock.calls[0][0];
     expect(items.every((i: { picked: boolean }) => i.picked === true)).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// registerDiscoveryCommand (editless.discoverSquads)
-// ---------------------------------------------------------------------------
-
-describe('registerDiscoveryCommand', () => {
-  it('should register editless.discoverSquads command', () => {
-    const registry = makeRegistry();
-    const ctx = makeContext();
-
-    registerDiscoveryCommand(ctx, registry);
-
-    expect(mockRegisterCommand).toHaveBeenCalledWith('editless.discoverSquads', expect.any(Function));
-  });
-
-  it('should push disposable to context subscriptions', () => {
-    const registry = makeRegistry();
-    const ctx = makeContext();
-
-    registerDiscoveryCommand(ctx, registry);
-
-    expect(ctx.subscriptions.length).toBe(1);
-  });
-
-  it('should use discoveryDir from config when set', async () => {
-    makeConfig('/custom/dir');
-    const registry = makeRegistry();
-    const ctx = makeContext();
-    registerDiscoveryCommand(ctx, registry);
-
-    await getHandler('editless.discoverSquads')();
-
-    expect(mockShowOpenDialog).not.toHaveBeenCalled();
-  });
-
-  it('should show folder picker when no discoveryDir configured', async () => {
-    makeConfig('', []);
-    mockShowOpenDialog.mockResolvedValue(undefined);
-    const registry = makeRegistry();
-    const ctx = makeContext();
-    registerDiscoveryCommand(ctx, registry);
-
-    await getHandler('editless.discoverSquads')();
-
-    expect(mockShowOpenDialog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        canSelectFolders: true,
-        canSelectFiles: false,
-        canSelectMany: false,
-      }),
-    );
-  });
-
-  it('should return early when user cancels folder picker', async () => {
-    makeConfig('');
-    mockShowOpenDialog.mockResolvedValue(undefined);
-    const registry = makeRegistry();
-    const ctx = makeContext();
-    registerDiscoveryCommand(ctx, registry);
-
-    await getHandler('editless.discoverSquads')();
-
-    expect(registry.loadSquads).not.toHaveBeenCalled();
-  });
-
-  it('should call loadSquads and discover when directory is selected', async () => {
-    makeConfig('');
-    mockShowOpenDialog.mockResolvedValue([{ fsPath: '/selected/dir' }]);
-    const registry = makeRegistry();
-    const ctx = makeContext();
-    registerDiscoveryCommand(ctx, registry);
-
-    await getHandler('editless.discoverSquads')();
-
-    // loadSquads is called twice: once to get existing, once inside discoverAgentTeams
-    expect(registry.loadSquads).toHaveBeenCalled();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// checkDiscoveryOnStartup
-// ---------------------------------------------------------------------------
-
-describe('checkDiscoveryOnStartup', () => {
-  it('should return early when no scan paths configured', () => {
-    makeConfig('', []);
-    const registry = makeRegistry();
-    const ctx = makeContext();
-
-    checkDiscoveryOnStartup(ctx, registry);
-
-    expect(mockShowInformationMessage).not.toHaveBeenCalled();
-  });
-
-  it('should return early when discoveryDir is whitespace only', () => {
-    makeConfig('   ', []);
-    const registry = makeRegistry();
-    const ctx = makeContext();
-
-    checkDiscoveryOnStartup(ctx, registry);
-
-    expect(mockShowInformationMessage).not.toHaveBeenCalled();
-  });
-
-  it('should scan discoveryDir when configured', () => {
-    makeConfig('/scan/here');
-    const registry = makeRegistry();
-    const ctx = makeContext();
-
-    checkDiscoveryOnStartup(ctx, registry);
-
-    expect(registry.loadSquads).toHaveBeenCalled();
-  });
-
-  it('should scan scanPaths when configured', () => {
-    makeConfig('', ['/path/a', '/path/b']);
-    const registry = makeRegistry();
-    const ctx = makeContext();
-
-    checkDiscoveryOnStartup(ctx, registry);
-
-    expect(registry.loadSquads).toHaveBeenCalled();
-  });
-
-  it('should not show notification when no new agents discovered', () => {
-    makeConfig('/empty/dir');
-    const registry = makeRegistry();
-    const ctx = makeContext();
-
-    checkDiscoveryOnStartup(ctx, registry);
-
-    expect(mockShowInformationMessage).not.toHaveBeenCalled();
-  });
-
-  it('should show notification when new agents are discovered', () => {
-    // To make discoverAgentTeamsInMultiplePaths return results, we need
-    // actual directories with team.md. Since we can't easily do that
-    // with the real fs calls (discovery.ts uses real fs), we test that
-    // the notification path works correctly by testing promptAndAddSquads
-    // and the message flow separately.
-    // Here we verify the "no agents found" early-return branch.
-    makeConfig('/nonexistent/path');
-    const registry = makeRegistry();
-    const ctx = makeContext();
-
-    checkDiscoveryOnStartup(ctx, registry);
-
-    // discoverAgentTeamsInMultiplePaths returns [] for non-existent paths
-    expect(mockShowInformationMessage).not.toHaveBeenCalled();
-  });
-
-  it('should combine discoveryDir and scanPaths for scanning', () => {
-    makeConfig('/dir-a', ['/dir-b', '/dir-c']);
-    const registry = makeRegistry();
-    const ctx = makeContext();
-
-    checkDiscoveryOnStartup(ctx, registry);
-
-    // Should call loadSquads since there are paths to scan
-    expect(registry.loadSquads).toHaveBeenCalled();
-  });
-
-  it('should filter out empty scan paths', () => {
-    makeConfig('', ['', '  ', '']);
-    const registry = makeRegistry();
-    const ctx = makeContext();
-
-    checkDiscoveryOnStartup(ctx, registry);
-
-    // All paths are empty/whitespace, so early return
-    expect(mockShowInformationMessage).not.toHaveBeenCalled();
   });
 });

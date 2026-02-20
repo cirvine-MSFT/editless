@@ -9,7 +9,7 @@ import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 
 
-import { registerDiscoveryCommand, autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
+import { autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
 import { discoverAll } from './unified-discovery';
 import type { DiscoveredItem } from './unified-discovery';
@@ -186,8 +186,12 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // --- Commands ----------------------------------------------------------
 
-  // Squad discovery command
-  context.subscriptions.push(registerDiscoveryCommand(context, registry));
+  // Squad discovery command — triggers unified discovery (#317)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.discoverSquads', () => {
+      refreshDiscovery();
+    }),
+  );
 
   // Discovery populates the tree — no toast notifications (#317)
 

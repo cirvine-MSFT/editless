@@ -174,38 +174,7 @@ export async function promptAndAddSquads(
   vscode.window.showInformationMessage(`Added ${selected.length} agent(s) to registry.`);
 }
 
-export function registerDiscoveryCommand(
-  context: vscode.ExtensionContext,
-  registry: EditlessRegistry,
-): vscode.Disposable {
-  const disposable = vscode.commands.registerCommand('editless.discoverSquads', async () => {
-    const config = vscode.workspace.getConfiguration('editless');
-    const discoveryDir = config.get<string>('discoveryDir', '');
 
-    let dirPath: string | undefined;
-
-    if (discoveryDir) {
-      dirPath = discoveryDir;
-    } else {
-      const uris = await vscode.window.showOpenDialog({
-        canSelectFolders: true,
-        canSelectFiles: false,
-        canSelectMany: false,
-        openLabel: 'Select directory to scan for agents',
-      });
-      dirPath = uris?.[0]?.fsPath;
-    }
-
-    if (!dirPath) { return; }
-
-    registry.loadSquads();
-    const discovered = discoverAgentTeams(dirPath, registry.loadSquads());
-    await promptAndAddSquads(discovered, registry);
-  });
-
-  context.subscriptions.push(disposable);
-  return disposable;
-}
 
 /**
  * Auto-register squads found at workspace roots.
@@ -269,35 +238,4 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
   }
 }
 
-export function checkDiscoveryOnStartup(
-  context: vscode.ExtensionContext,
-  registry: EditlessRegistry,
-): void {
-  // Auto-register workspace-root squads silently
-  autoRegisterWorkspaceSquads(registry);
 
-  const config = vscode.workspace.getConfiguration('editless');
-  const discoveryDir = config.get<string>('discoveryDir', '');
-  const scanPaths = config.get<string[]>('discovery.scanPaths', []);
-
-  const existing = registry.loadSquads();
-  const pathsToScan = [discoveryDir, ...scanPaths].filter(p => p.trim());
-
-  if (pathsToScan.length === 0) { return; }
-
-  const discovered = discoverAgentTeamsInMultiplePaths(pathsToScan, existing);
-
-  if (discovered.length === 0) { return; }
-
-  vscode.window
-    .showInformationMessage(
-      `Found ${discovered.length} new agent(s) in discovery directory. Add them?`,
-      'Add',
-      'Dismiss',
-    )
-    .then(action => {
-      if (action === 'Add') {
-        promptAndAddSquads(discovered, registry);
-      }
-    });
-}
