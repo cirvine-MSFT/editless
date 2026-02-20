@@ -279,8 +279,12 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     vscode.commands.registerCommand('editless.refresh', () => {
       discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
       treeProvider.setDiscoveredAgents(discoveredAgents);
+      autoRegisterWorkspaceSquads(registry);
+      checkDiscoveryOnStartup(context, registry);
       treeProvider.refresh();
-      output.appendLine('[refresh] Tree refreshed');
+      squadWatcher.updateSquads(registry.loadSquads());
+      statusBar.update();
+      output.appendLine('[refresh] Tree refreshed (agents + squads)');
     }),
   );
 
