@@ -4,13 +4,9 @@ import { resolveTeamDir } from './team-dir';
 import type {
   AgentTeamConfig,
   SquadState,
-  SquadStatus,
   AgentInfo,
   WorkReference,
 } from './types';
-
-const ONE_HOUR = 60 * 60 * 1000;
-const ONE_DAY = 24 * ONE_HOUR;
 
 function safeStat(p: string): fs.Stats | null {
   try {
@@ -135,13 +131,6 @@ export function extractReferences(text: string): WorkReference[] {
   return references;
 }
 
-export function determineStatus(lastActivity: Date | null): SquadStatus {
-  const now = Date.now();
-  if (lastActivity && (now - lastActivity.getTime()) < ONE_HOUR) return 'active';
-  if (!lastActivity || (now - lastActivity.getTime()) > ONE_DAY) return 'needs-attention';
-  return 'idle';
-}
-
 export function scanSquad(config: AgentTeamConfig): SquadState {
   const aiTeamDir = resolveTeamDir(config.path);
   const teamMdPath = aiTeamDir ? path.join(aiTeamDir, 'team.md') : null;
@@ -150,7 +139,6 @@ export function scanSquad(config: AgentTeamConfig): SquadState {
     if (!aiTeamDir) {
       return {
         config,
-        status: 'idle',
         lastActivity: null,
         error: `.squad/ (or .ai-team/) directory not found at ${config.path}`,
         roster: [],
@@ -174,11 +162,8 @@ export function scanSquad(config: AgentTeamConfig): SquadState {
       if (!lastMtime || f.mtime > lastMtime) lastMtime = f.mtime;
     }
 
-    const status = determineStatus(lastMtime);
-
     return {
       config,
-      status,
       lastActivity: lastMtime?.toISOString() || null,
       roster,
       charter,
@@ -186,7 +171,6 @@ export function scanSquad(config: AgentTeamConfig): SquadState {
   } catch (err) {
     return {
       config,
-      status: 'idle',
       lastActivity: null,
       error: `Scan failed: ${err instanceof Error ? err.message : String(err)}`,
       roster: [],

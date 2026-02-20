@@ -199,9 +199,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const descParts: string[] = [cfg.universe];
 
     const cached = this._cache.get(cfg.id);
-    if (cached) {
-      descParts.push(cached.status);
-    }
     if (this.terminalManager) {
       const count = this.terminalManager.getTerminalsForSquad(cfg.id).length;
       if (count > 0) {
@@ -222,11 +219,8 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       tooltipLines.push(`Squad Version: ${localVersion}`);
     }
 
-    if (cached) {
-      tooltipLines.push(`Status: ${cached.status}`);
-      if (cached.lastActivity) {
-        tooltipLines.push(`Last activity: ${cached.lastActivity}`);
-      }
+    if (cached?.lastActivity) {
+      tooltipLines.push(`Last activity: ${cached.lastActivity}`);
     }
     item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
     item.iconPath = new vscode.ThemeIcon('organization');
