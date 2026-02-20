@@ -1,10 +1,7 @@
 import * as vscode from 'vscode';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent } from './session-context';
-
-function getLaunchCommand(): string {
-  return vscode.workspace.getConfiguration('editless.cli').get<string>('launchCommand', 'copilot --agent $(agent)');
-}
+import { getLaunchCommand } from './cli-settings';
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata

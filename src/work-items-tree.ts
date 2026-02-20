@@ -1,9 +1,6 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
 import { GitHubIssue, fetchAssignedIssues, isGhAvailable } from './github-client';
 import type { AdoWorkItem } from './ado-client';
-import { TEAM_DIR_NAMES } from './team-dir';
 
 interface IssueFilter {
   includeLabels?: string[];

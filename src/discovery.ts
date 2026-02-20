@@ -4,12 +4,9 @@ import * as path from 'path';
 import { AgentTeamConfig } from './types';
 import { EditlessRegistry } from './registry';
 import { resolveTeamMd, resolveTeamDir } from './team-dir';
+import { getLaunchCommand } from './cli-settings';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
-
-function getLaunchCommand(): string {
-  return vscode.workspace.getConfiguration('editless.cli').get<string>('launchCommand', 'copilot --agent $(agent)');
-}
 
 function normalizeSquadName(name: string, fallback: string): string {
   const trimmed = name.trim();
