@@ -27,6 +27,8 @@
 
 📌 **Team update (2026-02-19):** Terminal Integration audit merged — Research findings synthesized into unified plan. Jaguar's API surface analysis and stable/proposed API categorization was critical for distinguishing which patterns to build on (TerminalOptions, shell integration) vs defer (pseudoterminals). Key confidence points: sendText race fix, env var injection for session metadata, shell execution APIs. Synthesis document filed in decisions.md. — decided by Rick
 
+📌 **Team update (2026-02-21):** Pseudoterminal spike completed — Full prototype implemented with 30 passing tests and comprehensive spike documentation. Skill extraction performed for future integration planning. Branch: squad/321-pseudoterminal-spike. Ready for team sync on integration roadmap. — completed by Jaguar
+
 📌 **Team update (2026-02-19):** Terminal integration research session complete — 4-phase architecture plan and 27-item priority matrix. Session log at .ai-team/log/2026-02-19-terminal-integration-research.md. — documented by Scribe
 
 ## Deep Dive: Session Rename & Resume (2026-02-19)

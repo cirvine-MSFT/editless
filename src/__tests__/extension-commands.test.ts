@@ -33,6 +33,7 @@ const {
   mockGetHiddenIds,
   mockTreeRefresh,
   mockTreeSetDiscoveredAgents,
+  mockTreeSetDiscoveredItems,
   mockWorkItemsRefresh,
   mockPRsRefresh,
   mockOpenExternal,
@@ -57,6 +58,7 @@ const {
   mockAddSquads,
   mockDiscoverAllAgents,
   mockDiscoverAgentTeams,
+  mockDiscoverAll,
   mockOnDidCloseTerminal,
   mockResolveTeamDir,
   MockEditlessTreeItem,
@@ -108,6 +110,7 @@ const {
     mockGetHiddenIds: vi.fn().mockReturnValue([]),
     mockTreeRefresh: vi.fn(),
     mockTreeSetDiscoveredAgents: vi.fn(),
+    mockTreeSetDiscoveredItems: vi.fn(),
     mockWorkItemsRefresh: vi.fn(),
     mockPRsRefresh: vi.fn(),
     mockOpenExternal: vi.fn(),
@@ -132,6 +135,7 @@ const {
     mockAddSquads: vi.fn(),
     mockDiscoverAllAgents: vi.fn().mockReturnValue([]),
     mockDiscoverAgentTeams: vi.fn().mockReturnValue([]),
+    mockDiscoverAll: vi.fn().mockReturnValue([]),
     mockOnDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
     mockResolveTeamDir: vi.fn(),
     MockEditlessTreeItem,
@@ -250,6 +254,7 @@ vi.mock('../editless-tree', () => ({
     return {
       refresh: mockTreeRefresh,
       setDiscoveredAgents: mockTreeSetDiscoveredAgents,
+      setDiscoveredItems: mockTreeSetDiscoveredItems,
       invalidate: vi.fn(),
       findTerminalItem: vi.fn(),
     };
@@ -326,14 +331,16 @@ vi.mock('../squad-utils', () => ({
 }));
 
 vi.mock('../discovery', () => ({
-  registerDiscoveryCommand: vi.fn(() => ({ dispose: vi.fn() })),
-  checkDiscoveryOnStartup: vi.fn(),
   autoRegisterWorkspaceSquads: vi.fn(),
   discoverAgentTeams: mockDiscoverAgentTeams,
 }));
 
 vi.mock('../agent-discovery', () => ({
   discoverAllAgents: mockDiscoverAllAgents,
+}));
+
+vi.mock('../unified-discovery', () => ({
+  discoverAll: mockDiscoverAll,
 }));
 
 vi.mock('../watcher', () => ({
@@ -2009,7 +2016,9 @@ describe('editless.promoteDiscoveredAgent', () => {
     getHandler('editless.promoteDiscoveredAgent')(item);
 
     expect(mockTreeRefresh).toHaveBeenCalled();
-    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalledWith([]);
+    // Unified flow re-discovers instead of manually filtering
+    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
+    expect(mockTreeSetDiscoveredItems).toHaveBeenCalled();
   });
 
   it('should show confirmation message', () => {
@@ -2045,7 +2054,7 @@ describe('editless.promoteDiscoveredAgent', () => {
     expect(mockAddSquads).not.toHaveBeenCalled();
   });
 
-  it('should remove promoted agent from discovered list', () => {
+  it('should re-discover after promotion to exclude promoted item', () => {
     mockDiscoverAllAgents.mockReturnValue([
       testAgent,
       { id: 'other-agent', name: 'Other', filePath: '/workspace/other.agent.md', source: 'workspace' as const },
@@ -2065,8 +2074,38 @@ describe('editless.promoteDiscoveredAgent', () => {
 
     getHandler('editless.promoteDiscoveredAgent')(item);
 
-    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalledWith([
-      expect.objectContaining({ id: 'other-agent' }),
+    // Unified flow re-discovers (calls both setDiscoveredAgents and setDiscoveredItems)
+    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
+    expect(mockTreeSetDiscoveredItems).toHaveBeenCalled();
+    expect(mockTreeRefresh).toHaveBeenCalled();
+  });
+
+  it('should promote a discovered squad with squad-specific properties', () => {
+    vi.clearAllMocks();
+    commandHandlers.clear();
+    mockLoadSquads.mockReturnValue([]);
+    mockGetHiddenIds.mockReturnValue([]);
+    mockDiscoverAllAgents.mockReturnValue([]);
+    mockDiscoverAll.mockReturnValue([
+      { id: 'my-squad', name: 'My Squad', type: 'squad', source: 'workspace', path: '/workspace/my-squad', description: 'A squad', universe: 'acme-corp' },
+    ]);
+    activate(makeContext());
+
+    const item = new MockEditlessTreeItem('My Squad', 'discovered-squad', 0);
+    item.id = 'discovered:my-squad';
+
+    getHandler('editless.promoteDiscoveredAgent')(item);
+
+    expect(mockAddSquads).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'my-squad',
+        name: 'My Squad',
+        path: '/workspace/my-squad',
+        icon: '🔷',
+        universe: 'acme-corp',
+        description: 'A squad',
+        launchCommand: 'copilot --agent squad',
+      }),
     ]);
   });
 

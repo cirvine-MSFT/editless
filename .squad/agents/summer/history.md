@@ -30,6 +30,10 @@
 📌 **Team update (2026-02-16):** Worktree enforcement reinforced to hard constraint — Git checkout violations (agent on #213 checked out branches on the main clone instead of using worktrees) have happened repeatedly despite existing documentation. The rule is now a non-negotiable constraint enforced through code review: the main clone (C:\Users\cirvine\code\work\editless) is PULL-ONLY, all feature branch work must use git worktrees. Violations must be caught and rejected in PR review. — reinforced by Casey Irvine
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 
+📌 **UX design: Unified discovery flow for agents & squads (2026-02-21)** — Designed consolidated discovery UX replacing toast-based prompts. Key insight: agents are discovered inline from workspace (.agent.md files), squads from scan dirs—two different flows. Proposal: unified "Discovered" section in tree showing both agent + squad items, with context menu actions (Add to Registry, Hide). Visual distinction via icons (hubot = agent, organization = squad). Persistent "Hidden" section to restore items. Squares with #317 (refresh discovery) and #318 (add from existing). Design doc: `.squad/decisions/inbox/summer-unified-discovery-ux.md`. — designed by Summer
+
+📌 **Team update (2026-02-20):** Session state model simplified to 3 states with new UI: active (loading~spin), inactive (circle-outline), orphaned (eye-closed). Descriptions: active/inactive show relative time; orphaned shows 'previous session'. UX is now clearer (no idle/stale distinction). — decided by Morty
+
 📌 **Team update (2026-02-20):** Session state model simplified to 3 states with new UI: active (loading~spin), inactive (circle-outline), orphaned (eye-closed). Descriptions: active/inactive show relative time; orphaned shows 'previous session'. UX is now clearer (no idle/stale distinction). — decided by Morty
 
 

@@ -9,8 +9,10 @@ import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 
 
-import { registerDiscoveryCommand, checkDiscoveryOnStartup, autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
+import { autoRegisterWorkspaceSquads, discoverAgentTeams } from './discovery';
 import { discoverAllAgents } from './agent-discovery';
+import { discoverAll } from './unified-discovery';
+import type { DiscoveredItem } from './unified-discovery';
 import type { AgentTeamConfig } from './types';
 import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
@@ -118,24 +120,24 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
-  // --- Agent discovery — workspace .agent.md files -------------------------
+  // --- Unified discovery — agents + squads in one pass (#317, #318) ----------
   let discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
   treeProvider.setDiscoveredAgents(discoveredAgents);
 
+  let discoveredItems = discoverAll(vscode.workspace.workspaceFolders ?? [], registry);
+  treeProvider.setDiscoveredItems(discoveredItems);
+
+  /** Re-run unified discovery and update tree. */
+  function refreshDiscovery(): void {
+    discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
+    treeProvider.setDiscoveredAgents(discoveredAgents);
+    discoveredItems = discoverAll(vscode.workspace.workspaceFolders ?? [], registry);
+    treeProvider.setDiscoveredItems(discoveredItems);
+  }
+
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
-      discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
-      treeProvider.setDiscoveredAgents(discoveredAgents);
-    }),
-  );
-
-  // --- Config change listener — re-scan when discovery.scanPaths changes ----
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('editless.discovery.scanPaths') || 
-          e.affectsConfiguration('editless.discoveryDir')) {
-        checkDiscoveryOnStartup(context, registry);
-      }
+      refreshDiscovery();
     }),
   );
 
@@ -184,11 +186,14 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // --- Commands ----------------------------------------------------------
 
-  // Squad discovery command
-  context.subscriptions.push(registerDiscoveryCommand(context, registry));
+  // Squad discovery command — triggers unified discovery (#317)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.discoverSquads', () => {
+      refreshDiscovery();
+    }),
+  );
 
-  // Check for new squads on startup
-  checkDiscoveryOnStartup(context, registry);
+  // Discovery populates the tree — no toast notifications (#317)
 
   // Rename squad (context menu)
   context.subscriptions.push(
@@ -277,8 +282,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Refresh
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.refresh', () => {
-      discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
-      treeProvider.setDiscoveredAgents(discoveredAgents);
+      refreshDiscovery();
       treeProvider.refresh();
       output.appendLine('[refresh] Tree refreshed');
     }),
@@ -464,12 +468,27 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
-  // Promote discovered agent to registry (#250)
+  // Promote discovered item to registry (#250, #317)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.promoteDiscoveredAgent', (item?: EditlessTreeItem) => {
       if (!item?.id) return;
-      const agentId = item.id.replace(/^discovered:/, '');
-      const agent = discoveredAgents.find(a => a.id === agentId);
+      const itemId = item.id.replace(/^discovered:/, '');
+
+      // Check unified discovered items first
+      const disc = discoveredItems.find(d => d.id === itemId);
+      if (disc) {
+        const config: AgentTeamConfig = disc.type === 'squad'
+          ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description, launchCommand: buildDefaultLaunchCommand() }
+          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description, launchCommand: buildDefaultLaunchCommand() };
+        registry.addSquads([config]);
+        refreshDiscovery();
+        treeProvider.refresh();
+        vscode.window.showInformationMessage(`Added "${disc.name}" to registry.`);
+        return;
+      }
+
+      // Fallback to legacy discovered agents
+      const agent = discoveredAgents.find(a => a.id === itemId);
       if (!agent) return;
 
       const config: AgentTeamConfig = {
@@ -483,8 +502,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       };
 
       registry.addSquads([config]);
-      discoveredAgents = discoveredAgents.filter(a => a.id !== agent.id);
-      treeProvider.setDiscoveredAgents(discoveredAgents);
+      refreshDiscovery();
       treeProvider.refresh();
       vscode.window.showInformationMessage(`Added "${agent.name}" to registry.`);
     }),
@@ -503,6 +521,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         const squad = registry.getSquad(id);
         if (squad) {
           return { label: `${squad.icon} ${squad.name}`, description: squad.universe, id };
+        }
+        const disc = discoveredItems.find(d => d.id === id);
+        if (disc) {
+          return { label: disc.type === 'squad' ? `🔷 ${disc.name}` : disc.name, description: disc.source, id };
         }
         const agent = discoveredAgents.find(a => a.id === id);
         if (agent) {
@@ -961,8 +983,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
         const doc = await vscode.workspace.openTextDocument(destUri);
         await vscode.window.showTextDocument(doc);
-        discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
-        treeProvider.setDiscoveredAgents(discoveredAgents);
+        refreshDiscovery();
         return;
       }
 
@@ -1031,8 +1052,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const doc = await vscode.workspace.openTextDocument(filePath);
       await vscode.window.showTextDocument(doc);
 
-      discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
-      treeProvider.setDiscoveredAgents(discoveredAgents);
+      refreshDiscovery();
     }),
   );
 
