@@ -105,10 +105,10 @@ describe('copilot-cli-builder', () => {
       );
     });
 
-    it('deduplicates typed flags that are already set (typed wins)', () => {
+    it('deduplicates typed flags that are already set (typed wins, drops value)', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const cmd = buildCopilotCommand({ agent: 'squad', extraArgs: ['--agent', 'other'] });
-      expect(cmd).toBe('copilot --agent squad other');
+      expect(cmd).toBe('copilot --agent squad');
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('--agent'),
       );
@@ -129,7 +129,8 @@ describe('copilot-cli-builder', () => {
 
     it('warns on console when dedup occurs', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      buildCopilotCommand({ agent: 'squad', extraArgs: ['--agent', 'other'] });
+      const cmd = buildCopilotCommand({ agent: 'squad', extraArgs: ['--agent', 'other'] });
+      expect(cmd).toBe('copilot --agent squad');
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('--agent'),
@@ -161,6 +162,90 @@ describe('copilot-cli-builder', () => {
       const cmd = buildDefaultLaunchCommand();
       expect(cmd).not.toContain('$(');
       expect(cmd).not.toContain('${');
+    });
+  });
+
+  describe('shell quoting', () => {
+    it('quotes addDirs paths that contain spaces', () => {
+      const cmd = buildCopilotCommand({ addDirs: ['C:\\Program Files\\MyApp'] });
+      expect(cmd).toBe('copilot --add-dir "C:\\Program Files\\MyApp"');
+    });
+
+    it('does not quote addDirs paths without spaces', () => {
+      const cmd = buildCopilotCommand({ addDirs: ['/simple/path'] });
+      expect(cmd).toBe('copilot --add-dir /simple/path');
+    });
+
+    it('quotes extraArgs values that contain spaces', () => {
+      const cmd = buildCopilotCommand({ extraArgs: ['some value with spaces'] });
+      expect(cmd).toBe('copilot "some value with spaces"');
+    });
+
+    it('shell metacharacters in values with spaces get quoted (documented behavior)', () => {
+      const cmd = buildCopilotCommand({ extraArgs: ['--flag', 'val;rm -rf /'] });
+      expect(cmd).toBe('copilot --flag "val;rm -rf /"');
+    });
+  });
+
+  describe('dedup edge cases', () => {
+    it('drops both flag AND its dangling value when deduplicating', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const cmd = buildCopilotCommand({
+        agent: 'squad',
+        extraArgs: ['--agent', 'other', '--yolo'],
+      });
+      expect(cmd).toBe('copilot --agent squad --yolo');
+      warnSpy.mockRestore();
+    });
+
+    it('deduplicates --flag=value syntax', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const cmd = buildCopilotCommand({
+        agent: 'squad',
+        extraArgs: ['--agent=other'],
+      });
+      expect(cmd).toBe('copilot --agent squad');
+      warnSpy.mockRestore();
+    });
+
+    it('does not skip the next arg when dedup flag is followed by another flag', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const cmd = buildCopilotCommand({
+        agent: 'squad',
+        extraArgs: ['--agent', '--yolo'],
+      });
+      expect(cmd).toBe('copilot --agent squad --yolo');
+      warnSpy.mockRestore();
+    });
+  });
+
+  describe('defensive filtering', () => {
+    it('filters null/undefined values in extraArgs without crashing', () => {
+      const cmd = buildCopilotCommand({ extraArgs: [undefined as any, null as any, '--yolo'] });
+      expect(cmd).toBe('copilot --yolo');
+    });
+
+    it('filters empty strings in extraArgs', () => {
+      const cmd = buildCopilotCommand({ extraArgs: ['', '--yolo'] });
+      expect(cmd).toBe('copilot --yolo');
+    });
+  });
+
+  describe('legacy config stripping', () => {
+    it('strips --agent $(agent) from configured command', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return 'copilot --agent $(agent)';
+        return def;
+      });
+      expect(getCliCommand()).toBe('copilot');
+    });
+
+    it('strips --agent $(agent) mid-string from configured command', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return 'copilot --agent $(agent) --verbose';
+        return def;
+      });
+      expect(getCliCommand()).toBe('copilot --verbose');
     });
   });
 });

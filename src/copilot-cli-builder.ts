@@ -7,6 +7,11 @@ import * as vscode from 'vscode';
 // Replaces $(agent) variable interpolation with direct string construction.
 // ---------------------------------------------------------------------------
 
+/** Quote an argument if it contains spaces, so shell parsing won't split it. */
+function shellQuote(arg: string): string {
+  return arg.includes(' ') ? `"${arg}"` : arg;
+}
+
 export interface CopilotCommandOptions {
   /** Agent type to launch (e.g. "squad", "my-agent"). Maps to --agent flag. */
   agent?: string;
@@ -23,9 +28,10 @@ export interface CopilotCommandOptions {
  * Defaults to `"copilot"` if not configured.
  */
 export function getCliCommand(): string {
-  return vscode.workspace
+  const raw = vscode.workspace
     .getConfiguration('editless.cli')
     .get<string>('command', 'copilot');
+  return raw.replace(/\s*--agent\s+\$\(agent\)\s*/g, ' ').trim();
 }
 
 /**
@@ -47,24 +53,30 @@ export function buildCopilotCommand(options: CopilotCommandOptions = {}): string
   }
   if (options.addDirs) {
     for (const dir of options.addDirs) {
-      parts.push('--add-dir', dir);
+      parts.push('--add-dir', shellQuote(dir));
     }
   }
 
   // Append freeform extraArgs with intelligent dedup against typed flags
   if (options.extraArgs?.length) {
+    const safeArgs = options.extraArgs.filter((a): a is string => typeof a === 'string' && a.length > 0);
     const TYPED_FLAGS = new Set(['--agent', '--resume', '--add-dir']);
     const activeTypedFlags = new Set<string>();
     if (options.agent) { activeTypedFlags.add('--agent'); }
     if (options.resume) { activeTypedFlags.add('--resume'); }
     if (options.addDirs) { activeTypedFlags.add('--add-dir'); }
 
-    for (const arg of options.extraArgs) {
+    for (let i = 0; i < safeArgs.length; i++) {
+      const arg = safeArgs[i];
       const flag = arg.startsWith('--') ? arg.split(/[= ]/)[0] : null;
       if (flag && TYPED_FLAGS.has(flag) && activeTypedFlags.has(flag)) {
         console.warn(`[editless] extraArgs flag "${flag}" dropped — already set by typed option`);
+        // Skip the next arg too if it's a dangling value (not a flag)
+        if (i + 1 < safeArgs.length && !safeArgs[i + 1].startsWith('--')) {
+          i++;
+        }
       } else {
-        parts.push(arg);
+        parts.push(arg.startsWith('--') ? arg : shellQuote(arg));
       }
     }
   }
