@@ -69,7 +69,6 @@ vi.mock('../github-client', () => ({
 vi.mock('../scanner', () => ({
   scanSquad: vi.fn((cfg: unknown) => ({
     config: cfg,
-    status: 'idle',
     lastActivity: null,
     roster: [{ name: 'Morty', role: 'Dev' }],
     charter: '',
