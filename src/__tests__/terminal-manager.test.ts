@@ -35,11 +35,10 @@ vi.mock('vscode', () => ({
     get terminals() { return mockTerminals; },
   },
   workspace: {
-    getConfiguration: (section?: string) => ({
+    getConfiguration: () => ({
       get: (key: string, defaultValue?: unknown) => {
-        if (section === 'editless.cli' && key === 'launchCommand') {
-          return 'copilot --agent $(agent)';
-        }
+        if (key === 'command') return 'copilot';
+        if (key === 'defaultAgent') return 'squad';
         return defaultValue;
       },
     }),
