@@ -20,6 +20,8 @@ export interface CopilotCommandOptions {
   addDirs?: string[];
   /** Skip tool confirmation prompts. Maps to --allow-all-tools flag. */
   allowAllTools?: boolean;
+  /** Arbitrary additional CLI arguments. Appended after typed flags. */
+  extraArgs?: string[];
 }
 
 /**
@@ -62,6 +64,30 @@ export function buildCopilotCommand(options: CopilotCommandOptions = {}): string
   }
   if (options.allowAllTools) {
     parts.push('--allow-all-tools');
+  }
+
+  // Append freeform extraArgs with intelligent dedup against typed flags
+  if (options.extraArgs?.length) {
+    const TYPED_FLAGS = new Set([
+      '--agent', '--resume', '--continue', '--model', '--add-dir', '--allow-all-tools',
+    ]);
+    // Collect flags that were actually set by typed options
+    const activeTypedFlags = new Set<string>();
+    if (options.agent) { activeTypedFlags.add('--agent'); }
+    if (options.resume) { activeTypedFlags.add('--resume'); }
+    if (options.continue) { activeTypedFlags.add('--continue'); }
+    if (options.model) { activeTypedFlags.add('--model'); }
+    if (options.addDirs) { activeTypedFlags.add('--add-dir'); }
+    if (options.allowAllTools) { activeTypedFlags.add('--allow-all-tools'); }
+
+    for (const arg of options.extraArgs) {
+      const flag = arg.startsWith('--') ? arg.split(/[= ]/)[0] : null;
+      if (flag && TYPED_FLAGS.has(flag) && activeTypedFlags.has(flag)) {
+        console.warn(`[editless] extraArgs flag "${flag}" dropped — already set by typed option`);
+      } else {
+        parts.push(arg);
+      }
+    }
   }
 
   return parts.join(' ');

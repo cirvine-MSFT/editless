@@ -113,6 +113,55 @@ describe('copilot-cli-builder', () => {
     });
   });
 
+  describe('extraArgs', () => {
+    it('passes through unknown flags', () => {
+      expect(buildCopilotCommand({ extraArgs: ['--yolo', '--verbose'] })).toBe(
+        'copilot --yolo --verbose',
+      );
+    });
+
+    it('passes through non-flag arguments', () => {
+      expect(buildCopilotCommand({ extraArgs: ['some-value'] })).toBe(
+        'copilot some-value',
+      );
+    });
+
+    it('deduplicates typed flags that are already set (typed wins)', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const cmd = buildCopilotCommand({ agent: 'squad', extraArgs: ['--agent', 'other'] });
+      expect(cmd).toBe('copilot --agent squad other');
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('--agent'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('lets typed flags through extraArgs when not set in typed options', () => {
+      expect(buildCopilotCommand({ extraArgs: ['--model', 'gpt-5'] })).toBe(
+        'copilot --model gpt-5',
+      );
+    });
+
+    it('does not affect output when empty', () => {
+      expect(buildCopilotCommand({ extraArgs: [] })).toBe('copilot');
+    });
+
+    it('warns on console when dedup occurs', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      buildCopilotCommand({ allowAllTools: true, extraArgs: ['--allow-all-tools'] });
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('--allow-all-tools'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('appends after typed flags', () => {
+      const cmd = buildCopilotCommand({ agent: 'squad', extraArgs: ['--yolo'] });
+      expect(cmd).toBe('copilot --agent squad --yolo');
+    });
+  });
+
   describe('buildDefaultLaunchCommand', () => {
     it('builds command with default agent type', () => {
       expect(buildDefaultLaunchCommand()).toBe('copilot --agent squad');
