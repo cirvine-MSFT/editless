@@ -9,14 +9,15 @@ import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
 import type { AgentTeamConfig, SquadState, AgentInfo, SessionContext } from './types';
 import type { DiscoveredAgent } from './agent-discovery';
+import type { DiscoveredItem } from './unified-discovery';
 import type { AgentVisibilityManager } from './visibility';
 
 // ---------------------------------------------------------------------------
 // Tree item types
 // ---------------------------------------------------------------------------
 
-export type TreeItemType = 'squad' | 'category' | 'agent' | 'terminal' | 'discovered-agent' | 'orphanedSession';
-type CategoryKind = 'roster';
+export type TreeItemType = 'squad' | 'category' | 'agent' | 'terminal' | 'discovered-agent' | 'discovered-squad' | 'orphanedSession';
+type CategoryKind = 'roster' | 'discovered' | 'hidden';
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
 function normalizeSquadDisplayName(name: string, fallback: string): string {
@@ -75,6 +76,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private _cache = new Map<string, SquadState>();
   private _discoveredAgents: DiscoveredAgent[] = [];
+  private _discoveredItems: DiscoveredItem[] = [];
 
   private readonly _terminalSub: vscode.Disposable | undefined;
   private readonly _labelSub: vscode.Disposable | undefined;
@@ -107,6 +109,11 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   setDiscoveredAgents(agents: DiscoveredAgent[]): void {
     this._discoveredAgents = agents;
+    this._onDidChangeTreeData.fire();
+  }
+
+  setDiscoveredItems(items: DiscoveredItem[]): void {
+    this._discoveredItems = items;
     this._onDidChangeTreeData.fire();
   }
 
@@ -159,17 +166,38 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       .filter(cfg => !this._visibility?.isHidden(cfg.id))
       .map(cfg => this.buildSquadItem(cfg));
 
-    const visibleAgents = this._discoveredAgents.filter(a => !this._visibility?.isHidden(a.id));
-    if (visibleAgents.length > 0) {
+    // Unified "Discovered" section — agents + squads from unified discovery
+    const visibleItems = this._discoveredItems.filter(i => !this._visibility?.isHidden(i.id));
+
+    // Fallback: also include legacy discovered agents not already in unified items
+    const unifiedIds = new Set(visibleItems.map(i => i.id));
+    const legacyAgents = this._discoveredAgents
+      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id));
+
+    const totalDiscovered = visibleItems.length + legacyAgents.length;
+
+    if (totalDiscovered > 0) {
       const header = new EditlessTreeItem(
-        'Discovered Agents',
+        'Discovered',
         'category',
-        vscode.TreeItemCollapsibleState.None,
+        vscode.TreeItemCollapsibleState.Expanded,
+        undefined,
+        'discovered',
       );
+      header.description = `${totalDiscovered} new`;
       header.iconPath = new vscode.ThemeIcon('search');
       items.push(header);
 
-      for (const agent of visibleAgents) {
+      // Squads first, then agents (per Summer's UX spec)
+      const discoveredSquads = visibleItems.filter(i => i.type === 'squad');
+      const discoveredAgents = visibleItems.filter(i => i.type === 'agent');
+      for (const squad of discoveredSquads) {
+        items.push(this.buildDiscoveredSquadItem(squad));
+      }
+      for (const agent of discoveredAgents) {
+        items.push(this.buildDiscoveredItemAgent(agent));
+      }
+      for (const agent of legacyAgents) {
         items.push(this.buildDiscoveredAgentItem(agent));
       }
     }
@@ -312,6 +340,9 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       case 'roster':
         children = state.roster.map(a => this.buildAgentItem(a, squadId));
         break;
+      default:
+        children = [];
+        break;
     }
 
     if (parentItem) {
@@ -357,6 +388,42 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         arguments: [uri],
       };
     }
+    return item;
+  }
+
+  private buildDiscoveredItemAgent(disc: DiscoveredItem): EditlessTreeItem {
+    const item = new EditlessTreeItem(disc.name, 'discovered-agent');
+    item.id = `discovered:${disc.id}`;
+    item.description = disc.description ?? disc.source;
+    item.iconPath = new vscode.ThemeIcon('hubot');
+    item.tooltip = new vscode.MarkdownString(
+      [`**🤖 ${disc.name}**`, `Source: ${disc.source}`, `File: \`${disc.path}\``].join('\n\n'),
+    );
+    const uri = vscode.Uri.file(disc.path);
+    if (disc.path.endsWith('.md')) {
+      item.command = {
+        command: 'editless.openFilePreview',
+        title: 'Preview Agent File',
+        arguments: [uri],
+      };
+    } else {
+      item.command = {
+        command: 'vscode.open',
+        title: 'Open Agent File',
+        arguments: [uri],
+      };
+    }
+    return item;
+  }
+
+  private buildDiscoveredSquadItem(disc: DiscoveredItem): EditlessTreeItem {
+    const item = new EditlessTreeItem(disc.name, 'discovered-squad');
+    item.id = `discovered:${disc.id}`;
+    item.description = disc.universe ?? disc.source;
+    item.iconPath = new vscode.ThemeIcon('organization');
+    item.tooltip = new vscode.MarkdownString(
+      [`**🔷 ${disc.name}**`, `Source: ${disc.source}`, `Path: \`${disc.path}\``, disc.universe ? `Universe: ${disc.universe}` : ''].filter(Boolean).join('\n\n'),
+    );
     return item;
   }
 

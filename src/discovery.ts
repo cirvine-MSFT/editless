@@ -4,7 +4,7 @@ import * as path from 'path';
 import { AgentTeamConfig } from './types';
 import { EditlessRegistry } from './registry';
 import { resolveTeamMd, resolveTeamDir } from './team-dir';
-import { getLaunchCommand } from './cli-settings';
+import { buildDefaultLaunchCommand } from './copilot-cli-builder';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
@@ -90,61 +90,13 @@ export function discoverAgentTeams(dirPath: string, existingSquads: AgentTeamCon
       path: folderPath,
       icon: '🔷',
       universe: parsed.universe,
-      launchCommand: getLaunchCommand(),
+      launchCommand: buildDefaultLaunchCommand(),
     });
   }
 
   return discovered;
 }
 
-export function discoverAgentTeamsInMultiplePaths(
-  scanPaths: string[],
-  existingSquads: AgentTeamConfig[],
-): AgentTeamConfig[] {
-  const discovered: AgentTeamConfig[] = [];
-  const seenIds = new Set<string>();
-  const existingPaths = new Set(existingSquads.map(s => s.path.toLowerCase()));
-
-  for (const scanPath of scanPaths) {
-    if (!scanPath.trim()) { continue; }
-
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(scanPath, { withFileTypes: true });
-    } catch {
-      continue;
-    }
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) { continue; }
-
-      const folderPath = path.resolve(scanPath, entry.name);
-      const teamMdPath = resolveTeamMd(folderPath);
-
-      if (!teamMdPath) { continue; }
-      if (existingPaths.has(folderPath.toLowerCase())) { continue; }
-
-      const id = toKebabCase(entry.name);
-      if (seenIds.has(id)) { continue; }
-      seenIds.add(id);
-
-      const content = fs.readFileSync(teamMdPath, 'utf-8');
-      const parsed = parseTeamMd(content, entry.name);
-
-      discovered.push({
-        id,
-        name: parsed.name,
-        description: parsed.description,
-        path: folderPath,
-        icon: '🔷',
-        universe: parsed.universe,
-        launchCommand: getLaunchCommand(),
-      });
-    }
-  }
-
-  return discovered;
-}
 
 export async function promptAndAddSquads(
   discovered: AgentTeamConfig[],
@@ -174,38 +126,7 @@ export async function promptAndAddSquads(
   vscode.window.showInformationMessage(`Added ${selected.length} agent(s) to registry.`);
 }
 
-export function registerDiscoveryCommand(
-  context: vscode.ExtensionContext,
-  registry: EditlessRegistry,
-): vscode.Disposable {
-  const disposable = vscode.commands.registerCommand('editless.discoverSquads', async () => {
-    const config = vscode.workspace.getConfiguration('editless');
-    const discoveryDir = config.get<string>('discoveryDir', '');
 
-    let dirPath: string | undefined;
-
-    if (discoveryDir) {
-      dirPath = discoveryDir;
-    } else {
-      const uris = await vscode.window.showOpenDialog({
-        canSelectFolders: true,
-        canSelectFiles: false,
-        canSelectMany: false,
-        openLabel: 'Select directory to scan for agents',
-      });
-      dirPath = uris?.[0]?.fsPath;
-    }
-
-    if (!dirPath) { return; }
-
-    registry.loadSquads();
-    const discovered = discoverAgentTeams(dirPath, registry.loadSquads());
-    await promptAndAddSquads(discovered, registry);
-  });
-
-  context.subscriptions.push(disposable);
-  return disposable;
-}
 
 /**
  * Auto-register squads found at workspace roots.
@@ -249,7 +170,7 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
         path: folderPath,
         icon: '🔷',
         universe: parsed.universe,
-        launchCommand: getLaunchCommand(),
+        launchCommand: buildDefaultLaunchCommand(),
       });
     } else if (resolveTeamDir(folderPath)) {
       // squad init creates .ai-team/ before the coordinator writes team.md
@@ -259,7 +180,7 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
         path: folderPath,
         icon: '🔷',
         universe: 'unknown',
-        launchCommand: getLaunchCommand(),
+        launchCommand: buildDefaultLaunchCommand(),
       });
     }
   }
@@ -269,35 +190,4 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
   }
 }
 
-export function checkDiscoveryOnStartup(
-  context: vscode.ExtensionContext,
-  registry: EditlessRegistry,
-): void {
-  // Auto-register workspace-root squads silently
-  autoRegisterWorkspaceSquads(registry);
 
-  const config = vscode.workspace.getConfiguration('editless');
-  const discoveryDir = config.get<string>('discoveryDir', '');
-  const scanPaths = config.get<string[]>('discovery.scanPaths', []);
-
-  const existing = registry.loadSquads();
-  const pathsToScan = [discoveryDir, ...scanPaths].filter(p => p.trim());
-
-  if (pathsToScan.length === 0) { return; }
-
-  const discovered = discoverAgentTeamsInMultiplePaths(pathsToScan, existing);
-
-  if (discovered.length === 0) { return; }
-
-  vscode.window
-    .showInformationMessage(
-      `Found ${discovered.length} new agent(s) in discovery directory. Add them?`,
-      'Add',
-      'Dismiss',
-    )
-    .then(action => {
-      if (action === 'Add') {
-        promptAndAddSquads(discovered, registry);
-      }
-    });
-}

@@ -315,14 +315,16 @@
       ],
       "view/item/context": [
         { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent$/", "group": "inline@0" },
-        { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent|discovered-agent$/", "group": "session@0" },
+        { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent|discovered-agent|discovered-squad$/", "group": "session@0" },
         { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@1" },
         { "command": "editless.changeModel", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@2" },
         { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@3" },
         { "command": "editless.openInSquadUi", "when": "view == editlessTree && viewItem =~ /^squad/ && editless.squadUiSupportsDeepLink", "group": "squad@4" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@5" },
         { "command": "editless.promoteDiscoveredAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
+        { "command": "editless.promoteDiscoveredAgent", "when": "view == editlessTree && viewItem == discovered-squad", "group": "inline" },
         { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
+        { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-squad", "group": "inline" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal" },
         { "command": "editless.closeTerminal", "when": "viewItem == terminal", "group": "inline@99" },
         { "command": "editless.renameSession", "when": "viewItem == terminal" },
@@ -379,23 +381,7 @@
           "scope": "resource",
           "order": 1
         },
-        "editless.discoveryDir": {
-          "type": "string",
-          "default": "",
-          "description": "Directory to scan for squad projects",
-          "markdownDescription": "Directory to scan for squad projects. EditLess watches this directory for folders containing `.squad/` (or `.ai-team/`) structures and adds them to the Agents pane automatically.\n\n_This setting will be replaced by `#editless.discovery.scanPaths#` in a future release._",
-          "scope": "resource",
-          "order": 2
-        },
-        "editless.discovery.scanPaths": {
-          "type": "array",
-          "default": [],
-          "description": "Additional directories to scan for agents and squads on launch and config change",
-          "items": {
-            "type": "string"
-          }
-        },
-        "editless.scanDebounceMs": {
+        "editless.scanDebounceMs":{
           "type": "number",
           "default": 500,
           "description": "Debounce interval in milliseconds for file system scanning",
@@ -413,11 +399,19 @@
         },
         "editless.cli.launchCommand": {
           "type": "string",
-          "default": "copilot --agent $(agent)",
-          "description": "Command to launch an agent session. Use $(agent) as placeholder for agent name.",
-          "markdownDescription": "Command to launch an agent session. Use `$(agent)` as a placeholder for the agent name.\n\nDefault: `\"copilot --agent $(agent)\"`",
+          "default": "",
+          "description": "Override the full launch command for agent sessions. When empty, the command is built from CLI settings automatically.",
+          "markdownDescription": "Override the full launch command for agent sessions. When empty, the command is built automatically from `editless.cli.command` and `editless.cli.defaultAgent`.\n\nLeave empty to use the built-in flag builder.",
           "scope": "window",
           "order": 21
+        },
+        "editless.cli.defaultAgent": {
+          "type": "string",
+          "default": "squad",
+          "description": "Default agent type for launch commands (e.g. squad, my-agent).",
+          "markdownDescription": "Default agent type passed to `--agent` when building launch commands.\n\nDefault: `\"squad\"`",
+          "scope": "window",
+          "order": 22
         },
         "editless.cli.createCommand": {
           "type": "string",
@@ -425,7 +419,7 @@
           "description": "Command to create a new agent. Empty string uses built-in creation flow.",
           "markdownDescription": "Command to create a new agent. Leave empty to use the built-in creation flow (markdown file in `.github/agents/`).\n\nDefault: `\"\"`",
           "scope": "window",
-          "order": 22
+          "order": 23
         },
         "editless.github.repos": {
           "type": "array",
