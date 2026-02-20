@@ -26,7 +26,7 @@ function normalizeSquadName(name: string, fallback: string): string {
   return trimmed;
 }
 
-function parseTeamMd(content: string, folderName: string): Pick<AgentTeamConfig, 'name' | 'description' | 'universe'> {
+export function parseTeamMd(content: string, folderName: string): Pick<AgentTeamConfig, 'name' | 'description' | 'universe'> {
   let name = folderName;
   let description: string | undefined;
   let universe = 'unknown';
@@ -49,7 +49,7 @@ function parseTeamMd(content: string, folderName: string): Pick<AgentTeamConfig,
   return { name, description, universe };
 }
 
-function toKebabCase(name: string): string {
+export function toKebabCase(name: string): string {
   return name
     .replace(/([a-z])([A-Z])/g, '$1-$2')
     .replace(/[\s_]+/g, '-')

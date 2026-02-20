@@ -203,12 +203,15 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     }
 
     if (items.length === 0) {
+      const hasHiddenItems = (this._visibility?.getHiddenIds().length ?? 0) > 0;
       const msg = new EditlessTreeItem(
-        'All agents hidden — use Show Hidden to restore',
+        hasHiddenItems
+          ? 'All agents hidden — use Show Hidden to restore'
+          : 'No agents yet — use + to add',
         'category',
         vscode.TreeItemCollapsibleState.None,
       );
-      msg.iconPath = new vscode.ThemeIcon('eye-closed');
+      msg.iconPath = new vscode.ThemeIcon(hasHiddenItems ? 'eye-closed' : 'add');
       items.push(msg);
     }
 
