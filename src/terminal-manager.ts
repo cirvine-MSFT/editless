@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { AgentTeamConfig } from './types';
-import type { SessionContextResolver, SessionEvent } from './session-context';
+import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
 import { getLaunchCommand } from './cli-settings';
 
 // ---------------------------------------------------------------------------
@@ -215,26 +215,55 @@ export class TerminalManager implements vscode.Disposable {
     return match;
   }
 
-  relaunchSession(entry: PersistedTerminalInfo): vscode.Terminal {
+  /**
+   * Resume an orphaned session. Validates session state before launching.
+   * @param continueLatest When true, uses `--continue` instead of `--resume <id>`.
+   */
+  relaunchSession(entry: PersistedTerminalInfo, continueLatest = false): vscode.Terminal {
     const reconnected = this.reconnectSession(entry);
     if (reconnected) {
       reconnected.show();
       return reconnected;
     }
 
+    // Pre-resume validation: check workspace.yaml + events.jsonl
+    if (entry.agentSessionId && this._sessionResolver) {
+      const check = this._sessionResolver.isSessionResumable(entry.agentSessionId);
+      if (!check.resumable) {
+        vscode.window.showErrorMessage(`Cannot resume session: ${check.reason}`);
+      }
+      if (check.stale) {
+        vscode.window.showWarningMessage(
+          `Session ${entry.agentSessionId} has not been updated in over 7 days. It may be outdated.`,
+        );
+      }
+    }
+
+    // Build env vars for the new terminal
+    const env: Record<string, string> = {};
+    if (entry.agentSessionId) {
+      env['EDITLESS_SESSION_ID'] = entry.id;
+      env['EDITLESS_AGENT_SESSION_ID'] = entry.agentSessionId;
+    }
+
     const terminal = vscode.window.createTerminal({
       name: entry.displayName,
       cwd: entry.squadPath,
+      env: Object.keys(env).length > 0 ? env : undefined,
     });
-    terminal.show();
 
+    // Queue sendText BEFORE show() to avoid race condition where shell
+    // isn't ready when the terminal becomes visible (#322)
     if (entry.launchCommand) {
-      if (entry.agentSessionId) {
+      if (continueLatest) {
+        terminal.sendText(`${entry.launchCommand} --continue`);
+      } else if (entry.agentSessionId) {
         terminal.sendText(`${entry.launchCommand} --resume ${entry.agentSessionId}`);
       } else {
         terminal.sendText(entry.launchCommand);
       }
     }
+    terminal.show();
 
     this._terminals.set(terminal, {
       id: entry.id,
