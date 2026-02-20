@@ -25,12 +25,9 @@ import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
 import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
+import { getLaunchCommand } from './cli-settings';
 
 const execFileAsync = promisify(execFile);
-
-function getLaunchCommand(): string {
-  return vscode.workspace.getConfiguration('editless.cli').get<string>('launchCommand', 'copilot --agent $(agent)');
-}
 
 function getCreateCommand(): string {
   return vscode.workspace.getConfiguration('editless.cli').get<string>('createCommand', '');

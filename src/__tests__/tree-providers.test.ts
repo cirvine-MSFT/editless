@@ -69,7 +69,7 @@ vi.mock('../github-client', () => ({
 vi.mock('../scanner', () => ({
   scanSquad: vi.fn((cfg: unknown) => ({
     config: cfg,
-    status: 'idle',
+    status: 'inactive',
     lastActivity: null,
     roster: [{ name: 'Morty', role: 'Dev' }],
     charter: '',
@@ -448,7 +448,7 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
       getTerminalInfo: vi.fn().mockReturnValue(undefined),
       getTerminalsForSquad: vi.fn().mockReturnValue([]),
       getOrphanedSessions: vi.fn().mockReturnValue([]),
-      getSessionState: vi.fn().mockReturnValue('idle'),
+      getSessionState: vi.fn().mockReturnValue('inactive'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
@@ -468,7 +468,7 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
       getTerminalInfo: vi.fn().mockReturnValue({ squadId: 'squad-a', displayName: 'Test', labelKey: 'lk', createdAt: new Date() }),
       getTerminalsForSquad: vi.fn().mockReturnValue([{ terminal: mockTerminal, info: { squadId: 'squad-a', displayName: 'Test', labelKey: 'lk', createdAt: new Date() } }]),
       getOrphanedSessions: vi.fn().mockReturnValue([]),
-      getSessionState: vi.fn().mockReturnValue('idle'),
+      getSessionState: vi.fn().mockReturnValue('inactive'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
@@ -660,7 +660,7 @@ describe('EditlessTreeProvider — squad item description', () => {
         { terminal: {}, info: {} },
       ]),
       getOrphanedSessions: vi.fn().mockReturnValue([]),
-      getSessionState: vi.fn().mockReturnValue('idle'),
+      getSessionState: vi.fn().mockReturnValue('inactive'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
@@ -678,7 +678,7 @@ describe('EditlessTreeProvider — squad item description', () => {
     const mockTerminalMgr = {
       getTerminalsForSquad: vi.fn().mockReturnValue([{ terminal: {}, info: {} }]),
       getOrphanedSessions: vi.fn().mockReturnValue([]),
-      getSessionState: vi.fn().mockReturnValue('idle'),
+      getSessionState: vi.fn().mockReturnValue('inactive'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
