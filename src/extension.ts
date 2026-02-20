@@ -934,7 +934,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         [
           { label: '$(file-code) Agent', description: 'Create an agent template file', value: 'agent' as const },
           { label: '$(terminal) Session', description: 'Launch a new agent session', value: 'session' as const },
-          { label: '$(rocket) Squad', description: 'Initialize a new Squad project', value: 'squad' as const },
+          { label: '$(organization) Squad', description: 'Initialize a new Squad project', value: 'squad' as const },
         ],
         { placeHolder: 'What would you like to add?' },
       );
