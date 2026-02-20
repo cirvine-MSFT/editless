@@ -222,3 +222,6 @@ Reviewed and merged 4 removal PRs (#352, #353, #354, #355) from the v0.1.1 clean
 **Process learning:** Merge order matters for removal batches targeting the same base. PRs #352 and #353 merged cleanly. #354 merged cleanly. #355 conflicted on terminal-manager.test.ts because both #354 and #355 modified the import line differently. Resolved by taking the union of both changes (no cli-provider mock AND no stateFromEvent import).
 
 Decision record: `.ai-team/decisions/inbox/rick-removal-batch2-review.md`
+
+### 2026-02-20: PR #359 session tree description cleanup — approved and merged
+Reviewed PR #359 (Closes #358) — +2/-32 lines in editless-tree.ts. Three changes: (1) Label uses stable `info.displayName` instead of auto-updating `sessionCtx.summary`. (2) Description simplified to just `relative` (creation-relative time). (3) Deleted `_buildTerminalDescription` (30-line method, sole call site confirmed via grep). Tooltip still preserves full context (summary, branch, refs, timestamps). `getStateDescription` import still used by `_buildTerminalTooltip`. All 576 tests pass, lint clean. Aligns with UX convention: Icon=state, Label=what, Description=time only, Tooltip=full context. Simple/confident — squash merged, issue #358 auto-closed.
