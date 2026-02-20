@@ -89,7 +89,7 @@ export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFo
   for (const folder of workspaceFolders) {
     const root = folder.uri.fsPath;
     const ghAgentsDir = path.join(root, '.github', 'agents');
-    for (const fp of collectAgentMdFiles(ghAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, agents); }
+    for (const fp of collectAllMdFiles(ghAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, agents); }
     for (const fp of collectAgentMdFiles(root)) { readAndPushAgent(fp, 'workspace', seen, agents); }
   }
 

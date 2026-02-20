@@ -145,15 +145,15 @@ describe('discoverAgentsInWorkspace', () => {
     expect(result).toEqual([]);
   });
 
-  it('should ignore non-.agent.md files', () => {
-    writeFixture('ws/.github/agents/readme.md', '# Not an agent\n');
+  it('should discover all .md files in .github/agents/ and ignore non-.md files', () => {
+    writeFixture('ws/.github/agents/readme.md', '# Readme Agent\n');
     writeFixture('ws/.github/agents/test.agent.md', '# Real Agent\n');
     writeFixture('ws/.github/agents/config.json', '{}');
 
     const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
 
-    expect(result).toHaveLength(1);
-    expect(result[0].name).toBe('Real Agent');
+    expect(result).toHaveLength(2);
+    expect(result.map(a => a.name).sort()).toEqual(['Readme Agent', 'Real Agent']);
   });
 
   it('should store the correct filePath', () => {
