@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { createRegistry, watchRegistry } from './registry';
@@ -948,15 +949,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
-  // Add Agent — choose mode (repo template or CLI provider), then create
+  // Add Agent — pick personal vs workspace location, then create
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.addAgent', async () => {
-      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-      if (!workspaceFolder) {
-        vscode.window.showWarningMessage('No workspace folder open.');
-        return;
-      }
-
       const name = await vscode.window.showInputBox({
         prompt: 'Agent name',
         placeHolder: 'my-agent',
@@ -968,93 +963,40 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       });
       if (!name) return;
 
-      type SourceValue = 'create' | 'import';
-      const sourceItems: { label: string; description: string; value: SourceValue }[] = [
-        { label: '$(add) Create new', description: 'Create from template or CLI provider', value: 'create' },
-        { label: '$(file-symlink-file) Import from file', description: 'Copy an existing .md file', value: 'import' },
+      type LocationValue = 'personal' | 'workspace';
+      const locationItems: { label: string; description: string; value: LocationValue }[] = [
+        { label: '$(account) Personal agent', description: '~/.copilot/agents/', value: 'personal' },
+        { label: '$(repo) Workspace agent', description: '.github/agents/ in current workspace', value: 'workspace' },
       ];
-      const sourcePick = await vscode.window.showQuickPick(sourceItems, {
-        placeHolder: 'How should the agent be created?',
+      const locationPick = await vscode.window.showQuickPick(locationItems, {
+        placeHolder: 'Where should the agent live?',
       });
-      if (!sourcePick) return;
+      if (!locationPick) return;
 
-      if (sourcePick.value === 'import') {
-        const uris = await vscode.window.showOpenDialog({
-          canSelectFiles: true,
-          canSelectFolders: false,
-          canSelectMany: false,
-          openLabel: 'Import agent file',
-          filters: { 'Markdown': ['md'] },
-        });
-        if (!uris || uris.length === 0) return;
+      let agentsDir: string;
 
-        const agentsDir = path.join(workspaceFolder.uri.fsPath, '.github', 'agents');
-        await vscode.workspace.fs.createDirectory(vscode.Uri.file(agentsDir));
-        const destPath = path.join(agentsDir, `${name.trim()}.agent.md`);
-        const destUri = vscode.Uri.file(destPath);
-
-        try {
-          await vscode.workspace.fs.copy(uris[0], destUri, { overwrite: false });
-        } catch (err: unknown) {
-          const msg = err instanceof Error ? err.message : String(err);
-          vscode.window.showWarningMessage(`Failed to import agent file: ${msg}`);
+      if (locationPick.value === 'personal') {
+        agentsDir = path.join(os.homedir(), '.copilot', 'agents');
+      } else {
+        const folders = vscode.workspace.workspaceFolders;
+        if (!folders || folders.length === 0) {
+          vscode.window.showWarningMessage('No workspace folder open.');
           return;
         }
-
-        const doc = await vscode.workspace.openTextDocument(destUri);
-        await vscode.window.showTextDocument(doc);
-        const agentId = name.trim().replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
-        registry.addSquads([{
-          id: agentId,
-          name: name.trim(),
-          path: agentsDir,
-          icon: '🤖',
-          universe: 'standalone',
-          launchCommand: buildDefaultLaunchCommand(),
-        }]);
-        refreshDiscovery();
-        treeProvider.refresh();
-        return;
+        let workspaceFolder: vscode.WorkspaceFolder;
+        if (folders.length === 1) {
+          workspaceFolder = folders[0];
+        } else {
+          const folderPick = await vscode.window.showQuickPick(
+            folders.map(f => ({ label: f.name, description: f.uri.fsPath, folder: f })),
+            { placeHolder: 'Which workspace folder?' },
+          );
+          if (!folderPick) return;
+          workspaceFolder = folderPick.folder;
+        }
+        agentsDir = path.join(workspaceFolder.uri.fsPath, '.github', 'agents');
       }
 
-      const createCommand = getCreateCommand();
-      const hasCliCreate = !!createCommand.trim();
-
-      type ModeValue = 'repo' | 'cli';
-      const modeItems: { label: string; description: string; value: ModeValue }[] = [
-        { label: '$(repo) Repo template', description: 'Create .github/agents/ markdown file', value: 'repo' },
-      ];
-      if (hasCliCreate) {
-        modeItems.unshift({
-          label: '$(terminal) CLI command',
-          description: 'Create via configured CLI command',
-          value: 'cli',
-        });
-      }
-
-      let mode: ModeValue = 'repo';
-      if (modeItems.length > 1) {
-        const modePick = await vscode.window.showQuickPick(modeItems, {
-          placeHolder: 'How should the agent be created?',
-        });
-        if (!modePick) return;
-        mode = modePick.value;
-      }
-
-      if (mode === 'cli' && createCommand) {
-        const command = createCommand
-          .replace(/\$\(agent\)/g, name.trim())
-          .replace(/\$\{agentName\}/g, name.trim());
-        const terminal = vscode.window.createTerminal({
-          name: `Add Agent: ${name.trim()}`,
-          cwd: workspaceFolder.uri.fsPath,
-        });
-        terminal.show();
-        terminal.sendText(command);
-        return;
-      }
-
-      const agentsDir = path.join(workspaceFolder.uri.fsPath, '.github', 'agents');
       await vscode.workspace.fs.createDirectory(vscode.Uri.file(agentsDir));
 
       const filePath = path.join(agentsDir, `${name.trim()}.agent.md`);
