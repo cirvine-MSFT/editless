@@ -5507,3 +5507,99 @@ These 4 PRs all based on the same SHA. Merging #352/#353/#354 first caused confl
 - [ ] Clean dead imports in `work-items-tree.ts` (`fs`, `path`, `TEAM_DIR_NAMES`)
 - [ ] Consider enabling `noUnusedLocals` in tsconfig if not already set
 
+
+---
+
+### 2026-02-20: Terminal Command Ordering: sendText before show
+
+**Author:** Morty (Extension Dev)  
+**Date:** 2026-02-20  
+**PR:** #365 (Closes #322)
+
+## Decision
+
+When launching or relaunching terminals with a command, always call `terminal.sendText()` **before** `terminal.show()`. This queues the command in the terminal's input buffer before the terminal becomes visible, preventing the race condition where the shell isn't ready to accept input.
+
+## Context
+
+The previous `relaunchSession()` flow called `show()` then `sendText()`. On slow machines or under load, the shell process hadn't fully started by the time `sendText()` fired, causing the resume command to be silently dropped. Users clicked "Resume" and nothing happened — a P0 bug.
+
+## Impact
+
+- All terminal launch paths in `terminal-manager.ts` should follow this pattern
+- `launchTerminal()` already had the correct order (sendText before show at lines 105-106)
+- `relaunchSession()` was the only violator — now fixed
+- Future terminal launch code must maintain this ordering
+
+---
+
+### 2026-02-20: CLI Flag Builder Pattern
+
+**Date:** 2026-02-20
+**Author:** Morty (Extension Dev)
+**PR:** #366
+**Issue:** #325
+
+## Decision
+
+CLI commands are now built via `buildCopilotCommand(options: CopilotCommandOptions)` in `src/copilot-cli-builder.ts` instead of storing raw command strings with `` interpolation tokens. The `` pattern is eliminated from the codebase.
+
+## Key Details
+
+- **`buildCopilotCommand(options)`** — takes typed options, returns a complete CLI command string
+- **`buildDefaultLaunchCommand()`** — replacement for `getLaunchCommand()`, reads `editless.cli.defaultAgent` setting
+- **New setting** `editless.cli.defaultAgent` (default: `"squad"`) controls the `--agent` flag value
+- **`editless.cli.launchCommand`** default changed from `"copilot --agent "` to `""` (empty = use builder)
+- **`getLaunchCommand()`** kept as deprecated wrapper — call `buildDefaultLaunchCommand()` for new code
+
+## Why
+
+`` was never interpolated at runtime, causing broken CLI commands. Direct typed construction is safer and extensible (supports `--resume`, `--model`, `--add-dir`, etc.)
+
+---
+
+### 2026-02-20: Terminal Command Ordering: sendText before show
+
+**Author:** Morty (Extension Dev)  
+**Date:** 2026-02-20  
+**PR:** #365 (Closes #322)
+
+## Decision
+
+When launching or relaunching terminals with a command, always call 	erminal.sendText() **before** 	erminal.show(). This queues the command in the terminal's input buffer before the terminal becomes visible, preventing the race condition where the shell isn't ready to accept input.
+
+## Context
+
+The previous elaunchSession() flow called show() then sendText(). On slow machines or under load, the shell process hadn't fully started by the time sendText() fired, causing the resume command to be silently dropped. Users clicked "Resume" and nothing happened — a P0 bug.
+
+## Impact
+
+- All terminal launch paths in 	erminal-manager.ts should follow this pattern
+- launchTerminal() already had the correct order (sendText before show at lines 105-106)
+- elaunchSession() was the only violator — now fixed
+- Future terminal launch code must maintain this ordering
+
+---
+
+### 2026-02-20: CLI Flag Builder Pattern
+
+**Date:** 2026-02-20
+**Author:** Morty (Extension Dev)
+**PR:** #366
+**Issue:** #325
+
+## Decision
+
+CLI commands are now built via uildCopilotCommand(options: CopilotCommandOptions) in src/copilot-cli-builder.ts instead of storing raw command strings with (agent) interpolation tokens. The (agent) pattern is eliminated from the codebase.
+
+## Key Details
+
+- **uildCopilotCommand(options)** — takes typed options, returns a complete CLI command string
+- **uildDefaultLaunchCommand()** — replacement for getLaunchCommand(), reads ditless.cli.defaultAgent setting
+- **New setting** ditless.cli.defaultAgent (default: "squad") controls the --agent flag value
+- **ditless.cli.launchCommand** default changed from "copilot --agent (agent)" to "" (empty = use builder)
+- **getLaunchCommand()** kept as deprecated wrapper — call uildDefaultLaunchCommand() for new code
+
+## Why
+
+(agent) was never interpolated at runtime, causing broken CLI commands. Direct typed construction is safer and extensible (supports --resume, --model, --add-dir, etc.)
