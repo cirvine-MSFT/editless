@@ -8,8 +8,8 @@ import * as path from 'path';
  * If this test fails, an agency reference was re-introduced — remove it.
  *
  * Scans all text files in the repo EXCEPT:
- *   - .ai-team/ (internal squad state — historical references are fine)
- *   - .ai-team-templates/
+ *   - .squad/, .ai-team/ (internal squad state — historical references are fine)
+ *   - .squad-templates/, .ai-team-templates/
  *   - node_modules/, dist/, out/ (generated)
  *   - __tests__/, __integration__/ (test files may reference the word)
  *   - .git/ (git internals)
@@ -19,7 +19,8 @@ import * as path from 'path';
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 
 const SKIP_DIRS = new Set([
-  '.ai-team', '.ai-team-templates', 'node_modules', 'dist', 'out',
+  '.ai-team', '.ai-team-templates', '.squad', '.squad-templates',
+  'node_modules', 'dist', 'out',
   '__tests__', '__integration__', '.git', 'icons', '.vscode-test',
 ]);
 
