@@ -54,17 +54,20 @@ export class AcpClient {
   public readonly onThoughtChunk = this._onThoughtChunk.event;
   public readonly onToolCall = this._onToolCall.event;
   public readonly onToolCallUpdate = this._onToolCallUpdate.event;
+  private readonly _onModeUpdate = new vscode.EventEmitter<string>();
+
   public readonly onPlan = this._onPlan.event;
   public readonly onStopped = this._onStopped.event;
   public readonly onError = this._onError.event;
+  public readonly onModeUpdate = this._onModeUpdate.event;
 
   constructor(handler: AcpRequestHandler, outputChannel: vscode.OutputChannel) {
     this.handler = handler;
     this.outputChannel = outputChannel;
   }
 
-  async initialize(clientCapabilities: types.ClientCapabilities = {}): Promise<types.InitializeResult> {
-    const command = buildCopilotCommand({ extraArgs: ['--acp', '--stdio'] });
+  async initialize(clientCapabilities: types.ClientCapabilities = {}, options?: { agent?: string }): Promise<types.InitializeResult> {
+    const command = buildCopilotCommand({ acp: true, agent: options?.agent });
     this.outputChannel.appendLine(`[ACP] Spawning: ${command}`);
 
     const parts = command.split(' ');
@@ -137,6 +140,7 @@ export class AcpClient {
     this._onPlan.dispose();
     this._onStopped.dispose();
     this._onError.dispose();
+    this._onModeUpdate.dispose();
   }
 
   private cleanup(): void {
@@ -288,6 +292,9 @@ export class AcpClient {
         break;
       case 'plan':
         this._onPlan.fire({ steps: update.plan.steps });
+        break;
+      case 'current_mode_update':
+        this._onModeUpdate.fire(update.modeId);
         break;
       default:
         this.outputChannel.appendLine(`[ACP] Unknown session update: ${JSON.stringify(update)}`);

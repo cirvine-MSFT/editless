@@ -133,6 +133,59 @@ export class AcpPanel implements vscode.Disposable {
       color: var(--vscode-errorForeground);
     }
 
+    #toolbar {
+      padding: 6px 16px;
+      background-color: var(--vscode-sideBar-background);
+      border-bottom: 1px solid var(--vscode-panel-border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      flex-wrap: wrap;
+    }
+
+    #toolbar label {
+      opacity: 0.7;
+    }
+
+    #toolbar select {
+      background-color: var(--vscode-dropdown-background);
+      color: var(--vscode-dropdown-foreground);
+      border: 1px solid var(--vscode-dropdown-border);
+      border-radius: 2px;
+      padding: 2px 4px;
+      font-family: var(--vscode-font-family);
+      font-size: 12px;
+      outline: none;
+    }
+
+    #toolbar select:focus {
+      border-color: var(--vscode-focusBorder);
+    }
+
+    #agent-name {
+      margin-left: auto;
+      opacity: 0.6;
+      font-style: italic;
+    }
+
+    .message.queued {
+      align-self: flex-end;
+      background-color: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      opacity: 0.55;
+      position: relative;
+    }
+
+    .message.queued::after {
+      content: '⏳ queued';
+      display: block;
+      font-size: 10px;
+      opacity: 0.7;
+      margin-top: 4px;
+      text-align: right;
+    }
+
     #conversation {
       flex: 1;
       overflow-y: auto;
@@ -284,6 +337,13 @@ export class AcpPanel implements vscode.Disposable {
 </head>
 <body>
   <div id="status-bar" class="connecting">Connecting...</div>
+  <div id="toolbar">
+    <label for="model-select">Model:</label>
+    <select id="model-select" disabled><option>loading…</option></select>
+    <label for="mode-select">Mode:</label>
+    <select id="mode-select" disabled><option>loading…</option></select>
+    <span id="agent-name"></span>
+  </div>
   <div id="conversation"></div>
   <div id="input-area">
     <textarea id="input-box" placeholder="Type a message..." rows="1"></textarea>
@@ -297,8 +357,21 @@ export class AcpPanel implements vscode.Disposable {
       const inputBox = document.getElementById('input-box');
       const sendButton = document.getElementById('send-button');
       const statusBar = document.getElementById('status-bar');
+      const modelSelect = document.getElementById('model-select');
+      const modeSelect = document.getElementById('mode-select');
+      const agentName = document.getElementById('agent-name');
 
       let currentAssistantMessage = null;
+      let isPrompting = false;
+      const messageQueue = [];
+
+      // --- Toolbar events ---
+      modelSelect.addEventListener('change', () => {
+        vscode.postMessage({ type: 'changeModel', modelId: modelSelect.value });
+      });
+      modeSelect.addEventListener('change', () => {
+        vscode.postMessage({ type: 'changeMode', modeId: modeSelect.value });
+      });
 
       // Auto-resize textarea
       inputBox.addEventListener('input', () => {
@@ -321,9 +394,34 @@ export class AcpPanel implements vscode.Disposable {
         const text = inputBox.value.trim();
         if (!text) return;
 
-        vscode.postMessage({ type: 'sendMessage', text });
         inputBox.value = '';
         inputBox.style.height = 'auto';
+
+        if (isPrompting) {
+          // Queue message and show visual indicator
+          messageQueue.push(text);
+          const msg = document.createElement('div');
+          msg.className = 'message queued';
+          msg.dataset.queueIndex = String(messageQueue.length - 1);
+          msg.textContent = text;
+          conversation.appendChild(msg);
+          scrollToBottom();
+          return;
+        }
+
+        vscode.postMessage({ type: 'sendMessage', text });
+      }
+
+      function drainQueue() {
+        if (messageQueue.length === 0) return;
+        const next = messageQueue.shift();
+        // Remove the first queued message indicator
+        const queued = conversation.querySelector('.message.queued');
+        if (queued) {
+          queued.classList.remove('queued');
+          queued.classList.add('user');
+        }
+        vscode.postMessage({ type: 'sendMessage', text: next });
       }
 
       window.addEventListener('message', event => {
@@ -350,6 +448,25 @@ export class AcpPanel implements vscode.Disposable {
             break;
           case 'setStatus':
             setStatus(message.status);
+            break;
+          case 'setModels':
+            populateModels(message.models);
+            break;
+          case 'setModes':
+            populateModes(message.modes);
+            break;
+          case 'updateMode':
+            if (modeSelect) modeSelect.value = message.modeId;
+            break;
+          case 'setAgent':
+            agentName.textContent = message.name ? ('Agent: ' + message.name) : '';
+            break;
+          case 'promptStarted':
+            isPrompting = true;
+            break;
+          case 'promptFinished':
+            isPrompting = false;
+            drainQueue();
             break;
           case 'error':
             showError(message.message);
@@ -452,6 +569,32 @@ export class AcpPanel implements vscode.Disposable {
 
       function scrollToBottom() {
         conversation.scrollTop = conversation.scrollHeight;
+      }
+
+      function populateModels(models) {
+        modelSelect.innerHTML = '';
+        if (!models || !models.availableModels) return;
+        for (const m of models.availableModels) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name || m.id;
+          if (m.id === models.currentModelId) opt.selected = true;
+          modelSelect.appendChild(opt);
+        }
+        modelSelect.disabled = false;
+      }
+
+      function populateModes(modes) {
+        modeSelect.innerHTML = '';
+        if (!modes || !modes.availableModes) return;
+        for (const m of modes.availableModes) {
+          const opt = document.createElement('option');
+          opt.value = m.id;
+          opt.textContent = m.name || m.id;
+          if (m.id === modes.currentModeId) opt.selected = true;
+          modeSelect.appendChild(opt);
+        }
+        modeSelect.disabled = false;
       }
     })();
   </script>

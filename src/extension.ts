@@ -1171,7 +1171,16 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
       subscriptions.push(
         client.onStopped(e => {
+          void panel.postMessage({ type: 'endAssistantMessage' });
+          void panel.postMessage({ type: 'promptFinished' });
           void panel.postMessage({ type: 'setStatus', status: 'Ready' });
+        })
+      );
+
+      subscriptions.push(
+        client.onModeUpdate(modeId => {
+          void panel.postMessage({ type: 'updateMode', modeId });
+          output.appendLine(`[ACP] Mode changed to: ${modeId}`);
         })
       );
 
@@ -1186,18 +1195,25 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       subscriptions.push(
         panel.onDidReceiveMessage(async (msg: unknown) => {
           if (typeof msg === 'object' && msg !== null && 'type' in msg) {
-            const message = msg as { type: string; text?: string };
+            const message = msg as { type: string; text?: string; modelId?: string; modeId?: string };
             if (message.type === 'sendMessage' && message.text && sessionId) {
               void panel.postMessage({ type: 'addUserMessage', text: message.text });
               void panel.postMessage({ type: 'startAssistantMessage' });
+              void panel.postMessage({ type: 'promptStarted' });
               void panel.postMessage({ type: 'setStatus', status: 'Thinking' });
               try {
                 await client.prompt(sessionId, message.text);
               } catch (err) {
                 const errorMsg = err instanceof Error ? err.message : String(err);
                 void panel.postMessage({ type: 'error', message: errorMsg });
+              } finally {
+                void panel.postMessage({ type: 'promptFinished' });
                 void panel.postMessage({ type: 'setStatus', status: 'Ready' });
               }
+            } else if (message.type === 'changeModel' && message.modelId) {
+              output.appendLine(`[ACP] Model change requested: ${message.modelId} (not yet supported by ACP — may need prompt prefix or dedicated request)`);
+            } else if (message.type === 'changeMode' && message.modeId) {
+              output.appendLine(`[ACP] Mode change requested: ${message.modeId} (not yet supported by ACP — may need prompt prefix or dedicated request)`);
             }
           }
         })
@@ -1211,6 +1227,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const panelDisposable = {
         dispose: () => {
           subscriptions.forEach(s => s.dispose());
+          handler.dispose();
           client.dispose();
         }
       };
@@ -1223,6 +1240,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
         const sessionResult = await client.createSession(cwd);
         sessionId = sessionResult.sessionId;
+
+        // Send models and modes to the panel toolbar
+        void panel.postMessage({ type: 'setModels', models: sessionResult.models });
+        void panel.postMessage({ type: 'setModes', modes: sessionResult.modes });
         
         void panel.postMessage({ type: 'setStatus', status: 'Ready' });
       } catch (err) {

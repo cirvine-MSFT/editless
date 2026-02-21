@@ -5,8 +5,10 @@ import * as fs from 'fs/promises';
 // Hoisted mocks
 // ---------------------------------------------------------------------------
 
-const { mockReadFile, mockOutputChannel } = vi.hoisted(() => ({
+const { mockReadFile, mockWriteFile, mockMkdir, mockOutputChannel, mockPool } = vi.hoisted(() => ({
   mockReadFile: vi.fn(),
+  mockWriteFile: vi.fn(),
+  mockMkdir: vi.fn(),
   mockOutputChannel: {
     appendLine: vi.fn(),
     append: vi.fn(),
@@ -17,10 +19,20 @@ const { mockReadFile, mockOutputChannel } = vi.hoisted(() => ({
     name: 'ACP Handler Test',
     replace: vi.fn(),
   },
+  mockPool: {
+    create: vi.fn().mockReturnValue('mock-term-1'),
+    getOutput: vi.fn().mockReturnValue({ output: '', exitCode: null }),
+    waitForExit: vi.fn().mockResolvedValue(0),
+    kill: vi.fn(),
+    release: vi.fn(),
+    dispose: vi.fn(),
+  },
 }));
 
 vi.mock('fs/promises', () => ({
   readFile: mockReadFile,
+  writeFile: mockWriteFile,
+  mkdir: mockMkdir,
 }));
 
 vi.mock('vscode', () => ({
@@ -31,6 +43,10 @@ vi.mock('vscode', () => ({
       },
     ],
   },
+}));
+
+vi.mock('../acp/process-pool', () => ({
+  ProcessPool: vi.fn(function() { return mockPool; }),
 }));
 
 import { DefaultAcpRequestHandler } from '../acp/handlers';
@@ -215,103 +231,160 @@ describe('DefaultAcpRequestHandler', () => {
     });
   });
 
-  describe('Stub methods', () => {
-    it('writeTextFile returns error (not implemented)', async () => {
+  describe('File writing', () => {
+    it('writes file with absolute path', async () => {
+      mockMkdir.mockResolvedValue(undefined);
+      mockWriteFile.mockResolvedValue(undefined);
+
       const params: types.WriteTextFileParams = {
-        path: '/test.txt',
+        path: '/absolute/path/to/file.txt',
         content: 'new content',
       };
 
-      await expect(handler.onWriteTextFile(params)).rejects.toThrow(
-        'Write operations not supported in spike'
-      );
+      const result = await handler.onWriteTextFile(params);
 
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
-        expect.stringContaining('STUB')
-      );
+      expect(result).toEqual({ success: true });
+      expect(mockMkdir).toHaveBeenCalledWith(expect.stringContaining('path'), { recursive: true });
+      expect(mockWriteFile).toHaveBeenCalledWith('/absolute/path/to/file.txt', 'new content', 'utf-8');
     });
 
-    it('writeTextFile logs the request before failing', async () => {
+    it('writes file with relative path resolved to workspace', async () => {
+      mockMkdir.mockResolvedValue(undefined);
+      mockWriteFile.mockResolvedValue(undefined);
+
       const params: types.WriteTextFileParams = {
-        path: '/test.txt',
-        content: 'test content',
+        path: 'relative/file.txt',
+        content: 'relative content',
       };
 
-      await expect(handler.onWriteTextFile(params)).rejects.toThrow();
+      const result = await handler.onWriteTextFile(params);
 
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
-        expect.stringContaining('Write file request')
-      );
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
-        expect.stringContaining('test.txt')
+      expect(result).toEqual({ success: true });
+      const writePath = mockWriteFile.mock.calls[0][0];
+      expect(writePath).toContain('relative');
+      expect(writePath).toContain('file.txt');
+    });
+
+    it('creates parent directories recursively', async () => {
+      mockMkdir.mockResolvedValue(undefined);
+      mockWriteFile.mockResolvedValue(undefined);
+
+      const params: types.WriteTextFileParams = {
+        path: '/deep/nested/dir/file.txt',
+        content: 'deep content',
+      };
+
+      await handler.onWriteTextFile(params);
+
+      expect(mockMkdir).toHaveBeenCalledWith(
+        expect.any(String),
+        { recursive: true }
       );
     });
 
-    it('terminal/create returns error (not implemented)', async () => {
+    it('throws on write error', async () => {
+      mockMkdir.mockResolvedValue(undefined);
+      mockWriteFile.mockRejectedValue(new Error('EACCES: permission denied'));
+
+      const params: types.WriteTextFileParams = {
+        path: '/readonly/file.txt',
+        content: 'content',
+      };
+
+      await expect(handler.onWriteTextFile(params)).rejects.toThrow(
+        'Failed to write file: EACCES: permission denied'
+      );
+    });
+
+    it('throws on mkdir error', async () => {
+      mockMkdir.mockRejectedValue(new Error('EACCES: mkdir failed'));
+
+      const params: types.WriteTextFileParams = {
+        path: '/no-perms/file.txt',
+        content: 'content',
+      };
+
+      await expect(handler.onWriteTextFile(params)).rejects.toThrow(
+        'Failed to write file: EACCES: mkdir failed'
+      );
+    });
+
+    it('logs write operations', async () => {
+      mockMkdir.mockResolvedValue(undefined);
+      mockWriteFile.mockResolvedValue(undefined);
+
+      const params: types.WriteTextFileParams = {
+        path: '/test/write.txt',
+        content: 'logged content',
+      };
+
+      await handler.onWriteTextFile(params);
+
+      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
+        expect.stringContaining('Write file')
+      );
+    });
+
+    it('handles empty content', async () => {
+      mockMkdir.mockResolvedValue(undefined);
+      mockWriteFile.mockResolvedValue(undefined);
+
+      const params: types.WriteTextFileParams = {
+        path: '/test/empty.txt',
+        content: '',
+      };
+
+      const result = await handler.onWriteTextFile(params);
+      expect(result.success).toBe(true);
+      expect(mockWriteFile).toHaveBeenCalledWith(expect.any(String), '', 'utf-8');
+    });
+  });
+
+  describe('Terminal operations (ProcessPool delegation)', () => {
+    it('terminal/create delegates to pool.create and returns terminalId', async () => {
       const params: types.TerminalCreateParams = {
         command: 'npm',
         args: ['test'],
         cwd: '/workspace',
       };
 
-      await expect(handler.onTerminalCreate(params)).rejects.toThrow(
-        'Terminal operations not supported in spike'
-      );
+      const result = await handler.onTerminalCreate(params);
 
-      expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
-        expect.stringContaining('STUB')
-      );
+      expect(result).toEqual({ terminalId: 'mock-term-1' });
+      expect(mockPool.create).toHaveBeenCalledWith('npm', ['test'], '/workspace', undefined);
     });
 
-    it('terminal/output returns error (not implemented)', async () => {
-      const params: types.TerminalOutputParams = {
-        terminalId: 'term-123',
+    it('terminal/create passes env to pool', async () => {
+      const params: types.TerminalCreateParams = {
+        command: 'cmd',
+        args: [],
+        env: { FOO: 'bar' },
       };
 
-      await expect(handler.onTerminalOutput(params)).rejects.toThrow(
-        'Terminal operations not supported in spike'
-      );
+      await handler.onTerminalCreate(params);
+
+      expect(mockPool.create).toHaveBeenCalledWith('cmd', [], undefined, { FOO: 'bar' });
     });
 
-    it('terminal/wait_for_exit returns error (not implemented)', async () => {
-      const params: types.TerminalWaitForExitParams = {
-        terminalId: 'term-123',
+    it('terminal/create handles missing optional params', async () => {
+      const params: types.TerminalCreateParams = {
+        command: 'ls',
       };
 
-      await expect(handler.onTerminalWaitForExit(params)).rejects.toThrow(
-        'Terminal operations not supported in spike'
-      );
+      const result = await handler.onTerminalCreate(params);
+
+      expect(result.terminalId).toBe('mock-term-1');
+      expect(mockPool.create).toHaveBeenCalledWith('ls', undefined, undefined, undefined);
     });
 
-    it('terminal/kill returns error (not implemented)', async () => {
-      const params: types.TerminalKillParams = {
-        terminalId: 'term-123',
-      };
-
-      await expect(handler.onTerminalKill(params)).rejects.toThrow(
-        'Terminal operations not supported in spike'
-      );
-    });
-
-    it('terminal/release returns error (not implemented)', async () => {
-      const params: types.TerminalReleaseParams = {
-        terminalId: 'term-123',
-      };
-
-      await expect(handler.onTerminalRelease(params)).rejects.toThrow(
-        'Terminal operations not supported in spike'
-      );
-    });
-
-    it('terminal/create logs command details before failing', async () => {
+    it('terminal/create logs command details', async () => {
       const params: types.TerminalCreateParams = {
         command: 'git',
         args: ['status'],
         cwd: '/repo',
-        env: { GIT_EDITOR: 'vim' },
       };
 
-      await expect(handler.onTerminalCreate(params)).rejects.toThrow();
+      await handler.onTerminalCreate(params);
 
       expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
         expect.stringContaining('git status')
@@ -321,16 +394,87 @@ describe('DefaultAcpRequestHandler', () => {
       );
     });
 
-    it('terminal/create handles missing optional params', async () => {
-      const params: types.TerminalCreateParams = {
-        command: 'ls',
+    it('terminal/output delegates to pool.getOutput', async () => {
+      mockPool.getOutput.mockReturnValue({ output: 'hello world\n', exitCode: 0 });
+
+      const params: types.TerminalOutputParams = {
+        terminalId: 'term-123',
       };
 
-      await expect(handler.onTerminalCreate(params)).rejects.toThrow();
+      const result = await handler.onTerminalOutput(params);
+
+      expect(result).toEqual({ output: 'hello world\n', exitCode: 0 });
+      expect(mockPool.getOutput).toHaveBeenCalledWith('term-123');
+    });
+
+    it('terminal/output converts null exitCode to undefined', async () => {
+      mockPool.getOutput.mockReturnValue({ output: '', exitCode: null });
+
+      const params: types.TerminalOutputParams = { terminalId: 'term-123' };
+      const result = await handler.onTerminalOutput(params);
+
+      expect(result.exitCode).toBeUndefined();
+    });
+
+    it('terminal/wait_for_exit delegates to pool.waitForExit', async () => {
+      mockPool.waitForExit.mockResolvedValue(0);
+
+      const params: types.TerminalWaitForExitParams = {
+        terminalId: 'term-123',
+      };
+
+      const result = await handler.onTerminalWaitForExit(params);
+
+      expect(result).toEqual({ exitCode: 0 });
+      expect(mockPool.waitForExit).toHaveBeenCalledWith('term-123');
+    });
+
+    it('terminal/wait_for_exit returns non-zero exit code', async () => {
+      mockPool.waitForExit.mockResolvedValue(1);
+
+      const params: types.TerminalWaitForExitParams = { terminalId: 'term-fail' };
+      const result = await handler.onTerminalWaitForExit(params);
+
+      expect(result.exitCode).toBe(1);
+    });
+
+    it('terminal/kill delegates to pool.kill', async () => {
+      const params: types.TerminalKillParams = {
+        terminalId: 'term-123',
+      };
+
+      const result = await handler.onTerminalKill(params);
+
+      expect(result).toEqual({ success: true });
+      expect(mockPool.kill).toHaveBeenCalledWith('term-123');
+    });
+
+    it('terminal/release delegates to pool.release', async () => {
+      const params: types.TerminalReleaseParams = {
+        terminalId: 'term-123',
+      };
+
+      const result = await handler.onTerminalRelease(params);
+
+      expect(result).toEqual({ success: true });
+      expect(mockPool.release).toHaveBeenCalledWith('term-123');
+    });
+
+    it('terminal/output logs operation details', async () => {
+      mockPool.getOutput.mockReturnValue({ output: 'data', exitCode: null });
+
+      await handler.onTerminalOutput({ terminalId: 'term-x' });
 
       expect(mockOutputChannel.appendLine).toHaveBeenCalledWith(
-        expect.stringContaining('ls')
+        expect.stringContaining('term-x')
       );
+    });
+  });
+
+  describe('Dispose', () => {
+    it('disposes the process pool', () => {
+      handler.dispose();
+      expect(mockPool.dispose).toHaveBeenCalled();
     });
   });
 
