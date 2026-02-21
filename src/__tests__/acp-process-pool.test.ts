@@ -33,14 +33,17 @@ import { ProcessPool } from '../acp/process-pool';
 function createMockProcess() {
   const stdout = new EventEmitter();
   const stderr = new EventEmitter();
+  const stdin = { end: vi.fn() };
   const proc = new EventEmitter() as EventEmitter & {
     stdout: EventEmitter;
     stderr: EventEmitter;
+    stdin: { end: ReturnType<typeof vi.fn> };
     pid: number;
     kill: ReturnType<typeof vi.fn>;
   };
   proc.stdout = stdout;
   proc.stderr = stderr;
+  proc.stdin = stdin;
   proc.pid = 12345;
   proc.kill = vi.fn();
   return proc;
@@ -82,7 +85,7 @@ describe('ProcessPool', () => {
 
       expect(id).toBe('term-1');
       expect(mockSpawn).toHaveBeenCalledWith('echo', ['hello'], expect.objectContaining({
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ['pipe', 'pipe', 'pipe'],
         shell: true,
       }));
     });
@@ -118,13 +121,16 @@ describe('ProcessPool', () => {
       expect(spawnCall.env).toEqual(expect.objectContaining({ MY_VAR: 'hello' }));
     });
 
-    it('does not set env when no env provided', () => {
+    it('always sets non-interactive env vars', () => {
       mockSpawn.mockReturnValue(createMockProcess());
 
       pool.create('cmd', []);
 
       const spawnCall = mockSpawn.mock.calls[0][2];
-      expect(spawnCall.env).toBeUndefined();
+      expect(spawnCall.env).toBeDefined();
+      expect(spawnCall.env.TERM).toBe('dumb');
+      expect(spawnCall.env.NO_COLOR).toBe('1');
+      expect(spawnCall.env.CI).toBe('1');
     });
 
     it('defaults args to empty array when not provided', () => {

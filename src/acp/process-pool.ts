@@ -9,6 +9,9 @@ import { spawn, execSync, ChildProcess } from 'child_process';
 import { randomUUID } from 'crypto';
 import * as vscode from 'vscode';
 
+/** Default timeout for waitForExit (5 minutes). */
+const DEFAULT_WAIT_TIMEOUT_MS = 5 * 60 * 1000;
+
 interface ManagedProcess {
   process: ChildProcess;
   stdout: string;
@@ -23,14 +26,25 @@ export class ProcessPool implements vscode.Disposable {
 
   create(command: string, args?: string[], cwd?: string, env?: Record<string, string>): string {
     const terminalId = randomUUID();
-    const spawnEnv = env ? { ...process.env, ...env } : undefined;
+    const spawnEnv = {
+      ...process.env,
+      ...env,
+      // Signal non-interactive mode to CLIs
+      TERM: 'dumb',
+      NO_COLOR: '1',
+      CI: '1',
+      AZURE_CORE_NO_COLOR: '1',
+    };
 
     const child = spawn(command, args ?? [], {
       cwd,
       env: spawnEnv,
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       shell: true,
     });
+
+    // Close stdin immediately — no interactive input available via ACP
+    child.stdin?.end();
 
     const managed: ManagedProcess = {
       process: child,
@@ -84,12 +98,26 @@ export class ProcessPool implements vscode.Disposable {
     };
   }
 
-  async waitForExit(terminalId: string): Promise<number> {
+  async waitForExit(terminalId: string, timeoutMs: number = DEFAULT_WAIT_TIMEOUT_MS): Promise<number> {
     const managed = this.processes.get(terminalId);
     if (!managed) {
       return 1;
     }
-    return managed.exitPromise;
+    if (managed.exited) {
+      return managed.exitCode!;
+    }
+
+    const timeout = new Promise<number>((_, reject) =>
+      setTimeout(() => reject(new Error(`Process ${terminalId} timed out after ${timeoutMs}ms`)), timeoutMs)
+    );
+
+    try {
+      return await Promise.race([managed.exitPromise, timeout]);
+    } catch {
+      // Timeout — kill the hung process
+      this.kill(terminalId);
+      return 1;
+    }
   }
 
   kill(terminalId: string): void {
