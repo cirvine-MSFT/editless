@@ -1,5 +1,237 @@
 
 
+## 2026-02-22: ACP Spike Architecture Decision
+
+**Date:** 2026-02-22  
+**Author:** Jaguar (Copilot SDK Expert)  
+**Status:** Implemented  
+**Related:** Issue #370 (ACP spike)
+
+### Context
+
+EditLess needs programmatic control over Copilot CLI for the ACP integration spike. The spike validates that ACP can replace terminal+events.jsonl integration with a structured JSON-RPC protocol.
+
+### Decision
+
+Built a three-layer ACP protocol foundation:
+
+#### 1. Type Layer (`src/acp/types.ts`)
+Complete TypeScript interfaces for ACP protocol v1:
+- JSON-RPC base types (Request, Response, Notification, Error)
+- All client→agent methods: `initialize`, `session/new`, `session/load`, `session/prompt`, `session/cancel`
+- All agent→client session updates: `agent_message_chunk`, `agent_thought_chunk`, `tool_call`, `tool_call_update`, `plan`, `user_message_chunk`, `available_commands_update`, `current_mode_update`
+- All agent→client request methods: `session/request_permission`, `fs/read_text_file`, `fs/write_text_file`, `terminal/*`
+- Discriminated unions for type-safe update handling
+
+#### 2. Client Layer (`src/acp/client.ts`)
+Core JSON-RPC engine:
+- Spawns `copilot --acp --stdio` using `buildCopilotCommand({ extraArgs: ['--acp', '--stdio'] })`
+- NDJSON parsing with line-buffered stream handling (safety for partial reads)
+- Bidirectional JSON-RPC: tracks pending client→agent requests by ID, handles incoming agent→client requests
+- EventEmitter pattern (`vscode.EventEmitter`) for streaming updates: message_chunk, thought_chunk, tool_call, tool_call_update, plan, stopped, error
+- Handler interface (`AcpRequestHandler`) for agent→client requests — decouples protocol from VS Code APIs
+- Proper lifecycle: initialize() → createSession(cwd) → prompt(sessionId, text) → dispose()
+- Cleanup on dispose: kills child process, rejects pending promises, disposes emitters
+
+#### 3. Handler Layer (`src/acp/handlers.ts`)
+Spike implementation of `AcpRequestHandler`:
+- Auto-approves all permission requests (spike only)
+- Reads files from disk via Node `fs/promises` for `fs/read_text_file`
+- Throws stub errors for `fs/write_text_file` and `terminal/*` (out of spike scope)
+- Logs all requests to VS Code output channel for visibility during testing
+
+### Architecture Insights
+
+**Reverse request pattern:** ACP is bidirectional. The Copilot agent makes JSON-RPC requests TO the client (fs/read, terminal/create, permission requests). These arrive with an `id` field — client MUST send a JSON-RPC response. This is fundamentally different from terminal mode (one-way, agent owns I/O).
+
+**Implication:** EditLess becomes the UI owner in ACP mode. The handler interface is the abstraction point for VS Code integration (file system, terminal, permission dialogs).
+
+**Why handler interface?** Decouples protocol from VS Code. Tests can mock handlers. Future handlers can implement write/terminal capabilities without touching client.ts.
+
+### Patterns Used
+
+- **NDJSON streaming:** Buffer accumulation with `split('\n')`, parse each complete line separately (safety against partial JSON)
+- **Map-based request tracking:** `pendingRequests: Map<id, {resolve, reject}>` — promises resolved when responses arrive
+- **Type guards:** `isValidJsonRpc(msg): msg is Record<string, unknown>` for safe type narrowing
+- **VS Code EventEmitter:** Not Node EventEmitter — integrates with VS Code extension host, proper disposal
+- **Command builder integration:** Uses existing `buildCopilotCommand()` from `copilot-cli-builder.ts` for consistency
+
+### What's NOT in Spike Scope
+
+- Write file operations (handler throws error)
+- Terminal operations (handler throws error)
+- Permission UI (handler auto-approves)
+- Session resume UI (`session/load` is implemented in client, no UI)
+- Model/mode switching (protocol supports it, no UI)
+- Plan visualization (events fire, no rendering)
+- Tool call UI (events fire, no rendering)
+
+### Next Steps (Post-Spike)
+
+If spike proves ACP viable:
+1. Build UI layer: webview panel rendering agent_message_chunk, tool calls, plans
+2. Implement real permission handler: VS Code dialogs for user approval
+3. Implement terminal handler: route terminal/* to VS Code integrated terminal
+4. Implement write handler: VS Code workspace edit API + user confirmation
+5. Add session resume UI: list sessions from protocol, not filesystem
+6. Add model/mode switcher: UI controls for runtime switching
+
+If spike proves ACP NOT viable:
+- Fall back to terminal+events.jsonl+--resume (Option A)
+- ACP remains a future option when protocol stabilizes
+
+### Confidence
+
+High — Protocol testing validated all message types, client compiles cleanly, architecture matches ACP spec patterns from Zed/JetBrains implementations.
+
+---
+
+## 2026-02-22: ACP Deep Dive: Definitive Analysis
+
+**Date:** 2026-02-22  
+**Author:** Jaguar (Copilot SDK Expert)  
+**Requested by:** Casey Irvine  
+**Status:** Research complete
+
+### What IS ACP Exactly?
+
+The **Agent Client Protocol (ACP)** is an open standard that standardizes communication between code editors/IDEs (clients) and AI coding agents (servers). It's the LSP equivalent for AI agents — any ACP-compliant client can talk to any ACP-compliant agent, and vice versa.
+
+**Key facts:**
+- Protocol: **JSON-RPC 2.0** over **NDJSON** (newline-delimited JSON)
+- Transport: **stdio** (recommended for IDE integration) or **TCP** (for remote/networked)
+- Created by: Zed Industries, with adoption by GitHub, JetBrains, Gemini CLI, and others
+- Copilot CLI support: **Public preview** since January 28, 2026
+- SDK: `@agentclientprotocol/sdk` (TypeScript), current version ~0.14.x
+- Spec version: Protocol version `1` (integer, not semver)
+
+**This is NOT a GitHub-proprietary thing.** It's an industry standard. Copilot CLI implements the ACP *server* role — meaning clients speak TO it, not the other way around.
+
+### How Does --acp Change the CLI's Behavior?
+
+**Verified by live testing** with `copilot.exe --acp --stdio` on Copilot CLI v0.0.414:
+
+**What changes:**
+- **No terminal UI.** No banner, no prompt, no scrolling chat, no color output. The process is completely headless.
+- **stdin/stdout become a JSON-RPC channel.** You send JSON-RPC requests in, you get JSON-RPC responses and notifications out.
+- **It's a server, not a client.** YOUR code drives the conversation — sending prompts, handling permissions, managing sessions.
+- **Streaming responses.** Agent output arrives as `session/update` notifications with `agent_message_chunk` updates.
+
+### Protocol Surface Summary
+
+**Messages the CLIENT sends (EditLess → Copilot):**
+| Method | Purpose |
+|--------|---------|
+| `initialize` | Handshake, negotiate capabilities |
+| `session/new` | Create a new conversation session |
+| `session/load` | Resume a previous session (Copilot supports this!) |
+| `session/prompt` | Send user message |
+| `session/cancel` | Cancel current operation |
+
+**Notifications the AGENT sends (Copilot → EditLess):**
+| Update Type | Purpose |
+|-------------|---------|
+| `agent_message_chunk` | Streaming text response |
+| `agent_thought_chunk` | Internal reasoning (transparency) |
+| `tool_call` | New tool invocation starting |
+| `tool_call_update` | Progress/completion of tool |
+| `plan` | Multi-step execution plan |
+| `user_message_chunk` | Replay of history during session load |
+| `available_commands_update` | Slash command discovery |
+| `current_mode_update` | Mode changes (agent/plan/autopilot) |
+
+**Methods the AGENT calls on the CLIENT (Copilot asks EditLess):**
+| Method | Purpose |
+|--------|---------|
+| `session/request_permission` | Ask user to approve tool execution |
+| `fs/read_text_file` | Read a file from workspace |
+| `fs/write_text_file` | Write a file to workspace |
+| `terminal/create` | Run a shell command |
+| `terminal/output` | Get terminal output |
+| `terminal/wait_for_exit` | Wait for command completion |
+| `terminal/kill` | Kill a running command |
+| `terminal/release` | Release terminal resources |
+
+### Is ACP Stable or Experimental?
+
+**Mixed:**
+- The **ACP protocol spec** itself is approaching stability (protocol version 1, broad industry adoption, Zed + JetBrains + GitHub + Gemini)
+- **Copilot CLI's ACP support** is explicitly **public preview** (announced Jan 28, 2026): "subject to change"
+- The **TypeScript SDK** is at v0.14.x — pre-1.0, actively evolving
+- The protocol uses integer versioning (`1`) for major versions, with new capabilities added as non-breaking extensions
+
+**Assessment:** The protocol design is solid and won't change fundamentally. But Copilot-specific behaviors, available capabilities, and SDK APIs may shift. Building on it now is viable for experimentation; building a production dependency on it needs careful version pinning.
+
+### Three Realistic Options for EditLess
+
+#### Option A: Regular Terminal + events.jsonl + --resume (Current Plan)
+**Architecture:** EditLess spawns `copilot --resume <uuid>` in a VS Code terminal. User sees native Copilot UI. EditLess watches `~/.copilot/session-state/{uuid}/events.jsonl` for state.
+
+| Aspect | Rating |
+|--------|--------|
+| Implementation cost | Low — already partially built |
+| User experience | Native Copilot terminal (proven UX) |
+| Structured data | Limited to events.jsonl file watching |
+| Permission handling | Copilot handles it natively in terminal |
+| Session resume | ✅ `--resume <uuid>` works |
+| Tool call visibility | events.jsonl has tool events |
+| Real-time streaming | events.jsonl is append-only, file-watch latency |
+| Stability | ✅ Stable, production-ready |
+| Risk | Very low |
+
+**Verdict:** Ship this. It works, it's stable, users get the real Copilot experience.
+
+#### Option B: Full ACP Client (No Terminal, EditLess Owns the UI)
+**Architecture:** EditLess spawns `copilot --acp --stdio` as a headless subprocess. EditLess renders ALL output in a custom webview/panel. EditLess implements fs/terminal capabilities.
+
+| Aspect | Rating |
+|--------|--------|
+| Implementation cost | **Very high** — build full Copilot UI from scratch |
+| User experience | Custom (could be better OR worse than native) |
+| Structured data | ✅ Perfect — every event is typed JSON-RPC |
+| Permission handling | EditLess must build permission UI |
+| Session resume | ✅ `session/load` protocol method |
+| Tool call visibility | ✅ Real-time, typed, with diffs and terminals |
+| Real-time streaming | ✅ Sub-millisecond, true streaming |
+| Stability | ⚠️ Public preview, SDK pre-1.0 |
+| Risk | High — large surface area, breaking changes possible |
+
+**Verdict:** This is the "build a Copilot IDE panel from scratch" option. Enormous effort. For EditLess, this is premature — you'd be rebuilding what Copilot's native terminal already provides.
+
+#### Option C: Hybrid (ACP Sideband + Terminal Display)
+**Architecture:** Run two Copilot instances — one in terminal for user UX, one in ACP mode for structured data.
+
+| Aspect | Rating |
+|--------|--------|
+| Implementation cost | Medium-high — two processes, state sync challenges |
+| User experience | Native terminal + structured sideband |
+| Structured data | ✅ From ACP instance |
+| Risk | **Fatal flaw: two independent sessions** |
+
+**Verdict:** ❌ This doesn't work. The two instances would have separate sessions, separate conversations, separate tool executions. Double API quota for no benefit. No way to "mirror" one to the other.
+
+### Recommendation
+
+**Phase 1 (now): Option A.** Terminal + events.jsonl + --resume. This is the right call. Ship it.
+
+**Phase 2 (future, when ACP stabilizes):** Consider Option B ONLY if EditLess evolves into a full IDE panel that wants to own the Copilot UX completely — like Zed or JetBrains do. This would be a major architectural pivot, not an incremental improvement.
+
+**What ACP gives us that events.jsonl doesn't (for future reference):**
+1. Typed tool call content (diffs with old/new text, terminal output)
+2. Permission request interception (EditLess could auto-approve or customize)
+3. Plan visibility (step-by-step agent planning)
+4. Mode switching (agent/plan/autopilot)
+5. Model selection at runtime
+6. Session load with full history replay
+7. MCP server injection at session creation time
+
+**What we'd lose by switching to ACP:**
+1. The native Copilot terminal UX (we'd have to rebuild it)
+2. Stability (public preview vs. proven terminal mode)
+3. User familiarity (terminal is what people know)
+
+---
+
 ### 2026-02-18: Dev Tooling: Isolated Environment Strategy
 
 **Date:** 2026-02-18  
