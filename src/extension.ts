@@ -963,7 +963,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
       type LocationValue = 'personal' | 'workspace';
       const locationItems: { label: string; description: string; value: LocationValue }[] = [
-        { label: '$(account) Personal agent', description: '~/.copilot/agents/', value: 'personal' },
+        { label: '$(account) Personal agent', description: '~/.config/copilot/agents/', value: 'personal' },
         { label: '$(repo) Workspace agent', description: '.github/agents/ in current workspace', value: 'workspace' },
       ];
       const locationPick = await vscode.window.showQuickPick(locationItems, {
@@ -974,7 +974,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       let agentsDir: string;
 
       if (locationPick.value === 'personal') {
-        agentsDir = path.join(os.homedir(), '.copilot', 'agents');
+        agentsDir = path.join(os.homedir(), '.config', 'copilot', 'agents');
       } else {
         const folders = vscode.workspace.workspaceFolders;
         if (!folders || folders.length === 0) {
@@ -1018,7 +1018,12 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         '',
       ].join('\n');
 
-      fs.writeFileSync(filePath, template, 'utf-8');
+      try {
+        fs.writeFileSync(filePath, template, 'utf-8');
+      } catch (err) {
+        vscode.window.showErrorMessage(`Failed to create agent file: ${err instanceof Error ? err.message : err}`);
+        return;
+      }
       const doc = await vscode.workspace.openTextDocument(filePath);
       await vscode.window.showTextDocument(doc);
 

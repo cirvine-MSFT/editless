@@ -24,7 +24,7 @@ interface WorkspaceFolder {
 
 /**
  * Unified discovery — scans workspace folders for both agents AND squads,
- * plus ~/.copilot/agents/ for personal agent library.
+ * plus ~/.config/copilot/agents/ (and ~/.copilot/agents/) for personal agent library.
  * Returns DiscoveredItem[] minus already-registered items.
  */
 export function discoverAll(

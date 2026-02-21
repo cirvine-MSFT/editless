@@ -1191,7 +1191,7 @@ describe('extension command handlers', () => {
       expect(mockShowTextDocument).not.toHaveBeenCalled();
     });
 
-    it('should create personal agent in ~/.copilot/agents/', async () => {
+    it('should create personal agent in ~/.config/copilot/agents/', async () => {
       const os = await import('os');
       mockShowInputBox.mockResolvedValueOnce('test-agent');
       mockShowQuickPick.mockResolvedValueOnce({ value: 'personal' });
