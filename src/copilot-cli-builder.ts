@@ -21,6 +21,8 @@ export interface CopilotCommandOptions {
   addDirs?: string[];
   /** Arbitrary additional CLI arguments (e.g. --model, --yolo, --continue). */
   extraArgs?: string[];
+  /** Enable ACP mode with --acp --stdio flags. */
+  acp?: boolean;
 }
 
 /**
@@ -55,6 +57,9 @@ export function buildCopilotCommand(options: CopilotCommandOptions = {}): string
     for (const dir of options.addDirs) {
       parts.push('--add-dir', shellQuote(dir));
     }
+  }
+  if (options.acp) {
+    parts.push('--acp', '--stdio');
   }
 
   // Append freeform extraArgs with intelligent dedup against typed flags

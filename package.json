@@ -68,6 +68,11 @@
         "icon": "$(add)"
       },
       {
+        "command": "editless.launchAcpSession",
+        "title": "Launch ACP Session (Experimental)",
+        "category": "EditLess"
+      },
+      {
         "command": "editless.focusSession",
         "title": "Focus Session",
         "category": "EditLess"

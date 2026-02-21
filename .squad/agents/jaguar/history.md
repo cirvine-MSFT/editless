@@ -180,3 +180,25 @@ Thorough investigation of ACP for EditLess integration, including live protocol 
 
 **Full analysis**: `.squad/decisions/inbox/jaguar-acp-deep-dive.md`
 
+## ACP Spike Implementation (2026-02-22)
+
+Built the foundational ACP protocol layer for issue #370:
+
+**Architecture:**
+- `src/acp/types.ts` — Complete TypeScript interfaces for ACP JSON-RPC protocol v1 (initialize, session/*, fs/*, terminal/*, all session update types)
+- `src/acp/client.ts` — JSON-RPC client over child_process stdio, bidirectional request/response handling, EventEmitter pattern for streaming updates
+- `src/acp/handlers.ts` — Default implementation auto-approving permissions, reading files, stubbing writes/terminal (spike scope)
+
+**Key patterns:**
+- Spawns `copilot --acp --stdio` using `buildCopilotCommand` with `extraArgs: ['--acp', '--stdio']`
+- NDJSON parsing with line buffering for stream safety
+- Pending request tracking via Map<id, Promise> with proper cleanup on dispose
+- Agent→client request routing via handler interface (fs/read, permission requests, terminal ops)
+- VS Code EventEmitter for 'message_chunk', 'thought_chunk', 'tool_call', 'tool_call_update', 'plan', 'stopped', 'error'
+- Type-safe discriminated unions for session updates (SessionUpdate = AgentMessageChunkUpdate | ToolCallUpdate | ...)
+
+**Critical architecture insight:** ACP agent makes reverse JSON-RPC calls to the client (fs/read_text_file, terminal/create, etc.). These arrive as requests with `id` fields — client MUST respond. Handler interface decouples protocol from VS Code integration.
+
+**File paths:** `src/acp/{types,client,handlers}.ts`
+
+

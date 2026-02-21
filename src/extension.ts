@@ -29,6 +29,7 @@ import { getEdition } from './vscode-compat';
 import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
 import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
 import { buildDefaultLaunchCommand, buildCopilotCommand } from './copilot-cli-builder';
+import { AcpPanel } from './acp/panel';
 
 const execFileAsync = promisify(execFile);
 
@@ -1124,6 +1125,114 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         }
       });
       context.subscriptions.push(listener);
+    }),
+  );
+
+  // --- ACP Session (Experimental) ----------------------------------------
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.launchAcpSession', async () => {
+      const panel = AcpPanel.createOrShow(context.extensionUri);
+      
+      // Dynamic import to avoid startup impact
+      const { AcpClient } = await import('./acp/client');
+      const { DefaultAcpRequestHandler } = await import('./acp/handlers');
+
+      const handler = new DefaultAcpRequestHandler(output);
+      const client = new AcpClient(handler, output);
+      
+      let sessionId: string | undefined;
+
+      // Wire client events → panel messages
+      const subscriptions: vscode.Disposable[] = [];
+      
+      subscriptions.push(
+        client.onMessageChunk(text => {
+          void panel.postMessage({ type: 'appendChunk', text });
+        })
+      );
+
+      subscriptions.push(
+        client.onThoughtChunk(text => {
+          void panel.postMessage({ type: 'thoughtChunk', text });
+        })
+      );
+
+      subscriptions.push(
+        client.onToolCall(call => {
+          void panel.postMessage({ type: 'toolCall', name: call.name, status: 'running' });
+        })
+      );
+
+      subscriptions.push(
+        client.onToolCallUpdate(update => {
+          void panel.postMessage({ type: 'toolCall', name: update.id, status: update.type });
+        })
+      );
+
+      subscriptions.push(
+        client.onStopped(e => {
+          void panel.postMessage({ type: 'setStatus', status: 'Ready' });
+        })
+      );
+
+      subscriptions.push(
+        client.onError(err => {
+          void panel.postMessage({ type: 'error', message: err.message });
+          void panel.postMessage({ type: 'setStatus', status: 'Error' });
+        })
+      );
+
+      // Wire panel user input → client.prompt()
+      subscriptions.push(
+        panel.onDidReceiveMessage(async (msg: unknown) => {
+          if (typeof msg === 'object' && msg !== null && 'type' in msg) {
+            const message = msg as { type: string; text?: string };
+            if (message.type === 'sendMessage' && message.text && sessionId) {
+              void panel.postMessage({ type: 'addUserMessage', text: message.text });
+              void panel.postMessage({ type: 'startAssistantMessage' });
+              void panel.postMessage({ type: 'setStatus', status: 'Thinking' });
+              try {
+                await client.prompt(sessionId, message.text);
+              } catch (err) {
+                const errorMsg = err instanceof Error ? err.message : String(err);
+                void panel.postMessage({ type: 'error', message: errorMsg });
+                void panel.postMessage({ type: 'setStatus', status: 'Ready' });
+              }
+            }
+          }
+        })
+      );
+
+      // Dispose client when panel closes
+      subscriptions.push(
+        panel.onDidReceiveMessage(() => {}) // Keep subscription active
+      );
+
+      const panelDisposable = {
+        dispose: () => {
+          subscriptions.forEach(s => s.dispose());
+          client.dispose();
+        }
+      };
+
+      // Initialize and create session
+      try {
+        void panel.postMessage({ type: 'setStatus', status: 'Connecting' });
+        await client.initialize();
+        
+        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
+        const sessionResult = await client.createSession(cwd);
+        sessionId = sessionResult.sessionId;
+        
+        void panel.postMessage({ type: 'setStatus', status: 'Ready' });
+      } catch (err) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        void panel.postMessage({ type: 'error', message: `Failed to start ACP session: ${errorMsg}` });
+        void panel.postMessage({ type: 'setStatus', status: 'Error' });
+        output.appendLine(`[ACP] Failed to start session: ${errorMsg}`);
+      }
+
+      context.subscriptions.push(panelDisposable);
     }),
   );
 
