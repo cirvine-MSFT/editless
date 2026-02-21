@@ -57,6 +57,7 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _shellExecutionActive = new Map<vscode.Terminal, boolean>();
   private readonly _lastActivityAt = new Map<vscode.Terminal, number>();
   private readonly _sessionWatchers = new Map<vscode.Terminal, vscode.Disposable>();
+  private readonly _lastSessionEvent = new Map<vscode.Terminal, SessionEvent>();
   private _matchTimer: ReturnType<typeof setTimeout> | undefined;
   private _persistTimer: ReturnType<typeof setInterval> | undefined;
   private _sessionResolver?: SessionContextResolver;
@@ -74,6 +75,7 @@ export class TerminalManager implements vscode.Disposable {
       vscode.window.onDidCloseTerminal(terminal => {
         this._shellExecutionActive.delete(terminal);
         this._lastActivityAt.delete(terminal);
+        this._lastSessionEvent.delete(terminal);
         const watcher = this._sessionWatchers.get(terminal);
         if (watcher) {
           watcher.dispose();
@@ -151,6 +153,7 @@ export class TerminalManager implements vscode.Disposable {
     // Start watching the session for activity (#324)
     if (this._sessionResolver) {
       const watcher = this._sessionResolver.watchSession(uuid, event => {
+        this._lastSessionEvent.set(terminal, event);
         this._lastActivityAt.set(terminal, Date.now());
         this._onDidChange.fire();
       });
@@ -276,7 +279,8 @@ export class TerminalManager implements vscode.Disposable {
 
     // Start watching the reconnected session for activity
     if (entry.agentSessionId && this._sessionResolver) {
-      const watcher = this._sessionResolver.watchSession(entry.agentSessionId, () => {
+      const watcher = this._sessionResolver.watchSession(entry.agentSessionId, event => {
+        this._lastSessionEvent.set(match, event);
         this._lastActivityAt.set(match, Date.now());
         this._onDidChange.fire();
       });
@@ -364,7 +368,8 @@ export class TerminalManager implements vscode.Disposable {
 
     // Start watching the relaunched session for activity
     if (entry.agentSessionId && this._sessionResolver) {
-      const watcher = this._sessionResolver.watchSession(entry.agentSessionId, () => {
+      const watcher = this._sessionResolver.watchSession(entry.agentSessionId, event => {
+        this._lastSessionEvent.set(terminal, event);
         this._lastActivityAt.set(terminal, Date.now());
         this._onDidChange.fire();
       });
@@ -458,6 +463,13 @@ export class TerminalManager implements vscode.Disposable {
     const terminal = terminalOrId;
     const info = this._terminals.get(terminal);
     if (!info) { return undefined; }
+
+    // Prefer events.jsonl data over shell execution tracking — it reflects
+    // the actual copilot agent state rather than the outer shell process.
+    const lastEvent = this._lastSessionEvent.get(terminal);
+    if (lastEvent) {
+      return isWorkingEvent(lastEvent.type) ? 'active' : 'inactive';
+    }
 
     const isExecuting = this._shellExecutionActive.get(terminal);
     return isExecuting ? 'active' : 'inactive';
@@ -629,6 +641,20 @@ export class TerminalManager implements vscode.Disposable {
 }
 
 // -- Exported helpers for tree view and testability -------------------------
+
+/** Returns true if the event type indicates the agent is actively working. */
+function isWorkingEvent(eventType: string): boolean {
+  switch (eventType) {
+    case 'assistant.turn_start':
+    case 'assistant.message':
+    case 'tool.execution_start':
+    case 'tool.execution_complete':
+    case 'user.message':
+      return true;
+    default:
+      return false;
+  }
+}
 
 export function getStateIcon(state: SessionState): vscode.ThemeIcon {
   switch (state) {
