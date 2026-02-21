@@ -580,13 +580,24 @@ describe('EditlessTreeProvider — visibility filtering', () => {
   it('"All agents hidden" placeholder when everything hidden', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
     const registry = createMockRegistry(squads);
-    const visibility = { isHidden: () => true };
+    const visibility = { isHidden: () => true, getHiddenIds: () => ['squad-a'] };
     const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
 
     const roots = provider.getChildren();
 
     expect(roots).toHaveLength(1);
     expect(roots[0].label).toContain('All agents hidden');
+  });
+
+  it('"No agents yet" placeholder when truly empty', () => {
+    const registry = createMockRegistry([]);
+    const visibility = { isHidden: () => false, getHiddenIds: () => [] };
+    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
+
+    const roots = provider.getChildren();
+
+    expect(roots).toHaveLength(1);
+    expect(roots[0].label).toContain('No agents yet');
   });
 });
 

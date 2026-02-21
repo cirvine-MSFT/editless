@@ -203,12 +203,15 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     }
 
     if (items.length === 0) {
+      const hasHiddenItems = (this._visibility?.getHiddenIds().length ?? 0) > 0;
       const msg = new EditlessTreeItem(
-        'All agents hidden — use Show Hidden to restore',
+        hasHiddenItems
+          ? 'All agents hidden — use Show Hidden to restore'
+          : 'No agents yet — use + to add',
         'category',
         vscode.TreeItemCollapsibleState.None,
       );
-      msg.iconPath = new vscode.ThemeIcon('eye-closed');
+      msg.iconPath = new vscode.ThemeIcon(hasHiddenItems ? 'eye-closed' : 'add');
       items.push(msg);
     }
 
@@ -217,21 +220,29 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private buildSquadItem(cfg: AgentTeamConfig): EditlessTreeItem {
     const displayName = normalizeSquadDisplayName(cfg.name, cfg.id);
+    const isStandalone = cfg.universe === 'standalone';
+
+    const terminalCount = this.terminalManager
+      ? this.terminalManager.getTerminalsForSquad(cfg.id).length
+      : 0;
+
     const item = new EditlessTreeItem(
       `${cfg.icon} ${displayName}`,
       'squad',
-      vscode.TreeItemCollapsibleState.Collapsed,
+      isStandalone
+        ? (terminalCount > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None)
+        : vscode.TreeItemCollapsibleState.Collapsed,
       cfg.id,
     );
 
-    const descParts: string[] = [cfg.universe];
+    const descParts: string[] = [];
+    if (!isStandalone) {
+      descParts.push(cfg.universe);
+    }
 
     const cached = this._cache.get(cfg.id);
-    if (this.terminalManager) {
-      const count = this.terminalManager.getTerminalsForSquad(cfg.id).length;
-      if (count > 0) {
-        descParts.push(`${count} session${count === 1 ? '' : 's'}`);
-      }
+    if (terminalCount > 0) {
+      descParts.push(`${terminalCount} session${terminalCount === 1 ? '' : 's'}`);
     }
 
     item.description = descParts.join(' · ');
@@ -251,7 +262,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       tooltipLines.push(`Last activity: ${cached.lastActivity}`);
     }
     item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
-    item.iconPath = new vscode.ThemeIcon('organization');
+    item.iconPath = new vscode.ThemeIcon(isStandalone ? 'hubot' : 'organization');
 
     return item;
   }
@@ -307,18 +318,20 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       }
     }
 
-    // Roster
-    const rosterItem = new EditlessTreeItem(
-      `Roster (${state.roster.length})`,
-      'category',
-      state.roster.length > 0
-        ? vscode.TreeItemCollapsibleState.Collapsed
-        : vscode.TreeItemCollapsibleState.None,
-      squadId,
-      'roster',
-    );
-    rosterItem.iconPath = new vscode.ThemeIcon('organization');
-    children.push(rosterItem);
+    // Roster — only for non-standalone squads
+    if (state.config.universe !== 'standalone') {
+      const rosterItem = new EditlessTreeItem(
+        `Roster (${state.roster.length})`,
+        'category',
+        state.roster.length > 0
+          ? vscode.TreeItemCollapsibleState.Collapsed
+          : vscode.TreeItemCollapsibleState.None,
+        squadId,
+        'roster',
+      );
+      rosterItem.iconPath = new vscode.ThemeIcon('organization');
+      children.push(rosterItem);
+    }
 
     if (parentItem) {
       for (const child of children) {

@@ -202,9 +202,19 @@ describe('discoverAgentsInCopilotDir', () => {
     fs.mkdirSync(agentsDir, { recursive: true });
     fs.writeFileSync(path.join(agentsDir, 'foo.agent.md'), '# Foo Agent\n> Foo description\n', 'utf-8');
 
-    // discoverAgentsInCopilotDir uses os.homedir() which reads HOME/USERPROFILE
     const result = discoverAgentsInCopilotDir();
 
     expect(result.find(a => a.id === 'foo')).toBeDefined();
+  });
+
+  it('should discover agents in ~/.config/copilot/agents/ subdirectory', () => {
+    const fakeHome = process.env.HOME!;
+    const agentsDir = path.join(fakeHome, '.config', 'copilot', 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, 'bar.agent.md'), '# Bar Agent\n> Bar description\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir();
+
+    expect(result.find(a => a.id === 'bar')).toBeDefined();
   });
 });
