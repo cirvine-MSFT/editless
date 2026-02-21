@@ -248,3 +248,18 @@ Decision record: `.ai-team/decisions/inbox/rick-removal-batch2-review.md`
 Reviewed PR #359 (Closes #358) — +2/-32 lines in editless-tree.ts. Three changes: (1) Label uses stable `info.displayName` instead of auto-updating `sessionCtx.summary`. (2) Description simplified to just `relative` (creation-relative time). (3) Deleted `_buildTerminalDescription` (30-line method, sole call site confirmed via grep). Tooltip still preserves full context (summary, branch, refs, timestamps). `getStateDescription` import still used by `_buildTerminalTooltip`. All 576 tests pass, lint clean. Aligns with UX convention: Icon=state, Label=what, Description=time only, Tooltip=full context. Simple/confident — squash merged, issue #358 auto-closed.
 
 📌 **Removal Batch 2 architecture review (2026-02-20):** Reviewed and merged 4 consecutive cleanup PRs (#352–#355). Identified 3 follow-up items: (1) Extract getLaunchCommand() to shared cli-settings.ts module (currently duplicated in discovery.ts, extension.ts, terminal-manager.ts), (2) Clean dead imports in work-items-tree.ts (fs, path, TEAM_DIR_NAMES after plan detection removal), (3) Consider enabling noUnusedLocals in tsconfig. Architectural observation: Merge order matters for batches — all 4 PRs based on same SHA, caused conflicts when merged sequentially. Future batches should rebase proactively or merge in dependency order.
+
+### 2026-02-21: Phase 2 terminal integration architecture review — REQUEST CHANGES
+Reviewed `terminal-manager.ts` and `session-context.ts` for Phase 2 terminal integration (pre-generated UUID, TerminalOptions, focusTerminal overload, watchSession/watchSessionDir, session watcher wiring).
+
+**Verdict: REQUEST CHANGES** — one required fix, two advisories.
+
+**Required fix:** `relaunchSession` (terminal-manager.ts:306-308) shows error via `showErrorMessage` when `isSessionResumable` returns `resumable: false`, but **does not return early** — execution continues, creating a terminal and sending the doomed `--resume` command. Users see contradictory signals: error toast + terminal launching. Must early-return or guard terminal creation.
+
+**Advisory 1 — Missing `dispose()` on SessionContextResolver:** Class owns `_fileWatchers` and `_watcherPending` maps but has no bulk cleanup method. TerminalManager.dispose() handles its own watchers via `_sessionWatchers`, but orphaned retry timers from `setupWatch()` could fire post-deactivation. Recommend adding a `dispose()` method to SessionContextResolver.
+
+**Advisory 2 — Unbounded retry in `setupWatch()`:** session-context.ts:218-222 and 278-283 retry every 1s forever if file/dir doesn't exist. Each watcher's Disposable cleans up on dispose, so no leak, but wasteful if session never materializes. Recommend max retry count (~30).
+
+**What's solid:** Module boundary is clean (session-context.ts has zero vscode imports, uses own Disposable interface). Watcher lifecycle in TerminalManager is thorough — onDidCloseTerminal cleans per-terminal, dispose() cleans all. Pre-generated UUID eliminates session-detection race condition. Debounced fs.watch with tail reading is efficient. focusTerminal string-overload validates liveness correctly. `watchSessionDir` is unused in production code (forward-looking for Phase 3) — acceptable as speculative API.
+
+**Decision:** Filed `.squad/decisions/inbox/rick-phase2-review.md` documenting the relaunchSession guard requirement.

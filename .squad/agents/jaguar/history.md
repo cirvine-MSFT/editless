@@ -180,3 +180,37 @@ Thorough investigation of ACP for EditLess integration, including live protocol 
 
 **Full analysis**: `.squad/decisions/inbox/jaguar-acp-deep-dive.md`
 
+## ACP Spike M5 — Agent flag, UI dropdowns, message queue (2026-02-23)
+
+Implemented four features on branch `squad/370-acp-spike`:
+
+**1. Agent selection via --agent flag:**
+- `AcpClient.initialize()` now accepts `options?: { agent?: string }` and passes it to `buildCopilotCommand({ acp: true, agent })`. The builder already supported both flags — this wires it through the ACP client so ACP sessions can use custom agents.
+
+**2. Model/mode dropdowns in webview panel:**
+- Added toolbar between status bar and conversation with `<select>` dropdowns for model and mode, plus a read-only agent name display.
+- Panel accepts `setModels` (from `SessionNewResult.models`) and `setModes` (from `SessionNewResult.modes`) messages to populate dropdowns.
+- Panel emits `changeModel` and `changeMode` messages to extension.
+- `updateMode` message from extension updates the mode dropdown when `current_mode_update` notification arrives.
+
+**3. Message queue in webview:**
+- Users can type and send messages while agent is responding. Messages are queued in an array.
+- Queued messages appear in chat with 55% opacity and "⏳ queued" badge.
+- `promptStarted`/`promptFinished` messages from extension control queue flow. Queue drains sequentially after each prompt completes.
+
+**4. Extension.ts wiring:**
+- After `session/new`, sends `setModels` and `setModes` to panel with the returned models/modes data.
+- `changeModel`/`changeMode` from panel are logged to output channel (ACP doesn't yet have a dedicated method — may need prompt prefix or dedicated request).
+- `onModeUpdate` event added to `AcpClient` for `current_mode_update` session notifications, wired through to panel's `updateMode`.
+- `onStopped` now also sends `endAssistantMessage` and `promptFinished` to properly close the message and drain the queue.
+
+**Key decisions:**
+- Model/mode switching is *logged only* for now — ACP protocol doesn't expose a dedicated method for runtime model/mode changes. Likely needs `session/prompt` with a prefix or a future protocol addition.
+- Message queue lives entirely in the webview JS; extension just signals `promptStarted`/`promptFinished`.
+
+## Fix: relaunchSession early return on non-resumable session (2026-02)
+
+- `relaunchSession()` was missing a `return` after `showErrorMessage` when `isSessionResumable()` returned `resumable: false`. This caused terminal creation and `--resume <id>` to proceed, resulting in both an error toast and a broken terminal.
+- Fix: Added `return undefined` after the error message, changed return type to `vscode.Terminal | undefined`, and added `.filter()` in `relaunchAllOrphans()` to handle the new undefined possibility.
+- Lesson: Always guard control flow after validation error paths — showing an error message is not the same as aborting the operation.
+

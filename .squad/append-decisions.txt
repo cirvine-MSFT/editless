@@ -1,0 +1,61 @@
+
+
+---
+
+### 2026-02-21: Terminal UUID Pre-generation Pattern
+
+**Date:** 2026-02-21  
+**Author:** Morty  
+**Status:** Implemented  
+**Issues:** #323, #324, #326
+
+## Decision
+
+Terminals now pre-generate Copilot CLI session UUIDs before launching, eliminating the need for post-launch orphan detection and fixing focus stability issues.
+
+## Implementation
+
+### 1. UUID Pre-generation (#323, #326)
+
+Terminals pre-generate UUID via crypto.randomUUID(), pass via --resume flag. Enables deterministic session tracking without race conditions.
+
+### 2. Terminal Options
+
+All managed terminals use: isTransient=true, iconPath, color, env vars (EDITLESS_TERMINAL_ID, EDITLESS_SQUAD_ID, EDITLESS_SQUAD_NAME).
+
+### 3. Events.jsonl File Watching
+
+SessionContextResolver.watchSession() watches with 100ms debounce, tail-reads last line, auto-retries on missing file.
+
+### 4. Stable Terminal Focus
+
+focusTerminal() accepts terminal object or string ID for lookup.
+
+---
+
+### 2026-02-21: ACP Deep Dive: Definitive Analysis for EditLess
+
+**Date:** 2026-02-21  
+**Author:** Jaguar (Copilot SDK Expert)  
+**Status:** Research complete
+
+## Summary
+
+ACP (Agent Client Protocol) — open JSON-RPC standard for IDE ↔ AI agent communication.
+
+**Three options for EditLess:**
+
+1. **Option A (RECOMMENDED NOW): Terminal + events.jsonl + --resume** — Low effort, proven stable, production-ready.
+2. **Option B (Future): Full ACP Client** — Very high effort, public preview, requires UI rebuild.
+3. **Option C (DON'T): Hybrid (two processes)** — Separate sessions, breaks state sync.
+
+## Recommendation
+
+Ship Option A now. It's stable and users get native Copilot UX. Option B is viable only if EditLess evolves into a full IDE panel (like Zed/JetBrains) — that would be a major architectural pivot, not incremental.
+
+## Key Points
+
+- ACP protocol spec approaching stability (version 1)
+- Copilot CLI ACP support is public preview (breaking changes possible)
+- TypeScript SDK v0.14.x (pre-1.0)
+- Production dependencies need careful version pinning
