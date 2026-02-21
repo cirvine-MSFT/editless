@@ -104,3 +104,43 @@ Researched three questions about Copilot CLI integration for EditLess terminal m
 5. `--no-alt-screen --no-color --stream off` for maximum parsability in pseudo-terminal scenarios
 6. Env vars: `COPILOT_MODEL`, `COPILOT_ALLOW_ALL`, `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`, `XDG_STATE_HOME`
 
+## Deep Dive: Pseudoterminal + --resume + events.jsonl + --acp Analysis (2026-02-21)
+
+Analyzed Casey's question: "Can pseudoterminal coexist with --resume, events.jsonl, and --acp?" from CLI integration perspective.
+
+**1. Pseudoterminal + --resume + events.jsonl:**
+- ✅ **YES, fully compatible. No conflicts.**
+- `--resume <uuid>` just controls session dir naming; doesn't interact with process lifecycle
+- PTY handles process; CLI writes to filesystem; EditLess watches filesystem
+- Pre-generated UUID eliminates fragile regex parsing (validates Morty's concern)
+- Robust combination: EditLess controls process, knows session ID, gets rich state from events.jsonl
+
+**2. Pseudoterminal + --acp:**
+- ❌ **NO, mutually exclusive.**
+- `--acp` (Agent Client Protocol) switches CLI into JSON-RPC server mode, not interactive mode
+- PTY needs interactive stdout/stderr; ACP replaces stdout/stderr with protocol messages
+- Can't do both: `copilot --acp --resume` is invalid (different I/O models)
+- Forces choice: Either PTY (user sees terminal), or ACP (structured protocol, invisible to user)
+
+**3. Regular terminal hide/show UX with pseudoterminal:**
+- ✅ **Pseudoterminal gives real advantage here.**
+- Current behavior (regular terminal): Close tab → process dies (SIGTERM standard behavior)
+- Pseudoterminal behavior: Close UI → EditLess can keep process running
+- Means: Reopen terminal → reconnect to existing process, not relaunch
+- BUT: EditLess uses `isTransient` terminals (2026-02-19 decision), which may or may not survive OS signals
+
+**4. What CLI team actually wants (inferred from design):**
+- ✅ Use `--resume <uuid>` for session control
+- ✅ Watch `~/.copilot/session-state/` filesystem for state
+- ✅ Use `--acp` for deep machine-to-machine integration (if needed)
+- ❌ Don't parse terminal output (not a contract)
+- ❌ No `--ide` or `--json` flags exist (CLI chose filesystem + protocol, not terminal hacks)
+- **Signal**: Two preferred paths (Terminal + Filesystem, or ACP Protocol), not three
+
+**Verdict on "best of both worlds":**
+- PTY + --resume + events.jsonl: Works, but adds complexity vs regular terminal
+- ACP: Actually IS the "best of both worlds" — structured data (like PTY promises) + programmatic control (better than PTY)
+- Recommendation: Phase 1 keep current (works), Phase 3 consider ACP (designed for extensions), Phase 2 pseudoterminal is optional
+
+**Full analysis**: `.squad/decisions/inbox/jaguar-pty-acp-analysis.md`
+

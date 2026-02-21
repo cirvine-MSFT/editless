@@ -6278,3 +6278,412 @@ The spike looks for `Session ID: <uuid>` in terminal output. Casey reports the C
 
 Jaguar's discovery (CLI no longer prints `Session ID:`) validates the concern that the pseudoterminal's regex-based session detection is fragile. The existing master approach (filesystem scanning) is more robust.
 
+
+---
+
+## 2026-02-21: Pseudoterminal Architecture Trade-off Analysis — Issue #321
+
+# Pseudoterminal Architecture Decision
+
+**Date:** 2026-02-21  
+**Decision Owner:** Rick (Lead)  
+**Context:** Issue #321 spike analysis – Morty found the pseudoterminal module was written but never integrated. Jaguar validated `events.jsonl` + `--resume` + `--acp` strategy. Casey asked: can we use pseudoterminal UX AND events.jsonl integration?
+
+---
+
+## Analysis
+
+### 1. Regular Terminal + events.jsonl + --resume Strategy
+
+**What you get:**
+- ✅ Real-time state detection via `events.jsonl` file watching (idle/working/tool-running)
+- ✅ Accurate session resumption via `--resume <uuid>` (pre-generate UUID before launch)
+- ✅ VS Code terminal API handles I/O, shell features, resizing natively
+- ✅ Shell features work: tab completion, history, aliases
+- ✅ Minimal integration surface (just wire up event watchers)
+- ✅ Path forward to `--acp` protocol (structured machine-to-machine) with no rework
+
+**What you lose:**
+- ❌ Terminal I/O is a black box after launch — you can't read stdout/stderr to detect state
+- ❌ Terminal resize/Ctrl+C handling is automatic but not controllable
+- ❌ No structured logging injection without parsing terminal output
+- ❌ State detection via `events.jsonl` is an extra I/O dependency (adds 10-30ms per poll)
+
+---
+
+### 2. Pseudoterminal + events.jsonl + --resume Strategy
+
+**What you get:**
+- ✅ Full I/O control: read stdout/stderr in real-time for custom state detection
+- ✅ Inject structured messages into terminal output (no CLI output pollution)
+- ✅ Same `events.jsonl` + `--resume` integration as approach #1
+- ✅ Session ID detection from CLI output (fire callback immediately on detection)
+- ✅ Controlled shutdown: send Ctrl+C, SIGKILL timeout
+
+**What you lose:**
+- ❌ **Pseudoterminal implements NO shell features** — Copilot pseudoterminal.ts explicitly accepts this tradeoff (line 61-62 comment). Tab completion, shell history, aliases, sourcing `.bashrc` — all gone.
+- ❌ Extra maintenance burden: terminal I/O parsing, state detection patterns, error handling
+- ❌ Windows doesn't support PTY resizing via SIGWINCH (line 120-122) — resize events silently fail
+- ❌ Pseudoterminal architecture is orthogonal to `events.jsonl` — you're implementing state detection TWICE (pattern matching + file watching)
+- ❌ Terminal state detection is fragile: depends on CLI output format staying stable, output buffering, pattern order
+- ❌ CLI updates that change prompt format break state detection (no resilience)
+
+---
+
+### 3. Is "Best of Both Worlds" Possible?
+
+**Short answer: No. They solve different problems.**
+
+- `events.jsonl` is **the authoritative source of truth** for CLI state. It's structured, version-stable, machine-readable.
+- Pseudoterminal I/O parsing is **inherently fragile** — it's fighting against terminal formatting, buffering, and CLI output changes.
+
+**Why combining them doesn't work:**
+- If you have `events.jsonl`, you don't need I/O state detection — you already have the signal.
+- If you use pseudoterminal for I/O control, you're doing state detection work that `events.jsonl` already solved.
+- The pseudoterminal **doesn't solve any problem that `events.jsonl` + regular terminal doesn't solve**.
+- Adding pseudoterminal adds maintenance debt and loses shell features — the cost/benefit is negative.
+
+---
+
+### 4. The Hide/Show Behavior (Casey's Original Observation)
+
+**The question:** When you close a pseudoterminal and reopen it, it hides/shows instead of launching a new instance. Is this pseudoterminal-specific?
+
+**Answer: No. This is VS Code terminal behavior + EditLess session persistence.**
+
+- VS Code terminal `dispose()` closes the UI but the process keeps running (if you don't kill it)
+- EditLess TerminalManager already implements hide/show reconnection (terminal-manager.ts lines 185-216): `reconnectSession()` finds orphaned terminals by name and re-attaches them
+- The "relaunch" path (lines 222-287) is what happens when no orphan is found — it starts a new process
+- **You get this behavior from regular terminals too.** The pseudoterminal adds nothing here.
+
+**Why this works today:**
+```typescript
+// From terminal-manager.ts:222-266
+// When relaunching, we DON'T kill the process — we reuse it
+terminal.sendText(`${entry.launchCommand} --resume ${entry.agentSessionId}`);
+// The terminal was already created + shown. If process was still alive, sendText queues to stdin.
+```
+
+---
+
+### 5. What About --acp (Structured Protocol)?
+
+**The future path:** Copilot CLI is moving to `--acp` for structured machine-to-machine integration.
+
+- `--acp` is a protocol for programmatic control (event subscriptions, tool definitions, response routing)
+- Pseudoterminal is designed for **human interactive terminal emulation**
+- When `--acp` ships, you'll want to use a **WebSocket or stdio pipe**, not a terminal at all
+- Pseudoterminal becomes a dead end — you'll have to rip it out and replace it with the ACP client
+
+**Why pseudoterminal is not a stepping stone:**
+- ACP is not "pseudoterminal + structure" — it's a fundamentally different integration model
+- Pseudoterminal skills don't transfer to ACP (completely different APIs, lifecycle, I/O model)
+- Building pseudoterminal now wastes engineering time that won't help ACP implementation
+
+---
+
+## The Recommendation
+
+**Use regular terminal + events.jsonl + --resume. Do NOT build the pseudoterminal.**
+
+### Rationale
+
+1. **State detection is solved.** `events.jsonl` file watching gives you real-time state (idle/working/tool-running) without parsing terminal output. It's structured, version-stable, and doesn't break on CLI output changes.
+
+2. **Session resumption is solved.** `--resume <uuid>` pre-generated before launch means sessions don't need post-hoc detection from CLI output. Session IDs come from EditLess, not pattern-matched from stdout.
+
+3. **Hide/show behavior is already implemented.** EditLess TerminalManager reconnects orphaned terminals by name — this works with regular terminals and requires zero pseudoterminal code.
+
+4. **Pseudoterminal is a net loss in every dimension:**
+   - Loses shell features (tab completion, history, aliases)
+   - Adds I/O parsing maintenance (fragile, breaks on CLI format changes)
+   - Duplicates state detection (`events.jsonl` already does this)
+   - No UX win over regular terminal + hide/show reconnect
+   - Is a dead end when `--acp` ships (will be ripped out and replaced)
+
+5. **Cost/benefit is terrible.** Pseudoterminal spiking cost: ~16 hours of engineering. Actual benefits: zero (everything it provides is already solved or worse than the alternative). This is the definition of sunk-cost thinking — don't throw good money after bad.
+
+6. **ACP is the right investment.** When Copilot SDK ships `--acp` support, you'll want to build an ACP client (WebSocket-based, fully structured). Pseudoterminal skills don't transfer; resources spent here are wasted.
+
+### What To Do Instead
+
+1. **Confirm events.jsonl stability.** Have Jaguar validate that `events.jsonl` schema is stable across CLI versions and won't change without warning. If it's not stable, that's a blocker for both approaches.
+
+2. **Land the regular terminal + --resume infrastructure.**
+   - Extend TerminalManager to accept optional `agentSessionId` (use `--resume` if provided)
+   - Add env injection (`EDITLESS_AGENT_SESSION_ID`) for CLI to detect relaunch
+   - Test reconnect flow: close terminal → reopen → sendText `--resume <id>` → terminal resumes
+
+3. **Build the events.jsonl watcher** (low cost, high value):
+   - Poll `~/.copilot/session-state/<sessionId>/events.jsonl` every 500-1000ms
+   - Parse for state markers: `"idle"`, `"working"`, `"tool-running"`
+   - Update EditLess UI status in real-time (don't wait for terminal output)
+   - This is what Casey liked about the pseudoterminal — live status updates — but it's a file watcher, not I/O parsing.
+
+4. **Archive the pseudoterminal spike.** Don't ship it. Document in #321 that spike was explored, is architecturally unnecessary given `events.jsonl`, and would become dead code when `--acp` ships. This is a reasonable decision, not a failure.
+
+5. **Plan for --acp.** Once Copilot SDK stabilizes `--acp`, create an issue for ACP client integration. That's where the real value is.
+
+---
+
+## Decision Implications
+
+- **Code:** Delete `copilot-pseudoterminal.ts`. It's 284 lines of perfectly-written code that we don't need.
+- **Testing:** events.jsonl file watching (new) needs 5-6 test cases. Much cheaper than pseudoterminal tests.
+- **Documentation:** Update terminal integration docs to explain `events.jsonl` as the source of truth for state, not terminal output parsing.
+- **Roadmap:** Add ACP client work to v0.3 backlog (defer pending Copilot SDK stability).
+
+---
+
+## Decision Record
+
+**Decided:** Rick (Lead)  
+**Approved by:** —  
+**Date:** 2026-02-21  
+**Status:** ✅ Recommended (awaiting Casey approval)
+
+If Casey agrees, this should be immediately documented in issue #321 to unblock the team.
+
+---
+
+## 2026-02-21: Analysis: Pseudoterminal + --resume + events.jsonl + --acp Integration
+
+# Analysis: Pseudoterminal + --resume + events.jsonl + --acp Integration
+
+**Date:** 2026-02-21  
+**Author:** Jaguar (Copilot SDK Expert)  
+**Requested by:** Casey Irvine  
+**Context:** Evaluating whether pseudoterminal architecture can coexist with Copilot CLI's structured integration paths.
+
+---
+
+## Question 1: Pseudoterminal + --resume + events.jsonl — Would This Work?
+
+### The Combination
+- **Pseudoterminal** (EditLess owns process lifecycle via `child_process.spawn()`)
+- **--resume <uuid>** (CLI flag to start new session with known ID)
+- **events.jsonl** (file-based status stream watched by EditLess)
+
+### Analysis: ✅ YES, No Conflicts
+
+**Architecture:**
+```
+EditLess Extension
+  ├─ Generate UUID before spawn
+  ├─ Pass to CLI: copilot --resume <uuid> --no-alt-screen --no-color
+  ├─ Spawn as child process (pty gives EditLess piped stdout/stderr)
+  ├─ Watch ~/.copilot/session-state/<uuid>/events.jsonl
+  ├─ Parse events.jsonl for state transitions
+  └─ Render in extension UI (no terminal rendering needed)
+```
+
+**Why it works:**
+1. **No lifecycle conflicts**: `--resume` just tells CLI "use this UUID for session dir naming" — it doesn't care about process management. PTY handles process.
+2. **No state conflicts**: `--resume` uses the same `workspace.yaml` + `events.jsonl` storage that EditLess already watches. The CLI writes to files; EditLess watches files. Independent concerns.
+3. **events.jsonl is robust**: Pre-generated UUID ensures EditLess knows the session ID before launch, eliminating the fragile regex-on-terminal-output approach that Morty flagged.
+4. **Both flags independent**: 
+   - `--resume` controls session naming
+   - `--no-alt-screen` disables terminal graphics (helps with PTY)
+   - `--stream off` ensures events.jsonl is the source of truth, not stdout
+   - None interfere with each other
+
+**Proven flags from CLI help:**
+- `--resume [sessionId]` — "start a new session with a specific UUID"
+- `--stream <mode>` — "on|off" to control streaming
+- `--no-alt-screen` — explicitly disable terminal alt buffer (compatible with PTY)
+
+---
+
+## Question 2: Pseudoterminal + --acp — Would This Replace or Coexist?
+
+### What --acp Actually Does
+Based on research and CLI help:
+
+**--acp starts CLI as Agent Client Protocol server:**
+```bash
+copilot --acp --stdio           # JSON-RPC over stdin/stdout
+copilot --acp --port 3000       # TCP socket mode
+```
+
+**Capabilities (per ACP spec):**
+- Sends prompts via JSON-RPC messages
+- Receives structured responses (code, files, edits, permissions)
+- **Session management**: Creates isolated sessions, manages lifecycle
+- **Real-time streaming**: Agent sends incremental updates as NDJSON
+- **Tool execution control**: Client can approve/deny tool calls
+- **No visible terminal needed**: All I/O is JSON-RPC, not a terminal UI
+
+**Key difference from interactive mode:**
+- Interactive mode: User sees terminal, types prompts, CLI outputs to terminal
+- ACP mode: Client library sends JSON, gets JSON back. **Process is invisible to user.**
+
+### Answer: ⚠️ --acp REPLACES, not coexists with terminal
+
+**You cannot do both:**
+```bash
+# ❌ INVALID
+copilot --acp --resume <uuid>  # These are mutually exclusive
+```
+
+**Why replacement, not coexistence:**
+1. **Different I/O models**: 
+   - Terminal mode: stdout/stderr are user-visible
+   - ACP mode: stdout/stderr are protocol messages (NDJSON, not user text)
+2. **Session lifecycle differs**:
+   - Terminal: User controls (Ctrl+C, close tab, etc.)
+   - ACP: Client protocol controls (via JSON messages)
+3. **CLI makes a choice**: When `--acp` is passed, CLI enters server loop, not terminal loop
+
+**Architectural implication:**
+- **Terminal + --resume + events.jsonl**: Pseudoterminal controls process, CLI runs in interactive-like mode (even if hidden), writes events
+- **ACP (--acp --stdio)**: Client library owns process, sends/receives JSON, no terminal concept
+
+---
+
+## Question 3: The Hide/Show UX — Does Pseudoterminal Give Us Something Regular Terminal Doesn't?
+
+### The Observation
+> "When you close the terminal panel, the CLI process keeps running in the background. Close terminal → reopen shows same session, doesn't relaunch CLI."
+
+### Real VS Code Terminal Behavior
+
+**Current EditLess (using `vscode.window.createTerminal`):**
+- User closes terminal tab → `onDidCloseTerminal` fires → EditLess reconciliation logic
+- **Process status**: Likely **KILLED** by VS Code (process termination on close is standard)
+- **Proof**: Per VS Code docs, closing terminal sends SIGTERM to shell process, then forcibly kills if needed
+
+**With Pseudoterminal (`vscode.window.createExtensionTerminal`):**
+- EditLess owns process lifecycle explicitly
+- User closes terminal UI → terminal closed, but EditLess **can keep process running** if it chooses
+- User reopens vs. new terminal → EditLess can reconnect to existing process
+- **Actual difference**: Pseudoterminal lets ExtensionTerminal UI disconnect from process without killing it
+
+### Answer: ✅ YES, Pseudoterminal Gives Real UX Advantage
+
+**What you gain with pseudoterminal:**
+```
+Close terminal panel
+  ↓
+- Old behavior: Process dies, CLI session ends
+- Pseudoterminal: Process keeps running (EditLess didn't send kill)
+  
+Reopen terminal
+  ↓
+- Old behavior: Relaunch CLI with --resume (start new interactive session)
+- Pseudoterminal: Reconnect to existing process, same PID still running
+```
+
+**Why this matters for Copilot CLI:**
+- `--resume` *starts* a new interactive session (even with same UUID, it's a new invocation)
+- Pseudoterminal process can keep running through UI hide/show cycles
+- One continuous Copilot CLI process instead of repeated relaunches
+
+**But there's a catch:**
+- EditLess still needs `isTransient` terminals (EditLess decision from 2026-02-19)
+- With `isTransient: true`, VS Code clears terminal from sidebar but process may or may not survive depending on OS
+- Pseudoterminal doesn't guarantee process persistence; you'd need additional logic to prevent kill signals
+
+---
+
+## Question 4: What Does Copilot CLI Team Actually WANT Extensions to Do?
+
+### Evidence from CLI Design
+
+**1. Session ID visibility:**
+- ❌ NOT in terminal output (banner is cosmetic only)
+- ✅ YES in filesystem: `workspace.yaml` + `events.jsonl`
+- **Signal**: CLI team assumes clients will watch the filesystem, not parse terminal output
+
+**2. Flag philosophy:**
+- `--resume <uuid>` exists for "pre-determined session ID" use cases
+- `--additional-mcp-config <json>` allows injecting extension context as MCP server
+- **Signal**: CLI team expects extensions to launch CLI programmatically with specific flags, not via user terminal
+
+**3. Structured integration:**
+- `--acp --stdio` (JSON-RPC over stdio)
+- `--stream on|off` (control event stream)
+- `--log-level`, `--config-dir`, `--log-dir` (extension-friendly logging)
+- **Signal**: CLI is designed for programmatic integration, not just user-facing terminal
+
+**4. No `--ide` or `--json` flags:**
+- ❌ NO `--ide` flag (no special IDE mode)
+- ❌ NO `--json` machine-readable output
+- ✅ INSTEAD: `--acp` for structured integration, `events.jsonl` for state
+- **Signal**: CLI team chose filesystem + protocol, not terminal-based hacks
+
+### Conclusion: **Two Preferred Paths, Not Three**
+
+**Path A: Terminal + Filesystem (Current Master)**
+```
+EditLess launches Copilot CLI interactively in VS Code terminal
+Watches ~/.copilot/session-state/ for session state
+User sees CLI output, types prompts interactively
+Process tied to terminal lifecycle
+```
+**Pros:** Simple, user sees CLI, standard terminal features (completion, history)
+**Cons:** Process dies when terminal closes, no programmatic control
+
+**Path B: ACP Protocol (Future-Proof)**
+```
+EditLess launches: copilot --acp --stdio
+Sends prompts via JSON-RPC client library
+Receives responses as structured JSON
+EditLess renders in custom UI (or passes through as text)
+Process lifecycle controlled by ExtensionTerminal or headless subprocess
+```
+**Pros:** Maximum programmatic control, structured data, testable
+**Cons:** Requires ACP client library integration, less visible to user
+
+**Path C: Pseudoterminal (Hybrid, Not Preferred)**
+```
+EditLess launches copilot in pseudoterminal (via child_process.spawn)
+Watches events.jsonl for state
+Optionally injects status overlays into terminal output
+Process lifecycle fully controlled by EditLess
+```
+**Pros:** Richer state detection than terminal output, process persistence
+**Cons:** High complexity, not a stated first-class use case, duplicates ACP goals
+
+### What CLI Team SEEMS to Want
+✅ Use `--resume <uuid>` to control session IDs
+✅ Watch `~/.copilot/session-state/` for state
+✅ Use `--acp` for deep integration (not just terminal launch)
+❌ Don't parse terminal output (it's not a contract)
+❌ Don't assume session IDs appear in terminal (they don't)
+
+**Grain direction:** You're going with the grain if you:
+1. Pre-generate UUID, pass to CLI
+2. Watch filesystem for state
+3. Consider --acp for v0.3 or v0.4 phase
+
+---
+
+## Final Verdict
+
+| Combination | Works? | Conflicts? | Recommended? |
+|---|---|---|---|
+| **PTY + --resume + events.jsonl** | ✅ YES | ❌ NONE | 🟡 Yes (for Phase 2) |
+| **PTY + --acp** | ❌ NO | ✅ MUTUALLY EXCLUSIVE | ❌ No, choose one |
+| **Regular terminal + --resume + events.jsonl** | ✅ YES | ❌ NONE | ✅ Yes (current) |
+| **ACP (--acp --stdio)** | ✅ YES | ❌ NONE | 🟡 Yes (Phase 3+) |
+
+### Casey's Question: "Do we gain both best of both worlds?"
+
+**Short answer:** Not quite. You get two options:
+
+1. **Keep current approach (Path A)**: Regular terminal, works now, limited to what you can parse
+2. **Upgrade to ACP (Path B)**: Structured integration, future-proof, requires library work
+3. **Pseudoterminal (Path C)**: Rich state detection + process control, but CLI team didn't design for this, adds complexity without clear win over ACP
+
+**The "best of both worlds" is actually ACP (Path B):** You get structured state data (like pseudoterminal promises) *and* programmatic control, all designed by CLI team for extension integration.
+
+---
+
+## Recommendations for EditLess Roadmap
+
+1. **Phase 1 (current)**: Keep terminal + --resume + events.jsonl. It works, proven.
+2. **Phase 2 (optional)**: Add pseudoterminal option if you want process persistence UX. Use `--resume <uuid>` + events.jsonl for state. But don't merge Morty's spike without integration; it's incomplete.
+3. **Phase 3 (future)**: Evaluate ACP. This is what CLI team designed for. May eliminate need for pseudoterminal entirely.
+
+**Don't pursue:** Mixing pseudoterminal + --acp (they're mutually exclusive).
+

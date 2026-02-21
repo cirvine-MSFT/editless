@@ -118,6 +118,22 @@ Documented recent codebase changes (last 30 commits) for Summer (docs) to identi
 **Key changes to settings (package.json):**
 - Two new commands added to PR filter toolbar: `editless.filterPRs` (navigation@2), `editless.clearPRsFilter` (navigation@3, conditional).
 - Four new commands for agent discovery/hiding: `hideAgent`, `showHiddenAgents`, `showAllAgents`, `promoteDiscoveredAgent`.
+
+### 2026-02-21: Pseudoterminal spike analysis — DO NOT SHIP, use events.jsonl instead
+Analyzed spike #321 pseudoterminal module and Casey's question: "Can we use pseudoterminal for UX benefits AND events.jsonl + --resume for state detection?" **Finding: No. They solve orthogonal problems, and combining them creates net negative value.**
+
+**Key analysis:**
+1. **events.jsonl is the authoritative source of truth.** File watching gives real-time state (idle/working/tool-running) without parsing terminal output. It's structured, version-stable, doesn't break on CLI output changes.
+2. **Pseudoterminal I/O parsing duplicates this work.** The spike implements state detection patterns (lines 9-240) that redundantly solve what `events.jsonl` already solves. Fragile: depends on CLI output format staying stable forever.
+3. **Session resumption (--resume) is already solved** pre-launch via UUID generation. No need for post-hoc session ID detection from terminal output.
+4. **Hide/show behavior is NOT pseudoterminal-specific.** EditLess TerminalManager already implements orphan reconnection (terminal-manager.ts lines 185-216). Works with regular terminals. Pseudoterminal adds zero UX value here.
+5. **Pseudoterminal loses shell features:** No tab completion, history, aliases, shell integration. Cost is real, benefit is zero.
+6. **Pseudoterminal is a dead-end when --acp ships.** ACP (structured machine-to-machine protocol) is the future. Pseudoterminal skills don't transfer; resources spent here are wasted when ACP client is built.
+7. **Cost/benefit is terrible:** 16-hour spike cost vs zero benefits (everything provided is suboptimal vs alternatives or already solved).
+
+**Recommendation (Casey approval pending):** Delete copilot-pseudoterminal.ts (284 lines of good code, but unnecessary). Build instead: (1) Regular terminal + events.jsonl + --resume infrastructure. (2) events.jsonl file watcher for real-time state (low cost, high value). (3) Archive spike with decision rationale. (4) Plan ACP client as v0.3 work.
+
+**Decision record:** `.squad/decisions/inbox/rick-pseudoterminal-decision.md`
 - No NEW settings added to `editless.*` configuration section; filtering state managed via context keys.
 
 **Things that likely need docs updates:**
