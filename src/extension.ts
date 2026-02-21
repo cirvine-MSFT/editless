@@ -1235,7 +1235,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       // Initialize and create session
       try {
         void panel.postMessage({ type: 'setStatus', status: 'Connecting' });
-        await client.initialize();
+        await client.initialize({
+          fs: { readTextFile: true, writeTextFile: true },
+          terminal: true,
+        });
         
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd();
         const sessionResult = await client.createSession(cwd);
