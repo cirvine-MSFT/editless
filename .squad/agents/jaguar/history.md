@@ -63,3 +63,44 @@ Full findings: `.ai-team/decisions/inbox/jaguar-session-rename-resume.md`
 
 📌 Team update (2026-02-19): Session rename & resume architectural decisions finalized. Key decisions: (1) Display dual names (EditLess + Copilot summary), (2) Fix #277 with TerminalOptions, (3) Create custom Copilot Sessions tree view, (4) No write-access to workspace.yaml. — decided by Casey Irvine
 
+## Deep Dive: Copilot CLI v0.0.414 Integration Research (2026-02-21)
+
+Researched three questions about Copilot CLI integration for EditLess terminal management:
+
+**1. Session ID Visibility:**
+- CLI no longer displays session ID visibly in terminal output (confirmed: banner is cosmetic only)
+- Session ID IS reliably written to `~/.copilot/session-state/{uuid}/workspace.yaml` (field: `id:`) and `events.jsonl` (first event: `session.start` → `data.sessionId`)
+- `--resume <uuid>` accepts a pre-generated UUID to START a new session with a known ID — EditLess can generate UUID before launch and pass it
+- Session state dir: `workspace.yaml`, `events.jsonl`, `checkpoints/index.md`, `rewind-snapshots/index.json`, `files/`
+- `update_terminal_title` config (default: true) puts agent intent in terminal title bar — possible signal source
+- `XDG_STATE_HOME` env var overrides session-state location (default: `~/.copilot`)
+
+**2. CLI Command Line Flags (v0.0.414, full inventory):**
+- **IDE-relevant:** `--acp` (Agent Client Protocol server mode), `--no-alt-screen`, `--no-color`, `--screen-reader`, `--banner` (control startup banner), `--stream on|off`
+- **Agent/model:** `--agent <agent>`, `--model <model>`, `--autopilot`, `--max-autopilot-continues <n>`
+- **Session:** `--resume [sessionId]`, `--continue` (resume latest), `--config-dir <dir>`, `--log-dir <dir>`, `--log-level <level>`
+- **Permissions:** `--allow-all`, `--allow-all-tools`, `--allow-all-paths`, `--allow-all-urls`, `--allow-tool [tools]`, `--deny-tool [tools]`, `--allow-url [urls]`, `--deny-url [urls]`, `--yolo` (alias for --allow-all)
+- **MCP:** `--additional-mcp-config <json>`, `--disable-builtin-mcps`, `--disable-mcp-server <name>`, `--add-github-mcp-tool`, `--add-github-mcp-toolset`, `--enable-all-github-mcp-tools`
+- **Output/scripting:** `-p <text>` (non-interactive prompt), `-s/--silent` (agent response only), `-i <prompt>` (interactive + auto-execute), `--share [path]`, `--share-gist`, `--no-ask-user` (autonomous mode)
+- **Paths:** `--add-dir <dir>`, `--allow-all-paths`, `--disallow-temp-dir`
+- **Tools:** `--available-tools [tools]`, `--excluded-tools [tools]`, `--disable-parallel-tools-execution`
+- **Other:** `--experimental`, `--no-custom-instructions`, `--plain-diff`, `--bash-env on|off`
+- ❌ NO `--ide` flag. NO `--json` machine-readable output mode. NO `--session-id` output flag.
+- ✅ `--acp` (Agent Client Protocol) is the structured integration path — runs as a server, likely JSON-RPC
+
+**3. Status Detection:**
+- `events.jsonl` is the primary real-time signal: `session.start` → `user.message` → `assistant.turn_start` → `assistant.message` → `tool.execution_start/complete` → `assistant.turn_end`
+- State machine: idle (after `assistant.turn_end` or `session.start`) → working (after `assistant.turn_start`) → waiting (after `user.message` prompt or tool needing confirmation)
+- `update_terminal_title` config updates terminal title with current intent (parseable via VS Code terminal title APIs)
+- `-s/--silent` + `-p` mode: exit code signals success/failure for non-interactive use
+- `--acp` mode likely provides structured status via protocol — needs further investigation
+- NO explicit machine-readable status stream in interactive mode beyond events.jsonl file watching
+
+**Key findings for EditLess integration:**
+1. Pre-generate session UUID and pass via `--resume <uuid>` to know session ID before launch
+2. Watch `events.jsonl` with file watcher for real-time state detection
+3. `--acp` flag is the future-proof structured integration (Agent Client Protocol)
+4. `--additional-mcp-config` allows injecting EditLess as an MCP server at launch time
+5. `--no-alt-screen --no-color --stream off` for maximum parsability in pseudo-terminal scenarios
+6. Env vars: `COPILOT_MODEL`, `COPILOT_ALLOW_ALL`, `COPILOT_CUSTOM_INSTRUCTIONS_DIRS`, `XDG_STATE_HOME`
+

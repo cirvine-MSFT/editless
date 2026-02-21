@@ -6133,3 +6133,148 @@ Casey directed: "I want the unified flow NOW to simplify the code." Two complete
 - `CategoryKind` expanded: `'roster' | 'discovered' | 'hidden'`
 - The old `promptAndAddSquads()` and `registerDiscoveryCommand()` still exist in `discovery.ts` for the manual `editless.discoverSquads` command
 
+---
+
+## 2026-02-21: Copilot CLI Integration Flags for EditLess
+
+**Date:** 2026-02-21  
+**Author:** Jaguar (Copilot SDK Expert)  
+**Status:** Approved  
+**Affects:** terminal-manager.ts, session-context.ts, cli-provider.ts  
+
+### Context
+
+Researched Copilot CLI v0.0.414 flags and session management to answer integration questions. The CLI has evolved significantly — no visible session ID in terminal output, but robust file-based session state and new structured protocol support.
+
+### Decisions
+
+**1. Session ID Detection Strategy**
+
+Use `--resume <pre-generated-uuid>` to control session IDs.
+
+The CLI's `--resume` flag accepts a UUID to start a *new* session with that ID. EditLess should:
+- Generate a UUID before launching the terminal
+- Pass it via `--resume <uuid>` in the launch command
+- Immediately know the session ID without parsing terminal output
+- Watch `~/.copilot/session-state/<uuid>/events.jsonl` for state
+
+Fallback: parse `workspace.yaml` (`id:` field) or first line of `events.jsonl` (`session.start` event with `data.sessionId`).
+
+**2. Recommended Launch Flags for EditLess**
+
+```
+copilot --resume <editless-uuid> --no-alt-screen --allow-all-tools --agent <agent> --model <model> --add-dir <workspace>
+```
+
+Optional integration flags:
+- `--additional-mcp-config @<path>` — inject EditLess MCP server config at launch
+- `--no-custom-instructions` — when EditLess wants full control of instructions
+- `--log-dir <session-specific-dir>` — capture logs per-session for debugging
+- `--config-dir <dir>` — isolate config if needed (affects all settings)
+- `-p <prompt> --allow-all -s` — non-interactive mode for automated tasks (silent output)
+
+**3. Status Detection via events.jsonl**
+
+State machine derived from event types:
+```
+IDLE:     after session.start or assistant.turn_end
+WORKING:  after assistant.turn_start
+TOOL_RUN: after tool.execution_start (until tool.execution_complete)
+WAITING:  no turn active + no recent assistant.turn_end (user input needed)
+```
+
+Additional signals:
+- `update_terminal_title` config (default: true) updates terminal title with agent intent
+- Exit code from `-p` mode signals success/failure
+
+**4. Future: ACP (Agent Client Protocol)**
+
+The `--acp` flag runs CLI as a structured protocol server (likely JSON-RPC). This is the proper machine-to-machine integration path but needs further investigation. Should be tracked as a future work item for EditLess.
+
+### Flags NOT Available (Confirmed Absent)
+
+- ❌ `--ide` / `--editor` — no IDE identification flag
+- ❌ `--json` — no machine-readable output mode
+- ❌ `--session-id` — no flag to output session ID
+- ❌ No structured status stream in interactive mode
+
+### Impact
+
+- `terminal-manager.ts`: Update launch command builder to use `--resume <uuid>` pattern
+- `session-context.ts`: Can simplify session ID detection (known at launch time)
+- `cli-provider.ts`: Update flag inventory for capability detection
+
+---
+
+## 2026-02-21: Pseudoterminal Spike Assessment — Issue #321
+
+**Date:** 2026-02-21  
+**Author:** Morty (Extension Dev)  
+**Status:** Assessment Complete  
+**Type:** Technical Evaluation  
+
+### Summary
+
+Assessment of pseudoterminal spike vs master for status detection. The spike is an unfinished proof-of-concept that is not wired into the extension. Casey is correct that he can't see status changes — they literally don't exist in the running extension.
+
+### Findings
+
+**1. The spike didn't change terminal-manager.ts at all**
+
+`terminal-manager.ts` is byte-for-byte identical on master and the spike branch. Zero diff. The spike added a standalone `copilot-pseudoterminal.ts` module (264 lines) with 30 unit tests, but never integrated it into:
+- `terminal-manager.ts` (still uses `vscode.window.createTerminal` + `sendText`)
+- `editless-tree.ts` (still reads state from `_shellExecutionActive`)
+- `extension.ts` (no imports, no feature flag, no wiring)
+
+**Casey's experience is correct:** The spike branch behaves identically to master for status detection.
+
+**2. What the pseudoterminal module DOES implement (in isolation)**
+
+The standalone `CopilotPseudoterminal` class implements:
+- **5 states:** `starting`, `idle`, `working`, `waiting`, `closed` (vs master's 3: `active`, `inactive`, `orphaned`)
+- **Output-based state detection:** Regex patterns on a rolling 4KB buffer
+  - Idle: prompt patterns (`>`, `copilot>`, `[project]>` at end of output)
+  - Working: tool markers (`🔧 Running tool:`, `Executing:`, `Tool call:`, `⚙️`)
+  - Waiting: fallback when output exists but no markers match
+- **Session ID extraction:** `/Session ID:\s*([a-f0-9-]+)/i` regex on output
+- **Callbacks:** `onStateChange` and `onSessionIdDetected` (never connected to anything)
+
+**3. Why status detection WOULD be better — theoretical advantages**
+
+A pseudoterminal gives us `child_process.spawn()` with piped stdio, meaning:
+- **Every byte of stdout/stderr flows through our code** — master gets nothing from terminal output
+- **We can inject overlay messages** (dim status text) without affecting the child process
+- **We get exit codes directly** from the `exit` event
+- **No sendText race** — we control process lifecycle directly
+- **No filesystem polling** for session IDs — we read them from output
+
+Master's status detection is limited to:
+- `onDidStartTerminalShellExecution` / `onDidEndTerminalShellExecution` — binary active/inactive
+- Filesystem-based session ID detection via `SessionContextResolver` (polling `~/.copilot/session-state/`)
+
+**4. Session ID detection — the regex won't match**
+
+The spike looks for `Session ID: <uuid>` in terminal output. Casey reports the CLI doesn't print this anymore. This is a fragile dependency on CLI output format. The existing master approach (scanning session-state directories by cwd match) is actually more robust because it doesn't depend on CLI output format — it reads the filesystem artifacts the CLI always creates.
+
+### Recommendation
+
+**Don't abandon the approach, but don't merge this spike as-is.** The pseudoterminal architecture is sound for the theoretical reasons, but the spike is incomplete:
+
+1. **No integration** — The module exists in a vacuum
+2. **Pattern fragility** — The prompt/working patterns are guesses, not validated against real CLI output
+3. **Session ID regex** — Depends on CLI output that apparently changed
+4. **Shell loss** — The `NO_COLOR=1` env var and lack of shell means degraded visual experience
+5. **Windows SIGWINCH** — `setDimensions` is a no-op on Windows (our primary platform)
+
+**If pursuing further:**
+- First validate what the actual CLI output looks like for prompts and session IDs
+- Wire it into `TerminalManager.launchTerminal()` behind a feature flag as the spike doc suggests
+- Connect `onStateChange` → `_shellExecutionActive` → `_onDidChange.fire()` → tree refresh
+- Test with real Copilot CLI sessions, not just mocked child_process
+
+**If not pursuing:** The current master approach (shell execution events + filesystem session detection) is working and has been battle-tested. The pseudoterminal's main advantage (richer state detection) requires CLI cooperation that may not exist.
+
+### Cross-Agent Alignment
+
+Jaguar's discovery (CLI no longer prints `Session ID:`) validates the concern that the pseudoterminal's regex-based session detection is fragile. The existing master approach (filesystem scanning) is more robust.
+
