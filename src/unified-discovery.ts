@@ -1,6 +1,8 @@
+import * as fs from 'fs';
 import * as path from 'path';
 import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir } from './agent-discovery';
-import { discoverAgentTeams } from './discovery';
+import { discoverAgentTeams, parseTeamMd, toKebabCase } from './discovery';
+import { resolveTeamMd } from './team-dir';
 import type { EditlessRegistry } from './registry';
 import type { AgentTeamConfig } from './types';
 
@@ -22,7 +24,7 @@ interface WorkspaceFolder {
 
 /**
  * Unified discovery — scans workspace folders for both agents AND squads,
- * plus ~/.copilot/agents/ for personal agent library.
+ * plus ~/.config/copilot/agents/ (and ~/.copilot/agents/) for personal agent library.
  * Returns DiscoveredItem[] minus already-registered items.
  */
 export function discoverAll(
@@ -64,6 +66,30 @@ export function discoverAll(
       path: agent.filePath,
       description: agent.description,
     });
+  }
+
+  // --- Squad discovery: workspace folder itself ---
+  for (const folder of workspaceFolders) {
+    const folderPath = folder.uri.fsPath;
+    const teamMdPath = resolveTeamMd(folderPath);
+    if (teamMdPath) {
+      const folderName = path.basename(folderPath);
+      const id = toKebabCase(folderName);
+      if (!registeredIds.has(id) && !seenIds.has(id) && !registeredPaths.has(folderPath.toLowerCase())) {
+        const content = fs.readFileSync(teamMdPath, 'utf-8');
+        const parsed = parseTeamMd(content, folderName);
+        seenIds.add(id);
+        items.push({
+          id,
+          name: parsed.name,
+          type: 'squad',
+          source: 'workspace',
+          path: folderPath,
+          description: parsed.description,
+          universe: parsed.universe,
+        });
+      }
+    }
   }
 
   // --- Squad discovery (scan parent dirs of workspace folders) ---

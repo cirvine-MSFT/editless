@@ -85,13 +85,27 @@ export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFo
   return agents;
 }
 
-/** Scan the Copilot local directory (~/.copilot/ and ~/.copilot/agents/) for agent configs. */
+/**
+ * Copilot personal agent directories (platform-dependent).
+ * Windows uses ~/.copilot/agents/, Linux/macOS uses ~/.config/copilot/agents/.
+ * We scan both to be cross-platform safe.
+ */
+export function getCopilotAgentDirs(): string[] {
+  const home = os.homedir();
+  return [
+    path.join(home, '.copilot'),
+    path.join(home, '.config', 'copilot'),
+  ];
+}
+
+/** Scan all Copilot local directories for agent configs. */
 export function discoverAgentsInCopilotDir(): DiscoveredAgent[] {
-  const copilotDir = path.join(os.homedir(), '.copilot');
   const agents: DiscoveredAgent[] = [];
   const seen = new Set<string>();
-  for (const fp of collectAgentMdFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
-  for (const fp of collectAgentMdFiles(copilotDir)) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
+  for (const copilotDir of getCopilotAgentDirs()) {
+    for (const fp of collectAgentMdFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
+    for (const fp of collectAgentMdFiles(copilotDir)) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
+  }
   return agents;
 }
 
