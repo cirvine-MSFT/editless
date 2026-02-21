@@ -526,7 +526,11 @@ describe('EditlessTreeProvider — refresh / setDiscoveredAgents / invalidate', 
     expect(listener).toHaveBeenCalled();
 
     const roots = provider.getChildren();
-    const discoveredItems = roots.filter(r => r.type === 'discovered-agent');
+    const header = roots.find(r => r.label === 'Discovered');
+    expect(header).toBeDefined();
+
+    const children = provider.getChildren(header!);
+    const discoveredItems = children.filter(r => r.type === 'discovered-agent');
     expect(discoveredItems).toHaveLength(1);
     expect(discoveredItems[0].label).toBe('Agent One');
   });
@@ -627,7 +631,8 @@ describe('EditlessTreeProvider — discovered agents', () => {
     const header = roots.find(r => r.label === 'Discovered');
     expect(header).toBeDefined();
 
-    const agentItems = roots.filter(r => r.type === 'discovered-agent');
+    const children = provider.getChildren(header!);
+    const agentItems = children.filter(r => r.type === 'discovered-agent');
     expect(agentItems).toHaveLength(2);
   });
 
@@ -641,7 +646,11 @@ describe('EditlessTreeProvider — discovered agents', () => {
     ]);
 
     const roots = provider.getChildren();
-    const agentItems = roots.filter(r => r.type === 'discovered-agent');
+    const header = roots.find(r => r.label === 'Discovered');
+    expect(header).toBeDefined();
+
+    const children = provider.getChildren(header!);
+    const agentItems = children.filter(r => r.type === 'discovered-agent');
     expect(agentItems).toHaveLength(1);
     expect(agentItems[0].label).toBe('Bot Two');
   });
@@ -671,17 +680,21 @@ describe('EditlessTreeProvider — setDiscoveredItems', () => {
 
     const roots = provider.getChildren();
 
-    const squadItems = roots.filter(r => r.type === 'discovered-squad');
-    const agentItems = roots.filter(r => r.type === 'discovered-agent');
+    const header = roots.find(r => r.label === 'Discovered');
+    expect(header).toBeDefined();
+
+    const children = provider.getChildren(header!);
+    const squadItems = children.filter(r => r.type === 'discovered-squad');
+    const agentItems = children.filter(r => r.type === 'discovered-agent');
     expect(squadItems).toHaveLength(1);
     expect(agentItems).toHaveLength(1);
     expect(squadItems[0].label).toBe('Team Alpha');
     expect(agentItems[0].label).toBe('Solo Agent');
 
     // Squads render before agents in the discovered section
-    const discoveredRoots = roots.filter(r => r.type === 'discovered-squad' || r.type === 'discovered-agent');
-    expect(discoveredRoots[0].type).toBe('discovered-squad');
-    expect(discoveredRoots[1].type).toBe('discovered-agent');
+    const discoveredChildren = children.filter(r => r.type === 'discovered-squad' || r.type === 'discovered-agent');
+    expect(discoveredChildren[0].type).toBe('discovered-squad');
+    expect(discoveredChildren[1].type).toBe('discovered-agent');
   });
 });
 

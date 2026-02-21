@@ -471,8 +471,11 @@ export class TerminalManager implements vscode.Disposable {
       return isWorkingEvent(lastEvent.type) ? 'active' : 'inactive';
     }
 
-    const isExecuting = this._shellExecutionActive.get(terminal);
-    return isExecuting ? 'active' : 'inactive';
+    // No events yet — the copilot CLI is a long-running process so
+    // shellExecutionActive is always true while it's alive.  Don't
+    // show the spinner just because the process is running; wait for
+    // actual working events from events.jsonl before spinning.
+    return 'inactive';
   }
 
   getStateIcon(state: SessionState): vscode.ThemeIcon {

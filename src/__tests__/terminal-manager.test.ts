@@ -934,7 +934,7 @@ describe('TerminalManager', () => {
     });
 
     describe('shell integration tracking', () => {
-      it('should transition to active state when shell execution starts', () => {
+      it('should remain inactive when shell execution starts (events.jsonl drives state)', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -947,7 +947,7 @@ describe('TerminalManager', () => {
         capturedShellStartListener({ terminal, execution });
 
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('active');
+        expect(state).toBe('inactive');
       });
 
       it('should show inactive immediately after shell execution ends', () => {
@@ -961,7 +961,8 @@ describe('TerminalManager', () => {
         } as vscode.TerminalShellExecution;
 
         capturedShellStartListener({ terminal, execution });
-        expect(mgr.getSessionState(terminal)).toBe('active');
+        // Shell execution alone no longer drives state — events.jsonl does
+        expect(mgr.getSessionState(terminal)).toBe('inactive');
 
         capturedShellEndListener({ terminal, execution });
         
@@ -987,13 +988,13 @@ describe('TerminalManager', () => {
         
         capturedShellStartListener({ terminal, execution: exec3 });
 
-        // Last execution is still running — should be active
-        expect(mgr.getSessionState(terminal)).toBe('active');
+        // Shell execution alone no longer drives state — events.jsonl does
+        expect(mgr.getSessionState(terminal)).toBe('inactive');
       });
     });
 
     describe('state computation', () => {
-      it('should return active for terminal with shell execution in progress', () => {
+      it('should return inactive for terminal with shell execution in progress', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -1002,7 +1003,8 @@ describe('TerminalManager', () => {
         const execution = { commandLine: { value: 'npm run build' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
 
-        expect(mgr.getSessionState(terminal)).toBe('active');
+        // Shell execution alone no longer drives state — events.jsonl does
+        expect(mgr.getSessionState(terminal)).toBe('inactive');
       });
 
       it('should return inactive for terminal with recent activity but no execution', () => {
@@ -1168,14 +1170,15 @@ describe('TerminalManager', () => {
 
         const execution = { commandLine: { value: 'echo "test"' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
-        expect(mgr.getSessionState(terminal)).toBe('active');
+        // Shell execution alone no longer drives state — events.jsonl does
+        expect(mgr.getSessionState(terminal)).toBe('inactive');
 
         capturedShellEndListener({ terminal, execution });
         const state = mgr.getSessionState(terminal);
         expect(state).toBe('inactive');
       });
 
-      it('should transition from inactive to active when execution starts', () => {
+      it('should stay inactive when execution starts (events.jsonl drives state)', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
@@ -1186,7 +1189,8 @@ describe('TerminalManager', () => {
         const execution = { commandLine: { value: 'npm test' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
         
-        expect(mgr.getSessionState(terminal)).toBe('active');
+        // Shell execution alone no longer drives state — events.jsonl does
+        expect(mgr.getSessionState(terminal)).toBe('inactive');
       });
 
     });
