@@ -500,7 +500,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (disc) {
         const config: AgentTeamConfig = disc.type === 'squad'
           ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description, launchCommand: buildDefaultLaunchCommand() }
-          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description, launchCommand: buildDefaultLaunchCommand() };
+          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description, launchCommand: buildCopilotCommand({ agent: disc.id }) };
         registry.addSquads([config]);
         refreshDiscovery();
         treeProvider.refresh();
@@ -1034,7 +1034,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         path: agentsDir,
         icon: '🤖',
         universe: 'standalone',
-        launchCommand: buildDefaultLaunchCommand(),
+        launchCommand: buildCopilotCommand({ agent: agentId }),
       }]);
       refreshDiscovery();
       treeProvider.refresh();

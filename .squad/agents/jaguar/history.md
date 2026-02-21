@@ -144,3 +144,39 @@ Analyzed Casey's question: "Can pseudoterminal coexist with --resume, events.jso
 
 **Full analysis**: `.squad/decisions/inbox/jaguar-pty-acp-analysis.md`
 
+## Deep Dive: ACP (Agent Client Protocol) Definitive Analysis (2026-02-22)
+
+Thorough investigation of ACP for EditLess integration, including live protocol testing against Copilot CLI v0.0.414.
+
+**What ACP IS:**
+- Open standard for editor↔agent communication (JSON-RPC 2.0 over NDJSON/stdio or TCP)
+- Copilot CLI implements the ACP *server* role — clients drive it programmatically
+- `--acp --stdio` makes CLI completely headless: no terminal UI, stdout IS the protocol channel
+- Public preview in Copilot CLI since Jan 28, 2026; protocol spec approaching stability (version 1)
+- TypeScript SDK: `@agentclientprotocol/sdk` v0.14.x (pre-1.0)
+
+**Live protocol testing confirmed:**
+- Initialize → session/new → session/prompt flow works end-to-end
+- Streaming `agent_message_chunk` updates arrive in real-time
+- Session creation returns available models, modes (agent/plan/autopilot)
+- `loadSession` capability = true (session resume supported via protocol)
+- Copilot reports: image support true, audio false, embeddedContext true
+
+**Key architectural finding: ACP and terminal mode are mutually exclusive.**
+- Single process: `--acp` replaces terminal UI entirely. No sideband possible.
+- Two processes: Independent sessions, no shared state, double API quota. Not viable.
+- ACP flips architecture: EditLess would OWN the UI, drive Copilot as headless subprocess
+- Client must implement: `session/request_permission`, `fs/*`, `terminal/*` methods
+
+**ACP protocol surface (client capabilities):**
+- `fs.readTextFile`, `fs.writeTextFile` — agent reads/writes files through client
+- `terminal` — agent asks client to run shell commands (create/output/wait/kill/release)
+- Rich session updates: agent_message_chunk, tool_call, tool_call_update (with diffs), plan, mode changes
+
+**Decision for EditLess:**
+- Phase 1: Stay with Option A (terminal + events.jsonl + --resume). Stable, proven, ships now.
+- Phase 2 (future): ACP only makes sense if EditLess pivots to owning the full Copilot UI panel (like Zed/JetBrains). Major architectural shift, not incremental.
+- Option C (hybrid/sideband) confirmed non-viable: two processes = two independent sessions.
+
+**Full analysis**: `.squad/decisions/inbox/jaguar-acp-deep-dive.md`
+
