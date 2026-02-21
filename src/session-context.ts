@@ -208,23 +208,55 @@ export class SessionContextResolver {
       }, 100);
     };
 
-    const setupWatch = () => {
+    const watchFile = () => {
       try {
         const watcher = fs.watch(eventsPath, { persistent: false }, onChange);
         this._fileWatchers.set(watchKey, watcher);
-        // Read initial state
         readLastLine();
       } catch {
-        // File doesn't exist yet — retry in 1s
+        // File disappeared after we saw it — fall back to dir watch
+        watchDir();
+      }
+    };
+
+    const watchDir = () => {
+      const sessionDir = path.join(this._sessionStateDir, sessionId);
+      try {
+        // Watch the session directory for events.jsonl to appear
+        const dirWatcher = fs.watch(sessionDir, { persistent: false }, (_eventType, filename) => {
+          if (filename === 'events.jsonl') {
+            dirWatcher.close();
+            this._fileWatchers.delete(watchKey);
+            watchFile();
+          }
+        });
+        this._fileWatchers.set(watchKey, dirWatcher);
+        // Check if file appeared between our check and the watch setup
+        if (fs.existsSync(eventsPath)) {
+          dirWatcher.close();
+          this._fileWatchers.delete(watchKey);
+          watchFile();
+        }
+      } catch {
+        // Directory doesn't exist yet — retry in 1s
         const retry = setTimeout(() => {
           this._watcherPending.delete(watchKey);
-          setupWatch();
+          if (fs.existsSync(eventsPath)) {
+            watchFile();
+          } else {
+            watchDir();
+          }
         }, 1000);
         this._watcherPending.set(watchKey, retry);
       }
     };
 
-    setupWatch();
+    // Start with file watch if it already exists, otherwise watch directory
+    if (fs.existsSync(eventsPath)) {
+      watchFile();
+    } else {
+      watchDir();
+    }
 
     return {
       dispose: () => {
