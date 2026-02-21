@@ -475,4 +475,243 @@ summary: Modified`,
       expect(result.stale).toBe(false);
     });
   });
+
+  // -------------------------------------------------------------------------
+  // Phase 2: File system watchers
+  // -------------------------------------------------------------------------
+
+  describe('watchSession', () => {
+    it('should call callback when events.jsonl is modified', async () => {
+      const module = await import('../session-context');
+      const resolver: any = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+
+      const sessionId = 'watch-session';
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+      
+      // Create initial events.jsonl
+      const eventsPath = path.join(sessionDir, 'events.jsonl');
+      fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
+
+      const callback = vi.fn();
+      const disposable = resolver.watchSession(sessionId, callback);
+
+      // Modify the file
+      await new Promise(resolve => setTimeout(resolve, 50));
+      fs.appendFileSync(eventsPath, '{"type":"user.message","timestamp":"2026-01-01T00:01:00Z"}\n', 'utf-8');
+
+      // Wait for watcher to fire
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      expect(callback).toHaveBeenCalled();
+      
+      disposable.dispose();
+    });
+
+    it('should parse the last event from events.jsonl', async () => {
+      const module = await import('../session-context');
+      const resolver: any = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+
+      const sessionId = 'parse-session';
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+
+      const eventsPath = path.join(sessionDir, 'events.jsonl');
+      fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
+
+      const callback = vi.fn();
+      const disposable = resolver.watchSession(sessionId, callback);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      fs.appendFileSync(eventsPath, '{"type":"assistant.turn_end","timestamp":"2026-01-01T00:02:00Z"}\n', 'utf-8');
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      expect(callback).toHaveBeenCalledWith(expect.objectContaining({
+        type: 'assistant.turn_end',
+        timestamp: '2026-01-01T00:02:00Z',
+      }));
+
+      disposable.dispose();
+    });
+
+    it('should debounce rapid changes', async () => {
+      const module = await import('../session-context');
+      const resolver: any = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+
+      const sessionId = 'debounce-session';
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+
+      const eventsPath = path.join(sessionDir, 'events.jsonl');
+      fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
+
+      const callback = vi.fn();
+      const disposable = resolver.watchSession(sessionId, callback);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Rapid changes
+      fs.appendFileSync(eventsPath, '{"type":"event1","timestamp":"2026-01-01T00:01:00Z"}\n', 'utf-8');
+      await new Promise(resolve => setTimeout(resolve, 20));
+      fs.appendFileSync(eventsPath, '{"type":"event2","timestamp":"2026-01-01T00:02:00Z"}\n', 'utf-8');
+      await new Promise(resolve => setTimeout(resolve, 20));
+      fs.appendFileSync(eventsPath, '{"type":"event3","timestamp":"2026-01-01T00:03:00Z"}\n', 'utf-8');
+
+      // Wait for debounce
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Should have been called fewer times than changes due to debouncing
+      expect(callback.mock.calls.length).toBeLessThan(3);
+      expect(callback.mock.calls.length).toBeGreaterThan(0);
+
+      disposable.dispose();
+    });
+
+    it('should return a disposable that stops watching', async () => {
+      const module = await import('../session-context');
+      const resolver: any = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+
+      const sessionId = 'dispose-session';
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+
+      const eventsPath = path.join(sessionDir, 'events.jsonl');
+      fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
+
+      const callback = vi.fn();
+      const disposable = resolver.watchSession(sessionId, callback);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Reset callback — watchSession reads initial state on setup, which may fire
+      callback.mockClear();
+      
+      // Dispose watcher
+      disposable.dispose();
+
+      // Modify file after disposal
+      fs.appendFileSync(eventsPath, '{"type":"user.message","timestamp":"2026-01-01T00:01:00Z"}\n', 'utf-8');
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Should not have been called after dispose
+      expect(callback).not.toHaveBeenCalled();
+    });
+
+    it('should handle events.jsonl not existing yet', async () => {
+      const module = await import('../session-context');
+      const resolver: any = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+
+      const sessionId = 'future-session';
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+
+      const callback = vi.fn();
+      
+      // Should not throw when events.jsonl doesn't exist
+      expect(() => resolver.watchSession(sessionId, callback)).not.toThrow();
+
+      const disposable = resolver.watchSession(sessionId, callback);
+      
+      // Create file after watcher is set up
+      const eventsPath = path.join(sessionDir, 'events.jsonl');
+      await new Promise(resolve => setTimeout(resolve, 50));
+      fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // May or may not fire depending on watcher behavior — just verify no crash
+      disposable.dispose();
+    });
+  });
+
+  describe('watchSession malformed JSON', () => {
+    it('should not call callback when events.jsonl has corrupt last line', async () => {
+      const module = await import('../session-context');
+      const resolver: any = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+
+      const sessionId = 'malformed-json-session';
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+
+      // Create initial valid events.jsonl
+      const eventsPath = path.join(sessionDir, 'events.jsonl');
+      fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
+
+      const callback = vi.fn();
+      const disposable = resolver.watchSession(sessionId, callback);
+
+      // Wait for initial read to settle
+      await new Promise(resolve => setTimeout(resolve, 200));
+      callback.mockClear();
+
+      // Append malformed JSON line
+      fs.appendFileSync(eventsPath, 'this is not valid json!!!\n', 'utf-8');
+
+      // Wait for watcher to fire
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Callback should NOT have been called with the corrupt line
+      expect(callback).not.toHaveBeenCalled();
+
+      disposable.dispose();
+    });
+  });
+
+  describe('watchSessionDir', () => {
+    it('should call callback when files change in session directory', async () => {
+      const module = await import('../session-context');
+      const resolver: any = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+
+      const sessionId = 'dir-watch-session';
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+
+      const callback = vi.fn();
+      const disposable = resolver.watchSessionDir(sessionId, callback);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      // Create a new file in the directory
+      fs.writeFileSync(path.join(sessionDir, 'new-file.txt'), 'content', 'utf-8');
+
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      expect(callback).toHaveBeenCalled();
+
+      disposable.dispose();
+    });
+
+    it('should return a disposable that stops watching', async () => {
+      const module = await import('../session-context');
+      const resolver: any = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+
+      const sessionId = 'dir-dispose-session';
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+
+      const callback = vi.fn();
+      const disposable = resolver.watchSessionDir(sessionId, callback);
+
+      await new Promise(resolve => setTimeout(resolve, 50));
+      
+      // Dispose
+      disposable.dispose();
+
+      // Modify directory after disposal
+      fs.writeFileSync(path.join(sessionDir, 'post-dispose.txt'), 'content', 'utf-8');
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Should not have been called
+      expect(callback).not.toHaveBeenCalled();
+    });
+  });
 });

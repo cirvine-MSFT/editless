@@ -16,6 +16,7 @@ const {
   mockOnDidStartTerminalShellExecution,
   mockOnDidEndTerminalShellExecution,
   mockTerminals,
+  mockRandomUUID,
 } = vi.hoisted(() => ({
   mockCreateTerminal: vi.fn(),
   mockOnDidCloseTerminal: vi.fn(),
@@ -23,7 +24,13 @@ const {
   mockOnDidStartTerminalShellExecution: vi.fn(),
   mockOnDidEndTerminalShellExecution: vi.fn(),
   mockTerminals: [] as vscode.Terminal[],
+  mockRandomUUID: vi.fn<() => `${string}-${string}-${string}-${string}-${string}`>(),
 }));
+
+vi.mock('crypto', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('crypto')>();
+  return { ...actual, randomUUID: mockRandomUUID };
+});
 
 vi.mock('vscode', () => ({
   window: {
@@ -162,9 +169,11 @@ beforeEach(() => {
     return { dispose: vi.fn() };
   });
 
-  mockCreateTerminal.mockImplementation((opts: { name: string }) => {
-    return makeMockTerminal(opts.name);
+  mockCreateTerminal.mockImplementation((opts: vscode.TerminalOptions) => {
+    return makeMockTerminal(opts.name ?? 'terminal');
   });
+
+  mockRandomUUID.mockReturnValue('00000000-0000-0000-0000-000000000000' as `${string}-${string}-${string}-${string}-${string}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -1491,6 +1500,8 @@ describe('TerminalManager', () => {
           }
           return result;
         }),
+        watchSession: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
       };
     }
 
@@ -1498,7 +1509,9 @@ describe('TerminalManager', () => {
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
       const config = makeSquadConfig({ path: '/project' });
-      mgr.launchTerminal(config);
+      const terminal = mgr.launchTerminal(config);
+      // Simulate legacy terminal without pre-set agentSessionId
+      mgr.getTerminalInfo(terminal)!.agentSessionId = undefined;
 
       vi.mocked(ctx.workspaceState.update).mockClear();
       mgr.detectSessionIds();
@@ -1510,6 +1523,7 @@ describe('TerminalManager', () => {
       const mgr = new TerminalManager(ctx);
       const config = makeSquadConfig({ path: '/project' });
       const terminal = mgr.launchTerminal(config);
+      // launchTerminal now pre-sets agentSessionId — this tests the no-op path
       mgr.setAgentSessionId(terminal, 'existing-session');
 
       const resolver = makeResolver(new Map());
@@ -1520,11 +1534,13 @@ describe('TerminalManager', () => {
       expect(resolver.resolveAll).not.toHaveBeenCalled();
     });
 
-    it('should assign session ID when squad path matches a resolved session', () => {
+    it('should assign session ID when squad path matches a resolved session (legacy terminal)', () => {
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
       const config = makeSquadConfig({ path: '/project' });
       const terminal = mgr.launchTerminal(config);
+      // Simulate legacy terminal without pre-set agentSessionId
+      mgr.getTerminalInfo(terminal)!.agentSessionId = undefined;
 
       const now = new Date();
       const sessions = new Map([
@@ -1539,11 +1555,13 @@ describe('TerminalManager', () => {
       expect(info?.agentSessionId).toBe('detected-session-1');
     });
 
-    it('should not assign session created before terminal launch', () => {
+    it('should not assign session created before terminal launch (legacy terminal)', () => {
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
       const config = makeSquadConfig({ path: '/project' });
       const terminal = mgr.launchTerminal(config);
+      // Simulate legacy terminal
+      mgr.getTerminalInfo(terminal)!.agentSessionId = undefined;
 
       const sessions = new Map([
         ['/project', { sessionId: 'old-session', createdAt: '2020-01-01T00:00:00.000Z' }],
@@ -1557,13 +1575,16 @@ describe('TerminalManager', () => {
       expect(info?.agentSessionId).toBeUndefined();
     });
 
-    it('should not double-claim a session already assigned to another terminal', () => {
+    it('should not double-claim a session already assigned to another terminal (legacy terminals)', () => {
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
       const config = makeSquadConfig({ path: '/project' });
 
       const terminal1 = mgr.launchTerminal(config);
       const terminal2 = mgr.launchTerminal(config, 'Second');
+      // Simulate legacy terminals
+      mgr.getTerminalInfo(terminal1)!.agentSessionId = undefined;
+      mgr.getTerminalInfo(terminal2)!.agentSessionId = undefined;
 
       const now = new Date();
       const sessions = new Map([
@@ -1583,11 +1604,13 @@ describe('TerminalManager', () => {
       expect(assigned[0]).toBe('shared-session');
     });
 
-    it('should fire onDidChange and persist when sessions are detected', () => {
+    it('should fire onDidChange and persist when sessions are detected (legacy terminal)', () => {
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
       const config = makeSquadConfig({ path: '/project' });
-      mgr.launchTerminal(config);
+      const terminal = mgr.launchTerminal(config);
+      // Simulate legacy terminal
+      mgr.getTerminalInfo(terminal)!.agentSessionId = undefined;
 
       const changeSpy = vi.fn();
       mgr.onDidChange(changeSpy);
@@ -1612,7 +1635,9 @@ describe('TerminalManager', () => {
       const mgr = new TerminalManager(ctx);
       // Launch without path (squadPath will be undefined)
       const config = makeSquadConfig({ path: undefined });
-      mgr.launchTerminal(config);
+      const terminal = mgr.launchTerminal(config);
+      // Simulate legacy terminal
+      mgr.getTerminalInfo(terminal)!.agentSessionId = undefined;
 
       const resolver = makeResolver(new Map());
       mgr.setSessionResolver(resolver as unknown as import('../session-context').SessionContextResolver);
@@ -1636,6 +1661,8 @@ describe('TerminalManager', () => {
       return {
         isSessionResumable: vi.fn().mockReturnValue(result),
         resolveAll: vi.fn().mockReturnValue(new Map()),
+        watchSession: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
       };
     }
 
@@ -1741,15 +1768,18 @@ describe('TerminalManager', () => {
 
       expect(mockCreateTerminal).toHaveBeenCalledWith(
         expect.objectContaining({
-          env: {
+          env: expect.objectContaining({
             EDITLESS_SESSION_ID: 'resume-env-1',
             EDITLESS_AGENT_SESSION_ID: 'env-session',
-          },
+            EDITLESS_TERMINAL_ID: 'resume-env-1',
+            EDITLESS_SQUAD_ID: 'test-squad',
+            EDITLESS_SQUAD_NAME: 'Test Squad',
+          }),
         }),
       );
     });
 
-    it('should not pass env when no agentSessionId', () => {
+    it('should still pass terminal/squad env vars when no agentSessionId', () => {
       const orphanEntry = makePersistedEntry({
         id: 'resume-no-env-1',
         terminalName: '🧪 No Match',
@@ -1763,9 +1793,17 @@ describe('TerminalManager', () => {
 
       expect(mockCreateTerminal).toHaveBeenCalledWith(
         expect.objectContaining({
-          env: undefined,
+          env: expect.objectContaining({
+            EDITLESS_TERMINAL_ID: 'resume-no-env-1',
+            EDITLESS_SQUAD_ID: 'test-squad',
+            EDITLESS_SQUAD_NAME: 'Test Squad',
+          }),
         }),
       );
+      // Should NOT include session-specific env vars
+      const createOpts = mockCreateTerminal.mock.calls[0][0] as vscode.TerminalOptions;
+      expect(createOpts.env?.EDITLESS_SESSION_ID).toBeUndefined();
+      expect(createOpts.env?.EDITLESS_AGENT_SESSION_ID).toBeUndefined();
     });
 
     it('should skip validation when no session resolver is set', () => {
@@ -1784,6 +1822,372 @@ describe('TerminalManager', () => {
 
       // Should still launch without errors
       expect(terminal.sendText).toHaveBeenCalledWith('copilot --agent squad --resume some-session');
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Phase 2: Terminal integration with --resume UUID
+  // -------------------------------------------------------------------------
+
+  describe('launchTerminal with --resume UUID', () => {
+    it('should set agentSessionId immediately on launch', () => {
+      const mockUuid = 'test-uuid-12345';
+      mockRandomUUID.mockReturnValue(mockUuid as `${string}-${string}-${string}-${string}-${string}`);
+
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+
+      const terminal = mgr.launchTerminal(config);
+
+      const info = mgr.getTerminalInfo(terminal);
+      expect(info?.agentSessionId).toBe(mockUuid);
+    });
+
+    it('should pass --resume UUID in the terminal sendText command', () => {
+      const mockUuid = 'test-uuid-67890';
+      mockRandomUUID.mockReturnValue(mockUuid as `${string}-${string}-${string}-${string}-${string}`);
+
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+
+      const terminal = mgr.launchTerminal(config);
+
+      expect(terminal.sendText).toHaveBeenCalledWith(expect.stringContaining(`--resume ${mockUuid}`));
+    });
+
+    it('should include EDITLESS_TERMINAL_ID in terminal env', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+
+      mgr.launchTerminal(config);
+
+      const createOpts = mockCreateTerminal.mock.calls[0][0] as vscode.TerminalOptions;
+      expect(createOpts.env).toBeDefined();
+      expect(createOpts.env?.EDITLESS_TERMINAL_ID).toBeDefined();
+    });
+
+    it('should include EDITLESS_SQUAD_ID and EDITLESS_SQUAD_NAME in terminal env', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ id: 'my-squad', name: 'My Squad' });
+
+      mgr.launchTerminal(config);
+
+      const createOpts = mockCreateTerminal.mock.calls[0][0] as vscode.TerminalOptions;
+      expect(createOpts.env?.EDITLESS_SQUAD_ID).toBe('my-squad');
+      expect(createOpts.env?.EDITLESS_SQUAD_NAME).toBe('My Squad');
+    });
+
+    it('should set isTransient: true on created terminal', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+
+      mgr.launchTerminal(config);
+
+      const createOpts = mockCreateTerminal.mock.calls[0][0] as vscode.TerminalOptions;
+      expect(createOpts.isTransient).toBe(true);
+    });
+  });
+
+  describe('Phase 2: watcher lifecycle', () => {
+    function makeMockResolver() {
+      return {
+        resolveAll: vi.fn().mockReturnValue(new Map()),
+        resolveForSquad: vi.fn(),
+        clearCache: vi.fn(),
+        getLastEvent: vi.fn(),
+        isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+        watchSession: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        _sessionStateDir: '/tmp/sessions',
+      };
+    }
+
+    it('launchTerminal calls watchSession when resolver is set', () => {
+      const mockUuid = 'test-uuid-value' as `${string}-${string}-${string}-${string}-${string}`;
+      mockRandomUUID.mockReturnValue(mockUuid);
+
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const mockResolver = makeMockResolver();
+      mgr.setSessionResolver(mockResolver as any);
+
+      mgr.launchTerminal(makeSquadConfig());
+
+      expect(mockResolver.watchSession).toHaveBeenCalledWith(
+        'test-uuid-value',
+        expect.any(Function),
+      );
+    });
+
+    it('watcher is disposed when terminal closes', () => {
+      const mockUuid = 'close-uuid' as `${string}-${string}-${string}-${string}-${string}`;
+      mockRandomUUID.mockReturnValue(mockUuid);
+
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const watcherDispose = vi.fn();
+      const mockResolver = makeMockResolver();
+      mockResolver.watchSession.mockReturnValue({ dispose: watcherDispose });
+      mgr.setSessionResolver(mockResolver as any);
+
+      const terminal = mgr.launchTerminal(makeSquadConfig());
+
+      // Fire close listener
+      capturedCloseListener(terminal);
+
+      expect(watcherDispose).toHaveBeenCalled();
+    });
+
+    it('dispose() clears all session watchers', () => {
+      const disposeFn1 = vi.fn();
+      const disposeFn2 = vi.fn();
+      const mockResolver = makeMockResolver();
+      let callCount = 0;
+      mockResolver.watchSession.mockImplementation(() => {
+        callCount++;
+        return { dispose: callCount === 1 ? disposeFn1 : disposeFn2 };
+      });
+
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      mgr.setSessionResolver(mockResolver as any);
+
+      mockRandomUUID.mockReturnValue('uuid-1' as `${string}-${string}-${string}-${string}-${string}`);
+      mgr.launchTerminal(makeSquadConfig());
+
+      mockRandomUUID.mockReturnValue('uuid-2' as `${string}-${string}-${string}-${string}-${string}`);
+      mgr.launchTerminal(makeSquadConfig());
+
+      expect(mockResolver.watchSession).toHaveBeenCalledTimes(2);
+
+      mgr.dispose();
+
+      expect(disposeFn1).toHaveBeenCalled();
+      expect(disposeFn2).toHaveBeenCalled();
+    });
+
+    it('reconnectSession and relaunchSession wire up watchers when agentSessionId is present', () => {
+      const mockResolver = makeMockResolver();
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      mgr.setSessionResolver(mockResolver as any);
+
+      // --- reconnectSession path ---
+      const reconnectEntry = makePersistedEntry({
+        id: 'watcher-reconnect-1',
+        terminalName: '🧪 Test Squad #1',
+        displayName: '🧪 Test Squad #1',
+        agentSessionId: 'reconnect-session-id',
+      });
+      const ctxReconnect = makeMockContext([reconnectEntry]);
+      const mgrReconnect = new TerminalManager(ctxReconnect);
+      mgrReconnect.setSessionResolver(mockResolver as any);
+      mgrReconnect.reconcile();
+
+      const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      mockResolver.watchSession.mockClear();
+      mgrReconnect.reconnectSession(reconnectEntry);
+
+      expect(mockResolver.watchSession).toHaveBeenCalledWith(
+        'reconnect-session-id',
+        expect.any(Function),
+      );
+
+      // --- relaunchSession path (new terminal, no live match) ---
+      mockTerminals.length = 0;
+      const relaunchEntry = makePersistedEntry({
+        id: 'watcher-relaunch-1',
+        terminalName: '🧪 No Match',
+        displayName: '🧪 Relaunch Test',
+        launchCommand: 'copilot --agent squad',
+        agentSessionId: 'relaunch-session-id',
+      });
+      const ctxRelaunch = makeMockContext([relaunchEntry]);
+      const mgrRelaunch = new TerminalManager(ctxRelaunch);
+      mgrRelaunch.setSessionResolver(mockResolver as any);
+      mgrRelaunch.reconcile();
+
+      mockResolver.watchSession.mockClear();
+      mgrRelaunch.relaunchSession(relaunchEntry);
+
+      expect(mockResolver.watchSession).toHaveBeenCalledWith(
+        'relaunch-session-id',
+        expect.any(Function),
+      );
+    });
+
+    it('launchTerminal with custom config.launchCommand appends --resume UUID', () => {
+      const mockUuid = 'custom-cmd-uuid' as `${string}-${string}-${string}-${string}-${string}`;
+      mockRandomUUID.mockReturnValue(mockUuid);
+
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ launchCommand: 'my-cli --agent custom' });
+
+      const terminal = mgr.launchTerminal(config);
+
+      expect(terminal.sendText).toHaveBeenCalledWith('my-cli --agent custom --resume custom-cmd-uuid');
+    });
+  });
+
+  describe('focusTerminal with stable ID lookup', () => {
+    it('should focus terminal when passed a vscode.Terminal object directly', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+
+      const terminal = mgr.launchTerminal(config);
+      mockTerminals.push(terminal); // Must be in terminals for alive check
+
+      vi.mocked(terminal.show).mockClear();
+      mgr.focusTerminal(terminal);
+
+      expect(terminal.show).toHaveBeenCalledWith(false);
+    });
+
+    it('should look up and focus terminal when passed a string ID', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+
+      const terminal = mgr.launchTerminal(config);
+      mockTerminals.push(terminal); // Must be in terminals for alive check
+      const info = mgr.getTerminalInfo(terminal)!;
+
+      vi.mocked(terminal.show).mockClear();
+      mgr.focusTerminal(info.id);
+
+      expect(terminal.show).toHaveBeenCalledWith(false);
+    });
+
+    it('should handle unknown string ID gracefully (not throw)', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+
+      expect(() => mgr.focusTerminal('unknown-id')).not.toThrow();
+    });
+
+    it('should not call show() on a terminal not in vscode.window.terminals', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig();
+
+      const terminal = mgr.launchTerminal(config);
+      const info = mgr.getTerminalInfo(terminal)!;
+
+      // Remove terminal from mockTerminals to simulate it being closed
+      const idx = mockTerminals.indexOf(terminal);
+      if (idx !== -1) mockTerminals.splice(idx, 1);
+
+      mgr.focusTerminal(info.id);
+
+      // Should not have called show after removal
+      expect(terminal.show).toHaveBeenCalledTimes(1); // Only from launchTerminal
+    });
+  });
+
+  describe('session ID detection with --resume', () => {
+    it('should NOT overwrite agentSessionId that was pre-set at launch', () => {
+      const mockUuid = 'preset-uuid';
+      mockRandomUUID.mockReturnValue(mockUuid as `${string}-${string}-${string}-${string}-${string}`);
+
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      
+      // Create mock resolver that would return different session
+      const mockResolver = {
+        resolveAll: vi.fn().mockReturnValue(new Map()),
+        resolveForSquad: vi.fn(),
+        clearCache: vi.fn(),
+        getLastEvent: vi.fn(),
+        isSessionResumable: vi.fn(),
+        watchSession: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        _sessionStateDir: '/tmp/sessions',
+      };
+      mgr.setSessionResolver(mockResolver as any);
+
+      const config = makeSquadConfig({ path: '/test/path' });
+      const terminal = mgr.launchTerminal(config);
+
+      // Verify agentSessionId was set
+      const infoBefore = mgr.getTerminalInfo(terminal);
+      expect(infoBefore?.agentSessionId).toBe(mockUuid);
+
+      // Configure resolver to return a different session ID
+      mockResolver.resolveAll.mockReturnValue(new Map([['/test/path', {
+        sessionId: 'different-session',
+        summary: 'Test',
+        cwd: '/test/path',
+        branch: 'main',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        references: [],
+      }]]));
+
+      // Trigger detection
+      mgr.detectSessionIds();
+
+      // Should NOT have changed
+      const infoAfter = mgr.getTerminalInfo(terminal);
+      expect(infoAfter?.agentSessionId).toBe(mockUuid);
+    });
+
+    it('should still detect session IDs for terminals without pre-set agentSessionId', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+
+      // Manually add a terminal without agentSessionId (simulate old behavior)
+      const config = makeSquadConfig({ path: '/test/path' });
+      const terminal = makeMockTerminal('Legacy Terminal');
+      
+      // Manually register without agentSessionId
+      const info = {
+        id: 'legacy-1',
+        labelKey: 'terminal:legacy-1',
+        displayName: 'Legacy Terminal',
+        originalName: 'Legacy Terminal',
+        squadId: config.id,
+        squadName: config.name,
+        squadIcon: config.icon,
+        index: 1,
+        createdAt: new Date(),
+        squadPath: config.path,
+      };
+      (mgr as any)._terminals.set(terminal, info);
+
+      // Create mock resolver
+      const mockResolver = {
+        resolveAll: vi.fn().mockReturnValue(new Map([['/test/path', {
+          sessionId: 'detected-session',
+          summary: 'Test',
+          cwd: '/test/path',
+          branch: 'main',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          references: [],
+        }]])),
+        resolveForSquad: vi.fn(),
+        clearCache: vi.fn(),
+        getLastEvent: vi.fn(),
+        isSessionResumable: vi.fn(),
+        watchSession: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        _sessionStateDir: '/tmp/sessions',
+      };
+      mgr.setSessionResolver(mockResolver as any);
+
+      mgr.detectSessionIds();
+
+      const infoAfter = mgr.getTerminalInfo(terminal);
+      expect(infoAfter?.agentSessionId).toBe('detected-session');
     });
   });
 });
