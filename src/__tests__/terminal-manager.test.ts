@@ -1317,7 +1317,7 @@ describe('TerminalManager', () => {
 
       const terminal = mgr.relaunchSession(orphanEntry);
 
-      expect(terminal.sendText).toHaveBeenCalledWith('copilot --agent squad');
+      expect(terminal!.sendText).toHaveBeenCalledWith('copilot --agent squad');
     });
 
     it('should send resume command with agentSessionId when available', () => {
@@ -1334,7 +1334,7 @@ describe('TerminalManager', () => {
 
       const terminal = mgr.relaunchSession(orphanEntry);
 
-      expect(terminal.sendText).toHaveBeenCalledWith(
+      expect(terminal!.sendText).toHaveBeenCalledWith(
         'copilot --agent squad --resume session-to-resume',
       );
     });
@@ -1351,7 +1351,7 @@ describe('TerminalManager', () => {
 
       const terminal = mgr.relaunchSession(orphanEntry);
 
-      expect(terminal.sendText).not.toHaveBeenCalled();
+      expect(terminal!.sendText).not.toHaveBeenCalled();
     });
 
     it('should preserve agentSessionId and launchCommand in relaunched terminal info', () => {
@@ -1368,7 +1368,7 @@ describe('TerminalManager', () => {
 
       const terminal = mgr.relaunchSession(orphanEntry);
 
-      const info = mgr.getTerminalInfo(terminal);
+      const info = mgr.getTerminalInfo(terminal!);
       expect(info?.agentSessionId).toBe('preserved-session');
       expect(info?.launchCommand).toBe('copilot --agent squad');
     });
@@ -1446,7 +1446,7 @@ describe('TerminalManager', () => {
       expect(orphans[0].agentSessionId).toBe('session-abc-123');
 
       const relaunched = mgr.relaunchSession(orphanEntry);
-      expect(relaunched.sendText).toHaveBeenCalledWith('copilot --yolo --resume session-abc-123');
+      expect(relaunched!.sendText).toHaveBeenCalledWith('copilot --yolo --resume session-abc-123');
     });
 
     it('should use squadPath as cwd when relaunching orphaned session', () => {
@@ -1725,8 +1725,8 @@ describe('TerminalManager', () => {
 
       const terminal = mgr.relaunchSession(orphanEntry);
 
-      const sendTextMock = vi.mocked(terminal.sendText);
-      const showMock = vi.mocked(terminal.show);
+      const sendTextMock = vi.mocked(terminal!.sendText);
+      const showMock = vi.mocked(terminal!.show);
 
       expect(sendTextMock).toHaveBeenCalled();
       expect(showMock).toHaveBeenCalled();
@@ -1750,7 +1750,7 @@ describe('TerminalManager', () => {
 
       const terminal = mgr.relaunchSession(orphanEntry, true);
 
-      expect(terminal.sendText).toHaveBeenCalledWith('copilot --agent squad --continue');
+      expect(terminal!.sendText).toHaveBeenCalledWith('copilot --agent squad --continue');
     });
 
     it('should pass EDITLESS env vars via TerminalOptions.env', () => {
@@ -1821,7 +1821,7 @@ describe('TerminalManager', () => {
       const terminal = mgr.relaunchSession(orphanEntry);
 
       // Should still launch without errors
-      expect(terminal.sendText).toHaveBeenCalledWith('copilot --agent squad --resume some-session');
+      expect(terminal!.sendText).toHaveBeenCalledWith('copilot --agent squad --resume some-session');
     });
   });
 
