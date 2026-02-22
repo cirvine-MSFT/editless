@@ -6744,3 +6744,16 @@ SquadUI v0.7.3 surface sufficient for Tier 1 integration (4 hours, v0.1). Keep t
 
 **From:** Casey Irvine (2026-02-22T03:39Z)  
 **What:** Brady confirmed multi-frontend approach. EditLess integrates Squad CLI as launchable session type + SquadUI as complementary sidebar. @github/copilot-sdk v0.1.25 is JSON-RPC foundation.
+
+---
+### 2026-02-22T03:20:00Z: User directive
+**By:** Casey Irvine (via Copilot)
+**What:** Be mindful of work items that look like they've already been tackled. Don't put changes on top of changes if the existing code in master already handles the issue. Verify what's already fixed before making new changes.
+**Why:** User request — captured for team memory. Several v0.1.1 issues were already partially or fully fixed (as discovered during triage). Agents should check existing code before implementing, to avoid redundant or conflicting changes.
+
+---
+### 2026-02-22T03:51:00Z: User directive
+**By:** Casey Irvine (via Copilot)
+**What:** EditLess is a window/tab/terminal manager — NOT a dashboard or information display. SquadUI should handle the dashboard, team info, decisions view, etc. EditLess just manages what's running where and which tabs need attention. "I really just want to be like a window kind of manager. I don't necessarily want to be sending a bunch of information back and forth."
+**Why:** User directive — scopes EditLess's role in the Squad ecosystem
+
