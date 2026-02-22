@@ -120,6 +120,8 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   }
 
   getAvailableOptions(nodeId: string, contextValue: string): { owners?: string[]; repos?: string[]; orgs?: string[]; projects?: string[]; statuses?: string[]; labels?: string[] } {
+    // Strip :f{seq} suffix from node IDs before data lookup
+    const cleanId = nodeId.replace(/:f\d+$/, '');
     if (contextValue === 'github-pr-backend') {
       const owners = new Set<string>();
       for (const repo of this._repos) {
@@ -130,13 +132,13 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     }
 
     if (contextValue === 'github-pr-org') {
-      const owner = nodeId.replace('github-pr:', '');
+      const owner = cleanId.replace('github-pr:', '');
       const repos = this._repos.filter(r => r.startsWith(owner + '/'));
       return { repos };
     }
 
     if (contextValue === 'github-pr-repo') {
-      const repoName = nodeId.replace('github-pr:', '');
+      const repoName = cleanId.replace('github-pr:', '');
       const prs = this._prs.get(repoName) ?? [];
       const labels = new Set<string>();
       for (const pr of prs) {

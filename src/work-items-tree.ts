@@ -168,6 +168,8 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   getAvailableOptions(nodeId: string, contextValue: string): { owners?: string[]; repos?: string[]; orgs?: string[]; projects?: string[]; types?: string[]; labels?: string[]; states?: UnifiedState[]; tags?: string[] } {
+    // Strip :f{seq} suffix from node IDs before data lookup
+    const cleanId = nodeId.replace(/:f\d+$/, '');
     if (contextValue === 'github-backend') {
       // Extract unique owners from repo names
       const owners = new Set<string>();
@@ -180,14 +182,14 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
 
     if (contextValue === 'github-org') {
       // Extract repos for this owner
-      const owner = nodeId.replace('github:', '');
+      const owner = cleanId.replace('github:', '');
       const repos = this._repos.filter(r => r.startsWith(owner + '/'));
       return { repos };
     }
 
     if (contextValue === 'github-repo') {
       // Labels, states, milestones for this repo
-      const repoName = nodeId.replace('github:', '');
+      const repoName = cleanId.replace('github:', '');
       const issues = this._issues.get(repoName) ?? [];
       const labels = new Set<string>();
       for (const issue of issues) {
