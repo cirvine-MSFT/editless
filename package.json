@@ -183,12 +183,6 @@
         "icon": "$(clear-all)"
       },
       {
-        "command": "editless.workItems.filterByType",
-        "title": "Filter Work Items by Type",
-        "category": "EditLess",
-        "icon": "$(filter)"
-      },
-      {
         "command": "editless.filterPRs",
         "title": "Filter PRs",
         "category": "EditLess",
@@ -313,78 +307,307 @@
     ],
     "menus": {
       "view/title": [
-        { "command": "editless.refresh", "when": "view == editlessTree", "group": "navigation@1" },
-        { "command": "editless.showHiddenAgents", "when": "view == editlessTree", "group": "navigation@2" },
-        { "command": "editless.addNew", "when": "view == editlessTree", "group": "navigation@3" },
-        { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation@1" },
-        { "command": "editless.filterWorkItems", "when": "view == editlessWorkItems", "group": "navigation@2" },
-        { "command": "editless.clearWorkItemsFilter", "when": "view == editlessWorkItems && editless.workItemsFiltered", "group": "navigation@3" },
-        { "command": "editless.workItems.filterByType", "when": "view == editlessWorkItems", "group": "navigation@5" },
-        { "command": "editless.configureWorkItems", "when": "view == editlessWorkItems", "group": "navigation@4" },
-        { "command": "editless.refreshPRs", "when": "view == editlessPRs", "group": "navigation@1" },
-        { "command": "editless.prs.toggleMyPRs", "when": "view == editlessPRs && !editless.prsMyOnly", "group": "navigation@2" },
-        { "command": "editless.prs.toggleMyPRs", "when": "view == editlessPRs && editless.prsMyOnly", "group": "navigation@2" },
-        { "command": "editless.filterPRs", "when": "view == editlessPRs", "group": "navigation@3" },
-        { "command": "editless.clearPRsFilter", "when": "view == editlessPRs && editless.prsFiltered", "group": "navigation@4" },
-        { "command": "editless.configurePRs", "when": "view == editlessPRs", "group": "navigation@5" }
+        {
+          "command": "editless.refresh",
+          "when": "view == editlessTree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "editless.showHiddenAgents",
+          "when": "view == editlessTree",
+          "group": "navigation@2"
+        },
+        {
+          "command": "editless.addNew",
+          "when": "view == editlessTree",
+          "group": "navigation@3"
+        },
+        {
+          "command": "editless.refreshWorkItems",
+          "when": "view == editlessWorkItems",
+          "group": "navigation@1"
+        },
+        {
+          "command": "editless.filterWorkItems",
+          "when": "view == editlessWorkItems",
+          "group": "navigation@2"
+        },
+        {
+          "command": "editless.clearWorkItemsFilter",
+          "when": "view == editlessWorkItems && editless.workItemsFiltered",
+          "group": "navigation@3"
+        },
+        {
+          "command": "editless.configureWorkItems",
+          "when": "view == editlessWorkItems",
+          "group": "navigation@4"
+        },
+        {
+          "command": "editless.refreshPRs",
+          "when": "view == editlessPRs",
+          "group": "navigation@1"
+        },
+        {
+          "command": "editless.prs.toggleMyPRs",
+          "when": "view == editlessPRs && !editless.prsMyOnly",
+          "group": "navigation@2"
+        },
+        {
+          "command": "editless.prs.toggleMyPRs",
+          "when": "view == editlessPRs && editless.prsMyOnly",
+          "group": "navigation@2"
+        },
+        {
+          "command": "editless.filterPRs",
+          "when": "view == editlessPRs",
+          "group": "navigation@3"
+        },
+        {
+          "command": "editless.clearPRsFilter",
+          "when": "view == editlessPRs && editless.prsFiltered",
+          "group": "navigation@4"
+        },
+        {
+          "command": "editless.configurePRs",
+          "when": "view == editlessPRs",
+          "group": "navigation@5"
+        }
       ],
       "view/item/context": [
-        { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent$/", "group": "inline@0" },
-        { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent$/", "group": "session@0" },
-        { "command": "editless.renameSquad", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@1" },
-        { "command": "editless.changeModel", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@2" },
-        { "command": "editless.goToSquadSettings", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@3" },
-        { "command": "editless.openInSquadUi", "when": "view == editlessTree && viewItem =~ /^squad/ && editless.squadUiSupportsDeepLink", "group": "squad@4" },
-        { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem =~ /^squad/", "group": "squad@5" },
-        { "command": "editless.promoteDiscoveredAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
-        { "command": "editless.promoteDiscoveredAgent", "when": "view == editlessTree && viewItem == discovered-squad", "group": "inline" },
-        { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-agent", "group": "inline" },
-        { "command": "editless.hideAgent", "when": "view == editlessTree && viewItem == discovered-squad", "group": "inline" },
-        { "command": "editless.closeTerminal", "when": "viewItem == terminal" },
-        { "command": "editless.closeTerminal", "when": "viewItem == terminal", "group": "inline@99" },
-        { "command": "editless.renameSession", "when": "viewItem == terminal" },
-        { "command": "editless.clearSessionLabel", "when": "viewItem == terminal" },
-        { "command": "editless.openInBrowser", "when": "viewItem == work-item", "group": "inline" },
-        { "command": "editless.goToWorkItem", "when": "viewItem == work-item", "group": "work-item@2" },
-        { "command": "editless.launchFromWorkItem", "when": "viewItem == work-item", "group": "work-item@1" },
-        { "command": "editless.openInBrowser", "when": "viewItem == pull-request", "group": "inline" },
-        { "command": "editless.launchFromPR", "when": "viewItem == pull-request", "group": "pull-request@1" },
-        { "command": "editless.goToPRInBrowser", "when": "viewItem == pull-request", "group": "pull-request@2" },
-        { "command": "editless.relaunchSession", "when": "viewItem == orphanedSession", "group": "inline@1" },
-        { "command": "editless.dismissOrphan", "when": "viewItem == orphanedSession", "group": "inline@2" }
+        {
+          "command": "editless.launchSession",
+          "when": "view == editlessTree && viewItem =~ /^squad|^agent$/",
+          "group": "inline@0"
+        },
+        {
+          "command": "editless.launchSession",
+          "when": "view == editlessTree && viewItem =~ /^squad|^agent$/",
+          "group": "session@0"
+        },
+        {
+          "command": "editless.renameSquad",
+          "when": "view == editlessTree && viewItem =~ /^squad/",
+          "group": "squad@1"
+        },
+        {
+          "command": "editless.changeModel",
+          "when": "view == editlessTree && viewItem =~ /^squad/",
+          "group": "squad@2"
+        },
+        {
+          "command": "editless.goToSquadSettings",
+          "when": "view == editlessTree && viewItem =~ /^squad/",
+          "group": "squad@3"
+        },
+        {
+          "command": "editless.openInSquadUi",
+          "when": "view == editlessTree && viewItem =~ /^squad/ && editless.squadUiSupportsDeepLink",
+          "group": "squad@4"
+        },
+        {
+          "command": "editless.hideAgent",
+          "when": "view == editlessTree && viewItem =~ /^squad/",
+          "group": "squad@5"
+        },
+        {
+          "command": "editless.promoteDiscoveredAgent",
+          "when": "view == editlessTree && viewItem == discovered-agent",
+          "group": "inline"
+        },
+        {
+          "command": "editless.promoteDiscoveredAgent",
+          "when": "view == editlessTree && viewItem == discovered-squad",
+          "group": "inline"
+        },
+        {
+          "command": "editless.hideAgent",
+          "when": "view == editlessTree && viewItem == discovered-agent",
+          "group": "inline"
+        },
+        {
+          "command": "editless.hideAgent",
+          "when": "view == editlessTree && viewItem == discovered-squad",
+          "group": "inline"
+        },
+        {
+          "command": "editless.closeTerminal",
+          "when": "viewItem == terminal"
+        },
+        {
+          "command": "editless.closeTerminal",
+          "when": "viewItem == terminal",
+          "group": "inline@99"
+        },
+        {
+          "command": "editless.renameSession",
+          "when": "viewItem == terminal"
+        },
+        {
+          "command": "editless.clearSessionLabel",
+          "when": "viewItem == terminal"
+        },
+        {
+          "command": "editless.openInBrowser",
+          "when": "viewItem == work-item",
+          "group": "inline"
+        },
+        {
+          "command": "editless.goToWorkItem",
+          "when": "viewItem == work-item",
+          "group": "work-item@2"
+        },
+        {
+          "command": "editless.launchFromWorkItem",
+          "when": "viewItem == work-item",
+          "group": "work-item@1"
+        },
+        {
+          "command": "editless.openInBrowser",
+          "when": "viewItem == pull-request",
+          "group": "inline"
+        },
+        {
+          "command": "editless.launchFromPR",
+          "when": "viewItem == pull-request",
+          "group": "pull-request@1"
+        },
+        {
+          "command": "editless.goToPRInBrowser",
+          "when": "viewItem == pull-request",
+          "group": "pull-request@2"
+        },
+        {
+          "command": "editless.relaunchSession",
+          "when": "viewItem == orphanedSession",
+          "group": "inline@1"
+        },
+        {
+          "command": "editless.dismissOrphan",
+          "when": "viewItem == orphanedSession",
+          "group": "inline@2"
+        }
       ],
       "commandPalette": [
-        { "command": "editless.focusTerminal", "when": "false" },
-        { "command": "editless.closeTerminal", "when": "false" },
-        { "command": "editless.clearSessionLabel", "when": "false" },
-        { "command": "editless.renameSquad", "when": "false" },
-        { "command": "editless.changeModel", "when": "false" },
-        { "command": "editless.goToSquadSettings", "when": "false" },
-        { "command": "editless.openInSquadUi", "when": "false" },
-        { "command": "editless.hideAgent", "when": "false" },
-        { "command": "editless.refreshWorkItems", "when": "false" },
-        { "command": "editless.filterWorkItems", "when": "false" },
-        { "command": "editless.clearWorkItemsFilter", "when": "false" },
-        { "command": "editless.workItems.filterByType", "when": "false" },
-        { "command": "editless.configureWorkItems", "when": "false" },
-        { "command": "editless.refreshPRs", "when": "false" },
-        { "command": "editless.prs.toggleMyPRs", "when": "false" },
-        { "command": "editless.filterPRs", "when": "false" },
-        { "command": "editless.clearPRsFilter", "when": "false" },
-        { "command": "editless.configurePRs", "when": "false" },
-        { "command": "editless.openInBrowser", "when": "false" },
-        { "command": "editless.launchFromWorkItem", "when": "false" },
-        { "command": "editless.openFilePreview", "when": "false" },
-        { "command": "editless.goToPR", "when": "false" },
-        { "command": "editless.configureRepos", "when": "false" },
-        { "command": "editless.configureAdo", "when": "false" },
-        { "command": "editless.addNew", "when": "false" },
-        { "command": "editless.promoteDiscoveredAgent", "when": "false" },
-        { "command": "editless.relaunchSession", "when": "false" },
-        { "command": "editless.dismissOrphan", "when": "false" },
-        { "command": "editless.goToWorkItem", "when": "false" },
-        { "command": "editless.launchFromPR", "when": "false" },
-        { "command": "editless.goToPRInBrowser", "when": "false" }
+        {
+          "command": "editless.focusTerminal",
+          "when": "false"
+        },
+        {
+          "command": "editless.closeTerminal",
+          "when": "false"
+        },
+        {
+          "command": "editless.clearSessionLabel",
+          "when": "false"
+        },
+        {
+          "command": "editless.renameSquad",
+          "when": "false"
+        },
+        {
+          "command": "editless.changeModel",
+          "when": "false"
+        },
+        {
+          "command": "editless.goToSquadSettings",
+          "when": "false"
+        },
+        {
+          "command": "editless.openInSquadUi",
+          "when": "false"
+        },
+        {
+          "command": "editless.hideAgent",
+          "when": "false"
+        },
+        {
+          "command": "editless.refreshWorkItems",
+          "when": "false"
+        },
+        {
+          "command": "editless.filterWorkItems",
+          "when": "false"
+        },
+        {
+          "command": "editless.clearWorkItemsFilter",
+          "when": "false"
+        },
+        {
+          "command": "editless.configureWorkItems",
+          "when": "false"
+        },
+        {
+          "command": "editless.refreshPRs",
+          "when": "false"
+        },
+        {
+          "command": "editless.prs.toggleMyPRs",
+          "when": "false"
+        },
+        {
+          "command": "editless.filterPRs",
+          "when": "false"
+        },
+        {
+          "command": "editless.clearPRsFilter",
+          "when": "false"
+        },
+        {
+          "command": "editless.configurePRs",
+          "when": "false"
+        },
+        {
+          "command": "editless.openInBrowser",
+          "when": "false"
+        },
+        {
+          "command": "editless.launchFromWorkItem",
+          "when": "false"
+        },
+        {
+          "command": "editless.openFilePreview",
+          "when": "false"
+        },
+        {
+          "command": "editless.goToPR",
+          "when": "false"
+        },
+        {
+          "command": "editless.configureRepos",
+          "when": "false"
+        },
+        {
+          "command": "editless.configureAdo",
+          "when": "false"
+        },
+        {
+          "command": "editless.addNew",
+          "when": "false"
+        },
+        {
+          "command": "editless.promoteDiscoveredAgent",
+          "when": "false"
+        },
+        {
+          "command": "editless.relaunchSession",
+          "when": "false"
+        },
+        {
+          "command": "editless.dismissOrphan",
+          "when": "false"
+        },
+        {
+          "command": "editless.goToWorkItem",
+          "when": "false"
+        },
+        {
+          "command": "editless.launchFromPR",
+          "when": "false"
+        },
+        {
+          "command": "editless.goToPRInBrowser",
+          "when": "false"
+        }
       ]
     },
     "configuration": {
@@ -398,7 +621,7 @@
           "scope": "resource",
           "order": 1
         },
-        "editless.scanDebounceMs":{
+        "editless.scanDebounceMs": {
           "type": "number",
           "default": 500,
           "description": "Debounce interval in milliseconds for file system scanning",
@@ -461,13 +684,17 @@
               "type": "array",
               "default": [],
               "description": "Only show issues with at least one of these labels (empty = show all)",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             },
             "excludeLabels": {
               "type": "array",
               "default": [],
               "description": "Hide issues with any of these labels",
-              "items": { "type": "string" }
+              "items": {
+                "type": "string"
+              }
             }
           }
         },

@@ -565,3 +565,151 @@ describe('WorkItemsTreeProvider — type filter', () => {
     expect(children).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Unified filter with types for GitHub issues (#387)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — unified type filter on GitHub issues', () => {
+  async function getFilteredItems(
+    issues: GitHubIssue[],
+    filter: { repos?: string[]; labels?: string[]; states?: Array<'open' | 'active' | 'closed'>; types?: string[] },
+  ): Promise<WorkItemsTreeItem[]> {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue(issues);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    provider.setFilter({
+      repos: filter.repos ?? [],
+      labels: filter.labels ?? [],
+      states: filter.states ?? [],
+      types: filter.types ?? [],
+    });
+
+    return provider.getChildren();
+  }
+
+  it('should filter GitHub issues by type via type:* labels', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:bug', 'release:v0.1'] }),
+        makeIssue({ number: 2, labels: ['type:feature', 'release:v0.1'] }),
+        makeIssue({ number: 3, labels: ['release:v0.1'] }),
+      ],
+      { types: ['Bug'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+
+  it('should match User Story type to type:user-story label', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:user-story'] }),
+        makeIssue({ number: 2, labels: ['type:bug'] }),
+      ],
+      { types: ['User Story'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+
+  it('should allow multiple type selections for GitHub issues', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:bug'] }),
+        makeIssue({ number: 2, labels: ['type:task'] }),
+        makeIssue({ number: 3, labels: ['type:feature'] }),
+      ],
+      { types: ['Bug', 'Feature'] },
+    );
+    expect(items).toHaveLength(2);
+    expect(items.map(i => i.label)).toEqual(
+      expect.arrayContaining([expect.stringContaining('#1'), expect.stringContaining('#3')]),
+    );
+  });
+
+  it('should show no items when type filter matches nothing', async () => {
+    const items = await getFilteredItems(
+      [makeIssue({ number: 1, labels: ['release:v0.1'] })],
+      { types: ['Bug'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('No items match current filter');
+  });
+
+  it('should not filter GitHub issues by type when types is empty', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:bug'] }),
+        makeIssue({ number: 2, labels: [] }),
+      ],
+      { types: [] },
+    );
+    expect(items).toHaveLength(2);
+  });
+
+  it('should be case-insensitive for type label matching', async () => {
+    const items = await getFilteredItems(
+      [makeIssue({ number: 1, labels: ['Type:Bug'] })],
+      { types: ['Bug'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADO terminology harmonization (#387)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — terminology harmonization', () => {
+  function makeAdoItem(overrides: Partial<import('../ado-client').AdoWorkItem> = {}): import('../ado-client').AdoWorkItem {
+    return {
+      id: 1,
+      title: 'ADO Item',
+      state: 'Active',
+      type: 'User Story',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/1',
+      assignedTo: 'user',
+      areaPath: 'Project\\Area',
+      tags: [],
+      ...overrides,
+    };
+  }
+
+  it('should use "Labels" instead of "Tags" in ADO tooltips', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([makeAdoItem({ tags: ['frontend', 'urgent'] })]);
+
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(1);
+    const tooltip = (roots[0].tooltip as { value: string }).value;
+    expect(tooltip).toContain('Labels: frontend, urgent');
+    expect(tooltip).not.toContain('Tags:');
+  });
+
+  it('should omit Labels line when ADO item has no tags', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([makeAdoItem({ tags: [] })]);
+
+    const roots = provider.getChildren();
+    const tooltip = (roots[0].tooltip as { value: string }).value;
+    expect(tooltip).not.toContain('Labels:');
+    expect(tooltip).not.toContain('Tags:');
+  });
+
+  it('should use "Labels" in filter description', () => {
+    const provider = new WorkItemsTreeProvider();
+    const mockTreeView = { description: undefined as string | undefined };
+    provider.setTreeView(mockTreeView as any);
+
+    provider.setFilter({ repos: [], labels: ['frontend'], states: [], types: [] });
+    expect(mockTreeView.description).toContain('label:frontend');
+  });
+});

@@ -347,12 +347,22 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     return true;
   }
 
+  /**
+   * Match GitHub issues by type filter.
+   * Maps ADO-style types (e.g. "Bug") to GitHub's `type:bug` label convention.
+   */
+  private matchesTypeFilter(issueLabels: string[], types: string[]): boolean {
+    const typeLabelPatterns = types.map(t => `type:${t.toLowerCase().replace(/\s+/g, '-')}`);
+    return issueLabels.some(l => typeLabelPatterns.includes(l.toLowerCase()));
+  }
+
   private applyRuntimeFilter(issues: GitHubIssue[]): GitHubIssue[] {
     if (!this.isFiltered) return issues;
     return issues.filter(issue => {
       if (this._filter.repos.length > 0 && !this._filter.repos.includes(issue.repository)) return false;
       if (this._filter.labels.length > 0 && !this.matchesLabelFilter(issue.labels, this._filter.labels)) return false;
       if (this._filter.states.length > 0 && !this._filter.states.includes(mapGitHubState(issue))) return false;
+      if (this._filter.types.length > 0 && !this.matchesTypeFilter(issue.labels, this._filter.types)) return false;
       return true;
     });
   }
@@ -451,7 +461,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         `Type: ${wi.type}`,
         `State: ${wi.state}`,
         `Area: ${wi.areaPath}`,
-        wi.tags.length > 0 ? `Tags: ${wi.tags.join(', ')}` : '',
+        wi.tags.length > 0 ? `Labels: ${wi.tags.join(', ')}` : '',
       ].filter(Boolean).join('\n\n'),
     );
     item.command = {

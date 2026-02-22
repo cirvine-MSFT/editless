@@ -571,7 +571,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     vscode.commands.registerCommand('editless.refreshPRs', () => prsProvider.refresh()),
   );
 
-  // Filter work items (#132)
+  // Unified work items filter (#132, #292, #387)
+  const typeOptions = ['Bug', 'Task', 'Feature', 'User Story'];
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.filterWorkItems', async () => {
       const current = workItemsProvider.filter;
@@ -593,6 +594,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       for (const s of stateOptions) {
         items.push({ label: s.label, description: 'state', picked: current.states.includes(s.value) });
       }
+      items.push({ label: 'Type', kind: vscode.QuickPickItemKind.Separator });
+      for (const t of typeOptions) {
+        items.push({ label: t, description: 'type', picked: (current.types ?? []).includes(t) });
+      }
       if (allLabels.length > 0) {
         items.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
         for (const label of allLabels) {
@@ -612,30 +617,15 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const states = picks.filter(p => p.description === 'state')
         .map(p => stateOptions.find(s => s.label === p.label)?.value)
         .filter((s): s is UnifiedState => s !== undefined);
+      const types = picks.filter(p => p.description === 'type').map(p => p.label);
 
-      workItemsProvider.setFilter({ repos, labels, states, types: current.types ?? [] });
+      workItemsProvider.setFilter({ repos, labels, states, types });
     }),
     vscode.commands.registerCommand('editless.clearWorkItemsFilter', () => workItemsProvider.clearFilter()),
-  );
-
-  // Filter work items by type (#292)
-  const adoTypeOptions = ['Bug', 'Task', 'Feature', 'User Story'];
-  context.subscriptions.push(
-    vscode.commands.registerCommand('editless.workItems.filterByType', async () => {
-      const current = workItemsProvider.filter;
-      const items = adoTypeOptions.map(t => ({
-        label: t,
-        picked: (current.types ?? []).includes(t),
-      }));
-      const picks = await vscode.window.showQuickPick(items, {
-        title: 'Filter Work Items by Type',
-        canPickMany: true,
-        placeHolder: 'Select types to show (leave empty to show all)',
-      });
-      if (picks === undefined) return;
-      const types = picks.map(p => p.label);
-      workItemsProvider.setFilter({ ...current, types });
-    }),
+    // Keep command registered for backward compat — delegates to unified filter
+    vscode.commands.registerCommand('editless.workItems.filterByType', () =>
+      vscode.commands.executeCommand('editless.filterWorkItems'),
+    ),
   );
 
   vscode.commands.executeCommand('setContext', 'editless.workItemsFiltered', false);
