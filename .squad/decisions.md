@@ -7532,3 +7532,203 @@ Worktree handoff (auto-creating a worktree when starting work and handing off sq
 
 1. File as a feature request on bradygaster/squad if it doesn't exist
 2. EditLess will integrate Squad CLI worktree output when available
+
+---
+
+## 2026-02-22T18:43Z: User Directive — Default Copilot CLI Agent
+
+**By:** Casey Irvine (via Copilot)  
+**Status:** User request — captured for team memory
+
+### Decision
+
+EditLess should always show a default "Copilot CLI" agent in the tree, even with no squads/agents configured. This is the generic Copilot CLI agent (no `--agent` flag). New users should never see an empty tree — they can launch a session parented to the generic agent without knowing about squads.
+
+### Rationale
+
+- User request — new users need an immediate launch point
+- Removes friction for first-run experience
+
+---
+
+## 2026-02-22: Default Copilot CLI Agent
+
+**Author:** Morty (Extension Dev)  
+**Date:** 2026-02-22  
+**Issue:** #337  
+**Status:** Implemented
+
+### Decision
+
+The EditLess tree always shows a built-in "Copilot CLI" entry at the top, even when no squads or agents are registered. This entry launches the generic Copilot CLI without a `--agent` flag. It cannot be hidden or deleted.
+
+### Rationale
+
+- New users should never see an empty sidebar — the default agent provides an immediate "launch" action.
+- The old welcome state (Welcome to EditLess / Add squad / Discover agents) is replaced — the default agent IS the onboarding entry point.
+- Uses `contextValue: 'default-agent'` to get the launch button but NOT delete/edit/hide context menu actions.
+
+### Implementation
+
+- `DEFAULT_COPILOT_CLI_ID = 'builtin:copilot-cli'` exported from `editless-tree.ts`
+- Synthetic `AgentTeamConfig` created on-the-fly in `launchSession` handler (not persisted to registry)
+- `launchCommand` set to `getCliCommand()` (just `copilot`) so no `--agent` flag is appended
+- Terminal sessions tracked under the sentinel squad ID like any other agent
+
+---
+
+## 2026-02-23: Universe Auto-Detection from Casting Registry
+
+**Author:** Morty (Extension Dev)  
+**Date:** 2026-02-23  
+**Issue:** #393  
+**Status:** Implemented
+
+### Decision
+
+When `parseTeamMd()` returns `universe: 'unknown'` (no `**Universe:**` marker in team.md), discovery now falls back to reading `.squad/casting/registry.json` (or `.ai-team/casting/registry.json`) and extracting the `universe` field from the first active agent entry.
+
+### Detection Priority
+
+1. `**Universe:**` in team.md — explicit user override, highest priority
+2. `.squad/casting/registry.json` universe field — automatic fallback
+3. `'unknown'` — final fallback when neither source has a universe
+
+### Architecture
+
+- `parseTeamMd()` remains pure (text-only, no filesystem access)
+- New `readUniverseFromRegistry(squadPath)` handles the file read
+- Fallback logic lives at caller sites: `discoverAgentTeams()`, `autoRegisterWorkspaceSquads()`, `discoverAll()`
+- Checks `.squad/` before `.ai-team/` (same priority order as `resolveTeamMd`)
+- Only reads from active agents (`status: 'active'`)
+- Errors handled gracefully — malformed/missing files silently fall through to 'unknown'
+
+### Impact
+
+All discovery paths (scan, auto-register, unified) now consistently resolve the universe. Squads with casting data no longer show "unknown" in the tree view.
+
+---
+
+## 2026-02-24: Inline Action Icons for Work Items & PRs
+
+**Author:** Summer (Product Designer)  
+**Date:** 2026-02-24  
+**Status:** Proposed  
+**Requested by:** Casey Irvine
+
+### Decision
+
+Replace `$(play)` with `$(add)` for session launch on work item and PR leaf nodes. Keep `$(link-external)` for "Open in Browser." Two inline icons per item, consistent across both views.
+
+### Rationale
+
+#### Why `$(add)` replaces `$(play)`
+
+1. **Consistency with main tree.** The Agents view already uses `$(add)` for "Launch Session" on squad/agent nodes (`inline@0`). Work items and PRs perform the same action — creating a new terminal session. Same action → same icon.
+
+2. **Casey's explicit ask.** _"There's maybe like a plus button that's like 'add a session.'"_ The `$(add)` icon directly maps to this mental model: you're _adding_ a session to your workspace, not _playing_ a recording.
+
+3. **Semantic accuracy.** `$(play)` implies "run" or "resume" — a state transition on something that already exists. `$(add)` implies "create" — which is what actually happens. The user selects an agent from a QuickPick and a new terminal session is created. That's an "add" operation.
+
+4. **No `$(play)` + `$(add)` dual icons.** Having both would raise the question "what's the difference?" The answer is nothing — they'd do the same thing. One icon, one meaning.
+
+#### Why `$(link-external)` stays
+
+`$(link-external)` is VS Code's established convention for "open external URL" (used in Settings UI, built-in Git, etc.). Users already understand it. The `$(link-external)` collision with "Open in Squad UI" on squad nodes is a non-issue — squad nodes live in the Agents tree, not the Work Items or PRs trees. A user never sees both meanings simultaneously.
+
+#### Why only 2 inline icons
+
+VS Code tree items get visually cluttered past 2-3 inline icons. Two icons keeps the layout clean and scannable. All supplementary actions (Go to Work Item, Go to PR) belong in the context menu where there's room for labels.
+
+### Spec
+
+#### Inline Icons — Work Item Leaf Nodes
+
+Applies to `viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/`
+
+| Position | Icon | Command | Tooltip |
+|---|---|---|---|
+| `inline@0` | `$(add)` | `editless.launchFromWorkItem` | Launch with Agent |
+| `inline@1` | `$(link-external)` | `editless.openInBrowser` | Open in Browser |
+
+#### Inline Icons — PR Leaf Nodes
+
+Applies to `viewItem =~ /^(pull-request|ado-pull-request)$/`
+
+| Position | Icon | Command | Tooltip |
+|---|---|---|---|
+| `inline@0` | `$(add)` | `editless.launchFromPR` | Launch with Agent |
+| `inline@1` | `$(link-external)` | `editless.openInBrowser` | Open in Browser |
+
+#### Visual Layout (left → right)
+
+```
+Bug #1234: Fix login timeout     [+] [↗]
+PR #567: Add retry logic          [+] [↗]
+```
+
+`[+]` = `$(add)` — primary action, leftmost, closest to label  
+`[↗]` = `$(link-external)` — secondary action, rightmost
+
+#### Command Icon Changes
+
+Update the command definition for `editless.launchFromWorkItem` and `editless.launchFromPR`:
+
+| Command | Current Icon | New Icon |
+|---|---|---|
+| `editless.launchFromWorkItem` | `$(play)` | `$(add)` |
+| `editless.launchFromPR` | `$(play)` | `$(add)` |
+
+#### Position Changes
+
+| Item | Current | New |
+|---|---|---|
+| Work item "Open in Browser" | `inline` (no position) | `inline@1` |
+| Work item "Launch with Agent" | `inline@10` | `inline@0` |
+| PR "Open in Browser" | `inline` (no position) | `inline@1` |
+| PR "Launch with Agent" | `inline@10` | `inline@0` |
+
+### Context Menu
+
+The right-click menu complements the inline icons with labeled entries. Every inline action should also appear in the context menu (discoverability — users who don't recognize an icon can right-click to find the same action with a text label).
+
+#### Work Item Context Menu
+
+| Group | Command | Label |
+|---|---|---|
+| `work-item@1` | `editless.launchFromWorkItem` | Launch with Agent |
+| `work-item@2` | `editless.openInBrowser` | Open in Browser |
+| `work-item@3` | `editless.goToWorkItem` | Go to Work Item |
+
+#### PR Context Menu
+
+| Group | Command | Label |
+|---|---|---|
+| `pull-request@1` | `editless.launchFromPR` | Launch with Agent |
+| `pull-request@2` | `editless.openInBrowser` | Open in Browser |
+| `pull-request@3` | `editless.goToPRInBrowser` | Go to PR |
+
+#### Context Menu vs Inline Decision
+
+| Action | Inline? | Context Menu? | Why |
+|---|---|---|---|
+| Launch with Agent | ✅ | ✅ | Primary action — needs maximum discoverability |
+| Open in Browser | ✅ | ✅ | Common action — icon is universally understood, but label helps |
+| Go to Work Item / Go to PR | ❌ | ✅ | Tertiary action — would clutter inline; context menu is sufficient |
+
+### Migration Notes
+
+- The `editless.launchFromWorkItem` and `editless.launchFromPR` command definitions change their `icon` property from `$(play)` to `$(add)`.
+- The `view/item/context` menu entries change their `group` positions as specified above.
+- No new commands are needed. No command IDs change.
+- The `$(play)` icon is fully removed from the work items and PR views.
+
+### Consistency Matrix
+
+| View | Primary Action | Icon | Secondary Action | Icon |
+|---|---|---|---|---|
+| Agents tree (squad/agent) | Launch Session | `$(add)` | — | — |
+| Work Items tree (leaf) | Launch with Agent | `$(add)` | Open in Browser | `$(link-external)` |
+| PRs tree (leaf) | Launch with Agent | `$(add)` | Open in Browser | `$(link-external)` |
+
+All three views now use `$(add)` for "create a session." One icon vocabulary across the entire extension.
