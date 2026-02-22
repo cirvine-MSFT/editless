@@ -732,12 +732,12 @@ describe('PRsTreeProvider — hierarchy rendering with level filters', () => {
       {
         id: 1, title: 'PR 1', isDraft: true, status: 'active',
         url: 'url', sourceRef: 'feature', targetRef: 'main',
-        repository: 'repo', reviewers: [],
+        repository: 'repo', reviewers: [], createdBy: 'user1@example.com',
       },
       {
         id: 2, title: 'PR 2', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'fix', targetRef: 'main',
-        repository: 'repo', reviewers: [],
+        repository: 'repo', reviewers: [], createdBy: 'user2@example.com',
       },
     ]);
 
@@ -808,7 +808,7 @@ describe('PRsTreeProvider — level filter edge cases', () => {
       {
         id: 1, title: 'PR', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'feature', targetRef: 'main',
-        repository: 'repo', reviewers: [],
+        repository: 'repo', reviewers: [], createdBy: 'user@example.com',
       },
     ]);
 
@@ -837,7 +837,7 @@ describe('PRsTreeProvider — level filter edge cases', () => {
       {
         id: 1, title: 'PR', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'feature', targetRef: 'main',
-        repository: 'repo', reviewers: [],
+        repository: 'repo', reviewers: [], createdBy: 'user@example.com',
       },
     ]);
     const listener = vi.fn();
@@ -849,5 +849,98 @@ describe('PRsTreeProvider — level filter edge cases', () => {
     expect(root).toHaveLength(2);
     expect(root.some(n => n.contextValue === 'ado-pr-backend')).toBe(true);
     expect(root.some(n => n.contextValue === 'github-pr-backend')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADO author filter
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — ADO author filter', () => {
+  function makeAdoPRs() {
+    return [
+      {
+        id: 1, title: 'My PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'feature', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'me@example.com',
+      },
+      {
+        id: 2, title: 'Other PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'fix', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'other@example.com',
+      },
+      {
+        id: 3, title: 'Draft PR', isDraft: true, status: 'active',
+        url: 'url', sourceRef: 'draft-branch', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'me@example.com',
+      },
+    ];
+  }
+
+  it('should filter ADO PRs by author when author filter is active', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoMe('me@example.com');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every(pr => pr.createdBy === 'me@example.com')).toBe(true);
+  });
+
+  it('should use case-insensitive matching for ADO author', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoMe('ME@EXAMPLE.COM');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every(pr => pr.createdBy.toLowerCase() === 'me@example.com')).toBe(true);
+  });
+
+  it('should show all ADO PRs when author filter is not active', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoMe('me@example.com');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
+    // 3 total, but draft/active are kept (merged/closed excluded by default)
+    expect(filtered).toHaveLength(3);
+  });
+
+  it('should not filter by author when adoMe is not set', () => {
+    const provider = new PRsTreeProvider();
+    // No setAdoMe call
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
+    expect(filtered).toHaveLength(3);
+  });
+
+  it('should show createdBy in tree item description when not in author mode', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoPRs(makeAdoPRs());
+
+    const projectNode = new PRsTreeItem('project', 2);
+    projectNode.id = 'ado-pr:org:project:f1';
+    projectNode.contextValue = 'ado-pr-project';
+
+    const items = provider.getChildren(projectNode);
+    expect(items[0].description).toContain('me@example.com');
+  });
+
+  it('should hide createdBy in tree item description when author filter is active', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoMe('me@example.com');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    provider.setAdoPRs(makeAdoPRs());
+
+    const projectNode = new PRsTreeItem('project', 2);
+    projectNode.id = 'ado-pr:org:project:f1';
+    projectNode.contextValue = 'ado-pr-project';
+
+    const items = provider.getChildren(projectNode);
+    expect(items[0].description).not.toContain('me@example.com');
   });
 });

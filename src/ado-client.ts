@@ -23,6 +23,7 @@ export interface AdoPR {
   url: string;
   repository: string;
   reviewers: string[];
+  createdBy: string;
 }
 
 function adoFetch<T>(apiUrl: string, token: string): Promise<T> {
@@ -202,6 +203,7 @@ export async function fetchAdoPRs(
         url: string;
         reviewers: Array<{ displayName: string }>;
         repository: { name: string };
+        createdBy: { displayName: string; uniqueName: string };
       }
       interface PRsResponse { value: PRDetail[] }
 
@@ -218,6 +220,7 @@ export async function fetchAdoPRs(
           url: webUrl,
           repository: repo.name,
           reviewers: (pr.reviewers ?? []).map(r => r.displayName),
+          createdBy: pr.createdBy?.uniqueName ?? '',
         });
       }
     } catch {
@@ -226,4 +229,36 @@ export async function fetchAdoPRs(
   }
 
   return allPRs;
+}
+
+let cachedAdoMe: string | undefined;
+
+export async function fetchAdoMe(
+  org: string,
+  token: string,
+): Promise<string> {
+  if (cachedAdoMe !== undefined) return cachedAdoMe;
+
+  const orgName = normalizeOrg(org);
+  const apiUrl = `https://dev.azure.com/${orgName}/_apis/connectionData`;
+
+  interface ConnectionData {
+    authenticatedUser: {
+      providerDisplayName: string;
+      properties: { Account: { $value: string } };
+    };
+  }
+
+  try {
+    const data = await adoFetch<ConnectionData>(apiUrl, token);
+    cachedAdoMe = data.authenticatedUser?.properties?.Account?.$value ?? '';
+  } catch {
+    cachedAdoMe = '';
+  }
+  return cachedAdoMe;
+}
+
+/** Reset cached identity (for testing). */
+export function _resetAdoMeCache(): void {
+  cachedAdoMe = undefined;
 }

@@ -43,6 +43,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   private _allLabels = new Set<string>();
   private _adoOrg: string | undefined;
   private _adoProject: string | undefined;
+  private _adoMe: string | undefined;
 
   setRepos(repos: string[]): void {
     this._repos = repos;
@@ -52,6 +53,10 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   setAdoConfig(org: string | undefined, project: string | undefined): void {
     this._adoOrg = org;
     this._adoProject = project;
+  }
+
+  setAdoMe(me: string): void {
+    this._adoMe = me;
   }
 
   setAdoPRs(prs: AdoPR[]): void {
@@ -478,6 +483,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       if (this._filter.statuses.length === 0 && (state === 'merged' || state === 'closed')) return false;
       if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
       if (this._filter.statuses.length > 0 && !this._filter.statuses.includes(state)) return false;
+      if (this._filter.author && this._adoMe && pr.createdBy.toLowerCase() !== this._adoMe.toLowerCase()) return false;
       return true;
     });
   }
@@ -510,7 +516,8 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     const item = new PRsTreeItem(`#${pr.id} ${pr.title}`);
     item.adoPR = pr;
     const stateLabel = pr.isDraft ? 'draft' : pr.status;
-    item.description = `${stateLabel} · ${pr.sourceRef} → ${pr.targetRef}`;
+    const authorSuffix = !this._filter.author && pr.createdBy ? ` · ${pr.createdBy}` : '';
+    item.description = `${stateLabel} · ${pr.sourceRef} → ${pr.targetRef}${authorSuffix}`;
     item.iconPath = pr.isDraft
       ? new vscode.ThemeIcon('git-pull-request-draft')
       : pr.status === 'merged'

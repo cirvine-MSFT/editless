@@ -27,7 +27,7 @@ import { PRsTreeProvider, PRsTreeItem, type PRsFilter, type PRLevelFilter } from
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
-import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
+import { fetchAdoWorkItems, fetchAdoPRs, fetchAdoMe } from './ado-client';
 import { buildDefaultLaunchCommand, buildCopilotCommand, getCliCommand } from './copilot-cli-builder';
 import { launchAndLabel } from './launch-utils';
 
@@ -1427,11 +1427,13 @@ async function initAdoIntegration(
     }
 
     try {
-      const [workItems, prs] = await Promise.all([
+      const [workItems, prs, adoMe] = await Promise.all([
         fetchAdoWorkItems(org, project, token),
         fetchAdoPRs(org, project, token),
+        fetchAdoMe(org, token),
       ]);
       workItemsProvider.setAdoItems(workItems);
+      if (adoMe) prsProvider.setAdoMe(adoMe);
       prsProvider.setAdoPRs(prs);
     } catch (err) {
       console.error('[EditLess] ADO fetch failed:', err);
