@@ -1113,18 +1113,28 @@ describe('TerminalManager', () => {
         expect(inactiveIcon).toBeDefined();
         expect(inactiveIcon.id).toBe('circle-outline');
 
-        const orphanedIcon = mgr.getStateIcon('orphaned');
+        const nonResumableInfo = makePersistedEntry();
+        const orphanedIcon = mgr.getStateIcon('orphaned', nonResumableInfo);
         expect(orphanedIcon).toBeDefined();
-        expect(orphanedIcon.id).toBe('eye-closed');
+        expect(orphanedIcon.id).toBe('circle-outline');
+
+        const resumableInfo = makePersistedEntry({ agentSessionId: 'session-123' });
+        const resumableIcon = mgr.getStateIcon('orphaned', resumableInfo);
+        expect(resumableIcon).toBeDefined();
+        expect(resumableIcon.id).toBe('history');
       });
 
       it('should return unique icons for non-transient session states', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
-        // launching intentionally shares loading~spin with active — both mean "working"
-        const states: SessionState[] = ['active', 'inactive', 'orphaned'];
-        const icons = states.map(s => mgr.getStateIcon(s).id);
-        expect(new Set(icons).size).toBe(states.length);
+        // active and inactive should have distinct icons
+        const activeIcon = mgr.getStateIcon('active').id;
+        const inactiveIcon = mgr.getStateIcon('inactive').id;
+        expect(activeIcon).not.toBe(inactiveIcon);
+        // resumable orphan should have a distinct icon
+        const resumableInfo = makePersistedEntry({ agentSessionId: 'session-123' });
+        const orphanedIcon = mgr.getStateIcon('orphaned', resumableInfo).id;
+        expect(orphanedIcon).not.toBe(activeIcon);
       });
 
       it('should return human-readable description for each state', () => {
@@ -1143,7 +1153,12 @@ describe('TerminalManager', () => {
         expect(inactiveDesc.length).toBeGreaterThan(0);
 
         const orphanedDesc = mgr.getStateDescription('orphaned', info);
-        expect(orphanedDesc).toContain('previous');
+        expect(orphanedDesc).toContain('session ended');
+
+        const resumableInfo = makePersistedEntry({ agentSessionId: 'session-123' });
+        const resumableDesc = mgr.getStateDescription('orphaned', resumableInfo);
+        expect(resumableDesc).toContain('previous session');
+        expect(resumableDesc).toContain('resume');
       });
 
       it('should include time elapsed in inactive state description', () => {

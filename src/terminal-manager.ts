@@ -520,13 +520,15 @@ export class TerminalManager implements vscode.Disposable {
     return 'inactive';
   }
 
-  getStateIcon(state: SessionState): vscode.ThemeIcon {
-    return getStateIcon(state);
+  getStateIcon(state: SessionState, info?: PersistedTerminalInfo | TerminalInfo): vscode.ThemeIcon {
+    const resumable = state === 'orphaned' && !!info?.agentSessionId;
+    return getStateIcon(state, resumable);
   }
 
   getStateDescription(state: SessionState, info: PersistedTerminalInfo | TerminalInfo): string {
     const lastActivityAt = 'lastSeenAt' in info ? (info as PersistedTerminalInfo).lastSeenAt : undefined;
-    return getStateDescription(state, lastActivityAt);
+    const resumable = state === 'orphaned' && !!info.agentSessionId;
+    return getStateDescription(state, lastActivityAt, resumable);
   }
 
   // -- Persistence & reconciliation -----------------------------------------
@@ -724,7 +726,7 @@ function isWorkingEvent(eventType: string): boolean {
   }
 }
 
-export function getStateIcon(state: SessionState): vscode.ThemeIcon {
+export function getStateIcon(state: SessionState, resumable = false): vscode.ThemeIcon {
   switch (state) {
     case 'launching':
     case 'active':
@@ -732,18 +734,20 @@ export function getStateIcon(state: SessionState): vscode.ThemeIcon {
     case 'inactive':
       return new vscode.ThemeIcon('circle-outline');
     case 'orphaned':
-      return new vscode.ThemeIcon('eye-closed');
+      return resumable
+        ? new vscode.ThemeIcon('history')
+        : new vscode.ThemeIcon('circle-outline');
     default:
       return new vscode.ThemeIcon('terminal');
   }
 }
 
-export function getStateDescription(state: SessionState, lastActivityAt?: number): string {
+export function getStateDescription(state: SessionState, lastActivityAt?: number, resumable = false): string {
   switch (state) {
     case 'launching':
       return 'launching…';
     case 'orphaned':
-      return 'previous session';
+      return resumable ? 'previous session — resume' : 'session ended';
     case 'active':
     case 'inactive': {
       if (!lastActivityAt) {

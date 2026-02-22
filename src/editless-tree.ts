@@ -504,18 +504,23 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   // -- Orphan item builder --------------------------------------------------
 
   private _buildOrphanItem(entry: PersistedTerminalInfo): EditlessTreeItem {
+    const resumable = !!entry.agentSessionId;
     const item = new EditlessTreeItem(entry.displayName, 'orphanedSession');
     item.id = `orphan:${entry.id}`;
     item.persistedEntry = entry;
-    item.description = '· orphaned — re-launch?';
-    item.iconPath = new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('disabledForeground'));
+    item.description = resumable ? 'previous session — resume' : 'session ended';
+    item.iconPath = resumable
+      ? new vscode.ThemeIcon('history')
+      : new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('disabledForeground'));
     item.contextValue = 'orphanedSession';
     item.tooltip = new vscode.MarkdownString(
-      [`**👻 ${entry.displayName}**`, `Squad: ${entry.squadName}`, 'This session has no live terminal. Re-launch or dismiss it.'].join('\n\n'),
+      resumable
+        ? [`**${entry.displayName}**`, `Squad: ${entry.squadName}`, 'Your conversation is saved. Click to pick up where you left off.'].join('\n\n')
+        : [`**${entry.displayName}**`, `Squad: ${entry.squadName}`, 'This terminal was closed. The conversation cannot be resumed.'].join('\n\n'),
     );
     item.command = {
       command: 'editless.relaunchSession',
-      title: 'Re-launch Session',
+      title: 'Resume Session',
       arguments: [item],
     };
     return item;

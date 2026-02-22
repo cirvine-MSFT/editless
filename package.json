@@ -281,13 +281,13 @@
       },
       {
         "command": "editless.dismissOrphan",
-        "title": "Dismiss Orphan",
+        "title": "Clear Session",
         "category": "EditLess",
         "icon": "$(close)"
       },
       {
         "command": "editless.relaunchAllOrphans",
-        "title": "Re-launch All Orphans",
+        "title": "Resume All Previous Sessions",
         "category": "EditLess",
         "icon": "$(debug-restart)"
       }
