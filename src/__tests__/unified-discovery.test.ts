@@ -198,6 +198,36 @@ describe('discoverAll', () => {
     expect(bot!.path).toContain('bot.agent.md');
   });
 
+  it('filters squad governance agent when squad is discovered from same folder', () => {
+    // Workspace folder IS a squad (has .squad/team.md) AND has .github/agents/squad.agent.md
+    const wsDir = path.join(tmpDir, 'my-squad');
+    writeFixture('my-squad/.squad/team.md', '# My Squad\n> A squad.\n**Universe:** prod\n');
+    writeFixture('my-squad/.github/agents/squad.agent.md', '# Squad\n> Squad governance file.\n');
+    // Also add a legitimate standalone agent to ensure it's NOT filtered
+    writeFixture('my-squad/.github/agents/helper.agent.md', '# Helper\n> Helps.\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(wsDir)], registry);
+
+    // squad.agent.md should be filtered out (it's the governance file)
+    expect(result.find(i => i.type === 'agent' && path.basename(i.path) === 'squad.agent.md')).toBeUndefined();
+    // The squad itself should still be present
+    expect(result.find(i => i.type === 'squad' && i.id === 'my-squad')).toBeDefined();
+    // The legitimate standalone agent should still be present
+    expect(result.find(i => i.type === 'agent' && i.id === 'helper')).toBeDefined();
+  });
+
+  it('keeps squad.agent.md when no squad is discovered in the same folder', () => {
+    // Workspace folder has squad.agent.md but NO .squad/team.md
+    writeFixture('ws/.github/agents/squad.agent.md', '# Squad\n> A standalone squad agent.\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(path.join(tmpDir, 'ws'))], registry);
+
+    const agent = result.find(i => i.id === 'squad' && i.type === 'agent');
+    expect(agent).toBeDefined();
+  });
+
   it('sets correct DiscoveredItem fields for squads', () => {
     const workspaceDir = path.join(tmpDir, 'projects', 'my-project');
     fs.mkdirSync(workspaceDir, { recursive: true });
