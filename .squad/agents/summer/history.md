@@ -11,6 +11,7 @@
 
 ## Learnings
 
+📌 **Empty state & onboarding UX (2026-02-22, #339):** Replaced single-line "No agents yet" placeholder with a 3-item welcome flow: `$(rocket)` Welcome header, `$(add)` "Add a squad directory" (→ editless.addSquad), `$(search)` "Discover agents in workspace" (→ editless.discoverSquads). The "All agents hidden" message is preserved separately for power users. Added "No active sessions — Click + to launch" hint inside squads with zero sessions. Icon choices: rocket=welcome, add=action, search=discover, info=hint. Tree item `command` property enables click-to-act without context menus. — designed by Summer
 
 - **Owner:** Casey Irvine
 - **Project:** EditLess — a VS Code extension for managing AI agents, terminal sessions, and work items. The "editorless IDE" panel.
