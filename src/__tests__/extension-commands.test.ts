@@ -383,6 +383,7 @@ vi.mock('../work-items-tree', () => ({
       getLevelFilter: vi.fn(),
       setLevelFilter: vi.fn(),
       clearLevelFilter: vi.fn(),
+      clearAllLevelFilters: vi.fn(),
       getAvailableOptions: vi.fn().mockReturnValue({}),
     };
   }),
@@ -1258,39 +1259,33 @@ describe('extension command handlers', () => {
   // --- editless.filterWorkItems -----------------------------------------------
 
   describe('editless.filterWorkItems', () => {
-    it('should show QuickPick with repos, states, and labels', async () => {
-      mockGetAllRepos.mockReturnValue(['owner/repo1']);
-      mockGetAllLabels.mockReturnValue(['type:bug', 'release:v0.1']);
+    it('should show QuickPick with sources only', async () => {
+      mockGetAllRepos.mockReturnValue(['owner/repo1', '(ADO)']);
       mockShowQuickPick.mockResolvedValue([]);
 
       await getHandler('editless.filterWorkItems')();
 
       expect(mockShowQuickPick).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({ label: 'owner/repo1', description: 'repo' }),
-          expect.objectContaining({ label: 'Open (New)', description: 'state' }),
-          expect.objectContaining({ label: 'type:bug', description: 'label' }),
-          expect.objectContaining({ label: 'release:v0.1', description: 'label' }),
+          expect.objectContaining({ label: 'owner/repo1', description: 'GitHub' }),
+          expect.objectContaining({ label: '(ADO)', description: 'Azure DevOps' }),
         ]),
-        expect.objectContaining({ canPickMany: true }),
+        expect.objectContaining({ canPickMany: true, title: 'Show/Hide Sources' }),
       );
     });
 
-    it('should apply selected filters to provider', async () => {
-      mockGetAllRepos.mockReturnValue(['owner/repo1']);
-      mockGetAllLabels.mockReturnValue(['type:bug']);
+    it('should apply selected sources to provider with empty labels/states/types', async () => {
+      mockGetAllRepos.mockReturnValue(['owner/repo1', '(ADO)']);
       mockShowQuickPick.mockResolvedValue([
-        { label: 'owner/repo1', description: 'repo' },
-        { label: 'type:bug', description: 'label' },
-        { label: 'Open (New)', description: 'state' },
+        { label: 'owner/repo1', description: 'GitHub' },
       ]);
 
       await getHandler('editless.filterWorkItems')();
 
       expect(mockSetFilter).toHaveBeenCalledWith({
         repos: ['owner/repo1'],
-        labels: ['type:bug'],
-        states: ['open'],
+        labels: [],
+        states: [],
         types: [],
       });
     });
@@ -1311,7 +1306,7 @@ describe('extension command handlers', () => {
   // --- editless.clearWorkItemsFilter -----------------------------------------
 
   describe('editless.clearWorkItemsFilter', () => {
-    it('should delegate to provider clearFilter', () => {
+    it('should delegate to provider clearFilter and clearAllLevelFilters', () => {
       getHandler('editless.clearWorkItemsFilter')();
       expect(mockClearFilter).toHaveBeenCalled();
     });

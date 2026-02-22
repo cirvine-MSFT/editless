@@ -161,6 +161,12 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     this._onDidChangeTreeData.fire();
   }
 
+  clearAllLevelFilters(): void {
+    this._levelFilters.clear();
+    this._filterSeq++;
+    this._onDidChangeTreeData.fire();
+  }
+
   getAvailableOptions(nodeId: string, contextValue: string): { owners?: string[]; repos?: string[]; orgs?: string[]; projects?: string[]; types?: string[]; labels?: string[]; states?: UnifiedState[]; tags?: string[] } {
     if (contextValue === 'github-backend') {
       // Extract unique owners from repo names
