@@ -269,3 +269,6 @@
 📌 **Filtered contextValue suffix pattern (#390, 2026-02-23):** Group nodes with active level filters append `-filtered` to their `contextValue`. The `getChildren()` dispatch and `getAvailableOptions()` strip this suffix before matching. Menu `when` clauses use `(-filtered)?$` regex to match both states. The clear icon only shows on `-filtered` variants.
 
 📌 **Default exclusion of closed/merged items (#390, 2026-02-23):** `applyRuntimeFilter` excludes closed work items and merged/closed PRs by default when no state/status filter is active. The same logic applies in level filter methods. Tests needing closed/merged items must explicitly set the filter.
+
+
+📌 **Inline icons + ADO launch support (#337, 2026-02-23):** Added inline play-button icons for `launchFromWorkItem` and `launchFromPR` in `view/item/context` using `group: inline@10` (after existing inline actions). Updated all context menu `when` clauses to use regex matching for ADO variants: `viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/` and `viewItem =~ /^(pull-request|ado-pull-request)$/`. The `launchFromWorkItem` command now handles `item?.adoWorkItem` mirroring the existing `launchFromPR` ADO pattern. Both commands already had `icon: "$(play)"`.
