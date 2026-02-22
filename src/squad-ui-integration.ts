@@ -38,6 +38,8 @@ export function initSquadUiContext(context: vscode.ExtensionContext): void {
 export async function openSquadUiDashboard(teamRoot?: string): Promise<void> {
   try {
     await vscode.commands.executeCommand('squadui.openDashboard', teamRoot);
+    // SquadUI's FileWatcher only monitors workspace root - external paths need manual refresh
+    await vscode.commands.executeCommand('squadui.refreshTree', teamRoot);
   } catch {
     // SquadUI command may not exist in older versions
   }
