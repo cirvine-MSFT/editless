@@ -1253,7 +1253,7 @@ describe('extension command handlers', () => {
   // --- editless.filterWorkItems -----------------------------------------------
 
   describe('editless.filterWorkItems', () => {
-    it('should show QuickPick with repos, states, and labels', async () => {
+    it('should show QuickPick with sources only', async () => {
       mockGetAllRepos.mockReturnValue(['owner/repo1']);
       mockGetAllLabels.mockReturnValue(['type:bug', 'release:v0.1']);
       mockShowQuickPick.mockResolvedValue([]);
@@ -1262,30 +1262,29 @@ describe('extension command handlers', () => {
 
       expect(mockShowQuickPick).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({ label: 'owner/repo1', description: 'repo' }),
-          expect.objectContaining({ label: 'Open (New)', description: 'state' }),
-          expect.objectContaining({ label: 'type:bug', description: 'label' }),
-          expect.objectContaining({ label: 'release:v0.1', description: 'label' }),
+          expect.objectContaining({ label: 'owner/repo1', description: 'source' }),
         ]),
-        expect.objectContaining({ canPickMany: true }),
+        expect.objectContaining({ canPickMany: true, title: 'Show/Hide Sources' }),
       );
+      // State and label options should NOT appear
+      const items = mockShowQuickPick.mock.calls[0][0] as { description?: string }[];
+      expect(items.filter(i => i.description === 'state')).toHaveLength(0);
+      expect(items.filter(i => i.description === 'label')).toHaveLength(0);
     });
 
-    it('should apply selected filters to provider', async () => {
+    it('should apply selected sources to provider with empty labels and states', async () => {
       mockGetAllRepos.mockReturnValue(['owner/repo1']);
       mockGetAllLabels.mockReturnValue(['type:bug']);
       mockShowQuickPick.mockResolvedValue([
-        { label: 'owner/repo1', description: 'repo' },
-        { label: 'type:bug', description: 'label' },
-        { label: 'Open (New)', description: 'state' },
+        { label: 'owner/repo1', description: 'source' },
       ]);
 
       await getHandler('editless.filterWorkItems')();
 
       expect(mockSetFilter).toHaveBeenCalledWith({
         repos: ['owner/repo1'],
-        labels: ['type:bug'],
-        states: ['open'],
+        labels: [],
+        states: [],
       });
     });
 

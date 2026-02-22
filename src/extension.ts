@@ -22,7 +22,7 @@ import { SessionContextResolver } from './session-context';
 import { scanSquad } from './scanner';
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
 import { resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
-import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState } from './work-items-tree';
+import { WorkItemsTreeProvider, WorkItemsTreeItem } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem, type PRsFilter } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
@@ -571,49 +571,29 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     vscode.commands.registerCommand('editless.refreshPRs', () => prsProvider.refresh()),
   );
 
-  // Filter work items (#132)
+  // Filter sources — cascading principle: global filter = sources only (#390)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.filterWorkItems', async () => {
       const current = workItemsProvider.filter;
       const allRepos = workItemsProvider.getAllRepos();
-      const allLabels = workItemsProvider.getAllLabels();
-      const stateOptions: { label: string; value: UnifiedState }[] = [
-        { label: 'Open (New)', value: 'open' },
-        { label: 'Active / In Progress', value: 'active' },
-      ];
 
       const items: vscode.QuickPickItem[] = [];
       if (allRepos.length > 0) {
-        items.push({ label: 'Repos', kind: vscode.QuickPickItemKind.Separator });
+        items.push({ label: 'Sources', kind: vscode.QuickPickItemKind.Separator });
         for (const repo of allRepos) {
-          items.push({ label: repo, description: 'repo', picked: current.repos.includes(repo) });
-        }
-      }
-      items.push({ label: 'State', kind: vscode.QuickPickItemKind.Separator });
-      for (const s of stateOptions) {
-        items.push({ label: s.label, description: 'state', picked: current.states.includes(s.value) });
-      }
-      if (allLabels.length > 0) {
-        items.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
-        for (const label of allLabels) {
-          items.push({ label, description: 'label', picked: current.labels.includes(label) });
+          items.push({ label: repo, description: 'source', picked: current.repos.includes(repo) });
         }
       }
 
       const picks = await vscode.window.showQuickPick(items, {
-        title: 'Filter Work Items',
+        title: 'Show/Hide Sources',
         canPickMany: true,
-        placeHolder: 'Select filters (leave empty to show all)',
+        placeHolder: 'Select sources to display (leave empty to show all)',
       });
       if (picks === undefined) return;
 
-      const repos = picks.filter(p => p.description === 'repo').map(p => p.label);
-      const labels = picks.filter(p => p.description === 'label').map(p => p.label);
-      const states = picks.filter(p => p.description === 'state')
-        .map(p => stateOptions.find(s => s.label === p.label)?.value)
-        .filter((s): s is UnifiedState => s !== undefined);
-
-      workItemsProvider.setFilter({ repos, labels, states });
+      const repos = picks.filter(p => p.description === 'source').map(p => p.label);
+      workItemsProvider.setFilter({ repos, labels: [], states: [] });
     }),
     vscode.commands.registerCommand('editless.clearWorkItemsFilter', () => workItemsProvider.clearFilter()),
   );
