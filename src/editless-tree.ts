@@ -235,19 +235,32 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       ? this.terminalManager.getTerminalsForSquad(DEFAULT_COPILOT_CLI_ID).length
       : 0;
 
+    const orphanCount = this.terminalManager
+      ? this.terminalManager.getOrphanedSessions()
+          .filter(o => o.squadId === DEFAULT_COPILOT_CLI_ID && !!o.agentSessionId)
+          .length
+      : 0;
+
     const item = new EditlessTreeItem(
       'Copilot CLI',
       'default-agent',
-      terminalCount > 0
+      (terminalCount > 0 || orphanCount > 0)
         ? vscode.TreeItemCollapsibleState.Collapsed
         : vscode.TreeItemCollapsibleState.None,
       DEFAULT_COPILOT_CLI_ID,
     );
     item.id = DEFAULT_COPILOT_CLI_ID;
     item.iconPath = new vscode.ThemeIcon('terminal');
-    item.description = terminalCount > 0
-      ? `${terminalCount} session${terminalCount === 1 ? '' : 's'}`
-      : 'Generic Copilot agent';
+
+    const descParts: string[] = [];
+    if (terminalCount > 0) {
+      descParts.push(`${terminalCount} session${terminalCount === 1 ? '' : 's'}`);
+    }
+    if (orphanCount > 0) {
+      descParts.push(`${orphanCount} resumable`);
+    }
+    item.description = descParts.length > 0 ? descParts.join(' · ') : 'Generic Copilot agent';
+
     item.tooltip = new vscode.MarkdownString(
       '**Copilot CLI**\n\nLaunch the generic Copilot CLI without a specific agent.',
     );
@@ -294,11 +307,17 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       ? this.terminalManager.getTerminalsForSquad(cfg.id).length
       : 0;
 
+    const orphanCount = this.terminalManager
+      ? this.terminalManager.getOrphanedSessions()
+          .filter(o => o.squadId === cfg.id && !!o.agentSessionId)
+          .length
+      : 0;
+
     const item = new EditlessTreeItem(
       `${cfg.icon} ${displayName}`,
       'squad',
       isStandalone
-        ? (terminalCount > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None)
+        ? ((terminalCount > 0 || orphanCount > 0) ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None)
         : vscode.TreeItemCollapsibleState.Collapsed,
       cfg.id,
     );
@@ -311,6 +330,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const cached = this._cache.get(cfg.id);
     if (terminalCount > 0) {
       descParts.push(`${terminalCount} session${terminalCount === 1 ? '' : 's'}`);
+    }
+
+    if (orphanCount > 0) {
+      descParts.push(`${orphanCount} resumable`);
     }
 
     item.description = descParts.join(' · ');
