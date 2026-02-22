@@ -427,3 +427,60 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
     expect(children[0].label).toBe('No PRs match current filter');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Author filter (#280)
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — author filter', () => {
+  it('isFiltered should return true when author is set', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    expect(provider.isFiltered).toBe(true);
+  });
+
+  it('isFiltered should return false when author is empty string', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '' });
+    expect(provider.isFiltered).toBe(false);
+  });
+
+  it('getFilterDescription should include author:me when author set', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    expect(provider.getFilterDescription()).toContain('author:me');
+  });
+
+  it('getFilterDescription should not include author when empty', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '' });
+    expect(provider.getFilterDescription()).not.toContain('author');
+  });
+
+  it('clearFilter should reset author to empty', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    expect(provider.isFiltered).toBe(true);
+    provider.clearFilter();
+    expect(provider.isFiltered).toBe(false);
+    expect(provider.filter.author).toBe('');
+  });
+
+  it('should trigger fetchAll when author changes', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR()]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalled());
+
+    listener.mockClear();
+    mockFetchMyPRs.mockClear();
+
+    // Change author → should trigger a new fetchAll
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    await vi.waitFor(() => expect(mockFetchMyPRs).toHaveBeenCalled());
+  });
+});

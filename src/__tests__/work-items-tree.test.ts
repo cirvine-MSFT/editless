@@ -546,4 +546,22 @@ describe('WorkItemsTreeProvider — type filter', () => {
     provider.clearFilter();
     expect(provider.isFiltered).toBe(false);
   });
+
+  it('should show parent as leaf when all children are filtered out', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([
+      makeAdoItem({ id: 60, type: 'Epic', title: 'Big Epic' }),
+      makeAdoItem({ id: 61, type: 'Bug', title: 'Bug Child', parentId: 60 }),
+    ]);
+
+    // Filter to only Epic type — parent has children in the map but filter removes them
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Epic'] });
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(1);
+    expect(roots[0].label).toContain('#60');
+
+    // getChildren on the parent should return empty because filter removes child
+    const children = provider.getChildren(roots[0]);
+    expect(children).toHaveLength(0);
+  });
 });

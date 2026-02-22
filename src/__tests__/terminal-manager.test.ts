@@ -2354,4 +2354,104 @@ describe('TerminalManager', () => {
       expect(orphans.find(e => e.id === 'substr-false-positive')).toBeDefined();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // #337 — Launch timeout edge case
+  // ---------------------------------------------------------------------------
+
+  describe('launch timeout (#337)', () => {
+    it('should auto-clear launching state after LAUNCH_TIMEOUT_MS', () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        expect(mgr.getSessionState(terminal)).toBe('launching');
+
+        // Advance just under the timeout — still launching
+        vi.advanceTimersByTime(9_999);
+        expect(mgr.getSessionState(terminal)).toBe('launching');
+
+        // Advance past the timeout — should be inactive
+        vi.advanceTimersByTime(1);
+        expect(mgr.getSessionState(terminal)).toBe('inactive');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // #338 — Resumable detection edge cases
+  // ---------------------------------------------------------------------------
+
+  describe('resumable detection edge cases (#338)', () => {
+    it('should treat undefined agentSessionId as non-resumable', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const info = makePersistedEntry({ agentSessionId: undefined });
+
+      const icon = mgr.getStateIcon('orphaned', info);
+      expect(icon.id).toBe('circle-outline');
+
+      const desc = mgr.getStateDescription('orphaned', info);
+      expect(desc).toBe('session ended');
+    });
+
+    it('should treat empty string agentSessionId as non-resumable', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const info = makePersistedEntry({ agentSessionId: '' });
+
+      const icon = mgr.getStateIcon('orphaned', info);
+      expect(icon.id).toBe('circle-outline');
+
+      const desc = mgr.getStateDescription('orphaned', info);
+      expect(desc).toBe('session ended');
+    });
+
+    it('should treat populated agentSessionId as resumable', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const info = makePersistedEntry({ agentSessionId: 'abc-123' });
+
+      const icon = mgr.getStateIcon('orphaned', info);
+      expect(icon.id).toBe('history');
+
+      const desc = mgr.getStateDescription('orphaned', info);
+      expect(desc).toContain('resume');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // #328 — Bumped MAX_REBOOT_COUNT to 5
+  // ---------------------------------------------------------------------------
+
+  describe('MAX_REBOOT_COUNT = 5 (#328)', () => {
+    it('should keep entries alive through 4 reboots then evict on 5th', () => {
+      const entry = makePersistedEntry({ rebootCount: 3 });
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      // rebootCount was 3, incremented to 4 — still < 5
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans).toHaveLength(1);
+    });
+
+    it('should evict entry when rebootCount reaches 5', () => {
+      const entry = makePersistedEntry({ rebootCount: 4 });
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      // rebootCount was 4, incremented to 5 — evicted
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans).toHaveLength(0);
+    });
+  });
 });

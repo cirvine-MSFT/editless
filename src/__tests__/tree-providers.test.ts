@@ -25,6 +25,12 @@ vi.mock('vscode', () => {
 
   class ThemeIcon {
     id: string;
+    color?: unknown;
+    constructor(id: string, color?: unknown) { this.id = id; this.color = color; }
+  }
+
+  class ThemeColor {
+    id: string;
     constructor(id: string) { this.id = id; }
   }
 
@@ -46,7 +52,7 @@ vi.mock('vscode', () => {
   }
 
   return {
-    TreeItem, TreeItemCollapsibleState, ThemeIcon, MarkdownString, EventEmitter,
+    TreeItem, TreeItemCollapsibleState, ThemeIcon, ThemeColor, MarkdownString, EventEmitter,
     Uri: {
       parse: (s: string) => ({ toString: () => s }),
       file: (s: string) => ({ toString: () => s, fsPath: s }),
@@ -842,5 +848,124 @@ describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
     const uniqueIds = new Set(allIds);
 
     expect(allIds.length).toBe(uniqueIds.size);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — orphan item resumable vs non-resumable (#338)
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — orphan item resumability', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  function makeTerminalManager(orphans: Array<Record<string, unknown>>) {
+    return {
+      getTerminalsForSquad: () => [],
+      getOrphanedSessions: () => orphans,
+      onDidChange: (cb: Function) => ({ dispose: () => {} }),
+      getSessionState: () => 'orphaned',
+      getLastActivityAt: () => undefined,
+      getStateIcon: vi.fn(),
+      getStateDescription: vi.fn(),
+      getTerminalInfo: () => undefined,
+    };
+  }
+
+  const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'standalone' }];
+
+  it('should show "previous session — resume" for resumable orphan', () => {
+    const orphan = {
+      id: 'orphan-1',
+      labelKey: 'terminal:orphan-1',
+      displayName: '🤖 Squad A #1',
+      squadId: 'squad-a',
+      squadName: 'Squad A',
+      squadIcon: '🤖',
+      index: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      terminalName: '🤖 Squad A #1',
+      lastSeenAt: Date.now(),
+      rebootCount: 0,
+      agentSessionId: 'session-abc',
+    };
+
+    const registry = createMockRegistry(squads);
+    const tm = makeTerminalManager([orphan]);
+    const provider = new EditlessTreeProvider(registry as never, tm as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    const children = provider.getChildren(squadItem);
+    const orphanItem = children.find(c => c.type === 'orphanedSession');
+
+    expect(orphanItem).toBeDefined();
+    expect(orphanItem!.description).toContain('resume');
+    expect((orphanItem!.iconPath as { id: string }).id).toBe('history');
+  });
+
+  it('should show "session ended" for non-resumable orphan (no agentSessionId)', () => {
+    const orphan = {
+      id: 'orphan-2',
+      labelKey: 'terminal:orphan-2',
+      displayName: '🤖 Squad A #1',
+      squadId: 'squad-a',
+      squadName: 'Squad A',
+      squadIcon: '🤖',
+      index: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      terminalName: '🤖 Squad A #1',
+      lastSeenAt: Date.now(),
+      rebootCount: 0,
+      // no agentSessionId
+    };
+
+    const registry = createMockRegistry(squads);
+    const tm = makeTerminalManager([orphan]);
+    const provider = new EditlessTreeProvider(registry as never, tm as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    const children = provider.getChildren(squadItem);
+    const orphanItem = children.find(c => c.type === 'orphanedSession');
+
+    expect(orphanItem).toBeDefined();
+    expect(orphanItem!.description).toBe('session ended');
+    expect((orphanItem!.iconPath as { id: string }).id).toBe('circle-outline');
+  });
+
+  it('should have different tooltip for resumable vs non-resumable', () => {
+    const resumableOrphan = {
+      id: 'res-1', labelKey: 'terminal:res-1', displayName: 'Test', squadId: 'squad-a',
+      squadName: 'Squad A', squadIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z',
+      terminalName: 'Test', lastSeenAt: Date.now(), rebootCount: 0, agentSessionId: 'sess-1',
+    };
+    const nonResumableOrphan = {
+      id: 'non-1', labelKey: 'terminal:non-1', displayName: 'Test2', squadId: 'squad-a',
+      squadName: 'Squad A', squadIcon: '🤖', index: 2, createdAt: '2026-01-01T00:00:00.000Z',
+      terminalName: 'Test2', lastSeenAt: Date.now(), rebootCount: 0,
+    };
+
+    const registry = createMockRegistry(squads);
+    const tm = makeTerminalManager([resumableOrphan, nonResumableOrphan]);
+    const provider = new EditlessTreeProvider(registry as never, tm as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    const children = provider.getChildren(squadItem);
+    const orphanItems = children.filter(c => c.type === 'orphanedSession');
+
+    expect(orphanItems).toHaveLength(2);
+    const resumableTooltip = (orphanItems.find(o => o.persistedEntry?.id === 'res-1')!.tooltip as { value: string }).value;
+    const nonResumableTooltip = (orphanItems.find(o => o.persistedEntry?.id === 'non-1')!.tooltip as { value: string }).value;
+
+    expect(resumableTooltip).toContain('pick up where you left off');
+    expect(nonResumableTooltip).toContain('cannot be resumed');
   });
 });

@@ -533,6 +533,20 @@ summary: Modified`,
       expect(result.resumable).toBe(true);
       expect(result.stale).toBe(false);
     });
+
+    it('does not flag 10-day-old sessions as stale (threshold is 14 days)', () => {
+      const sessionDir = path.join(tmpSessionDir, 'ten-day-session');
+      fs.mkdirSync(sessionDir, { recursive: true });
+      fs.writeFileSync(path.join(sessionDir, 'workspace.yaml'), 'cwd: /test\nsummary: test', 'utf-8');
+      const eventsPath = path.join(sessionDir, 'events.jsonl');
+      fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      fs.utimesSync(eventsPath, tenDaysAgo, tenDaysAgo);
+
+      const result = resolver.isSessionResumable('ten-day-session');
+      expect(result.resumable).toBe(true);
+      expect(result.stale).toBe(false);
+    });
   });
 
   // -------------------------------------------------------------------------
