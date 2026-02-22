@@ -472,33 +472,43 @@
         },
         {
           "command": "editless.openInBrowser",
-          "when": "viewItem == work-item",
+          "when": "viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
           "group": "inline"
         },
         {
           "command": "editless.goToWorkItem",
-          "when": "viewItem == work-item",
+          "when": "viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
           "group": "work-item@2"
         },
         {
           "command": "editless.launchFromWorkItem",
-          "when": "viewItem == work-item",
+          "when": "viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
           "group": "work-item@1"
         },
         {
+          "command": "editless.launchFromWorkItem",
+          "when": "view == editlessWorkItems && viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
+          "group": "inline@10"
+        },
+        {
           "command": "editless.openInBrowser",
-          "when": "viewItem == pull-request",
+          "when": "viewItem =~ /^(pull-request|ado-pull-request)$/",
           "group": "inline"
         },
         {
           "command": "editless.launchFromPR",
-          "when": "viewItem == pull-request",
+          "when": "viewItem =~ /^(pull-request|ado-pull-request)$/",
           "group": "pull-request@1"
         },
         {
           "command": "editless.goToPRInBrowser",
-          "when": "viewItem == pull-request",
+          "when": "viewItem =~ /^(pull-request|ado-pull-request)$/",
           "group": "pull-request@2"
+        },
+        {
+          "command": "editless.launchFromPR",
+          "when": "view == editlessPRs && viewItem =~ /^(pull-request|ado-pull-request)$/",
+          "group": "inline@10"
         },
         {
           "command": "editless.relaunchSession",

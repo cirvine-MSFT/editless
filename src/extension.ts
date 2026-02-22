@@ -951,7 +951,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.launchFromWorkItem', async (item?: WorkItemsTreeItem) => {
       const issue = item?.issue;
-      if (!issue) return;
+      const adoItem = item?.adoWorkItem;
+      if (!issue && !adoItem) return;
 
       const squads = registry.loadSquads();
       if (squads.length === 0) {
@@ -959,23 +960,29 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         return;
       }
 
+      const number = issue?.number ?? adoItem?.id;
+      const title = issue?.title ?? adoItem?.title ?? '';
+      const url = issue?.url ?? adoItem?.url ?? '';
+
       const pick = await vscode.window.showQuickPick(
         squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, squad: s })),
-        { placeHolder: `Launch agent for #${issue.number} ${issue.title}` },
+        { placeHolder: `Launch agent for #${number} ${title}` },
       );
       if (!pick) return;
 
       const cfg = pick.squad;
       const MAX_SESSION_NAME = 50;
-      const rawName = `#${issue.number} ${issue.title}`;
+      const rawName = `#${number} ${title}`;
       const terminalName = rawName.length <= MAX_SESSION_NAME
         ? rawName
         : rawName.slice(0, rawName.lastIndexOf(' ', MAX_SESSION_NAME)) + '…';
       const terminal = terminalManager.launchTerminal(cfg, terminalName);
       labelManager.setLabel(terminalManager.getLabelKey(terminal), terminalName);
 
-      await vscode.env.clipboard.writeText(issue.url);
-      vscode.window.showInformationMessage(`Copied ${issue.url} to clipboard`);
+      if (url) {
+        await vscode.env.clipboard.writeText(url);
+        vscode.window.showInformationMessage(`Copied ${url} to clipboard`);
+      }
     }),
   );
 
