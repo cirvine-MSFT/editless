@@ -87,20 +87,22 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Reconcile persisted terminal sessions with live terminals after reload
   terminalManager.reconcile();
 
-  // Crash recovery notification (fire-and-forget, non-blocking)
-  const orphans = terminalManager.getOrphanedSessions();
-  const resumable = orphans.filter(o => o.agentSessionId);
-  if (resumable.length > 0) {
-    void vscode.window.showInformationMessage(
-      `EditLess found ${resumable.length} previous session(s) that can be resumed.`,
-      'Resume All', 'Dismiss',
-    ).then(action => {
-      if (action === 'Resume All') {
-        terminalManager.relaunchAllOrphans();
-        treeProvider.refresh();
-      }
-    });
-  }
+  // Wait for terminal matching to settle before checking orphans (#race-fix)
+  void terminalManager.waitForReconciliation().then(() => {
+    const orphans = terminalManager.getOrphanedSessions();
+    const resumable = orphans.filter(o => o.agentSessionId);
+    if (resumable.length > 0) {
+      void vscode.window.showInformationMessage(
+        `EditLess found ${resumable.length} previous session(s) that can be resumed.`,
+        'Resume All', 'Dismiss',
+      ).then(action => {
+        if (action === 'Resume All') {
+          terminalManager.relaunchAllOrphans();
+          treeProvider.refresh();
+        }
+      });
+    }
+  });
 
   // Sync tree selection when switching terminals via tab bar
   context.subscriptions.push(

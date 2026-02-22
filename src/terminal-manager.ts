@@ -70,6 +70,8 @@ export class TerminalManager implements vscode.Disposable {
   private _matchTimer: ReturnType<typeof setTimeout> | undefined;
   private _persistTimer: ReturnType<typeof setInterval> | undefined;
   private _sessionResolver?: SessionContextResolver;
+  private _reconcileResolve?: () => void;
+  private _reconcileTimer?: ReturnType<typeof setTimeout>;
 
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange: vscode.Event<void> = this._onDidChange.event;
@@ -438,6 +440,22 @@ export class TerminalManager implements vscode.Disposable {
     this._sessionResolver = resolver;
   }
 
+  /**
+   * Returns a Promise that resolves once terminal matching has settled after
+   * reconcile().  Resolves immediately if there are no pending saved entries.
+   * Has a max timeout (2 s) so the caller never waits forever.
+   */
+  waitForReconciliation(): Promise<void> {
+    if (this._pendingSaved.length === 0) { return Promise.resolve(); }
+    return new Promise<void>(resolve => {
+      this._reconcileResolve = resolve;
+      this._reconcileTimer = setTimeout(() => {
+        this._reconcileResolve = undefined;
+        resolve();
+      }, 2000);
+    });
+  }
+
   setAgentSessionId(terminal: vscode.Terminal, sessionId: string): void {
     const info = this._terminals.get(terminal);
     if (!info) return;
@@ -640,6 +658,15 @@ export class TerminalManager implements vscode.Disposable {
 
     this._pendingSaved = unmatched;
 
+    // Resolve the waitForReconciliation() promise when all entries are matched
+    if (this._pendingSaved.length === 0 && this._reconcileResolve) {
+      clearTimeout(this._reconcileTimer);
+      const resolve = this._reconcileResolve;
+      this._reconcileResolve = undefined;
+      this._reconcileTimer = undefined;
+      resolve();
+    }
+
     for (const info of this._terminals.values()) {
       const current = this._counters.get(info.squadId) || 0;
       if (info.index >= current) {
@@ -686,6 +713,11 @@ export class TerminalManager implements vscode.Disposable {
   dispose(): void {
     if (this._matchTimer !== undefined) {
       clearTimeout(this._matchTimer);
+    }
+    if (this._reconcileTimer !== undefined) {
+      clearTimeout(this._reconcileTimer);
+      this._reconcileResolve = undefined;
+      this._reconcileTimer = undefined;
     }
     if (this._persistTimer !== undefined) {
       clearInterval(this._persistTimer);

@@ -259,6 +259,7 @@ vi.mock('../terminal-manager', () => ({
       relaunchAllOrphans: mockRelaunchAllOrphans,
       persist: vi.fn(),
       reconcile: vi.fn(),
+      waitForReconciliation: vi.fn().mockResolvedValue(undefined),
       setSessionResolver: vi.fn(),
       setAgentSessionId: vi.fn(),
       getOrphanedSessions: vi.fn().mockReturnValue([]),
