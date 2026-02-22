@@ -272,6 +272,7 @@ vi.mock('../editless-tree', () => ({
     };
   }),
   EditlessTreeItem: MockEditlessTreeItem,
+  DEFAULT_COPILOT_CLI_ID: 'builtin:copilot-cli',
 }));
 
 vi.mock('../registry', () => ({

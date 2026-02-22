@@ -595,21 +595,100 @@ describe('EditlessTreeProvider — visibility filtering', () => {
 
     const roots = provider.getChildren();
 
-    expect(roots).toHaveLength(1);
-    expect(roots[0].label).toContain('All agents hidden');
+    // First item is always the built-in Copilot CLI, then the "all hidden" message
+    expect(roots).toHaveLength(2);
+    expect(roots[0].type).toBe('default-agent');
+    expect(roots[1].label).toContain('All agents hidden');
   });
 
-  it('"No agents yet" welcome state when truly empty', () => {
+  it('shows default Copilot CLI agent when no squads registered', () => {
     const registry = createMockRegistry([]);
     const visibility = { isHidden: () => false, getHiddenIds: () => [] };
     const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
 
     const roots = provider.getChildren();
 
-    expect(roots).toHaveLength(3);
-    expect(roots[0].label).toContain('Welcome to EditLess');
-    expect(roots[1].label).toContain('Add a squad directory');
-    expect(roots[2].label).toContain('Discover agents in workspace');
+    expect(roots).toHaveLength(1);
+    expect(roots[0].type).toBe('default-agent');
+    expect(roots[0].label).toBe('Copilot CLI');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — default Copilot CLI agent
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — default Copilot CLI agent', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('always appears as the first root item', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+
+    expect(roots[0].type).toBe('default-agent');
+    expect(roots[0].label).toBe('Copilot CLI');
+    expect(roots[0].id).toBe('builtin:copilot-cli');
+  });
+
+  it('coexists with registered squads', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
+      { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+
+    expect(roots).toHaveLength(3); // default + 2 squads
+    expect(roots[0].type).toBe('default-agent');
+    expect(roots[1].type).toBe('squad');
+    expect(roots[2].type).toBe('squad');
+  });
+
+  it('has contextValue "default-agent" for menu targeting', () => {
+    const registry = createMockRegistry([]);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+    const defaultItem = roots.find(r => r.type === 'default-agent');
+
+    expect(defaultItem).toBeDefined();
+    expect(defaultItem!.contextValue).toBe('default-agent');
+  });
+
+  it('is not affected by visibility manager', () => {
+    const registry = createMockRegistry([]);
+    const visibility = { isHidden: () => true, getHiddenIds: () => [] };
+    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
+
+    const roots = provider.getChildren();
+    const defaultItem = roots.find(r => r.type === 'default-agent');
+
+    expect(defaultItem).toBeDefined();
+    expect(defaultItem!.label).toBe('Copilot CLI');
+  });
+
+  it('shows "Generic Copilot agent" description when no sessions', () => {
+    const registry = createMockRegistry([]);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+    const defaultItem = roots.find(r => r.type === 'default-agent');
+
+    expect(defaultItem!.description).toBe('Generic Copilot agent');
   });
 });
 

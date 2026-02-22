@@ -5,7 +5,7 @@ import * as os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { createRegistry, watchRegistry } from './registry';
-import { EditlessTreeProvider, EditlessTreeItem } from './editless-tree';
+import { EditlessTreeProvider, EditlessTreeItem, DEFAULT_COPILOT_CLI_ID } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 
@@ -28,7 +28,7 @@ import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
 import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
-import { buildDefaultLaunchCommand, buildCopilotCommand } from './copilot-cli-builder';
+import { buildDefaultLaunchCommand, buildCopilotCommand, getCliCommand } from './copilot-cli-builder';
 
 const execFileAsync = promisify(execFile);
 
@@ -312,6 +312,23 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Launch session
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.launchSession', async (squadIdOrItem?: string | EditlessTreeItem) => {
+      // Handle the built-in Copilot CLI default agent
+      const isDefaultAgent = (typeof squadIdOrItem !== 'string' && squadIdOrItem?.type === 'default-agent')
+        || squadIdOrItem === DEFAULT_COPILOT_CLI_ID;
+      if (isDefaultAgent) {
+        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const defaultCfg: AgentTeamConfig = {
+          id: DEFAULT_COPILOT_CLI_ID,
+          name: 'Copilot CLI',
+          path: cwd ?? '',
+          icon: '🤖',
+          universe: 'standalone',
+          launchCommand: getCliCommand(),
+        };
+        terminalManager.launchTerminal(defaultCfg);
+        return;
+      }
+
       const squads = registry.loadSquads();
       if (squads.length === 0) {
         vscode.window.showWarningMessage('No agents registered yet.');

@@ -400,12 +400,12 @@
       "view/item/context": [
         {
           "command": "editless.launchSession",
-          "when": "view == editlessTree && viewItem =~ /^squad|^agent$/",
+          "when": "view == editlessTree && viewItem =~ /^squad|^agent|^default-agent$/",
           "group": "inline@0"
         },
         {
           "command": "editless.launchSession",
-          "when": "view == editlessTree && viewItem =~ /^squad|^agent$/",
+          "when": "view == editlessTree && viewItem =~ /^squad|^agent|^default-agent$/",
           "group": "session@0"
         },
         {
