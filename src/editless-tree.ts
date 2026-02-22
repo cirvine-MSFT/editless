@@ -195,15 +195,49 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
     if (items.length === 0) {
       const hasHiddenItems = (this._visibility?.getHiddenIds().length ?? 0) > 0;
-      const msg = new EditlessTreeItem(
-        hasHiddenItems
-          ? 'All agents hidden — use Show Hidden to restore'
-          : 'No agents yet — use + to add',
-        'category',
-        vscode.TreeItemCollapsibleState.None,
-      );
-      msg.iconPath = new vscode.ThemeIcon(hasHiddenItems ? 'eye-closed' : 'add');
-      items.push(msg);
+      if (hasHiddenItems) {
+        const msg = new EditlessTreeItem(
+          'All agents hidden — use Show Hidden to restore',
+          'category',
+          vscode.TreeItemCollapsibleState.None,
+        );
+        msg.iconPath = new vscode.ThemeIcon('eye-closed');
+        items.push(msg);
+      } else {
+        // First-time / empty workspace — welcome state
+        const welcome = new EditlessTreeItem(
+          'Welcome to EditLess',
+          'category',
+          vscode.TreeItemCollapsibleState.None,
+        );
+        welcome.iconPath = new vscode.ThemeIcon('rocket');
+        welcome.description = 'Get started below';
+        items.push(welcome);
+
+        const addSquad = new EditlessTreeItem(
+          'Add a squad directory',
+          'category',
+          vscode.TreeItemCollapsibleState.None,
+        );
+        addSquad.iconPath = new vscode.ThemeIcon('add');
+        addSquad.command = {
+          command: 'editless.addSquad',
+          title: 'Add Squad',
+        };
+        items.push(addSquad);
+
+        const discover = new EditlessTreeItem(
+          'Discover agents in workspace',
+          'category',
+          vscode.TreeItemCollapsibleState.None,
+        );
+        discover.iconPath = new vscode.ThemeIcon('search');
+        discover.command = {
+          command: 'editless.discoverSquads',
+          title: 'Discover',
+        };
+        items.push(discover);
+      }
     }
 
     return items;
@@ -292,7 +326,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         const title = customLabel ? `🏷️ ${customLabel}` : info.displayName;
         const item = new EditlessTreeItem(title, 'terminal');
         item.terminal = terminal;
-        item.description = relative;
+        item.description = sessionState === 'launching' ? 'launching…' : relative;
         item.iconPath = getStateIcon(sessionState);
         item.contextValue = 'terminal';
         item.tooltip = this._buildTerminalTooltip(info.displayName, relative, sessionCtx, sessionState, lastActivityAt);
@@ -306,6 +340,16 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
       for (const orphan of this.terminalManager.getOrphanedSessions().filter(o => o.squadId === squadId)) {
         children.push(this._buildOrphanItem(orphan));
+      }
+
+      // Hint when squad has no sessions yet
+      const hasTerminals = this.terminalManager.getTerminalsForSquad(squadId).length > 0;
+      const hasOrphans = this.terminalManager.getOrphanedSessions().some(o => o.squadId === squadId);
+      if (!hasTerminals && !hasOrphans) {
+        const hint = new EditlessTreeItem('No active sessions', 'category');
+        hint.description = 'Click + to launch';
+        hint.iconPath = new vscode.ThemeIcon('info');
+        children.push(hint);
       }
     }
 
@@ -460,18 +504,23 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   // -- Orphan item builder --------------------------------------------------
 
   private _buildOrphanItem(entry: PersistedTerminalInfo): EditlessTreeItem {
+    const resumable = !!entry.agentSessionId;
     const item = new EditlessTreeItem(entry.displayName, 'orphanedSession');
     item.id = `orphan:${entry.id}`;
     item.persistedEntry = entry;
-    item.description = '· orphaned — re-launch?';
-    item.iconPath = new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('disabledForeground'));
+    item.description = resumable ? 'previous session — resume' : 'session ended';
+    item.iconPath = resumable
+      ? new vscode.ThemeIcon('history')
+      : new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('disabledForeground'));
     item.contextValue = 'orphanedSession';
     item.tooltip = new vscode.MarkdownString(
-      [`**👻 ${entry.displayName}**`, `Squad: ${entry.squadName}`, 'This session has no live terminal. Re-launch or dismiss it.'].join('\n\n'),
+      resumable
+        ? [`**${entry.displayName}**`, `Squad: ${entry.squadName}`, 'Your conversation is saved. Click to pick up where you left off.'].join('\n\n')
+        : [`**${entry.displayName}**`, `Squad: ${entry.squadName}`, 'This terminal was closed. The conversation cannot be resumed.'].join('\n\n'),
     );
     item.command = {
       command: 'editless.relaunchSession',
-      title: 'Re-launch Session',
+      title: 'Resume Session',
       arguments: [item],
     };
     return item;

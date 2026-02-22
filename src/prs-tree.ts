@@ -6,6 +6,7 @@ export interface PRsFilter {
   repos: string[];
   labels: string[];
   statuses: string[];
+  author: string;
 }
 
 export class PRsTreeItem extends vscode.TreeItem {
@@ -29,7 +30,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   private _adoPRs: AdoPR[] = [];
   private _adoConfigured = false;
   private _loading = false;
-  private _filter: PRsFilter = { repos: [], labels: [], statuses: [] };
+  private _filter: PRsFilter = { repos: [], labels: [], statuses: [], author: '' };
   private _filterSeq = 0;
   private _treeView?: vscode.TreeView<PRsTreeItem>;
   private _allLabels = new Set<string>();
@@ -61,19 +62,25 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   }
 
   get isFiltered(): boolean {
-    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.statuses.length > 0;
+    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.statuses.length > 0 || this._filter.author !== '';
   }
 
   setFilter(filter: PRsFilter): void {
+    const authorChanged = this._filter.author !== filter.author;
     this._filter = { ...filter };
     this._filterSeq++;
     vscode.commands.executeCommand('setContext', 'editless.prsFiltered', this.isFiltered);
+    vscode.commands.executeCommand('setContext', 'editless.prsMyOnly', filter.author !== '');
     this._updateDescription();
-    this._onDidChangeTreeData.fire();
+    if (authorChanged) {
+      this.fetchAll();
+    } else {
+      this._onDidChangeTreeData.fire();
+    }
   }
 
   clearFilter(): void {
-    this.setFilter({ repos: [], labels: [], statuses: [] });
+    this.setFilter({ repos: [], labels: [], statuses: [], author: '' });
   }
 
   private _updateDescription(): void {
@@ -87,6 +94,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
   getFilterDescription(): string {
     const parts: string[] = [];
+    if (this._filter.author) parts.push('author:me');
     if (this._filter.repos.length > 0) parts.push(`repo:${this._filter.repos.join(',')}`);
     if (this._filter.statuses.length > 0) parts.push(`status:${this._filter.statuses.join(',')}`);
     if (this._filter.labels.length > 0) parts.push(`label:${this._filter.labels.join(',')}`);
@@ -133,7 +141,8 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       if (ghOk) {
         fetches.push(
           ...this._repos.map(async (repo) => {
-            const prs = await fetchMyPRs(repo);
+            const author = this._filter.author || undefined;
+            const prs = await fetchMyPRs(repo, author);
             for (const pr of prs) {
               for (const label of pr.labels) nextLabels.add(label);
             }

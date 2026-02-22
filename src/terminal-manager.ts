@@ -9,7 +9,7 @@ import { buildCopilotCommand } from './copilot-cli-builder';
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------
 
-export type SessionState = 'active' | 'inactive' | 'orphaned';
+export type SessionState = 'launching' | 'active' | 'inactive' | 'orphaned';
 
 export interface TerminalInfo {
   id: string;
@@ -47,6 +47,13 @@ export interface PersistedTerminalInfo {
 
 const STORAGE_KEY = 'editless.terminalSessions';
 
+/** Strip Unicode emoji (and variation selectors / ZWJ sequences) from a string. */
+export function stripEmoji(str: string): string {
+  return str
+    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]\uFE0F?(\u200D[\p{Emoji_Presentation}\p{Extended_Pictographic}]\uFE0F?)*/gu, '')
+    .trim();
+}
+
 // ---------------------------------------------------------------------------
 // TerminalManager
 // ---------------------------------------------------------------------------
@@ -58,6 +65,8 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _lastActivityAt = new Map<vscode.Terminal, number>();
   private readonly _sessionWatchers = new Map<vscode.Terminal, vscode.Disposable>();
   private readonly _lastSessionEvent = new Map<vscode.Terminal, SessionEvent>();
+  private readonly _launchingTerminals = new Set<vscode.Terminal>();
+  private readonly _launchTimers = new Map<vscode.Terminal, ReturnType<typeof setTimeout>>();
   private _matchTimer: ReturnType<typeof setTimeout> | undefined;
   private _persistTimer: ReturnType<typeof setInterval> | undefined;
   private _sessionResolver?: SessionContextResolver;
@@ -73,6 +82,7 @@ export class TerminalManager implements vscode.Disposable {
 
     this._disposables.push(
       vscode.window.onDidCloseTerminal(terminal => {
+        this._clearLaunching(terminal);
         this._shellExecutionActive.delete(terminal);
         this._lastActivityAt.delete(terminal);
         this._lastSessionEvent.delete(terminal);
@@ -87,6 +97,7 @@ export class TerminalManager implements vscode.Disposable {
         }
       }),
       vscode.window.onDidStartTerminalShellExecution(e => {
+        this._clearLaunching(e.terminal);
         this._shellExecutionActive.set(e.terminal, true);
         this._lastActivityAt.set(e.terminal, Date.now());
         this._onDidChange.fire();
@@ -97,6 +108,28 @@ export class TerminalManager implements vscode.Disposable {
         this._onDidChange.fire();
       }),
     );
+  }
+
+  // -- Launch state tracking (#337) ------------------------------------------
+
+  private static readonly LAUNCH_TIMEOUT_MS = 10_000;
+
+  private _setLaunching(terminal: vscode.Terminal): void {
+    this._launchingTerminals.add(terminal);
+    const timer = setTimeout(() => {
+      this._clearLaunching(terminal);
+      this._onDidChange.fire();
+    }, TerminalManager.LAUNCH_TIMEOUT_MS);
+    this._launchTimers.set(terminal, timer);
+  }
+
+  private _clearLaunching(terminal: vscode.Terminal): void {
+    this._launchingTerminals.delete(terminal);
+    const timer = this._launchTimers.get(terminal);
+    if (timer) {
+      clearTimeout(timer);
+      this._launchTimers.delete(terminal);
+    }
   }
 
   // -- Public API -----------------------------------------------------------
@@ -149,10 +182,12 @@ export class TerminalManager implements vscode.Disposable {
     };
 
     this._terminals.set(terminal, info);
+    this._setLaunching(terminal);
 
     // Start watching the session for activity (#324)
     if (this._sessionResolver) {
       const watcher = this._sessionResolver.watchSession(uuid, event => {
+        this._clearLaunching(terminal);
         this._lastSessionEvent.set(terminal, event);
         this._lastActivityAt.set(terminal, Date.now());
         this._onDidChange.fire();
@@ -365,10 +400,12 @@ export class TerminalManager implements vscode.Disposable {
       launchCommand: entry.launchCommand,
       squadPath: entry.squadPath,
     });
+    this._setLaunching(terminal);
 
     // Start watching the relaunched session for activity
     if (entry.agentSessionId && this._sessionResolver) {
       const watcher = this._sessionResolver.watchSession(entry.agentSessionId, event => {
+        this._clearLaunching(terminal);
         this._lastSessionEvent.set(terminal, event);
         this._lastActivityAt.set(terminal, Date.now());
         this._onDidChange.fire();
@@ -464,6 +501,11 @@ export class TerminalManager implements vscode.Disposable {
     const info = this._terminals.get(terminal);
     if (!info) { return undefined; }
 
+    // Show launching spinner until events arrive or timeout (#337)
+    if (this._launchingTerminals.has(terminal)) {
+      return 'launching';
+    }
+
     // Prefer events.jsonl data over shell execution tracking — it reflects
     // the actual copilot agent state rather than the outer shell process.
     const lastEvent = this._lastSessionEvent.get(terminal);
@@ -478,18 +520,20 @@ export class TerminalManager implements vscode.Disposable {
     return 'inactive';
   }
 
-  getStateIcon(state: SessionState): vscode.ThemeIcon {
-    return getStateIcon(state);
+  getStateIcon(state: SessionState, info?: PersistedTerminalInfo | TerminalInfo): vscode.ThemeIcon {
+    const resumable = state === 'orphaned' && !!info?.agentSessionId;
+    return getStateIcon(state, resumable);
   }
 
   getStateDescription(state: SessionState, info: PersistedTerminalInfo | TerminalInfo): string {
     const lastActivityAt = 'lastSeenAt' in info ? (info as PersistedTerminalInfo).lastSeenAt : undefined;
-    return getStateDescription(state, lastActivityAt);
+    const resumable = state === 'orphaned' && !!info.agentSessionId;
+    return getStateDescription(state, lastActivityAt, resumable);
   }
 
   // -- Persistence & reconciliation -----------------------------------------
 
-  private static readonly MAX_REBOOT_COUNT = 2;
+  private static readonly MAX_REBOOT_COUNT = 5;
 
   reconcile(): void {
     const saved = this.context.workspaceState.get<PersistedTerminalInfo[]>(STORAGE_KEY, []);
@@ -502,7 +546,8 @@ export class TerminalManager implements vscode.Disposable {
         lastSeenAt: entry.lastSeenAt ?? Date.now(),
         rebootCount: (entry.rebootCount ?? 0) + 1,
       }))
-      .filter(entry => entry.rebootCount < TerminalManager.MAX_REBOOT_COUNT);
+      .filter(entry => entry.rebootCount < TerminalManager.MAX_REBOOT_COUNT)
+      .slice(0, 50);
 
     this._tryMatchTerminals();
 
@@ -572,12 +617,25 @@ export class TerminalManager implements vscode.Disposable {
     };
 
     // Multi-signal matching: each stage only considers unclaimed terminals
+    // Pass 1: Index-based — match by squadId + terminal index
+    runPass((t, p) => {
+      for (const [, info] of this._terminals) {
+        if (info.squadId === p.squadId && info.index === p.index - 1) return true;
+        if (info.squadId === p.squadId && info.index === p.index + 1) return true;
+      }
+      return false;
+    });
+    // Pass 2–4: Name-based matching
     runPass((t, p) => t.name === p.terminalName);
     runPass((t, p) => t.name === (p.originalName ?? p.displayName));
     runPass((t, p) => t.name === p.displayName);
+    // Pass 5: Emoji-stripped name comparison
     runPass((t, p) => {
-      const orig = p.originalName ?? p.displayName;
-      return t.name.includes(orig) || p.terminalName.includes(t.name);
+      const stripped = stripEmoji(t.name);
+      if (stripped.length === 0) return false;
+      return stripped === stripEmoji(p.terminalName)
+        || stripped === stripEmoji(p.originalName ?? p.displayName)
+        || stripped === stripEmoji(p.displayName);
     });
 
     this._pendingSaved = unmatched;
@@ -632,6 +690,11 @@ export class TerminalManager implements vscode.Disposable {
     if (this._persistTimer !== undefined) {
       clearInterval(this._persistTimer);
     }
+    for (const timer of this._launchTimers.values()) {
+      clearTimeout(timer);
+    }
+    this._launchTimers.clear();
+    this._launchingTerminals.clear();
     for (const w of this._sessionWatchers.values()) {
       w.dispose();
     }
@@ -650,32 +713,41 @@ function isWorkingEvent(eventType: string): boolean {
   switch (eventType) {
     case 'assistant.turn_start':
     case 'assistant.message':
+    case 'assistant.thinking':
+    case 'assistant.code_edit':
     case 'tool.execution_start':
     case 'tool.execution_complete':
+    case 'tool.result':
     case 'user.message':
+    case 'session.resume':
       return true;
     default:
       return false;
   }
 }
 
-export function getStateIcon(state: SessionState): vscode.ThemeIcon {
+export function getStateIcon(state: SessionState, resumable = false): vscode.ThemeIcon {
   switch (state) {
+    case 'launching':
     case 'active':
       return new vscode.ThemeIcon('loading~spin');
     case 'inactive':
       return new vscode.ThemeIcon('circle-outline');
     case 'orphaned':
-      return new vscode.ThemeIcon('eye-closed');
+      return resumable
+        ? new vscode.ThemeIcon('history')
+        : new vscode.ThemeIcon('circle-outline');
     default:
       return new vscode.ThemeIcon('terminal');
   }
 }
 
-export function getStateDescription(state: SessionState, lastActivityAt?: number): string {
+export function getStateDescription(state: SessionState, lastActivityAt?: number, resumable = false): string {
   switch (state) {
+    case 'launching':
+      return 'launching…';
     case 'orphaned':
-      return 'previous session';
+      return resumable ? 'previous session — resume' : 'session ended';
     case 'active':
     case 'inactive': {
       if (!lastActivityAt) {

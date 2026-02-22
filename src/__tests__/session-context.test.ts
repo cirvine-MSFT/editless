@@ -166,14 +166,10 @@ path: c:\\Users\\test`;
       const module = await import('../session-context');
       resolver = new module.SessionContextResolver();
       
-      // Override the session state dir by patching the internal path
-      // We do this by monkey-patching os.homedir behavior indirectly
-      // through file system operations
-      const homeDir = path.dirname(tmpSessionDir);
-      const aiTeamPath = path.join(homeDir, '.copilot', 'session-state');
+      // Use isolated session-state dir inside tmpSessionDir (cleaned up per test)
+      const aiTeamPath = path.join(tmpSessionDir, '.copilot', 'session-state');
       fs.mkdirSync(aiTeamPath, { recursive: true });
       
-      // We'll copy test session files to the expected location
       resolver._sessionStateDir = aiTeamPath;
     });
 
@@ -329,6 +325,69 @@ summary: Modified`,
       
       expect(result).toBeNull();
     });
+
+    it('uses CWD index for O(1) lookups on repeat scans (200 sessions)', () => {
+      const targetSquad = path.join(tmpSessionDir, 'target-squad');
+
+      // Create 200 session directories, only one matching our target
+      for (let i = 0; i < 200; i++) {
+        const sessionDir = path.join(resolver._sessionStateDir, `session-${i}`);
+        fs.mkdirSync(sessionDir, { recursive: true });
+        const cwd = i === 42 ? targetSquad : path.join(tmpSessionDir, `other-squad-${i}`);
+        fs.writeFileSync(
+          path.join(sessionDir, 'workspace.yaml'),
+          `cwd: ${cwd}\nsummary: Session ${i}\nupdated_at: 2025-01-01T${String(i).padStart(2, '0')}:00:00Z`,
+          'utf-8',
+        );
+      }
+
+      // First call: builds the index (cold)
+      const result1 = resolver.resolveForSquad(targetSquad);
+      expect(result1?.sessionId).toBe('session-42');
+
+      // Clear only the per-call cache, keep the CWD index
+      resolver._cache = null;
+
+      // Second call: should reuse the CWD index (warm) — measure time
+      const start = performance.now();
+      const result2 = resolver.resolveForSquad(targetSquad);
+      const elapsed = performance.now() - start;
+
+      expect(result2?.sessionId).toBe('session-42');
+      expect(elapsed).toBeLessThan(10); // <10ms with index vs ~100ms without
+    });
+
+    it('rebuilds CWD index when new session directories appear', () => {
+      const squadPath = path.join(tmpSessionDir, 'test-squad');
+
+      // Create initial session
+      const session1Dir = path.join(resolver._sessionStateDir, 'session-old');
+      fs.mkdirSync(session1Dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(session1Dir, 'workspace.yaml'),
+        `cwd: ${squadPath}\nsummary: Old\nupdated_at: 2025-01-01T00:00:00Z`,
+        'utf-8',
+      );
+
+      const result1 = resolver.resolveForSquad(squadPath);
+      expect(result1?.summary).toBe('Old');
+
+      // Clear per-call cache but keep CWD index
+      resolver._cache = null;
+
+      // Add a new session directory — index should rebuild
+      const session2Dir = path.join(resolver._sessionStateDir, 'session-new');
+      fs.mkdirSync(session2Dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(session2Dir, 'workspace.yaml'),
+        `cwd: ${squadPath}\nsummary: New\nupdated_at: 2025-01-02T00:00:00Z`,
+        'utf-8',
+      );
+
+      const result2 = resolver.resolveForSquad(squadPath);
+      expect(result2?.summary).toBe('New');
+      expect(result2?.sessionId).toBe('session-new');
+    });
   });
 
   describe('getLastEvent', () => {
@@ -428,8 +487,8 @@ summary: Modified`,
         const eventsPath = path.join(sessionDir, 'events.jsonl');
         fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
         if (opts.staleEvents) {
-          // Set mtime to 10 days ago
-          const staleTime = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+          // Set mtime to 15 days ago
+          const staleTime = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
           fs.utimesSync(eventsPath, staleTime, staleTime);
         }
       }
@@ -461,7 +520,7 @@ summary: Modified`,
       expect(result.resumable).toBe(false);
     });
 
-    it('flags stale sessions (events.jsonl older than 7 days)', () => {
+    it('flags stale sessions (events.jsonl older than 14 days)', () => {
       createSession('stale-session', { staleEvents: true });
       const result = resolver.isSessionResumable('stale-session');
       expect(result.resumable).toBe(true);
@@ -471,6 +530,20 @@ summary: Modified`,
     it('does not flag recent sessions as stale', () => {
       createSession('fresh-session');
       const result = resolver.isSessionResumable('fresh-session');
+      expect(result.resumable).toBe(true);
+      expect(result.stale).toBe(false);
+    });
+
+    it('does not flag 10-day-old sessions as stale (threshold is 14 days)', () => {
+      const sessionDir = path.join(tmpSessionDir, 'ten-day-session');
+      fs.mkdirSync(sessionDir, { recursive: true });
+      fs.writeFileSync(path.join(sessionDir, 'workspace.yaml'), 'cwd: /test\nsummary: test', 'utf-8');
+      const eventsPath = path.join(sessionDir, 'events.jsonl');
+      fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
+      const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+      fs.utimesSync(eventsPath, tenDaysAgo, tenDaysAgo);
+
+      const result = resolver.isSessionResumable('ten-day-session');
       expect(result.resumable).toBe(true);
       expect(result.stale).toBe(false);
     });

@@ -25,6 +25,7 @@ export interface WorkItemsFilter {
   repos: string[];
   labels: string[];
   states: UnifiedState[];
+  types: string[];
 }
 
 
@@ -48,9 +49,10 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   private _repos: string[] = [];
   private _issues = new Map<string, GitHubIssue[]>();
   private _adoItems: AdoWorkItem[] = [];
+  private _adoChildMap = new Map<number, number[]>();
   private _adoConfigured = false;
   private _loading = false;
-  private _filter: WorkItemsFilter = { repos: [], labels: [], states: [] };
+  private _filter: WorkItemsFilter = { repos: [], labels: [], states: [], types: [] };
   private _filterSeq = 0;
   private _treeView?: vscode.TreeView<WorkItemsTreeItem>;
   private _allLabels = new Set<string>();
@@ -63,11 +65,13 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   setAdoItems(items: AdoWorkItem[]): void {
     this._adoItems = items;
     this._adoConfigured = true;
+    this._buildAdoChildMap();
     this._onDidChangeTreeData.fire();
   }
 
   clearAdo(): void {
     this._adoItems = [];
+    this._adoChildMap.clear();
     this._adoConfigured = false;
     this._onDidChangeTreeData.fire();
   }
@@ -82,7 +86,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   get isFiltered(): boolean {
-    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.states.length > 0;
+    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.states.length > 0 || this._filter.types.length > 0;
   }
 
   setFilter(filter: WorkItemsFilter): void {
@@ -94,7 +98,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   clearFilter(): void {
-    this.setFilter({ repos: [], labels: [], states: [] });
+    this.setFilter({ repos: [], labels: [], states: [], types: [] });
   }
 
   private _updateDescription(): void {
@@ -107,6 +111,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     if (this._filter.repos.length > 0) parts.push(`repo:${this._filter.repos.join(',')}`);
     if (this._filter.labels.length > 0) parts.push(`label:${this._filter.labels.join(',')}`);
     if (this._filter.states.length > 0) parts.push(`state:${this._filter.states.join(',')}`);
+    if (this._filter.types.length > 0) parts.push(`type:${this._filter.types.join(',')}`);
     this._treeView.description = parts.join(' · ');
   }
 
@@ -246,7 +251,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
           adoGroup.id = `wi:ado:f${fseq}`;
           items.push(adoGroup);
         } else {
-          return filteredAdo.map(wi => this.buildAdoItem(wi));
+          return this._getAdoRootItems(filteredAdo).map(wi => this.buildAdoItem(wi));
         }
       }
 
@@ -277,7 +282,16 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     }
 
     if (element.contextValue === 'ado-group') {
-      return this.applyAdoRuntimeFilter(this._adoItems).map(wi => this.buildAdoItem(wi));
+      return this._getAdoRootItems(this.applyAdoRuntimeFilter(this._adoItems)).map(wi => this.buildAdoItem(wi));
+    }
+
+    if (element.contextValue === 'ado-parent-item' && element.adoWorkItem) {
+      const childIds = this._adoChildMap.get(element.adoWorkItem.id) ?? [];
+      const filtered = this.applyAdoRuntimeFilter(this._adoItems);
+      const filteredIdSet = new Set(filtered.map(wi => wi.id));
+      return childIds
+        .filter(id => filteredIdSet.has(id))
+        .map(id => this.buildAdoItem(filtered.find(wi => wi.id === id)!));
     }
 
     if (element.contextValue === 'milestone-group') {
@@ -349,6 +363,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
       if (this._filter.labels.length > 0 && !this.matchesLabelFilter(wi.tags, this._filter.labels)) return false;
       if (this._filter.states.length > 0 && !this._filter.states.includes(mapAdoState(wi.state))) return false;
+      if (this._filter.types.length > 0 && !this._filter.types.includes(wi.type)) return false;
       return true;
     });
   }
@@ -420,11 +435,16 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   private buildAdoItem(wi: AdoWorkItem): WorkItemsTreeItem {
     const stateIcon = wi.state === 'Active' ? '🔵' : wi.state === 'New' ? '🟢' : '⚪';
     const label = `${stateIcon} #${wi.id} ${wi.title}`;
-    const item = new WorkItemsTreeItem(label);
+    const hasChildren = (this._adoChildMap.get(wi.id)?.length ?? 0) > 0;
+    const collapsible = hasChildren
+      ? vscode.TreeItemCollapsibleState.Collapsed
+      : vscode.TreeItemCollapsibleState.None;
+    const item = new WorkItemsTreeItem(label, collapsible);
     item.adoWorkItem = wi;
     item.description = `${wi.type} · ${wi.state}`;
     item.iconPath = new vscode.ThemeIcon('azure');
-    item.contextValue = 'ado-work-item';
+    item.contextValue = hasChildren ? 'ado-parent-item' : 'ado-work-item';
+    item.id = `ado-wi:${wi.id}`;
     item.tooltip = new vscode.MarkdownString(
       [
         `**#${wi.id} ${wi.title}**`,
@@ -440,5 +460,22 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       arguments: [vscode.Uri.parse(wi.url)],
     };
     return item;
+  }
+
+  private _buildAdoChildMap(): void {
+    this._adoChildMap.clear();
+    const idSet = new Set(this._adoItems.map(wi => wi.id));
+    for (const wi of this._adoItems) {
+      if (wi.parentId != null && idSet.has(wi.parentId)) {
+        const children = this._adoChildMap.get(wi.parentId) ?? [];
+        children.push(wi.id);
+        this._adoChildMap.set(wi.parentId, children);
+      }
+    }
+  }
+
+  private _getAdoRootItems(items: AdoWorkItem[]): AdoWorkItem[] {
+    const idSet = new Set(items.map(wi => wi.id));
+    return items.filter(wi => wi.parentId == null || !idSet.has(wi.parentId));
   }
 }

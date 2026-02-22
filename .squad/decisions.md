@@ -6687,3 +6687,137 @@ Process lifecycle fully controlled by EditLess
 
 **Don't pursue:** Mixing pseudoterminal + --acp (they're mutually exclusive).
 
+
+---
+
+## Jaguar ACP Deep Dive (Phase M5, 2026-02-22)
+
+**Author:** Jaguar (Copilot SDK Expert)
+
+Definitive analysis of the Agent Client Protocol (ACP) for EditLess integration. Key findings:
+
+- ACP is a JSON-RPC 2.0 standard (not GitHub-proprietary) for editor ↔ AI agent communication
+- Copilot CLI supports ACP in public preview as of Jan 28, 2026
+- ACP replaces the terminal UI entirely (headless subprocess with structured JSON-RPC communication)
+- Provides typed tool call content, permission interception, plan visibility, and session loading
+- **Recommendation:** Phase 1 (current) use Option A (Terminal + events.jsonl). Phase 2+ consider Option B (Full ACP) if EditLess evolves into full IDE panel ownership.
+
+**Sources:** ACP Spec, GitHub Docs, live testing with Copilot CLI v0.0.414
+
+---
+
+## ACP Model/Mode Switching — Log Only for Now (2026-02-23)
+
+**Author:** Jaguar
+
+UI dropdowns for model and mode selection are wired but protocol calls are deferred. session/new returns available models/modes, but no dedicated session/changeModel or session/changeMode method exists in current ACP spec.
+
+**Decision:** Log selection changes to output channel; implement switching once mechanism is discovered in future ACP SDK versions (pre-1.0 protocol still evolving).
+
+---
+
+## Phase 2 Test Coverage Gaps — 6 Tests Required (2026-02-20)
+
+**Author:** Meeseeks (Tester)
+
+Existing 18 Phase 2 tests are well-structured but miss critical session watcher lifecycle coverage.
+
+**Required additions:**
+- P0: launchTerminal calls watchSession with pre-generated UUID
+- P0: Watcher cleanup on terminal close
+- P0: dispose() clears all session watchers  
+- P0: Watcher wiring in econnectSession and elaunchSession
+- P1: Custom config.launchCommand path with --resume UUID append
+- P1: Malformed JSON graceful degradation in watchSession
+
+**Rationale:** FS watchers are a known source of resource leaks if dispose isn't called. Watcher lifecycle is the core new behavior in Phase 2.
+
+---
+
+## Windows Shell Quoting in ProcessPool Tests (2026-02-20)
+
+**Author:** Meeseeks
+
+When writing integration tests for ProcessPool (uses spawn() with shell: true), avoid console.log() in -e/-p arguments and single-quoted literals. On Windows, shell: true routes through cmd.exe which strips single quotes and interprets parentheses as grouping.
+
+**Safe patterns:** 
+ode --version, 
+ode -e "process.exit(42)", 
+ode -p "'string'" does NOT work
+
+---
+
+## ACP Terminal Operations Use child_process.spawn, Not VS Code Terminals (2026-02-22)
+
+**Author:** Morty
+
+ACP 	erminal/create, 	erminal/output, 	erminal/kill implemented with child_process.spawn() in ProcessPool class, not VS Code Terminal API.
+
+**Rationale:** ACP requires programmatic stdout/stderr capture and exit code tracking. VS Code Terminal API is a rendering surface only.
+
+**Impact:** ProcessPool is Disposable; DefaultAcpRequestHandler owns instance; xtension.ts calls handler.dispose() on ACP panel close. File writes auto-approve for now (spike scope).
+
+---
+
+## Terminal UUID Pre-generation Pattern (2026-02-21)
+
+**Author:** Morty
+
+Implemented across issues #323, #324, #326:
+
+**UUID Pre-generation:** Generate crypto.randomUUID() before launching terminal; pass to CLI via --resume <uuid>. Eliminates race conditions and orphan detection. Immediate session tracking from terminal creation.
+
+**Terminal Options:** isTransient: true (prevents zombie terminals), iconPath: new vscode.ThemeIcon('terminal'), env vars EDITLESS_TERMINAL_ID, EDITLESS_SQUAD_ID, EDITLESS_SQUAD_NAME
+
+**File Watching:** SessionContextResolver.watchSession(sessionId, callback) uses s.watch() with 100ms debouncing, tail-reads events.jsonl, auto-retries if file doesn't exist (1s interval). Returns VS Code Disposable.
+
+**Stable Focus:** ocusTerminal() accepts 	erminal | string. String ID lookups find terminal from map, validates existence before showing.
+
+**Backward Compatibility:** detectSessionIds() retained for pre-UUID terminals.
+
+---
+
+## Terminal Constants Bumped (#328, 2026-02-21)
+
+**Author:** Morty
+
+| Constant | Old | New | Rationale |
+|---|---|---|---|
+| EVENT_CACHE_TTL_MS | 3s | 10s | Reduce events.jsonl disk I/O |
+| STALE_SESSION_DAYS | 7 | 14 | Sessions resumable longer |
+| MAX_REBOOT_COUNT | 2 | 5 | Orphans survive more restarts |
+| isWorkingEvent() types | 5 | 9 | Added assistant.thinking, assistant.code_edit, tool.result, session.resume |
+
+Note: IDLE_THRESHOLD_MS and STALE_THRESHOLD_MS removed in PR #354.
+
+---
+
+## Phase 2 Code Review — APPROVE with Advisory Notes (2026-02-21)
+
+**Author:** Rick (Lead)
+
+**Approved:** UUID pre-generation, TerminalOptions, focusTerminal string overload, fs.watch lifecycle, buildCopilotCommand integration
+
+**Advisory (non-blocking):**
+1. Soft validation in elaunchSession — shows error but continues; consider early return
+2. Unbounded retry in watchSession.setupWatch() — retries 1s forever; recommend max ~30 retries or exponential backoff
+3. watchSessionDir is dead code (not called from production; acceptable as Phase 3 forward-looking API)
+
+**Platform note:** s.watch behavior differs (macOS kqueue, Linux inotify, Windows ReadDirectoryChangesW); 100ms debounce mitigates.
+
+---
+
+## Empty State & Onboarding UX (2026-02-22)
+
+**Author:** Summer
+
+Three distinct empty states implemented:
+
+1. **First-time / empty workspace:** $(rocket) "Welcome to EditLess" + $(add) "Add a squad directory" + $(search) "Discover agents"
+2. **All items hidden:** $(eye-closed) "All agents hidden" (power-user message, never on first launch)
+3. **Squad with zero sessions:** $(info) "No active sessions"
+
+**Icon conventions:** ocket = welcome, dd = create, search = discover, info = hint, ye-closed = hidden (power user)
+
+**Rationale:** First-time user sees clear, clickable actions; returning users see appropriate context for their state.
+

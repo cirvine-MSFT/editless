@@ -613,10 +613,31 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         .map(p => stateOptions.find(s => s.label === p.label)?.value)
         .filter((s): s is UnifiedState => s !== undefined);
 
-      workItemsProvider.setFilter({ repos, labels, states });
+      workItemsProvider.setFilter({ repos, labels, states, types: current.types ?? [] });
     }),
     vscode.commands.registerCommand('editless.clearWorkItemsFilter', () => workItemsProvider.clearFilter()),
   );
+
+  // Filter work items by type (#292)
+  const adoTypeOptions = ['Bug', 'Task', 'Feature', 'User Story'];
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.workItems.filterByType', async () => {
+      const current = workItemsProvider.filter;
+      const items = adoTypeOptions.map(t => ({
+        label: t,
+        picked: (current.types ?? []).includes(t),
+      }));
+      const picks = await vscode.window.showQuickPick(items, {
+        title: 'Filter Work Items by Type',
+        canPickMany: true,
+        placeHolder: 'Select types to show (leave empty to show all)',
+      });
+      if (picks === undefined) return;
+      const types = picks.map(p => p.label);
+      workItemsProvider.setFilter({ ...current, types });
+    }),
+  );
+
   vscode.commands.executeCommand('setContext', 'editless.workItemsFiltered', false);
 
   // Filter PRs (#269)
@@ -664,11 +685,21 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         .map(p => prStatusOptions.find(s => s.label === p.label)?.value)
         .filter((s): s is string => s !== undefined);
 
-      prsProvider.setFilter({ repos, labels, statuses });
+      prsProvider.setFilter({ repos, labels, statuses, author: prsProvider.filter.author });
     }),
     vscode.commands.registerCommand('editless.clearPRsFilter', () => prsProvider.clearFilter()),
   );
   vscode.commands.executeCommand('setContext', 'editless.prsFiltered', false);
+  vscode.commands.executeCommand('setContext', 'editless.prsMyOnly', false);
+
+  // Toggle "created by me" PR filter (#280)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.prs.toggleMyPRs', () => {
+      const current = prsProvider.filter;
+      const newAuthor = current.author ? '' : '@me';
+      prsProvider.setFilter({ ...current, author: newAuthor });
+    }),
+  );
 
   // Configure GitHub repos (opens settings)
   context.subscriptions.push(

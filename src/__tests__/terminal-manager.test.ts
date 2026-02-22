@@ -68,7 +68,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { TerminalManager, type PersistedTerminalInfo, type SessionState } from '../terminal-manager';
+import { TerminalManager, type PersistedTerminalInfo, type SessionState, stripEmoji } from '../terminal-manager';
 import * as vscodeModule from 'vscode';
 
 function makeMockTerminal(name: string): vscode.Terminal {
@@ -490,11 +490,11 @@ describe('TerminalManager', () => {
       expect(entry!.rebootCount).toBe(1);
     });
 
-    it('should auto-clean orphaned entry with rebootCount >= 1 on second reboot', () => {
+    it('should auto-clean orphaned entry with rebootCount >= 4 on fifth reboot', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-reboot-2',
         terminalName: '🧪 Orphan #2',
-        rebootCount: 1,
+        rebootCount: 4,
         lastSeenAt: Date.now() - 72 * 60 * 60 * 1000,
       });
       const ctx = makeMockContext([orphanEntry]);
@@ -729,7 +729,7 @@ describe('TerminalManager', () => {
       expect(all[0].info.id).toBe('signal-original-1');
     });
 
-    it('should reconcile via contains-match when terminal name is substring', () => {
+    it('should NOT reconcile via contains-match (substring fallback removed #327)', () => {
       const entry = makePersistedEntry({
         id: 'signal-contains-1',
         terminalName: 'no-match',
@@ -743,10 +743,9 @@ describe('TerminalManager', () => {
       const mgr = new TerminalManager(ctx);
       mgr.reconcile();
 
-      const all = mgr.getAllTerminals();
-      expect(all).toHaveLength(1);
-      expect(all[0].terminal).toBe(liveTerminal);
-      expect(all[0].info.id).toBe('signal-contains-1');
+      expect(mgr.getAllTerminals()).toHaveLength(0);
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.find(e => e.id === 'signal-contains-1')).toBeDefined();
     });
 
     it('should NOT match terminals that have no signal overlap', () => {
@@ -925,11 +924,12 @@ describe('TerminalManager', () => {
     describe('SessionState type', () => {
       it('should export SessionState type with expected values', () => {
         const validStates: Array<import('../terminal-manager').SessionState> = [
+          'launching',
           'active',
           'inactive',
           'orphaned',
         ];
-        expect(validStates).toHaveLength(3);
+        expect(validStates).toHaveLength(4);
       });
     });
 
@@ -1007,15 +1007,15 @@ describe('TerminalManager', () => {
         expect(mgr.getSessionState(terminal)).toBe('inactive');
       });
 
-      it('should return inactive for terminal with recent activity but no execution', () => {
+      it('should return launching for terminal with no events yet (#337)', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
-        // Simulate recent activity (just created)
+        // Simulate recent activity (just created) — still in launching state
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('inactive');
+        expect(state).toBe('launching');
       });
 
       it('should return inactive for recently-reconnected terminal with old lastSeenAt', () => {
@@ -1050,14 +1050,14 @@ describe('TerminalManager', () => {
     });
 
     describe('getSessionState API', () => {
-      it('should return correct state for tracked terminal', () => {
+      it('should return launching state for newly-tracked terminal (#337)', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('inactive');
+        expect(state).toBe('launching');
       });
 
       it('should return orphaned for persisted-only session', () => {
@@ -1101,6 +1101,10 @@ describe('TerminalManager', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
 
+        const launchingIcon = mgr.getStateIcon('launching');
+        expect(launchingIcon).toBeDefined();
+        expect(launchingIcon.id).toBe('loading~spin');
+
         const activeIcon = mgr.getStateIcon('active');
         expect(activeIcon).toBeDefined();
         expect(activeIcon.id).toBe('loading~spin');
@@ -1109,17 +1113,28 @@ describe('TerminalManager', () => {
         expect(inactiveIcon).toBeDefined();
         expect(inactiveIcon.id).toBe('circle-outline');
 
-        const orphanedIcon = mgr.getStateIcon('orphaned');
+        const nonResumableInfo = makePersistedEntry();
+        const orphanedIcon = mgr.getStateIcon('orphaned', nonResumableInfo);
         expect(orphanedIcon).toBeDefined();
-        expect(orphanedIcon.id).toBe('eye-closed');
+        expect(orphanedIcon.id).toBe('circle-outline');
+
+        const resumableInfo = makePersistedEntry({ agentSessionId: 'session-123' });
+        const resumableIcon = mgr.getStateIcon('orphaned', resumableInfo);
+        expect(resumableIcon).toBeDefined();
+        expect(resumableIcon.id).toBe('history');
       });
 
-      it('should return unique icons for all session states', () => {
+      it('should return unique icons for non-transient session states', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
-        const states: SessionState[] = ['active', 'inactive', 'orphaned'];
-        const icons = states.map(s => mgr.getStateIcon(s).id);
-        expect(new Set(icons).size).toBe(states.length);
+        // active and inactive should have distinct icons
+        const activeIcon = mgr.getStateIcon('active').id;
+        const inactiveIcon = mgr.getStateIcon('inactive').id;
+        expect(activeIcon).not.toBe(inactiveIcon);
+        // resumable orphan should have a distinct icon
+        const resumableInfo = makePersistedEntry({ agentSessionId: 'session-123' });
+        const orphanedIcon = mgr.getStateIcon('orphaned', resumableInfo).id;
+        expect(orphanedIcon).not.toBe(activeIcon);
       });
 
       it('should return human-readable description for each state', () => {
@@ -1128,6 +1143,9 @@ describe('TerminalManager', () => {
 
         const info = makePersistedEntry();
 
+        const launchingDesc = mgr.getStateDescription('launching', info);
+        expect(launchingDesc).toContain('launching');
+
         const activeDesc = mgr.getStateDescription('active', info);
         expect(activeDesc.length).toBeGreaterThan(0);
 
@@ -1135,7 +1153,12 @@ describe('TerminalManager', () => {
         expect(inactiveDesc.length).toBeGreaterThan(0);
 
         const orphanedDesc = mgr.getStateDescription('orphaned', info);
-        expect(orphanedDesc).toContain('previous');
+        expect(orphanedDesc).toContain('session ended');
+
+        const resumableInfo = makePersistedEntry({ agentSessionId: 'session-123' });
+        const resumableDesc = mgr.getStateDescription('orphaned', resumableInfo);
+        expect(resumableDesc).toContain('previous session');
+        expect(resumableDesc).toContain('resume');
       });
 
       it('should include time elapsed in inactive state description', () => {
@@ -1152,14 +1175,14 @@ describe('TerminalManager', () => {
     });
 
     describe('session state defaults (regression tests for #226)', () => {
-      it('should default to inactive when no shell execution is active', () => {
+      it('should show launching state immediately after launchTerminal (#337)', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('inactive');
+        expect(state).toBe('launching');
       });
 
       it('should show inactive after shell execution completes', () => {
@@ -1170,7 +1193,7 @@ describe('TerminalManager', () => {
 
         const execution = { commandLine: { value: 'echo "test"' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
-        // Shell execution alone no longer drives state — events.jsonl does
+        // Shell execution clears launching state
         expect(mgr.getSessionState(terminal)).toBe('inactive');
 
         capturedShellEndListener({ terminal, execution });
@@ -1178,18 +1201,18 @@ describe('TerminalManager', () => {
         expect(state).toBe('inactive');
       });
 
-      it('should stay inactive when execution starts (events.jsonl drives state)', () => {
+      it('should transition from launching to inactive when execution starts (#337)', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
-        expect(mgr.getSessionState(terminal)).toBe('inactive');
+        expect(mgr.getSessionState(terminal)).toBe('launching');
 
         const execution = { commandLine: { value: 'npm test' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
         
-        // Shell execution alone no longer drives state — events.jsonl does
+        // Shell execution clears launching state → inactive (events.jsonl drives active)
         expect(mgr.getSessionState(terminal)).toBe('inactive');
       });
 
@@ -2192,6 +2215,243 @@ describe('TerminalManager', () => {
 
       const infoAfter = mgr.getTerminalInfo(terminal);
       expect(infoAfter?.agentSessionId).toBe('detected-session');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // #327 — Strengthened orphan matching
+  // ---------------------------------------------------------------------------
+
+  describe('stripEmoji helper (#327)', () => {
+    it('should strip emoji from a string', () => {
+      expect(stripEmoji('🧪 Test Squad #1')).toBe('Test Squad #1');
+    });
+
+    it('should handle strings with no emoji', () => {
+      expect(stripEmoji('Test Squad #1')).toBe('Test Squad #1');
+    });
+
+    it('should handle emoji-only strings', () => {
+      expect(stripEmoji('🧪🚀')).toBe('');
+    });
+
+    it('should handle empty strings', () => {
+      expect(stripEmoji('')).toBe('');
+    });
+  });
+
+  describe('emoji-stripped name matching (#327)', () => {
+    it('should match when shell strips emoji from terminal name', () => {
+      const entry = makePersistedEntry({
+        id: 'emoji-strip-1',
+        terminalName: '🧪 Test Squad #1',
+        displayName: '🧪 Test Squad #1',
+        originalName: '🧪 Test Squad #1',
+      });
+      const liveTerminal = makeMockTerminal('Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const all = mgr.getAllTerminals();
+      expect(all).toHaveLength(1);
+      expect(all[0].terminal).toBe(liveTerminal);
+      expect(all[0].info.id).toBe('emoji-strip-1');
+    });
+
+    it('should NOT emoji-match when stripped names differ', () => {
+      const entry = makePersistedEntry({
+        id: 'emoji-strip-2',
+        terminalName: '🧪 Alpha #1',
+        displayName: '🧪 Alpha #1',
+        originalName: '🧪 Alpha #1',
+      });
+      const liveTerminal = makeMockTerminal('Beta #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      expect(mgr.getAllTerminals()).toHaveLength(0);
+    });
+  });
+
+  describe('index-based matching (#327)', () => {
+    it('should match by squadId + sequential index when a sibling is already tracked', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ id: 'idx-squad', name: 'Idx Squad', icon: '🔢' });
+
+      // Launch a terminal so there's a tracked terminal with index 1
+      mockRandomUUID.mockReturnValueOnce('00000000-0000-0000-0000-aaaaaaaaaaaa' as any);
+      const t1 = mgr.launchTerminal(config);
+
+      // Simulate a persisted entry with index 2 that has mismatched names
+      const entry = makePersistedEntry({
+        id: 'idx-match-2',
+        squadId: 'idx-squad',
+        index: 2,
+        terminalName: 'shell-mangled-name',
+        displayName: 'shell-mangled-name',
+        originalName: 'shell-mangled-name',
+      });
+      const liveTerminal = makeMockTerminal('completely-different');
+      mockTerminals.push(liveTerminal);
+
+      // Load persisted entry manually to trigger matching
+      (mgr as any)._pendingSaved = [entry];
+      (mgr as any)._tryMatchTerminals();
+
+      const all = mgr.getAllTerminals();
+      // Should have the launched terminal + the index-matched one
+      const matched = all.find(a => a.info.id === 'idx-match-2');
+      expect(matched).toBeDefined();
+      expect(matched!.terminal).toBe(liveTerminal);
+    });
+  });
+
+  describe('pendingSaved cap at 50 (#327)', () => {
+    it('should cap _pendingSaved at 50 entries', () => {
+      const entries = Array.from({ length: 60 }, (_, i) =>
+        makePersistedEntry({
+          id: `cap-${i}`,
+          terminalName: `term-${i}`,
+          displayName: `term-${i}`,
+          rebootCount: 0,
+        }),
+      );
+
+      const ctx = makeMockContext(entries);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.length).toBeLessThanOrEqual(50);
+    });
+  });
+
+  describe('substring fallback removal (#327)', () => {
+    it('should NOT match via permissive substring includes', () => {
+      const entry = makePersistedEntry({
+        id: 'substr-false-positive',
+        terminalName: 'bash',
+        displayName: 'bash',
+        originalName: 'bash',
+      });
+      // "bash" would have matched "bash: 🧪 Squad #1" with old .includes()
+      const liveTerminal = makeMockTerminal('bash: 🧪 Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      expect(mgr.getAllTerminals()).toHaveLength(0);
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.find(e => e.id === 'substr-false-positive')).toBeDefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // #337 — Launch timeout edge case
+  // ---------------------------------------------------------------------------
+
+  describe('launch timeout (#337)', () => {
+    it('should auto-clear launching state after LAUNCH_TIMEOUT_MS', () => {
+      vi.useFakeTimers();
+      try {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        expect(mgr.getSessionState(terminal)).toBe('launching');
+
+        // Advance just under the timeout — still launching
+        vi.advanceTimersByTime(9_999);
+        expect(mgr.getSessionState(terminal)).toBe('launching');
+
+        // Advance past the timeout — should be inactive
+        vi.advanceTimersByTime(1);
+        expect(mgr.getSessionState(terminal)).toBe('inactive');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // #338 — Resumable detection edge cases
+  // ---------------------------------------------------------------------------
+
+  describe('resumable detection edge cases (#338)', () => {
+    it('should treat undefined agentSessionId as non-resumable', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const info = makePersistedEntry({ agentSessionId: undefined });
+
+      const icon = mgr.getStateIcon('orphaned', info);
+      expect(icon.id).toBe('circle-outline');
+
+      const desc = mgr.getStateDescription('orphaned', info);
+      expect(desc).toBe('session ended');
+    });
+
+    it('should treat empty string agentSessionId as non-resumable', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const info = makePersistedEntry({ agentSessionId: '' });
+
+      const icon = mgr.getStateIcon('orphaned', info);
+      expect(icon.id).toBe('circle-outline');
+
+      const desc = mgr.getStateDescription('orphaned', info);
+      expect(desc).toBe('session ended');
+    });
+
+    it('should treat populated agentSessionId as resumable', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const info = makePersistedEntry({ agentSessionId: 'abc-123' });
+
+      const icon = mgr.getStateIcon('orphaned', info);
+      expect(icon.id).toBe('history');
+
+      const desc = mgr.getStateDescription('orphaned', info);
+      expect(desc).toContain('resume');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // #328 — Bumped MAX_REBOOT_COUNT to 5
+  // ---------------------------------------------------------------------------
+
+  describe('MAX_REBOOT_COUNT = 5 (#328)', () => {
+    it('should keep entries alive through 4 reboots then evict on 5th', () => {
+      const entry = makePersistedEntry({ rebootCount: 3 });
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      // rebootCount was 3, incremented to 4 — still < 5
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans).toHaveLength(1);
+    });
+
+    it('should evict entry when rebootCount reaches 5', () => {
+      const entry = makePersistedEntry({ rebootCount: 4 });
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      // rebootCount was 4, incremented to 5 — evicted
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans).toHaveLength(0);
     });
   });
 });
