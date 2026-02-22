@@ -524,7 +524,7 @@ export class TerminalManager implements vscode.Disposable {
 
   // -- Persistence & reconciliation -----------------------------------------
 
-  private static readonly MAX_REBOOT_COUNT = 2;
+  private static readonly MAX_REBOOT_COUNT = 5;
 
   reconcile(): void {
     const saved = this.context.workspaceState.get<PersistedTerminalInfo[]>(STORAGE_KEY, []);
@@ -690,9 +690,13 @@ function isWorkingEvent(eventType: string): boolean {
   switch (eventType) {
     case 'assistant.turn_start':
     case 'assistant.message':
+    case 'assistant.thinking':
+    case 'assistant.code_edit':
     case 'tool.execution_start':
     case 'tool.execution_complete':
+    case 'tool.result':
     case 'user.message':
+    case 'session.resume':
       return true;
     default:
       return false;

@@ -61,8 +61,8 @@ interface CwdIndexEntry {
 export class SessionContextResolver {
   private _cache: CacheEntry | null = null;
   private readonly _eventCache = new Map<string, EventCacheEntry>();
-  private static readonly EVENT_CACHE_TTL_MS = 3_000;
-  static readonly STALE_SESSION_DAYS = 7;
+  private static readonly EVENT_CACHE_TTL_MS = 10_000;
+  static readonly STALE_SESSION_DAYS = 14;
   private readonly _sessionStateDir: string;
   private readonly _fileWatchers = new Map<string, fs.FSWatcher>();
   private readonly _watcherPending = new Map<string, ReturnType<typeof setTimeout>>();

@@ -490,11 +490,11 @@ describe('TerminalManager', () => {
       expect(entry!.rebootCount).toBe(1);
     });
 
-    it('should auto-clean orphaned entry with rebootCount >= 1 on second reboot', () => {
+    it('should auto-clean orphaned entry with rebootCount >= 4 on fifth reboot', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-reboot-2',
         terminalName: '🧪 Orphan #2',
-        rebootCount: 1,
+        rebootCount: 4,
         lastSeenAt: Date.now() - 72 * 60 * 60 * 1000,
       });
       const ctx = makeMockContext([orphanEntry]);

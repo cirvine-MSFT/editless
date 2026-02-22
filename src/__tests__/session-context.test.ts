@@ -491,8 +491,8 @@ summary: Modified`,
         const eventsPath = path.join(sessionDir, 'events.jsonl');
         fs.writeFileSync(eventsPath, '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
         if (opts.staleEvents) {
-          // Set mtime to 10 days ago
-          const staleTime = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
+          // Set mtime to 15 days ago
+          const staleTime = new Date(Date.now() - 15 * 24 * 60 * 60 * 1000);
           fs.utimesSync(eventsPath, staleTime, staleTime);
         }
       }
@@ -524,7 +524,7 @@ summary: Modified`,
       expect(result.resumable).toBe(false);
     });
 
-    it('flags stale sessions (events.jsonl older than 7 days)', () => {
+    it('flags stale sessions (events.jsonl older than 14 days)', () => {
       createSession('stale-session', { staleEvents: true });
       const result = resolver.isSessionResumable('stale-session');
       expect(result.resumable).toBe(true);
