@@ -263,3 +263,20 @@ Reviewed `terminal-manager.ts` and `session-context.ts` for Phase 2 terminal int
 **What's solid:** Module boundary is clean (session-context.ts has zero vscode imports, uses own Disposable interface). Watcher lifecycle in TerminalManager is thorough — onDidCloseTerminal cleans per-terminal, dispose() cleans all. Pre-generated UUID eliminates session-detection race condition. Debounced fs.watch with tail reading is efficient. focusTerminal string-overload validates liveness correctly. `watchSessionDir` is unused in production code (forward-looking for Phase 3) — acceptable as speculative API.
 
 **Decision:** Filed `.squad/decisions/inbox/rick-phase2-review.md` documenting the relaunchSession guard requirement.
+## Learnings
+
+### 2026-02-23: v0.1.1 Code Review — Performance & Reliability Wins
+
+Reviewed PR #385 (v0.1.1 release candidate). **Verdict: APPROVED.**
+
+**Key validation:**
+1.  **Performance:** CWD-indexed session cache (`SessionContextResolver`) eliminates O(N) file reads per poll. `parseSimpleYaml` is a smart optimization for metadata.
+2.  **Reliability:** Orphan matching strategy is now deterministic (Index → Exact → Emoji-stripped). Removed risky substring fallback that caused false positives.
+3.  **UX:** Launch progress indicator (`launching` state) bridges the gap between terminal creation and first event.
+4.  **Quality:** 654 tests passing. New tests cover race conditions and edge cases.
+
+**Advisory:**
+-   `SessionContextResolver` watcher retry loop is still unbounded (intentional for now, but monitor for CPU usage in v0.2).
+-   Work items ADO integration is clean but assumes flat list first, then hierarchy. Large ADO queries might need pagination in future.
+
+**Decision:** Merging PR #385 for v0.1.1 release.
