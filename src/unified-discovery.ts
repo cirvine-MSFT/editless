@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir } from './agent-discovery';
-import { discoverAgentTeams, parseTeamMd, toKebabCase } from './discovery';
+import { discoverAgentTeams, parseTeamMd, toKebabCase, readUniverseFromRegistry } from './discovery';
 import { resolveTeamMd } from './team-dir';
 import type { EditlessRegistry } from './registry';
 import type { AgentTeamConfig } from './types';
@@ -78,6 +78,9 @@ export function discoverAll(
       if (!registeredIds.has(id) && !seenIds.has(id) && !registeredPaths.has(folderPath.toLowerCase())) {
         const content = fs.readFileSync(teamMdPath, 'utf-8');
         const parsed = parseTeamMd(content, folderName);
+        const universe = parsed.universe === 'unknown'
+          ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
+          : parsed.universe;
         seenIds.add(id);
         items.push({
           id,
@@ -86,7 +89,7 @@ export function discoverAll(
           source: 'workspace',
           path: folderPath,
           description: parsed.description,
-          universe: parsed.universe,
+          universe,
         });
       }
     }

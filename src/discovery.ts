@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { AgentTeamConfig } from './types';
 import { EditlessRegistry } from './registry';
-import { resolveTeamMd, resolveTeamDir } from './team-dir';
+import { resolveTeamMd, resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
 import { buildDefaultLaunchCommand } from './copilot-cli-builder';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
@@ -49,6 +49,31 @@ export function parseTeamMd(content: string, folderName: string): Pick<AgentTeam
   return { name, description, universe };
 }
 
+/**
+ * Read the universe name from casting/registry.json inside the squad directory.
+ * Checks .squad/ then .ai-team/ (same priority as team.md resolution).
+ * Returns the universe of the first active agent, or undefined if unavailable.
+ */
+export function readUniverseFromRegistry(squadPath: string): string | undefined {
+  for (const dirName of TEAM_DIR_NAMES) {
+    const registryPath = path.join(squadPath, dirName, 'casting', 'registry.json');
+    try {
+      const raw = fs.readFileSync(registryPath, 'utf-8');
+      const data = JSON.parse(raw) as { agents?: Record<string, { status?: string; universe?: string }> };
+      if (data?.agents) {
+        for (const agent of Object.values(data.agents)) {
+          if (agent.status === 'active' && agent.universe) {
+            return agent.universe;
+          }
+        }
+      }
+    } catch {
+      // File doesn't exist or is malformed — try next directory
+    }
+  }
+  return undefined;
+}
+
 export function toKebabCase(name: string): string {
   return name
     .replace(/([a-z])([A-Z])/g, '$1-$2')
@@ -82,6 +107,9 @@ export function discoverAgentTeams(dirPath: string, existingSquads: AgentTeamCon
 
     const content = fs.readFileSync(teamMdPath, 'utf-8');
     const parsed = parseTeamMd(content, entry.name);
+    const universe = parsed.universe === 'unknown'
+      ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
+      : parsed.universe;
 
     discovered.push({
       id: toKebabCase(entry.name),
@@ -89,7 +117,7 @@ export function discoverAgentTeams(dirPath: string, existingSquads: AgentTeamCon
       description: parsed.description,
       path: folderPath,
       icon: '🔷',
-      universe: parsed.universe,
+      universe,
       launchCommand: buildDefaultLaunchCommand(),
     });
   }
@@ -152,7 +180,10 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
         if (teamMdPath) {
           const content = fs.readFileSync(teamMdPath, 'utf-8');
           const parsed = parseTeamMd(content, folder.name);
-          registry.updateSquad(existingSquad.id, parsed);
+          const universe = parsed.universe === 'unknown'
+            ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
+            : parsed.universe;
+          registry.updateSquad(existingSquad.id, { ...parsed, universe });
         }
       }
       continue;
@@ -162,6 +193,9 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
     if (teamMdPath) {
       const content = fs.readFileSync(teamMdPath, 'utf-8');
       const parsed = parseTeamMd(content, folder.name);
+      const universe = parsed.universe === 'unknown'
+        ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
+        : parsed.universe;
 
       toAdd.push({
         id: toKebabCase(folder.name),
@@ -169,7 +203,7 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
         description: parsed.description,
         path: folderPath,
         icon: '🔷',
-        universe: parsed.universe,
+        universe,
         launchCommand: buildDefaultLaunchCommand(),
       });
     } else if (resolveTeamDir(folderPath)) {
@@ -179,7 +213,7 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
         name: folder.name,
         path: folderPath,
         icon: '🔷',
-        universe: 'unknown',
+        universe: readUniverseFromRegistry(folderPath) ?? 'unknown',
         launchCommand: buildDefaultLaunchCommand(),
       });
     }
