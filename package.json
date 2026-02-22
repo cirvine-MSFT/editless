@@ -308,6 +308,18 @@
         "title": "Clear Filter",
         "category": "EditLess",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "editless.filterPRLevel",
+        "title": "Filter...",
+        "category": "EditLess",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "editless.clearPRLevelFilter",
+        "title": "Clear Filter",
+        "category": "EditLess",
+        "icon": "$(clear-all)"
       }
     ],
     "keybindings": [
@@ -512,6 +524,21 @@
           "command": "editless.clearLevelFilter",
           "when": "view == editlessWorkItems && viewItem =~ /^(ado|github)-(backend|org|project|repo)$/",
           "group": "filter@2"
+        },
+        {
+          "command": "editless.filterPRLevel",
+          "when": "view == editlessPRs && viewItem =~ /^(ado|github)-pr-(backend|org|project|repo)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "editless.filterPRLevel",
+          "when": "view == editlessPRs && viewItem =~ /^(ado|github)-pr-(backend|org|project|repo)$/",
+          "group": "filter@1"
+        },
+        {
+          "command": "editless.clearPRLevelFilter",
+          "when": "view == editlessPRs && viewItem =~ /^(ado|github)-pr-(backend|org|project|repo)$/",
+          "group": "filter@2"
         }
       ],
       "commandPalette": [
@@ -641,6 +668,14 @@
         },
         {
           "command": "editless.clearLevelFilter",
+          "when": "false"
+        },
+        {
+          "command": "editless.filterPRLevel",
+          "when": "false"
+        },
+        {
+          "command": "editless.clearPRLevelFilter",
           "when": "false"
         }
       ]

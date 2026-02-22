@@ -45,6 +45,12 @@ const {
   mockPRsClearFilter,
   mockPRsGetAllRepos,
   mockPRsGetAllLabels,
+  mockPRsClearAllLevelFilters,
+  mockPRsGetAvailableOptions,
+  mockPRsGetLevelFilter,
+  mockPRsSetLevelFilter,
+  mockPRsClearLevelFilter,
+  mockPRsSetAdoConfig,
   mockPromptAdoSignIn,
   mockOpenSquadUiDashboard,
   mockFetchLinkedPRs,
@@ -122,6 +128,12 @@ const {
     mockPRsClearFilter: vi.fn(),
     mockPRsGetAllRepos: vi.fn().mockReturnValue([]),
     mockPRsGetAllLabels: vi.fn().mockReturnValue([]),
+    mockPRsClearAllLevelFilters: vi.fn(),
+    mockPRsGetAvailableOptions: vi.fn().mockReturnValue({}),
+    mockPRsGetLevelFilter: vi.fn(),
+    mockPRsSetLevelFilter: vi.fn(),
+    mockPRsClearLevelFilter: vi.fn(),
+    mockPRsSetAdoConfig: vi.fn(),
     mockPromptAdoSignIn: vi.fn(),
     mockOpenSquadUiDashboard: vi.fn(),
     mockFetchLinkedPRs: vi.fn(),
@@ -408,6 +420,12 @@ vi.mock('../prs-tree', () => ({
       isFiltered: false,
       getAllRepos: mockPRsGetAllRepos,
       getAllLabels: mockPRsGetAllLabels,
+      setAdoConfig: mockPRsSetAdoConfig,
+      clearAllLevelFilters: mockPRsClearAllLevelFilters,
+      getAvailableOptions: mockPRsGetAvailableOptions,
+      getLevelFilter: mockPRsGetLevelFilter,
+      setLevelFilter: mockPRsSetLevelFilter,
+      clearLevelFilter: mockPRsClearLevelFilter,
     };
   }),
   PRsTreeItem: class {
@@ -1315,43 +1333,33 @@ describe('extension command handlers', () => {
   // --- editless.filterPRs ---------------------------------------------------
 
   describe('editless.filterPRs', () => {
-    it('should show QuickPick with repos, statuses, and labels', async () => {
-      mockPRsGetAllRepos.mockReturnValue(['owner/repo1']);
-      mockPRsGetAllLabels.mockReturnValue(['type:bug', 'release:v0.1']);
+    it('should show QuickPick with sources only', async () => {
+      mockPRsGetAllRepos.mockReturnValue(['owner/repo1', '(ADO)']);
       mockShowQuickPick.mockResolvedValue([]);
 
       await getHandler('editless.filterPRs')();
 
       expect(mockShowQuickPick).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({ label: 'owner/repo1', description: 'repo' }),
-          expect.objectContaining({ label: 'Draft', description: 'status' }),
-          expect.objectContaining({ label: 'Open', description: 'status' }),
-          expect.objectContaining({ label: 'Approved', description: 'status' }),
-          expect.objectContaining({ label: 'Changes Requested', description: 'status' }),
-          expect.objectContaining({ label: 'Auto-merge', description: 'status' }),
-          expect.objectContaining({ label: 'type:bug', description: 'label' }),
-          expect.objectContaining({ label: 'release:v0.1', description: 'label' }),
+          expect.objectContaining({ label: 'owner/repo1', description: 'GitHub' }),
+          expect.objectContaining({ label: '(ADO)', description: 'Azure DevOps' }),
         ]),
-        expect.objectContaining({ canPickMany: true }),
+        expect.objectContaining({ canPickMany: true, title: 'Show/Hide Sources' }),
       );
     });
 
-    it('should apply selected filters to provider', async () => {
+    it('should apply selected sources to provider', async () => {
       mockPRsGetAllRepos.mockReturnValue(['owner/repo1']);
-      mockPRsGetAllLabels.mockReturnValue(['type:bug']);
       mockShowQuickPick.mockResolvedValue([
-        { label: 'owner/repo1', description: 'repo' },
-        { label: 'type:bug', description: 'label' },
-        { label: 'Draft', description: 'status' },
+        { label: 'owner/repo1', description: 'GitHub' },
       ]);
 
       await getHandler('editless.filterPRs')();
 
       expect(mockPRsSetFilter).toHaveBeenCalledWith({
         repos: ['owner/repo1'],
-        labels: ['type:bug'],
-        statuses: ['draft'],
+        labels: [],
+        statuses: [],
         author: '',
       });
     });
@@ -1372,9 +1380,10 @@ describe('extension command handlers', () => {
   // --- editless.clearPRsFilter -----------------------------------------------
 
   describe('editless.clearPRsFilter', () => {
-    it('should delegate to provider clearFilter', () => {
+    it('should delegate to provider clearFilter and clearAllLevelFilters', () => {
       getHandler('editless.clearPRsFilter')();
       expect(mockPRsClearFilter).toHaveBeenCalled();
+      expect(mockPRsClearAllLevelFilters).toHaveBeenCalled();
     });
   });
 

@@ -9,6 +9,12 @@ export interface PRsFilter {
   author: string;
 }
 
+export interface PRLevelFilter {
+  selectedChildren?: string[];
+  statuses?: string[];
+  labels?: string[];
+}
+
 export class PRsTreeItem extends vscode.TreeItem {
   public pr?: GitHubPR;
   public adoPR?: AdoPR;
@@ -31,13 +37,21 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   private _adoConfigured = false;
   private _loading = false;
   private _filter: PRsFilter = { repos: [], labels: [], statuses: [], author: '' };
+  private _levelFilters = new Map<string, PRLevelFilter>();
   private _filterSeq = 0;
   private _treeView?: vscode.TreeView<PRsTreeItem>;
   private _allLabels = new Set<string>();
+  private _adoOrg: string | undefined;
+  private _adoProject: string | undefined;
 
   setRepos(repos: string[]): void {
     this._repos = repos;
     this.fetchAll();
+  }
+
+  setAdoConfig(org: string | undefined, project: string | undefined): void {
+    this._adoOrg = org;
+    this._adoProject = project;
   }
 
   setAdoPRs(prs: AdoPR[]): void {
@@ -81,6 +95,74 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
   clearFilter(): void {
     this.setFilter({ repos: [], labels: [], statuses: [], author: '' });
+  }
+
+  getLevelFilter(nodeId: string): PRLevelFilter | undefined {
+    return this._levelFilters.get(nodeId);
+  }
+
+  setLevelFilter(nodeId: string, filter: PRLevelFilter): void {
+    this._levelFilters.set(nodeId, filter);
+    this._filterSeq++;
+    this._onDidChangeTreeData.fire();
+  }
+
+  clearLevelFilter(nodeId: string): void {
+    this._levelFilters.delete(nodeId);
+    this._filterSeq++;
+    this._onDidChangeTreeData.fire();
+  }
+
+  clearAllLevelFilters(): void {
+    this._levelFilters.clear();
+    this._filterSeq++;
+    this._onDidChangeTreeData.fire();
+  }
+
+  getAvailableOptions(nodeId: string, contextValue: string): { owners?: string[]; repos?: string[]; orgs?: string[]; projects?: string[]; statuses?: string[]; labels?: string[] } {
+    if (contextValue === 'github-pr-backend') {
+      const owners = new Set<string>();
+      for (const repo of this._repos) {
+        const owner = repo.split('/')[0];
+        if (owner) owners.add(owner);
+      }
+      return { owners: [...owners].sort() };
+    }
+
+    if (contextValue === 'github-pr-org') {
+      const owner = nodeId.replace('github-pr:', '');
+      const repos = this._repos.filter(r => r.startsWith(owner + '/'));
+      return { repos };
+    }
+
+    if (contextValue === 'github-pr-repo') {
+      const repoName = nodeId.replace('github-pr:', '');
+      const prs = this._prs.get(repoName) ?? [];
+      const labels = new Set<string>();
+      for (const pr of prs) {
+        for (const label of pr.labels) labels.add(label);
+      }
+      return {
+        statuses: ['draft', 'open', 'approved', 'changes-requested', 'auto-merge'],
+        labels: [...labels].sort(),
+      };
+    }
+
+    if (contextValue === 'ado-pr-backend') {
+      return { orgs: this._adoOrg ? [this._adoOrg] : [] };
+    }
+
+    if (contextValue === 'ado-pr-org') {
+      return { projects: this._adoProject ? [this._adoProject] : [] };
+    }
+
+    if (contextValue === 'ado-pr-project') {
+      return {
+        statuses: ['draft', 'active', 'merged'],
+      };
+    }
+
+    return {};
   }
 
   private _updateDescription(): void {
@@ -222,46 +304,99 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
       const items: PRsTreeItem[] = [];
       const fseq = this._filterSeq;
+      const backendCount = (hasGitHub ? 1 : 0) + (hasAdo ? 1 : 0);
 
+      // ADO backend group
       if (hasAdo) {
-        if (hasGitHub) {
+        if (backendCount > 1) {
           const adoGroup = new PRsTreeItem('Azure DevOps', vscode.TreeItemCollapsibleState.Expanded);
           adoGroup.iconPath = new vscode.ThemeIcon('azure');
-          adoGroup.description = `${filteredAdoPRs.length} PR${filteredAdoPRs.length === 1 ? '' : 's'}`;
-          adoGroup.contextValue = 'ado-pr-group';
-          adoGroup.id = `pr:ado:f${fseq}`;
+          adoGroup.description = this._getFilterDescription('ado-pr:', filteredAdoPRs.length);
+          adoGroup.contextValue = 'ado-pr-backend';
+          adoGroup.id = `ado-pr::f${fseq}`;
           items.push(adoGroup);
         } else {
+          // Only ADO — show PRs directly
           return filteredAdoPRs.map(p => this.buildAdoPRItem(p));
         }
       }
 
+      // GitHub backend group
       if (hasGitHub) {
-        if (filteredPRs.size === 1 && !hasAdo) {
-          const [, prs] = [...filteredPRs.entries()][0];
-          return prs.map((p) => this.buildPRItem(p));
-        }
-
-        for (const [repo, prs] of filteredPRs.entries()) {
-          const repoItem = new PRsTreeItem(repo, vscode.TreeItemCollapsibleState.Expanded);
-          repoItem.iconPath = new vscode.ThemeIcon('github');
-          repoItem.description = `${prs.length} PR${prs.length === 1 ? '' : 's'}`;
-          repoItem.contextValue = 'repo-group';
-          repoItem.id = `pr:${repo}:f${fseq}`;
-          items.push(repoItem);
+        if (backendCount > 1) {
+          const ghGroup = new PRsTreeItem('GitHub', vscode.TreeItemCollapsibleState.Expanded);
+          ghGroup.iconPath = new vscode.ThemeIcon('github');
+          const totalCount = [...filteredPRs.values()].flat().length;
+          ghGroup.description = this._getFilterDescription('github-pr:', totalCount);
+          ghGroup.contextValue = 'github-pr-backend';
+          ghGroup.id = `github-pr::f${fseq}`;
+          items.push(ghGroup);
+        } else {
+          // Only GitHub — collapse if single repo
+          if (filteredPRs.size === 1) {
+            const [, prs] = [...filteredPRs.entries()][0];
+            return prs.map((p) => this.buildPRItem(p));
+          } else {
+            return this._getGitHubOwnerNodes(filteredPRs);
+          }
         }
       }
 
       return items;
     }
 
-    if (element.contextValue === 'ado-pr-group') {
-      return this.applyAdoRuntimeFilter(this._adoPRs).map(p => this.buildAdoPRItem(p));
+    // ADO backend → org nodes
+    if (element.contextValue === 'ado-pr-backend') {
+      return this._getAdoOrgNodes(this.applyAdoRuntimeFilter(this._adoPRs));
     }
 
-    const repoId = element.id?.replace(/^pr:|:f\d+$/g, '');
-    if (repoId && this._prs.has(repoId)) {
-      return this.applyRuntimeFilter(this._prs.get(repoId)!).map((p) => this.buildPRItem(p));
+    // ADO org → project nodes
+    if (element.contextValue === 'ado-pr-org') {
+      return this._getAdoProjectNodes(this.applyAdoRuntimeFilter(this._adoPRs));
+    }
+
+    // ADO project → PR items
+    if (element.contextValue === 'ado-pr-project') {
+      let filtered = this.applyAdoRuntimeFilter(this._adoPRs);
+      const projectFilter = this._levelFilters.get(element.id ?? '');
+      if (projectFilter) {
+        filtered = this._applyAdoLevelFilter(filtered, projectFilter);
+      }
+      return filtered.map(p => this.buildAdoPRItem(p));
+    }
+
+    // GitHub backend → owner nodes
+    if (element.contextValue === 'github-pr-backend') {
+      const filteredPRs = new Map<string, GitHubPR[]>();
+      for (const [repo, prs] of this._prs.entries()) {
+        const filtered = this.applyRuntimeFilter(prs);
+        if (filtered.length > 0) filteredPRs.set(repo, filtered);
+      }
+      return this._getGitHubOwnerNodes(filteredPRs);
+    }
+
+    // GitHub owner → repo nodes
+    if (element.contextValue === 'github-pr-org') {
+      const owner = element.id?.replace(/^github-pr:|:f\d+$/g, '') ?? '';
+      const filteredPRs = new Map<string, GitHubPR[]>();
+      for (const [repo, prs] of this._prs.entries()) {
+        if (repo.startsWith(owner + '/')) {
+          const filtered = this.applyRuntimeFilter(prs);
+          if (filtered.length > 0) filteredPRs.set(repo, filtered);
+        }
+      }
+      return this._getGitHubRepoNodes(filteredPRs, owner);
+    }
+
+    // GitHub repo → PR items
+    if (element.contextValue === 'github-pr-repo') {
+      const repoName = element.id?.replace(/^github-pr:|:f\d+$/g, '') ?? '';
+      let filtered = this.applyRuntimeFilter(this._prs.get(repoName) ?? []);
+      const repoFilter = this._levelFilters.get(element.id ?? '');
+      if (repoFilter) {
+        filtered = this._applyGitHubLevelFilter(filtered, repoFilter);
+      }
+      return filtered.map((p) => this.buildPRItem(p));
     }
 
     return [];
@@ -394,5 +529,102 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       arguments: [vscode.Uri.parse(pr.url)],
     };
     return item;
+  }
+
+  private _getFilterDescription(nodeId: string, itemCount: number): string {
+    const filter = this._levelFilters.get(nodeId);
+    const parts: string[] = [];
+
+    if (filter?.statuses && filter.statuses.length > 0) {
+      parts.push(filter.statuses.join(', '));
+    }
+    if (filter?.labels && filter.labels.length > 0) {
+      parts.push(filter.labels.join(', '));
+    }
+
+    const countStr = `${itemCount} PR${itemCount === 1 ? '' : 's'}`;
+    return parts.length > 0 ? `${countStr} · ${parts.join(' · ')}` : countStr;
+  }
+
+  private _getAdoOrgNodes(filteredAdo: AdoPR[]): PRsTreeItem[] {
+    if (!this._adoOrg) return [];
+
+    const fseq = this._filterSeq;
+    const orgItem = new PRsTreeItem(this._adoOrg, vscode.TreeItemCollapsibleState.Expanded);
+    orgItem.iconPath = new vscode.ThemeIcon('organization');
+    orgItem.description = this._getFilterDescription(`ado-pr:${this._adoOrg}`, filteredAdo.length);
+    orgItem.contextValue = 'ado-pr-org';
+    orgItem.id = `ado-pr:${this._adoOrg}:f${fseq}`;
+    return [orgItem];
+  }
+
+  private _getAdoProjectNodes(filteredAdo: AdoPR[]): PRsTreeItem[] {
+    if (!this._adoProject) return [];
+
+    const fseq = this._filterSeq;
+    const projectItem = new PRsTreeItem(this._adoProject, vscode.TreeItemCollapsibleState.Expanded);
+    projectItem.iconPath = new vscode.ThemeIcon('folder');
+    projectItem.description = this._getFilterDescription(`ado-pr:${this._adoOrg}:${this._adoProject}`, filteredAdo.length);
+    projectItem.contextValue = 'ado-pr-project';
+    projectItem.id = `ado-pr:${this._adoOrg}:${this._adoProject}:f${fseq}`;
+    return [projectItem];
+  }
+
+  private _getGitHubOwnerNodes(filteredPRs: Map<string, GitHubPR[]>): PRsTreeItem[] {
+    const owners = new Map<string, GitHubPR[]>();
+    for (const [repo, prs] of filteredPRs.entries()) {
+      const owner = repo.split('/')[0];
+      if (owner) {
+        const existing = owners.get(owner) ?? [];
+        existing.push(...prs);
+        owners.set(owner, existing);
+      }
+    }
+
+    const fseq = this._filterSeq;
+    const items: PRsTreeItem[] = [];
+    for (const [owner, prs] of owners) {
+      const ownerItem = new PRsTreeItem(owner, vscode.TreeItemCollapsibleState.Expanded);
+      ownerItem.iconPath = new vscode.ThemeIcon('organization');
+      ownerItem.description = this._getFilterDescription(`github-pr:${owner}`, prs.length);
+      ownerItem.contextValue = 'github-pr-org';
+      ownerItem.id = `github-pr:${owner}:f${fseq}`;
+      items.push(ownerItem);
+    }
+    return items;
+  }
+
+  private _getGitHubRepoNodes(filteredPRs: Map<string, GitHubPR[]>, owner: string): PRsTreeItem[] {
+    const fseq = this._filterSeq;
+    const items: PRsTreeItem[] = [];
+    for (const [repo, prs] of filteredPRs.entries()) {
+      if (repo.startsWith(owner + '/')) {
+        const repoItem = new PRsTreeItem(repo, vscode.TreeItemCollapsibleState.Expanded);
+        repoItem.iconPath = new vscode.ThemeIcon('repo');
+        repoItem.description = this._getFilterDescription(`github-pr:${repo}`, prs.length);
+        repoItem.contextValue = 'github-pr-repo';
+        repoItem.id = `github-pr:${repo}:f${fseq}`;
+        items.push(repoItem);
+      }
+    }
+    return items;
+  }
+
+  private _applyAdoLevelFilter(prs: AdoPR[], filter: PRLevelFilter): AdoPR[] {
+    return prs.filter(pr => {
+      if (filter.statuses && filter.statuses.length > 0) {
+        const state = pr.isDraft ? 'draft' : pr.status;
+        if (!filter.statuses.includes(state)) return false;
+      }
+      return true;
+    });
+  }
+
+  private _applyGitHubLevelFilter(prs: GitHubPR[], filter: PRLevelFilter): GitHubPR[] {
+    return prs.filter(pr => {
+      if (filter.statuses && filter.statuses.length > 0 && !filter.statuses.includes(this.derivePRState(pr))) return false;
+      if (filter.labels && filter.labels.length > 0 && !this.matchesLabelFilter(pr.labels, filter.labels)) return false;
+      return true;
+    });
   }
 }

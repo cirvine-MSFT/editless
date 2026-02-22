@@ -169,7 +169,7 @@ describe('PRsTreeProvider — multi-repo grouping', () => {
     expect(children[0].contextValue).toBe('pull-request');
   });
 
-  it('should show repo headers for multiple repos', async () => {
+  it('should show owner → repo hierarchy for multiple repos', async () => {
     mockIsGhAvailable.mockResolvedValue(true);
     mockFetchMyPRs.mockImplementation(async (repo: string) => {
       if (repo === 'owner/repo-a') return [makePR({ number: 1, repository: 'owner/repo-a' })];
@@ -183,14 +183,20 @@ describe('PRsTreeProvider — multi-repo grouping', () => {
     provider.setRepos(['owner/repo-a', 'owner/repo-b']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
+    // Root shows owner node (same owner for both repos)
     const roots = provider.getChildren();
-    expect(roots).toHaveLength(2);
-    expect(roots[0].contextValue).toBe('repo-group');
-    expect(roots[0].label).toBe('owner/repo-a');
-    expect(roots[1].label).toBe('owner/repo-b');
+    expect(roots).toHaveLength(1);
+    expect(roots[0].contextValue).toBe('github-pr-org');
+    expect(roots[0].label).toBe('owner');
 
-    // Children of repo header are PRs
-    const repoAPRs = provider.getChildren(roots[0]);
+    // Owner node children are repo nodes
+    const repoNodes = provider.getChildren(roots[0]);
+    expect(repoNodes).toHaveLength(2);
+    expect(repoNodes[0].contextValue).toBe('github-pr-repo');
+    expect(repoNodes[0].label).toBe('owner/repo-a');
+
+    // Children of repo node are PRs
+    const repoAPRs = provider.getChildren(repoNodes[0]);
     expect(repoAPRs).toHaveLength(1);
     expect(repoAPRs[0].contextValue).toBe('pull-request');
   });

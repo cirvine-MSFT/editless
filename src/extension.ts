@@ -23,7 +23,7 @@ import { scanSquad } from './scanner';
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
 import { resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
 import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState, type LevelFilter } from './work-items-tree';
-import { PRsTreeProvider, PRsTreeItem, type PRsFilter } from './prs-tree';
+import { PRsTreeProvider, PRsTreeItem, type PRsFilter, type PRLevelFilter } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
@@ -722,54 +722,124 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   vscode.commands.executeCommand('setContext', 'editless.workItemsFiltered', false);
 
-  // Filter PRs (#269)
-  const prStatusOptions: { label: string; value: string }[] = [
-    { label: 'Draft', value: 'draft' },
-    { label: 'Open', value: 'open' },
-    { label: 'Approved', value: 'approved' },
-    { label: 'Changes Requested', value: 'changes-requested' },
-    { label: 'Auto-merge', value: 'auto-merge' },
-  ];
+  // Filter PRs — global filter = sources only, detailed filters on per-level [≡] icons (#390)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.filterPRs', async () => {
       const current = prsProvider.filter;
       const allRepos = prsProvider.getAllRepos();
-      const allLabels = prsProvider.getAllLabels();
 
       const items: vscode.QuickPickItem[] = [];
-      if (allRepos.length > 0) {
-        items.push({ label: 'Repos', kind: vscode.QuickPickItemKind.Separator });
-        for (const repo of allRepos) {
-          items.push({ label: repo, description: 'repo', picked: current.repos.includes(repo) });
-        }
-      }
-      items.push({ label: 'Status', kind: vscode.QuickPickItemKind.Separator });
-      for (const s of prStatusOptions) {
-        items.push({ label: s.label, description: 'status', picked: current.statuses.includes(s.value) });
-      }
-      if (allLabels.length > 0) {
-        items.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
-        for (const label of allLabels) {
-          items.push({ label, description: 'label', picked: current.labels.includes(label) });
-        }
+      items.push({ label: 'Sources', kind: vscode.QuickPickItemKind.Separator });
+      for (const repo of allRepos) {
+        const desc = repo === '(ADO)' ? 'Azure DevOps' : 'GitHub';
+        items.push({ label: repo, description: desc, picked: current.repos.includes(repo) });
       }
 
       const picks = await vscode.window.showQuickPick(items, {
-        title: 'Filter PRs',
+        title: 'Show/Hide Sources',
+        canPickMany: true,
+        placeHolder: 'Select sources to show (leave empty to show all)',
+      });
+      if (picks === undefined) return;
+
+      const repos = picks.map(p => p.label);
+      prsProvider.setFilter({ repos, labels: [], statuses: [], author: prsProvider.filter.author });
+    }),
+    vscode.commands.registerCommand('editless.clearPRsFilter', () => {
+      prsProvider.clearFilter();
+      prsProvider.clearAllLevelFilters();
+    }),
+    // Per-level filtering (#390)
+    vscode.commands.registerCommand('editless.filterPRLevel', async (item: PRsTreeItem) => {
+      if (!item?.id || !item.contextValue) return;
+
+      const nodeId = item.id;
+      const contextValue = item.contextValue;
+      const options = prsProvider.getAvailableOptions(nodeId, contextValue);
+      const currentFilter = prsProvider.getLevelFilter(nodeId) ?? {};
+
+      const quickPickItems: vscode.QuickPickItem[] = [];
+
+      // Owners (GitHub PR backend)
+      if (options.owners && options.owners.length > 0) {
+        quickPickItems.push({ label: 'Owners', kind: vscode.QuickPickItemKind.Separator });
+        for (const owner of options.owners) {
+          quickPickItems.push({ label: owner, description: 'owner', picked: currentFilter.selectedChildren?.includes(owner) });
+        }
+      }
+
+      // Orgs (ADO PR backend)
+      if (options.orgs && options.orgs.length > 0) {
+        quickPickItems.push({ label: 'Organizations', kind: vscode.QuickPickItemKind.Separator });
+        for (const org of options.orgs) {
+          quickPickItems.push({ label: org, description: 'org', picked: currentFilter.selectedChildren?.includes(org) });
+        }
+      }
+
+      // Projects (ADO PR org)
+      if (options.projects && options.projects.length > 0) {
+        quickPickItems.push({ label: 'Projects', kind: vscode.QuickPickItemKind.Separator });
+        for (const project of options.projects) {
+          quickPickItems.push({ label: project, description: 'project', picked: currentFilter.selectedChildren?.includes(project) });
+        }
+      }
+
+      // Repos (GitHub PR org)
+      if (options.repos && options.repos.length > 0) {
+        quickPickItems.push({ label: 'Repositories', kind: vscode.QuickPickItemKind.Separator });
+        for (const repo of options.repos) {
+          quickPickItems.push({ label: repo, description: 'repo', picked: currentFilter.selectedChildren?.includes(repo) });
+        }
+      }
+
+      // Statuses (project/repo level)
+      if (options.statuses && options.statuses.length > 0) {
+        quickPickItems.push({ label: 'Status', kind: vscode.QuickPickItemKind.Separator });
+        for (const status of options.statuses) {
+          quickPickItems.push({ label: status, description: 'status', picked: currentFilter.statuses?.includes(status) });
+        }
+      }
+
+      // Labels (GitHub repo level)
+      if (options.labels && options.labels.length > 0) {
+        quickPickItems.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
+        for (const label of options.labels) {
+          quickPickItems.push({ label, description: 'label', picked: currentFilter.labels?.includes(label) });
+        }
+      }
+
+      if (quickPickItems.length === 0) {
+        vscode.window.showInformationMessage('No filter options available for this level');
+        return;
+      }
+
+      const picks = await vscode.window.showQuickPick(quickPickItems, {
+        title: `Filter ${item.label}`,
         canPickMany: true,
         placeHolder: 'Select filters (leave empty to show all)',
       });
       if (picks === undefined) return;
 
-      const repos = picks.filter(p => p.description === 'repo').map(p => p.label);
-      const labels = picks.filter(p => p.description === 'label').map(p => p.label);
-      const statuses = picks.filter(p => p.description === 'status')
-        .map(p => prStatusOptions.find(s => s.label === p.label)?.value)
-        .filter((s): s is string => s !== undefined);
+      const filter: PRLevelFilter = {};
+      filter.selectedChildren = picks.filter(p => p.description === 'owner' || p.description === 'org' || p.description === 'project' || p.description === 'repo').map(p => p.label);
+      filter.statuses = picks.filter(p => p.description === 'status').map(p => p.label);
+      filter.labels = picks.filter(p => p.description === 'label').map(p => p.label);
 
-      prsProvider.setFilter({ repos, labels, statuses, author: prsProvider.filter.author });
+      if (filter.selectedChildren?.length === 0) delete filter.selectedChildren;
+      if (filter.statuses?.length === 0) delete filter.statuses;
+      if (filter.labels?.length === 0) delete filter.labels;
+
+      if (Object.keys(filter).length === 0) {
+        prsProvider.clearLevelFilter(nodeId);
+      } else {
+        prsProvider.setLevelFilter(nodeId, filter);
+      }
     }),
-    vscode.commands.registerCommand('editless.clearPRsFilter', () => prsProvider.clearFilter()),
+    vscode.commands.registerCommand('editless.clearPRLevelFilter', (item: PRsTreeItem) => {
+      if (item?.id) {
+        prsProvider.clearLevelFilter(item.id);
+      }
+    }),
   );
   vscode.commands.executeCommand('setContext', 'editless.prsFiltered', false);
   vscode.commands.executeCommand('setContext', 'editless.prsMyOnly', false);
@@ -1329,10 +1399,12 @@ async function initAdoIntegration(
 
   if (!org || !project) {
     workItemsProvider.setAdoConfig(undefined, undefined);
+    prsProvider.setAdoConfig(undefined, undefined);
     return;
   }
 
   workItemsProvider.setAdoConfig(org, project);
+  prsProvider.setAdoConfig(org, project);
 
   async function fetchAdoData(): Promise<void> {
     let token = await getAdoToken(context.secrets);
