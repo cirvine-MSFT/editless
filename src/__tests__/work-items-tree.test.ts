@@ -371,3 +371,92 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     expect(items[0].label).toContain('#1');
   });
 });
+
+// ---------------------------------------------------------------------------
+// ADO parent/child hierarchy (#291)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — ADO hierarchy', () => {
+  function makeAdoItem(overrides: Partial<import('../ado-client').AdoWorkItem> = {}): import('../ado-client').AdoWorkItem {
+    return {
+      id: 1,
+      title: 'ADO Item',
+      state: 'Active',
+      type: 'User Story',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/1',
+      assignedTo: 'user',
+      areaPath: 'Project\\Area',
+      tags: [],
+      ...overrides,
+    };
+  }
+
+  it('should show parent items at root with children nested', () => {
+    const provider = new WorkItemsTreeProvider();
+    const parent = makeAdoItem({ id: 10, title: 'Epic' });
+    const child1 = makeAdoItem({ id: 11, title: 'Story A', parentId: 10 });
+    const child2 = makeAdoItem({ id: 12, title: 'Story B', parentId: 10 });
+    provider.setAdoItems([parent, child1, child2]);
+
+    // Root should only have the parent
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(1);
+    expect(roots[0].label).toContain('#10');
+    expect(roots[0].collapsibleState).toBe(1); // Collapsed
+
+    // Expanding the parent should show children
+    const children = provider.getChildren(roots[0]);
+    expect(children).toHaveLength(2);
+    expect(children.map(c => c.label)).toEqual(
+      expect.arrayContaining([expect.stringContaining('#11'), expect.stringContaining('#12')]),
+    );
+    expect(children[0].collapsibleState).toBe(0); // None (leaf)
+  });
+
+  it('should show items at root when parent is not in result set', () => {
+    const provider = new WorkItemsTreeProvider();
+    const child = makeAdoItem({ id: 20, title: 'Orphan', parentId: 999 });
+    provider.setAdoItems([child]);
+
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(1);
+    expect(roots[0].label).toContain('#20');
+    expect(roots[0].collapsibleState).toBe(0); // None (leaf)
+  });
+
+  it('should show items without parentId at root', () => {
+    const provider = new WorkItemsTreeProvider();
+    const item = makeAdoItem({ id: 30, title: 'Top Level' });
+    provider.setAdoItems([item]);
+
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(1);
+    expect(roots[0].label).toContain('#30');
+  });
+
+  it('should set ado-parent-item context for parents', () => {
+    const provider = new WorkItemsTreeProvider();
+    const parent = makeAdoItem({ id: 40, title: 'Parent' });
+    const child = makeAdoItem({ id: 41, title: 'Child', parentId: 40 });
+    provider.setAdoItems([parent, child]);
+
+    const roots = provider.getChildren();
+    expect(roots[0].contextValue).toBe('ado-parent-item');
+
+    const children = provider.getChildren(roots[0]);
+    expect(children[0].contextValue).toBe('ado-work-item');
+  });
+
+  it('should clear hierarchy on clearAdo', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([
+      makeAdoItem({ id: 50, title: 'Parent' }),
+      makeAdoItem({ id: 51, title: 'Child', parentId: 50 }),
+    ]);
+    provider.clearAdo();
+
+    const roots = provider.getChildren();
+    // Should show "configure" items since no repos or ADO configured
+    expect(roots.some(r => (r.label as string)?.includes('#50'))).toBe(false);
+  });
+});
