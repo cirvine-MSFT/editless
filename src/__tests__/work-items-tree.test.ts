@@ -90,7 +90,7 @@ vi.mock('../team-dir', () => ({
   TEAM_DIR_NAMES: ['.squad', '.ai-team'],
 }));
 
-import { WorkItemsTreeProvider, WorkItemsTreeItem, mapGitHubState, mapAdoState } from '../work-items-tree';
+import { WorkItemsTreeProvider, WorkItemsTreeItem, mapGitHubState, mapAdoState, type UnifiedState } from '../work-items-tree';
 import type { GitHubIssue } from '../github-client';
 
 beforeEach(() => {

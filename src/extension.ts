@@ -990,9 +990,14 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const cfg = pick.squad;
       const MAX_SESSION_NAME = 50;
       const rawName = `#${number} ${title}`;
-      const terminalName = rawName.length <= MAX_SESSION_NAME
-        ? rawName
-        : rawName.slice(0, rawName.lastIndexOf(' ', MAX_SESSION_NAME)) + '…';
+      let terminalName: string;
+      if (rawName.length <= MAX_SESSION_NAME) {
+        terminalName = rawName;
+      } else {
+        const spaceIdx = rawName.lastIndexOf(' ', MAX_SESSION_NAME);
+        const truncateAt = spaceIdx > 0 ? spaceIdx : MAX_SESSION_NAME;
+        terminalName = rawName.slice(0, truncateAt) + '…';
+      }
       const terminal = terminalManager.launchTerminal(cfg, terminalName);
       labelManager.setLabel(terminalManager.getLabelKey(terminal), terminalName);
 
@@ -1077,10 +1082,16 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const cfg = pick.squad;
       const MAX_SESSION_NAME = 50;
       const rawName = `PR #${number} ${title}`;
-      const terminalName = rawName.length <= MAX_SESSION_NAME
-        ? rawName
-        : rawName.slice(0, rawName.lastIndexOf(' ', MAX_SESSION_NAME)) + '…';
-      terminalManager.launchTerminal(cfg, terminalName);
+      let terminalName: string;
+      if (rawName.length <= MAX_SESSION_NAME) {
+        terminalName = rawName;
+      } else {
+        const spaceIdx = rawName.lastIndexOf(' ', MAX_SESSION_NAME);
+        const truncateAt = spaceIdx > 0 ? spaceIdx : MAX_SESSION_NAME;
+        terminalName = rawName.slice(0, truncateAt) + '…';
+      }
+      const terminal = terminalManager.launchTerminal(cfg, terminalName);
+      labelManager.setLabel(terminalManager.getLabelKey(terminal), terminalName);
 
       if (url) {
         await vscode.env.clipboard.writeText(url);
@@ -1089,7 +1100,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
-  // Go to PR in Browser (context menu on PRs)
+  // Go to PR in Browser(context menu on PRs)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.goToPRInBrowser', async (item?: PRsTreeItem) => {
       const url = item?.pr?.url ?? item?.adoPR?.url;
