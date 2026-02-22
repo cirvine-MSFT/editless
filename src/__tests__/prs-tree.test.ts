@@ -63,7 +63,12 @@ describe('PRsTreeProvider — derivePRState', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    const children = provider.getChildren();
+    // Navigate owner→repo→PR hierarchy
+    const ownerNodes = provider.getChildren();
+    expect(ownerNodes).toHaveLength(1);
+    const repoNodes = provider.getChildren(ownerNodes[0]);
+    expect(repoNodes).toHaveLength(1);
+    const children = provider.getChildren(repoNodes[0]);
     expect(children).toHaveLength(1);
     return (children[0].description as string).split(' · ')[0];
   }
@@ -84,7 +89,12 @@ describe('PRsTreeProvider — derivePRState', () => {
 
     // Must include 'merged' in statuses since merged PRs are hidden by default
     provider.setFilter({ repos: [], labels: [], statuses: ['merged'], author: '' });
-    const children = provider.getChildren();
+    // Navigate owner→repo→PR hierarchy
+    const ownerNodes = provider.getChildren();
+    expect(ownerNodes).toHaveLength(1);
+    const repoNodes = provider.getChildren(ownerNodes[0]);
+    expect(repoNodes).toHaveLength(1);
+    const children = provider.getChildren(repoNodes[0]);
     expect(children).toHaveLength(1);
     expect((children[0].description as string).split(' · ')[0]).toBe('merged');
   });
@@ -101,7 +111,12 @@ describe('PRsTreeProvider — derivePRState', () => {
 
     // Must include 'closed' in statuses since closed PRs are hidden by default
     provider.setFilter({ repos: [], labels: [], statuses: ['closed'], author: '' });
-    const children = provider.getChildren();
+    // Navigate owner→repo→PR hierarchy
+    const ownerNodes = provider.getChildren();
+    expect(ownerNodes).toHaveLength(1);
+    const repoNodes = provider.getChildren(ownerNodes[0]);
+    expect(repoNodes).toHaveLength(1);
+    const children = provider.getChildren(repoNodes[0]);
     expect(children).toHaveLength(1);
     expect((children[0].description as string).split(' · ')[0]).toBe('closed');
   });
@@ -132,7 +147,7 @@ describe('PRsTreeProvider — derivePRState', () => {
 // ---------------------------------------------------------------------------
 
 describe('PRsTreeProvider — multi-repo grouping', () => {
-  it('should show flat PR list for single repo', async () => {
+  it('should show owner → repo hierarchy for single repo', async () => {
     mockIsGhAvailable.mockResolvedValue(true);
     mockFetchMyPRs.mockResolvedValue([makePR({ number: 1 }), makePR({ number: 2, title: 'Second' })]);
 
@@ -142,9 +157,19 @@ describe('PRsTreeProvider — multi-repo grouping', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    const children = provider.getChildren();
-    expect(children).toHaveLength(2);
-    expect(children[0].contextValue).toBe('pull-request');
+    // Single repo still shows owner→repo hierarchy
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(1);
+    expect(roots[0].contextValue).toBe('github-pr-org');
+    expect(roots[0].label).toBe('owner');
+
+    const repoNodes = provider.getChildren(roots[0]);
+    expect(repoNodes).toHaveLength(1);
+    expect(repoNodes[0].contextValue).toBe('github-pr-repo');
+
+    const prItems = provider.getChildren(repoNodes[0]);
+    expect(prItems).toHaveLength(2);
+    expect(prItems[0].contextValue).toBe('pull-request');
   });
 
   it('should show owner → repo hierarchy for multiple repos', async () => {
@@ -236,7 +261,12 @@ describe('PRsTreeProvider — merge conflict indicator', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    const children = provider.getChildren();
+    // Navigate owner→repo→PR hierarchy
+    const ownerNodes = provider.getChildren();
+    expect(ownerNodes).toHaveLength(1);
+    const repoNodes = provider.getChildren(ownerNodes[0]);
+    expect(repoNodes).toHaveLength(1);
+    const children = provider.getChildren(repoNodes[0]);
     expect(children).toHaveLength(1);
     return children[0];
   }
@@ -627,9 +657,11 @@ describe('PRsTreeProvider — hierarchy rendering with level filters', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    // Get repo node
+    // Get owner→repo hierarchy
     const root = provider.getChildren();
-    expect(root).toHaveLength(2); // 2 PRs
+    expect(root).toHaveLength(1); // 1 owner node
+    const repoNodes = provider.getChildren(root[0]);
+    expect(repoNodes).toHaveLength(1); // 1 repo node
 
     // Now apply level filter to the repo
     const repoNode = new PRsTreeItem('owner/repo', 1);
@@ -754,10 +786,19 @@ describe('PRsTreeProvider — level filter edge cases', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    // Single backend, single repo → flat list
+    // Single backend, single repo → owner→repo hierarchy
     const root = provider.getChildren();
     expect(root).toHaveLength(1);
-    expect(root[0].contextValue).toBe('pull-request');
+    expect(root[0].contextValue).toBe('github-pr-org');
+    expect(root[0].label).toBe('owner');
+
+    const repoNodes = provider.getChildren(root[0]);
+    expect(repoNodes).toHaveLength(1);
+    expect(repoNodes[0].contextValue).toBe('github-pr-repo');
+
+    const prItems = provider.getChildren(repoNodes[0]);
+    expect(prItems).toHaveLength(1);
+    expect(prItems[0].contextValue).toBe('pull-request');
   });
 
   it('should handle single backend ADO-only configuration', () => {
@@ -771,10 +812,19 @@ describe('PRsTreeProvider — level filter edge cases', () => {
       },
     ]);
 
-    // Single backend, ADO → flat list
+    // Single backend, ADO → org→project hierarchy
     const root = provider.getChildren();
     expect(root).toHaveLength(1);
-    expect(root[0].contextValue).toBe('ado-pull-request');
+    expect(root[0].contextValue).toBe('ado-pr-org');
+    expect(root[0].label).toBe('org');
+
+    const projectNodes = provider.getChildren(root[0]);
+    expect(projectNodes).toHaveLength(1);
+    expect(projectNodes[0].contextValue).toBe('ado-pr-project');
+
+    const prItems = provider.getChildren(projectNodes[0]);
+    expect(prItems).toHaveLength(1);
+    expect(prItems[0].contextValue).toBe('ado-pull-request');
   });
 
   it('should show both backends when both GitHub and ADO configured', async () => {

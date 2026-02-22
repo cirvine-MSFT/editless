@@ -325,8 +325,8 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
           adoGroup.id = `ado-pr::f${fseq}`;
           items.push(adoGroup);
         } else {
-          // Only ADO — show PRs directly
-          return filteredAdoPRs.map(p => this.buildAdoPRItem(p));
+          // Only ADO — show org→project hierarchy
+          return this._getAdoOrgNodes(filteredAdoPRs);
         }
       }
 
@@ -341,13 +341,8 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
           ghGroup.id = `github-pr::f${fseq}`;
           items.push(ghGroup);
         } else {
-          // Only GitHub — collapse if single repo
-          if (filteredPRs.size === 1) {
-            const [, prs] = [...filteredPRs.entries()][0];
-            return prs.map((p) => this.buildPRItem(p));
-          } else {
-            return this._getGitHubOwnerNodes(filteredPRs);
-          }
+          // Only GitHub — always show owner→repo hierarchy
+          return this._getGitHubOwnerNodes(filteredPRs);
         }
       }
 
