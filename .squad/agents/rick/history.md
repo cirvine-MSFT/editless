@@ -48,6 +48,56 @@ Completed comprehensive retrospective analysis of v0.1 release cycle (103 closed
 
 **Post-release quality gaps:** 20+ issues (#277-#300) filed immediately after v0.1 representing UX validation failures: session status icons don't represent state (#279), clicking sessions doesn't switch terminal (#298), adding squad feels buggy (#283), 5s cold start (#300), squad update detection broken (#288), decisions view not updating (#287).
 
+**Lessons for v0.2:** (1) Tight definition of "done" during development — better to cut features early than ship broken ones and fix in patch. (2) Code review should catch duplicate work — add coordination point before merging parallel PRs to same module. (3) Architecture decisions must be final before parallel work — session state was rearchitected 4 times; should have been locked down in week 1. (4) UX validation should happen in v0.1 scope, not discovered in hotfixes. (5) Roadmap clarity prevents wasted effort on features that get removed (Custom Commands, F2 keybinding).
+
+---
+
+### 2026-02-22: v0.1.1 Release Planning — Viability Fixes & Scope Prioritization
+Analyzed 9 issues across 3 domains to define v0.1.1 as a **viability release**. EditLess shipped in v0.1 functionally but with UX gaps and performance issues that made it unreliable for terminal sessions and work item management.
+
+**Key planning decisions:**
+
+1. **Terminal session performance (#331) is P1:** Session resolution was 100ms per poll, causing observable UI lag. CWD-indexed cache reduces to <5ms — a 20x improvement that's critical for "feels responsive" perception.
+
+2. **Orphan session UX is a narrative:** Issues #327, #337, #338 tell one story: "Your sessions are safe and recoverable." Orphan matching false positives (#327) destroy trust. Launch progress indicator (#337) shows something is happening. Better UX copy (#338) explains what "orphaned" means. These should land together in same PR for narrative cohesion.
+
+3. **Empty state onboarding (#339) prevents cliff:** New users saw "All agents hidden — use Show Hidden to restore" — wrong message for first-time experience. Welcome state is low-effort, high-impact UX fix. Unblocks adoption.
+
+4. **Work items fixes (#280, #291, #292) are quality gates:** v0.1 shipped with flat work item list, no PR filtering, broken hierarchy. These are "credibility" fixes — not viability-critical but important for users to trust the feature set.
+
+5. **No hard blockers:** All 9 issues can run in parallel (3 devs: Morty terminal-session+work-items, Summer terminal-ux). Estimated 2–3 days elapsed time with ~13–15 dev hours.
+
+6. **Risk profile:** Low risk on constants (#328) and empty state (#339). Medium risk on performance (#331, #327) and UX timing (#337). Tree structure change (#291) needs careful testing for regressions.
+
+**Release narrative:** "v0.1.1 makes EditLess reliable and usable. Terminal sessions are 20x faster, orphan recovery is trustworthy, work items are discoverable."
+
+**Decision record:** Created `.squad/decisions/inbox/rick-v011-release-plan.md` with full execution plan, dependency graph, agent assignments, testing strategy, and rollout communication.
+
+---
+
+### 2026-02-22: v0.2 Scope & v0.1.1 Planning — Squad Integration Refocus
+
+Reviewed all directives from Casey, Morty, and Summer. Consolidated planning for v0.1.1 (viability release, 2–3 days) and v0.2 (Squad CLI first-class support, 1–2 weeks).
+
+**Key scope decisions:**
+
+1. **v0.1.1 (Viability):** Terminal session performance (CWD cache), orphan UX, launch indicator, empty state, work items fixes. Estimated 5–7 issues, 2–3 day sprint. Leads to solid foundation for v0.2.
+
+2. **v0.2 (Session Manager for CLI):** Focus on user-facing interactive sessions (copilot-cli, squad CLI REPL, squad CLI loop). Daemon/SDK/native-chat deferred to v0.3+.
+
+**v0.2 Scope Changes:**
+- **Squad modality support (3 types):** copilot-cli, squad-cli, unknown. Remove squad-sdk, native-chat (deferred). ThemeIcons only ($(copilot), $(organization), $(sync)).
+- **Session attention tracking (3 states):** working, idle, needs-decision via shell execution events, not heuristics. Start simple; iterate.
+- **Squad CLI command builder:** Parallel to existing copilot-cli builder. Support `squad`, `squad loop`, `squad init`, `squad upgrade`, `squad add`. Remove watch daemon (not a session).
+- **Registry ↔ Workspace hybrid:** Registry source of truth, workspace derived view. Phase 1: removeSquad commands, stale detection, autoAddToWorkspace setting. Phase 2: bidirectional reconciliation. No forced multi-root workspaces.
+- **EditLess as router, not SquadUI-lite:** Keep launch commands, session lifecycle, SquadUI forwarding, modality icons. Cut: rich heuristics, auto-refresh SquadUI, work item display in tree. Add: status bar attention indicator, split-view command, Squad CLI builder.
+
+**Affected Issues:** #373 (squad CLI builder), #374 (modality type system), #375 (launch commands), #376 (attention tracking), #377 (modality icons). #388 (registry/workspace sync). All already in backlog; scope refined, not new work.
+
+**Dependencies:** No blockers. v0.1.1 can run in parallel with v0.2 planning. Recommend v0.1.1 ship → week break/stabilization → v0.2 start.
+
+---
+
 **Test quality vs. quantity:** 200+ tests but #247 identifies pervasive antipatterns: ~25+ mock-call assertions without result validation, 16 tautological tests, 18+ shallow smoke tests, ~40 instances of fragile mock coupling, missing edge case coverage. High line coverage provides false confidence — suite checks that code runs but doesn't validate correct behavior.
 
 **Root cause:** Speed prioritized over validation. Aggressive parallel execution (96 PRs in 3 days) without sync points led to duplicate work, insufficient code review, and UX validation gaps.
@@ -95,6 +145,26 @@ Synthesized research from Jaguar (Copilot SDK), Morty (code audit), and Squanchy
 Decision record: `.ai-team/decisions/inbox/rick-terminal-integration-synthesis.md`.
 ### 2026-02-20: PR #364 assessment — unified discovery architecture decision
 Reviewed PR #364 (refresh button squad discovery) and Casey's broader feedback on discovery flows. **Finding:** Current code has two completely separate discovery paths (agents vs squads) with different UI patterns (sidebar for agents, toast+picker for squads). PR #364 is a correct tactical fix (adds squad discovery to refresh command) but doesn't address Casey's vision of a unified flow. **Decision:** Approve and merge PR #364 now (v0.1.1 bug fix). Promote #318 (unify discovery/add flows) to v0.2 architecture work. Recommend deprecating `editless.discovery.scanPaths` config and shifting to workspace-folder-based discovery only (aligns with workspace integration). Created decision record `.squad/decisions/inbox/rick-unified-discovery.md` with scope, rationale, and timeline.
+
+### 2026-02-22: Squad ecosystem v0.2 scope narrowed — watch daemon removed, native-chat deferred
+
+Updated 5 GitHub issues (#373, #374, #375, #376, #377) per Casey's scope directive. Changes represent **architecture clarification**: EditLess is a terminal session manager, not a process daemon launcher.
+
+**Key scope changes:**
+
+1. **Issue #373 (Squad CLI builder):** Removed `squad watch` from subcommand interface. Watch is a background daemon, not a terminal session — it should NOT be launched from EditLess. Keeps: `squad`, `squad loop`, `squad init`, `squad upgrade`, `squad add`. Updated `SquadCommandOptions` interface accordingly.
+
+2. **Issue #374 (modality type system):** Narrowed modality types from 5 to 3: `'copilot-cli' | 'squad-cli' | 'unknown'`. Removed `squad-sdk` and `native-chat` from v0.2 scope. Added "Future Modalities" section clarifying: `native-chat` is deferred, not cut — Casey directive is users should be able to work in CLI or native chat interchangeably. Simplified detection logic to check launchCommand only (no SDK markers, no env var detection).
+
+3. **Issue #375 (launch commands):** Removed `editless.launchSquadWatch` command entirely. Kept `editless.launchSquad` (REPL) and `editless.launchSquadLoop`. Reduced from 3 commands to 2.
+
+4. **Issue #376 (attention state tracking):** **Complete rewrite.** Old body proposed complex heuristics (output pattern matching, timeout-based idle detection). New body implements Casey's core directive: "The user needs to know when something is working, when it's idle, or when it needs a decision." Three-state model (`working | idle | needs-decision`) using ONLY existing VS Code shell execution events (`_shellExecutionActive`). Includes status bar indicator, tree view icons, auto-dismiss on interaction. Explicitly calls out: "Do NOT add complex heuristics. Start with shell execution events only. The detection may be imperfect initially. That's OK — ship it, iterate."
+
+5. **Issue #377 (modality icons):** Removed `squad-sdk` and `native-chat` icon references. Settled on ThemeIcons (`$(codicon-name)`) over emoji — themeable, consistent with VS Code design language. Icons: `copilot-cli` → `$(copilot)` or `$(github)`, `squad-cli` (REPL) → `$(organization)`, `squad-cli` (loop) → `$(sync)`.
+
+**Architecture clarity:** EditLess is a **session manager**, not a process daemon launcher. Terminals = user-facing interactive sessions. Background daemons (watch, background jobs) are out of scope. This is consistent with v0.1 vision: "The editorless IDE panel" — focus on user interaction, not infrastructure.
+
+**Why this matters:** v0.2 spec was creeping into infrastructure concerns (daemon management, SDK integration, chat UI). These are valuable but belong in v0.3+. v0.2 focus is: "Users can run Squad CLI sessions side-by-side with Copilot CLI and know at a glance what needs their attention."
 
 <!-- Append new learnings below. Each entry is something lasting about the project. -->
 Pre-release audit (issue #87) found EditLess is production-ready except for one critical blocker: `cli.provider` enum includes `"custom"` but KNOWN_PROFILES in cli-provider.ts does not define a custom profile. When user sets the setting to "custom", resolution fails silently and falls back to auto-detection, confusing UX. Fix: add `{ name: 'custom', command: '', versionCommand: '' }` to KNOWN_PROFILES so custom provider registers with no version/update capabilities (matches decision: custom CLIs get presence-only detection). Secondary findings: settings all follow naming conventions and have sensible defaults, no sensitive terms found (internal project names completely removed per decisions), test fixtures use generic names, feature detection is progressive and correct, notification toggles work properly. Documentation gap: README doesn't explain available settings yet (non-blocking, can be post-release patch).
