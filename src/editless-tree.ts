@@ -152,6 +152,9 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     if (element.type === 'squad' && element.squadId) {
       return this.getSquadChildren(element.squadId, element);
     }
+    if (element.type === 'category' && element.categoryKind === 'discovered') {
+      return this.getDiscoveredChildren(element);
+    }
     if (element.type === 'category' && element.squadId && element.categoryKind) {
       return this.getCategoryChildren(element.squadId, element.categoryKind, element);
     }
@@ -184,22 +187,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         undefined,
         'discovered',
       );
+      header.id = 'discovered-header';
       header.description = `${totalDiscovered} new`;
       header.iconPath = new vscode.ThemeIcon('search');
       items.push(header);
-
-      // Squads first, then agents (per Summer's UX spec)
-      const discoveredSquads = visibleItems.filter(i => i.type === 'squad');
-      const discoveredAgents = visibleItems.filter(i => i.type === 'agent');
-      for (const squad of discoveredSquads) {
-        items.push(this.buildDiscoveredSquadItem(squad));
-      }
-      for (const agent of discoveredAgents) {
-        items.push(this.buildDiscoveredItemAgent(agent));
-      }
-      for (const agent of legacyAgents) {
-        items.push(this.buildDiscoveredAgentItem(agent));
-      }
     }
 
     if (items.length === 0) {
@@ -362,6 +353,32 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       for (const child of children) {
         child.parent = parentItem;
       }
+    }
+
+    return children;
+  }
+
+  private getDiscoveredChildren(parentItem: EditlessTreeItem): EditlessTreeItem[] {
+    const visibleItems = this._discoveredItems.filter(i => !this._visibility?.isHidden(i.id));
+    const unifiedIds = new Set(visibleItems.map(i => i.id));
+    const legacyAgents = this._discoveredAgents
+      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id));
+
+    const children: EditlessTreeItem[] = [];
+
+    // Squads first, then agents (per Summer's UX spec)
+    for (const squad of visibleItems.filter(i => i.type === 'squad')) {
+      children.push(this.buildDiscoveredSquadItem(squad));
+    }
+    for (const agent of visibleItems.filter(i => i.type === 'agent')) {
+      children.push(this.buildDiscoveredItemAgent(agent));
+    }
+    for (const agent of legacyAgents) {
+      children.push(this.buildDiscoveredAgentItem(agent));
+    }
+
+    for (const child of children) {
+      child.parent = parentItem;
     }
 
     return children;

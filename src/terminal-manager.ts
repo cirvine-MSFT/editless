@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
+import * as crypto from 'crypto';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
 import { getLaunchCommand } from './cli-settings';
+import { buildCopilotCommand } from './copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
@@ -54,6 +56,8 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _counters = new Map<string, number>();
   private readonly _shellExecutionActive = new Map<vscode.Terminal, boolean>();
   private readonly _lastActivityAt = new Map<vscode.Terminal, number>();
+  private readonly _sessionWatchers = new Map<vscode.Terminal, vscode.Disposable>();
+  private readonly _lastSessionEvent = new Map<vscode.Terminal, SessionEvent>();
   private _matchTimer: ReturnType<typeof setTimeout> | undefined;
   private _persistTimer: ReturnType<typeof setInterval> | undefined;
   private _sessionResolver?: SessionContextResolver;
@@ -71,6 +75,12 @@ export class TerminalManager implements vscode.Disposable {
       vscode.window.onDidCloseTerminal(terminal => {
         this._shellExecutionActive.delete(terminal);
         this._lastActivityAt.delete(terminal);
+        this._lastSessionEvent.delete(terminal);
+        const watcher = this._sessionWatchers.get(terminal);
+        if (watcher) {
+          watcher.dispose();
+          this._sessionWatchers.delete(terminal);
+        }
         if (this._terminals.delete(terminal)) {
           this._persist();
           this._onDidChange.fire();
@@ -97,15 +107,33 @@ export class TerminalManager implements vscode.Disposable {
     const id = `${config.id}-${Date.now()}-${index}`;
     const labelKey = `terminal:${id}`;
 
+    // Pre-generate UUID for session tracking (#323, #326)
+    const uuid = crypto.randomUUID();
+
+    // Build launch command with --resume UUID
+    let launchCmd: string;
+    if (config.launchCommand) {
+      launchCmd = `${config.launchCommand} --resume ${uuid}`;
+    } else {
+      const defaultAgent = vscode.workspace
+        .getConfiguration('editless.cli')
+        .get<string>('defaultAgent', 'squad');
+      launchCmd = buildCopilotCommand({ agent: defaultAgent, resume: uuid });
+    }
+
     const terminal = vscode.window.createTerminal({
       name: displayName,
       cwd: config.path,
+      isTransient: true,
+      iconPath: new vscode.ThemeIcon('terminal'),
+      env: {
+        EDITLESS_TERMINAL_ID: id,
+        EDITLESS_SQUAD_ID: config.id,
+        EDITLESS_SQUAD_NAME: config.name,
+      },
     });
 
-    terminal.sendText(config.launchCommand || getLaunchCommand());
-    terminal.show();
-
-    this._terminals.set(terminal, {
+    const info: TerminalInfo = {
       id,
       labelKey,
       displayName,
@@ -115,9 +143,25 @@ export class TerminalManager implements vscode.Disposable {
       squadIcon: config.icon,
       index,
       createdAt: new Date(),
+      agentSessionId: uuid,
       launchCommand: config.launchCommand,
       squadPath: config.path,
-    });
+    };
+
+    this._terminals.set(terminal, info);
+
+    // Start watching the session for activity (#324)
+    if (this._sessionResolver) {
+      const watcher = this._sessionResolver.watchSession(uuid, event => {
+        this._lastSessionEvent.set(terminal, event);
+        this._lastActivityAt.set(terminal, Date.now());
+        this._onDidChange.fire();
+      });
+      this._sessionWatchers.set(terminal, watcher);
+    }
+
+    terminal.sendText(launchCmd);
+    terminal.show(false);
 
     this._counters.set(config.id, index + 1);
     this._persist();
@@ -168,8 +212,32 @@ export class TerminalManager implements vscode.Disposable {
     this._onDidChange.fire();
   }
 
-  focusTerminal(terminal: vscode.Terminal): void {
-    terminal.show();
+  focusTerminal(terminal: vscode.Terminal | string): void {
+    let actualTerminal: vscode.Terminal | undefined;
+
+    if (typeof terminal === 'string') {
+      // Lookup terminal by ID from TerminalInfo
+      for (const [t, info] of this._terminals) {
+        if (info.id === terminal) {
+          actualTerminal = t;
+          break;
+        }
+      }
+      if (!actualTerminal) {
+        console.warn(`[editless] focusTerminal: No terminal found with id "${terminal}"`);
+        return;
+      }
+    } else {
+      actualTerminal = terminal;
+    }
+
+    // Verify terminal is still alive
+    if (!vscode.window.terminals.includes(actualTerminal)) {
+      console.warn('[editless] focusTerminal: Terminal no longer exists');
+      return;
+    }
+
+    actualTerminal.show(false);
   }
 
   closeTerminal(terminal: vscode.Terminal): void {
@@ -209,6 +277,16 @@ export class TerminalManager implements vscode.Disposable {
       squadPath: entry.squadPath,
     });
 
+    // Start watching the reconnected session for activity
+    if (entry.agentSessionId && this._sessionResolver) {
+      const watcher = this._sessionResolver.watchSession(entry.agentSessionId, event => {
+        this._lastSessionEvent.set(match, event);
+        this._lastActivityAt.set(match, Date.now());
+        this._onDidChange.fire();
+      });
+      this._sessionWatchers.set(match, watcher);
+    }
+
     this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
     this._persist();
     this._onDidChange.fire();
@@ -219,7 +297,7 @@ export class TerminalManager implements vscode.Disposable {
    * Resume an orphaned session. Validates session state before launching.
    * @param continueLatest When true, uses `--continue` instead of `--resume <id>`.
    */
-  relaunchSession(entry: PersistedTerminalInfo, continueLatest = false): vscode.Terminal {
+  relaunchSession(entry: PersistedTerminalInfo, continueLatest = false): vscode.Terminal | undefined {
     const reconnected = this.reconnectSession(entry);
     if (reconnected) {
       reconnected.show();
@@ -231,6 +309,7 @@ export class TerminalManager implements vscode.Disposable {
       const check = this._sessionResolver.isSessionResumable(entry.agentSessionId);
       if (!check.resumable) {
         vscode.window.showErrorMessage(`Cannot resume session: ${check.reason}`);
+        return undefined;
       }
       if (check.stale) {
         vscode.window.showWarningMessage(
@@ -249,7 +328,14 @@ export class TerminalManager implements vscode.Disposable {
     const terminal = vscode.window.createTerminal({
       name: entry.displayName,
       cwd: entry.squadPath,
-      env: Object.keys(env).length > 0 ? env : undefined,
+      isTransient: true,
+      iconPath: new vscode.ThemeIcon('terminal'),
+      env: {
+        ...env,
+        EDITLESS_TERMINAL_ID: entry.id,
+        EDITLESS_SQUAD_ID: entry.squadId,
+        EDITLESS_SQUAD_NAME: entry.squadName,
+      },
     });
 
     // Queue sendText BEFORE show() to avoid race condition where shell
@@ -263,7 +349,7 @@ export class TerminalManager implements vscode.Disposable {
         terminal.sendText(entry.launchCommand);
       }
     }
-    terminal.show();
+    terminal.show(false);
 
     this._terminals.set(terminal, {
       id: entry.id,
@@ -280,6 +366,16 @@ export class TerminalManager implements vscode.Disposable {
       squadPath: entry.squadPath,
     });
 
+    // Start watching the relaunched session for activity
+    if (entry.agentSessionId && this._sessionResolver) {
+      const watcher = this._sessionResolver.watchSession(entry.agentSessionId, event => {
+        this._lastSessionEvent.set(terminal, event);
+        this._lastActivityAt.set(terminal, Date.now());
+        this._onDidChange.fire();
+      });
+      this._sessionWatchers.set(terminal, watcher);
+    }
+
     this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
     this._persist();
     this._onDidChange.fire();
@@ -294,7 +390,7 @@ export class TerminalManager implements vscode.Disposable {
 
   relaunchAllOrphans(): vscode.Terminal[] {
     const orphans = [...this._pendingSaved];
-    return orphans.map(entry => this.relaunchSession(entry));
+    return orphans.map(entry => this.relaunchSession(entry)).filter((t): t is vscode.Terminal => t !== undefined);
   }
 
   persist(): void {
@@ -368,8 +464,18 @@ export class TerminalManager implements vscode.Disposable {
     const info = this._terminals.get(terminal);
     if (!info) { return undefined; }
 
-    const isExecuting = this._shellExecutionActive.get(terminal);
-    return isExecuting ? 'active' : 'inactive';
+    // Prefer events.jsonl data over shell execution tracking — it reflects
+    // the actual copilot agent state rather than the outer shell process.
+    const lastEvent = this._lastSessionEvent.get(terminal);
+    if (lastEvent) {
+      return isWorkingEvent(lastEvent.type) ? 'active' : 'inactive';
+    }
+
+    // No events yet — the copilot CLI is a long-running process so
+    // shellExecutionActive is always true while it's alive.  Don't
+    // show the spinner just because the process is running; wait for
+    // actual working events from events.jsonl before spinning.
+    return 'inactive';
   }
 
   getStateIcon(state: SessionState): vscode.ThemeIcon {
@@ -526,6 +632,10 @@ export class TerminalManager implements vscode.Disposable {
     if (this._persistTimer !== undefined) {
       clearInterval(this._persistTimer);
     }
+    for (const w of this._sessionWatchers.values()) {
+      w.dispose();
+    }
+    this._sessionWatchers.clear();
     for (const d of this._disposables) {
       d.dispose();
     }
@@ -534,6 +644,20 @@ export class TerminalManager implements vscode.Disposable {
 }
 
 // -- Exported helpers for tree view and testability -------------------------
+
+/** Returns true if the event type indicates the agent is actively working. */
+function isWorkingEvent(eventType: string): boolean {
+  switch (eventType) {
+    case 'assistant.turn_start':
+    case 'assistant.message':
+    case 'tool.execution_start':
+    case 'tool.execution_complete':
+    case 'user.message':
+      return true;
+    default:
+      return false;
+  }
+}
 
 export function getStateIcon(state: SessionState): vscode.ThemeIcon {
   switch (state) {

@@ -4,6 +4,11 @@ import * as os from 'os';
 import { extractReferences } from './scanner';
 import type { SessionContext } from './types';
 
+/** Minimal disposable interface — avoids importing vscode in this pure Node.js module. */
+export interface Disposable {
+  dispose(): void;
+}
+
 const CACHE_TTL_MS = 30_000;
 
 function parseSimpleYaml(content: string): Record<string, string> {
@@ -49,6 +54,8 @@ export class SessionContextResolver {
   private static readonly EVENT_CACHE_TTL_MS = 3_000;
   static readonly STALE_SESSION_DAYS = 7;
   private readonly _sessionStateDir: string;
+  private readonly _fileWatchers = new Map<string, fs.FSWatcher>();
+  private readonly _watcherPending = new Map<string, ReturnType<typeof setTimeout>>();
 
   constructor() {
     this._sessionStateDir = path.join(os.homedir(), '.copilot', 'session-state');
@@ -145,6 +152,190 @@ export class SessionContextResolver {
 
     this._eventCache.set(sessionId, { timestamp: now, event });
     return event;
+  }
+
+  /**
+   * Watch a session's events.jsonl file for changes and invoke callback on each new event.
+   * Returns a Disposable to stop watching.
+   */
+  watchSession(sessionId: string, callback: (event: SessionEvent) => void): Disposable {
+    const eventsPath = path.join(this._sessionStateDir, sessionId, 'events.jsonl');
+    const watchKey = `session:${sessionId}`;
+
+    // Stop any existing watcher for this session
+    const existingWatcher = this._fileWatchers.get(watchKey);
+    if (existingWatcher) {
+      existingWatcher.close();
+      this._fileWatchers.delete(watchKey);
+    }
+
+    let lastSize = 0;
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const readLastLine = () => {
+      try {
+        const stats = fs.statSync(eventsPath);
+        if (stats.size <= lastSize) return;
+        lastSize = stats.size;
+
+        const fd = fs.openSync(eventsPath, 'r');
+        try {
+          const readSize = Math.min(2048, stats.size);
+          const buffer = Buffer.alloc(readSize);
+          fs.readSync(fd, buffer, 0, readSize, stats.size - readSize);
+          const chunk = buffer.toString('utf-8');
+          const lines = chunk.split('\n').filter(l => l.trim());
+          const lastLine = lines[lines.length - 1];
+          if (lastLine) {
+            const parsed = JSON.parse(lastLine);
+            callback({ type: parsed.type, timestamp: parsed.timestamp });
+          }
+        } finally {
+          fs.closeSync(fd);
+        }
+      } catch {
+        // File doesn't exist yet or read error
+      }
+    };
+
+    const onChange = () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      debounceTimer = setTimeout(() => {
+        debounceTimer = undefined;
+        readLastLine();
+      }, 100);
+    };
+
+    const watchFile = () => {
+      try {
+        const watcher = fs.watch(eventsPath, { persistent: false }, onChange);
+        this._fileWatchers.set(watchKey, watcher);
+        readLastLine();
+      } catch {
+        // File disappeared after we saw it — fall back to dir watch
+        watchDir();
+      }
+    };
+
+    const watchDir = () => {
+      const sessionDir = path.join(this._sessionStateDir, sessionId);
+      try {
+        // Watch the session directory for events.jsonl to appear
+        const dirWatcher = fs.watch(sessionDir, { persistent: false }, (_eventType, filename) => {
+          if (filename === 'events.jsonl') {
+            dirWatcher.close();
+            this._fileWatchers.delete(watchKey);
+            watchFile();
+          }
+        });
+        this._fileWatchers.set(watchKey, dirWatcher);
+        // Check if file appeared between our check and the watch setup
+        if (fs.existsSync(eventsPath)) {
+          dirWatcher.close();
+          this._fileWatchers.delete(watchKey);
+          watchFile();
+        }
+      } catch {
+        // Directory doesn't exist yet — retry in 1s
+        const retry = setTimeout(() => {
+          this._watcherPending.delete(watchKey);
+          if (fs.existsSync(eventsPath)) {
+            watchFile();
+          } else {
+            watchDir();
+          }
+        }, 1000);
+        this._watcherPending.set(watchKey, retry);
+      }
+    };
+
+    // Start with file watch if it already exists, otherwise watch directory
+    if (fs.existsSync(eventsPath)) {
+      watchFile();
+    } else {
+      watchDir();
+    }
+
+    return {
+      dispose: () => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
+        const pending = this._watcherPending.get(watchKey);
+        if (pending) {
+          clearTimeout(pending);
+          this._watcherPending.delete(watchKey);
+        }
+        const watcher = this._fileWatchers.get(watchKey);
+        if (watcher) {
+          watcher.close();
+          this._fileWatchers.delete(watchKey);
+        }
+      },
+    };
+  }
+
+  /**
+   * Watch a session directory for any changes (useful for detecting workspace.yaml appearance).
+   * Returns a Disposable to stop watching.
+   */
+  watchSessionDir(sessionId: string, callback: () => void): Disposable {
+    const sessionDir = path.join(this._sessionStateDir, sessionId);
+    const watchKey = `dir:${sessionId}`;
+
+    const existingWatcher = this._fileWatchers.get(watchKey);
+    if (existingWatcher) {
+      existingWatcher.close();
+      this._fileWatchers.delete(watchKey);
+    }
+
+    let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const onChange = () => {
+      if (debounceTimer) {
+        clearTimeout(debounceTimer);
+      }
+      debounceTimer = setTimeout(() => {
+        debounceTimer = undefined;
+        callback();
+      }, 100);
+    };
+
+    const setupWatch = () => {
+      try {
+        const watcher = fs.watch(sessionDir, { persistent: false }, onChange);
+        this._fileWatchers.set(watchKey, watcher);
+      } catch {
+        // Directory doesn't exist yet — retry in 1s
+        const retry = setTimeout(() => {
+          this._watcherPending.delete(watchKey);
+          setupWatch();
+        }, 1000);
+        this._watcherPending.set(watchKey, retry);
+      }
+    };
+
+    setupWatch();
+
+    return {
+      dispose: () => {
+        if (debounceTimer) {
+          clearTimeout(debounceTimer);
+        }
+        const pending = this._watcherPending.get(watchKey);
+        if (pending) {
+          clearTimeout(pending);
+          this._watcherPending.delete(watchKey);
+        }
+        const watcher = this._fileWatchers.get(watchKey);
+        if (watcher) {
+          watcher.close();
+          this._fileWatchers.delete(watchKey);
+        }
+      },
+    };
   }
 
   private _scan(squadPaths: string[]): Map<string, SessionContext> {
