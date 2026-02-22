@@ -1,4 +1,26 @@
 
+### 2026-02-23: Default Exclusion of Closed/Merged Items
+
+**Date:** 2026-02-23  
+**Author:** Morty  
+**Status:** Implemented  
+**Issue:** #390
+
+## Context
+
+Work items and PRs trees showed closed/merged items by default, cluttering the view with stale items.
+
+## Decision
+
+All runtime filters now exclude closed work items and merged/closed PRs by default when no state/status filter is explicitly set. Users can see them by explicitly selecting those states in the filter QuickPick.
+
+## Impact
+
+- Tests that need closed/merged items must explicitly set state/status filters
+- `applyRuntimeFilter`, `applyAdoRuntimeFilter`, `_applyGitHubLevelFilter`, and `_applyAdoLevelFilter` all enforce this
+- Filter descriptions and `isFiltered` remain unchanged — this is a default behavior, not a visible filter state
+
+---
 
 ### 2026-02-23: Filter UX Redesign: Hierarchical Backend-Aware Approach
 
