@@ -84,25 +84,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   prsProvider.setTreeView(prsView);
   context.subscriptions.push(prsView);
 
-  // Reconcile persisted terminal sessions with live terminals after reload
+  // Reconcile persisted terminal sessions with live terminals after reload.
+  // Orphaned sessions appear in the tree view — users can resume individually.
   terminalManager.reconcile();
-
-  // Wait for terminal matching to settle before checking orphans (#race-fix)
-  void terminalManager.waitForReconciliation().then(() => {
-    const orphans = terminalManager.getOrphanedSessions();
-    const resumable = orphans.filter(o => o.agentSessionId);
-    if (resumable.length > 0) {
-      void vscode.window.showInformationMessage(
-        `EditLess found ${resumable.length} previous session(s) that can be resumed.`,
-        'Resume All', 'Dismiss',
-      ).then(action => {
-        if (action === 'Resume All') {
-          terminalManager.relaunchAllOrphans();
-          treeProvider.refresh();
-        }
-      });
-    }
-  });
 
   // Sync tree selection when switching terminals via tab bar
   context.subscriptions.push(

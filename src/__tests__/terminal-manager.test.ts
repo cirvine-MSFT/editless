@@ -2539,7 +2539,7 @@ describe('TerminalManager', () => {
       vi.useRealTimers();
     });
 
-    it('no orphan toast when terminals match during debounce window', async () => {
+    it('no resumable orphans when terminals match during debounce window', async () => {
       vi.useFakeTimers();
 
       const saved = [makePersistedEntry({
