@@ -25,6 +25,7 @@ export interface WorkItemsFilter {
   repos: string[];
   labels: string[];
   states: UnifiedState[];
+  types: string[];
 }
 
 
@@ -51,7 +52,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   private _adoChildMap = new Map<number, number[]>();
   private _adoConfigured = false;
   private _loading = false;
-  private _filter: WorkItemsFilter = { repos: [], labels: [], states: [] };
+  private _filter: WorkItemsFilter = { repos: [], labels: [], states: [], types: [] };
   private _filterSeq = 0;
   private _treeView?: vscode.TreeView<WorkItemsTreeItem>;
   private _allLabels = new Set<string>();
@@ -85,7 +86,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   get isFiltered(): boolean {
-    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.states.length > 0;
+    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.states.length > 0 || this._filter.types.length > 0;
   }
 
   setFilter(filter: WorkItemsFilter): void {
@@ -97,7 +98,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   clearFilter(): void {
-    this.setFilter({ repos: [], labels: [], states: [] });
+    this.setFilter({ repos: [], labels: [], states: [], types: [] });
   }
 
   private _updateDescription(): void {
@@ -110,6 +111,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     if (this._filter.repos.length > 0) parts.push(`repo:${this._filter.repos.join(',')}`);
     if (this._filter.labels.length > 0) parts.push(`label:${this._filter.labels.join(',')}`);
     if (this._filter.states.length > 0) parts.push(`state:${this._filter.states.join(',')}`);
+    if (this._filter.types.length > 0) parts.push(`type:${this._filter.types.join(',')}`);
     this._treeView.description = parts.join(' · ');
   }
 
@@ -361,6 +363,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
       if (this._filter.labels.length > 0 && !this.matchesLabelFilter(wi.tags, this._filter.labels)) return false;
       if (this._filter.states.length > 0 && !this._filter.states.includes(mapAdoState(wi.state))) return false;
+      if (this._filter.types.length > 0 && !this._filter.types.includes(wi.type)) return false;
       return true;
     });
   }

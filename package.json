@@ -183,6 +183,12 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "editless.workItems.filterByType",
+        "title": "Filter Work Items by Type",
+        "category": "EditLess",
+        "icon": "$(filter)"
+      },
+      {
         "command": "editless.filterPRs",
         "title": "Filter PRs",
         "category": "EditLess",
@@ -313,6 +319,7 @@
         { "command": "editless.refreshWorkItems", "when": "view == editlessWorkItems", "group": "navigation@1" },
         { "command": "editless.filterWorkItems", "when": "view == editlessWorkItems", "group": "navigation@2" },
         { "command": "editless.clearWorkItemsFilter", "when": "view == editlessWorkItems && editless.workItemsFiltered", "group": "navigation@3" },
+        { "command": "editless.workItems.filterByType", "when": "view == editlessWorkItems", "group": "navigation@5" },
         { "command": "editless.configureWorkItems", "when": "view == editlessWorkItems", "group": "navigation@4" },
         { "command": "editless.refreshPRs", "when": "view == editlessPRs", "group": "navigation@1" },
         { "command": "editless.prs.toggleMyPRs", "when": "view == editlessPRs && !editless.prsMyOnly", "group": "navigation@2" },
@@ -358,6 +365,7 @@
         { "command": "editless.refreshWorkItems", "when": "false" },
         { "command": "editless.filterWorkItems", "when": "false" },
         { "command": "editless.clearWorkItemsFilter", "when": "false" },
+        { "command": "editless.workItems.filterByType", "when": "false" },
         { "command": "editless.configureWorkItems", "when": "false" },
         { "command": "editless.refreshPRs", "when": "false" },
         { "command": "editless.prs.toggleMyPRs", "when": "false" },

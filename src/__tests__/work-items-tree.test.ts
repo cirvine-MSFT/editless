@@ -169,7 +169,7 @@ describe('mapAdoState', () => {
 describe('WorkItemsTreeProvider — runtime filter', () => {
   async function getFilteredItems(
     issues: GitHubIssue[],
-    filter: { repos?: string[]; labels?: string[]; states?: Array<'open' | 'active' | 'closed'> },
+    filter: { repos?: string[]; labels?: string[]; states?: Array<'open' | 'active' | 'closed'>; types?: string[] },
   ): Promise<WorkItemsTreeItem[]> {
     mockIsGhAvailable.mockResolvedValue(true);
     mockFetchAssignedIssues.mockResolvedValue(issues);
@@ -184,6 +184,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
       repos: filter.repos ?? [],
       labels: filter.labels ?? [],
       states: filter.states ?? [],
+      types: filter.types ?? [],
     });
 
     return provider.getChildren();
@@ -235,7 +236,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: [], labels: [], states: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: [] });
     const items = provider.getChildren();
     expect(items).toHaveLength(2);
   });
@@ -250,7 +251,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: [], labels: ['bug'], states: [] });
+    provider.setFilter({ repos: [], labels: ['bug'], states: [], types: [] });
     expect(provider.getChildren()).toHaveLength(1);
 
     provider.clearFilter();
@@ -260,7 +261,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
   it('should report isFiltered correctly', () => {
     const provider = new WorkItemsTreeProvider();
     expect(provider.isFiltered).toBe(false);
-    provider.setFilter({ repos: ['test'], labels: [], states: [] });
+    provider.setFilter({ repos: ['test'], labels: [], states: [], types: [] });
     expect(provider.isFiltered).toBe(true);
     provider.clearFilter();
     expect(provider.isFiltered).toBe(false);
@@ -458,5 +459,91 @@ describe('WorkItemsTreeProvider — ADO hierarchy', () => {
     const roots = provider.getChildren();
     // Should show "configure" items since no repos or ADO configured
     expect(roots.some(r => (r.label as string)?.includes('#50'))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADO type filtering (#292)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — type filter', () => {
+  function makeAdoItem(overrides: Partial<import('../ado-client').AdoWorkItem> = {}): import('../ado-client').AdoWorkItem {
+    return {
+      id: 1,
+      title: 'ADO Item',
+      state: 'Active',
+      type: 'User Story',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/1',
+      assignedTo: 'user',
+      areaPath: 'Project\\Area',
+      tags: [],
+      ...overrides,
+    };
+  }
+
+  it('should filter ADO items by type', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, type: 'Bug', title: 'Fix crash' }),
+      makeAdoItem({ id: 2, type: 'Task', title: 'Write docs' }),
+      makeAdoItem({ id: 3, type: 'Bug', title: 'Fix typo' }),
+    ]);
+
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'] });
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(2);
+    expect(roots.every(r => (r.label as string)?.includes('Fix'))).toBe(true);
+  });
+
+  it('should show all types when types filter is empty', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, type: 'Bug' }),
+      makeAdoItem({ id: 2, type: 'Task' }),
+      makeAdoItem({ id: 3, type: 'Feature' }),
+    ]);
+
+    provider.setFilter({ repos: [], labels: [], states: [], types: [] });
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(3);
+  });
+
+  it('should allow multiple types', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, type: 'Bug' }),
+      makeAdoItem({ id: 2, type: 'Task' }),
+      makeAdoItem({ id: 3, type: 'Feature' }),
+    ]);
+
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug', 'Feature'] });
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(2);
+  });
+
+  it('should promote children to root when parent is filtered out by type', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([
+      makeAdoItem({ id: 10, type: 'User Story', title: 'Story' }),
+      makeAdoItem({ id: 11, type: 'Task', title: 'Task A', parentId: 10 }),
+      makeAdoItem({ id: 12, type: 'Task', title: 'Task B', parentId: 10 }),
+    ]);
+
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Task'] });
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(2);
+    expect(roots[0].label).toContain('#11');
+    expect(roots[1].label).toContain('#12');
+    // Children should be leaf items since parent is gone
+    expect(roots[0].collapsibleState).toBe(0);
+  });
+
+  it('should report isFiltered when types are set', () => {
+    const provider = new WorkItemsTreeProvider();
+    expect(provider.isFiltered).toBe(false);
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'] });
+    expect(provider.isFiltered).toBe(true);
+    provider.clearFilter();
+    expect(provider.isFiltered).toBe(false);
   });
 });
