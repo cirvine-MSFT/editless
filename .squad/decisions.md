@@ -6885,3 +6885,67 @@ The UI will present a unified "Type" filter that maps to these underlying repres
 - Users must follow `type:{name}` convention in GitHub for filters to work.
 - We standardized on "Labels" as the UI term for tags/labels across both providers.
 
+
+---
+
+# Decision: Context Value Naming Convention for Tree View Nodes
+
+**Date:** 2026-02-22  
+**Author:** Rick  
+**Context:** Architecture review of hierarchical filter implementation (#390)  
+**Status:** Observation / Recommended Convention
+
+## Background
+
+The hierarchical filter implementation (commits 873c8fe→98ebb34) introduced backend-aware context values for Work Items and PRs tree nodes:
+
+- **Work Items:** `ado-backend`, `github-backend`, `ado-org`, `ado-project`, `github-org`, `github-repo`
+- **PRs:** `ado-pr-backend`, `github-pr-backend`, `ado-pr-org`, `ado-pr-project`, `github-pr-org`, `github-pr-repo`
+
+The `-pr-` infix prevents collisions when the same logical node type (e.g., "backend") appears in different tree views.
+
+## Decision
+
+**Adopt a naming convention for context values when multiple tree views need similar hierarchical structures:**
+
+```
+{source}-{domain}-{level}
+```
+
+Where:
+- `source` = backend provider (e.g., `ado`, `github`)
+- `domain` = tree-specific namespace (e.g., `pr`, `workitem`, omitted if unique)
+- `level` = hierarchy level (e.g., `backend`, `org`, `project`, `repo`)
+
+**Examples:**
+- Work Items (domain omitted): `ado-backend`, `github-org`, `ado-project`
+- PRs: `ado-pr-backend`, `github-pr-org`
+- Future (hypothetical) commits tree: `ado-commit-backend`, `github-commit-repo`
+
+## Rationale
+
+1. **Collision Prevention:** package.json `when` clauses match context values across all tree views. Without namespacing, `ado-backend` in Work Items would conflict with `ado-backend` in PRs.
+
+2. **Pattern Consistency:** When adding new hierarchical trees, developers can follow this convention without reverse-engineering existing code.
+
+3. **Regex Maintainability:** package.json uses regexes like `/^(ado|github)-pr-(backend|org|project|repo)$/` to match nodes. The convention makes these patterns predictable.
+
+## Implementation Notes
+
+- Context values set via `item.contextValue = 'ado-pr-backend'` in tree provider's `getChildren()`.
+- package.json contributions use regex patterns for inline menus:
+  ```json
+  "when": "view == editlessPRs && viewItem =~ /^(ado|github)-pr-(backend|org|project|repo)$/"
+  ```
+
+## Non-Impact
+
+This is **not a breaking change**. Existing context values don't need refactoring — they already follow this pattern. This decision documents the implicit convention for future development.
+
+## References
+
+- Issue #390 — Hierarchical filter implementation
+- `src/work-items-tree.ts` lines 352, 368, 391, 395
+- `src/prs-tree.ts` lines 315, 331, 349, 369
+- `package.json` lines 515, 530 (menu contributions)
+
