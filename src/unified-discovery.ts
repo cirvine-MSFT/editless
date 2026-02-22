@@ -104,7 +104,19 @@ export function discoverAll(
     }
   }
 
-  return items;
+  // Filter out squad governance agents (e.g. squad.agent.md) that duplicate a discovered squad
+  const squadRoots = new Set(
+    items.filter(i => i.type === 'squad' && i.source === 'workspace').map(i => i.path.toLowerCase()),
+  );
+  return items.filter(item => {
+    if (item.type !== 'agent') return true;
+    // Only filter the squad governance file, not other agents in the same folder
+    const basename = path.basename(item.path).toLowerCase();
+    if (basename !== 'squad.agent.md') return true;
+    // Agent at {root}/.github/agents/squad.agent.md → root is 3 levels up
+    const root = path.dirname(path.dirname(path.dirname(item.path)));
+    return !squadRoots.has(root.toLowerCase());
+  });
 }
 
 function squadConfigToItem(cfg: AgentTeamConfig): DiscoveredItem {
