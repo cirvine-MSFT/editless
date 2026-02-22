@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as vscode from 'vscode';
+import { MockEditlessTreeItem } from './mocks/vscode-mocks';
 
 // ----- Hoisted mocks --------------------------------------------------------
 const {
@@ -67,27 +68,9 @@ const {
   mockDiscoverAll,
   mockOnDidCloseTerminal,
   mockResolveTeamDir,
-  MockEditlessTreeItem,
-} = vi.hoisted(() => {
-  class MockEditlessTreeItem {
-    terminal?: unknown;
-    persistedEntry?: unknown;
-    parent?: unknown;
-    squadId?: string;
-    id?: string;
-    constructor(
-      public label: string,
-      public type: string,
-      public collapsibleState: number,
-      squadId?: string,
-    ) {
-      this.squadId = squadId;
-    }
-  }
-
-  return {
-    mockRegisterCommand: vi.fn(),
-    mockExecuteCommand: vi.fn(),
+} = vi.hoisted(() => ({
+  mockRegisterCommand: vi.fn(),
+  mockExecuteCommand: vi.fn(),
     mockShowQuickPick: vi.fn(),
     mockShowInputBox: vi.fn(),
     mockShowWarningMessage: vi.fn(),
@@ -150,42 +133,16 @@ const {
     mockDiscoverAll: vi.fn().mockReturnValue([]),
     mockOnDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
     mockResolveTeamDir: vi.fn(),
-    MockEditlessTreeItem,
-  };
-});
+  }),
+);
 
 // Registered command handlers captured during activate()
 const commandHandlers = new Map<string, Function>();
 
 // ----- Mock: vscode ---------------------------------------------------------
-vi.mock('vscode', () => {
-  const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
-
-  class TreeItem {
-    label: string;
-    collapsibleState: number;
-    id?: string;
-    contextValue?: string;
-    constructor(label: string, collapsibleState = 0) {
-      this.label = label;
-      this.collapsibleState = collapsibleState;
-    }
-  }
-
-  class EventEmitter {
-    private listeners: Function[] = [];
-    get event() {
-      return (listener: Function) => {
-        this.listeners.push(listener);
-        return { dispose: () => { this.listeners = this.listeners.filter(l => l !== listener); } };
-      };
-    }
-    fire(value?: unknown) { this.listeners.forEach(l => l(value)); }
-    dispose() { this.listeners = []; }
-  }
-
-  class ThemeIcon { constructor(public id: string) {} }
-  class MarkdownString { constructor(public value: string) {} }
+vi.mock('vscode', async () => {
+  const { TreeItem, TreeItemCollapsibleState, ThemeIcon, MarkdownString, EventEmitter } =
+    await import('./mocks/vscode-mocks');
 
   mockRegisterCommand.mockImplementation((id: string, handler: Function) => {
     commandHandlers.set(id, handler);

@@ -1,70 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  createVscodeMock,
+  ThemeIcon,
+} from './mocks/vscode-mocks';
 
 const mockIsGhAvailable = vi.fn<() => Promise<boolean>>().mockResolvedValue(false);
 const mockFetchAssignedIssues = vi.fn().mockResolvedValue([]);
 const mockFetchMyPRs = vi.fn().mockResolvedValue([]);
 let mockIssueFilterConfig: Record<string, unknown> = {};
 
-vi.mock('vscode', () => {
-  const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
-
-  class TreeItem {
-    label: string;
-    collapsibleState: number;
-    iconPath?: unknown;
-    description?: string;
-    contextValue?: string;
-    tooltip?: unknown;
-    command?: unknown;
-    id?: string;
-    constructor(label: string, collapsibleState: number = TreeItemCollapsibleState.None) {
-      this.label = label;
-      this.collapsibleState = collapsibleState;
-    }
-  }
-
-  class ThemeIcon {
-    id: string;
-    color?: unknown;
-    constructor(id: string, color?: unknown) { this.id = id; this.color = color; }
-  }
-
-  class ThemeColor {
-    id: string;
-    constructor(id: string) { this.id = id; }
-  }
-
-  class MarkdownString {
-    value: string;
-    constructor(value: string) { this.value = value; }
-  }
-
-  class EventEmitter {
-    private listeners: Function[] = [];
-    get event() {
-      return (listener: Function) => {
-        this.listeners.push(listener);
-        return { dispose: () => { this.listeners = this.listeners.filter(l => l !== listener); } };
-      };
-    }
-    fire(value?: unknown) { this.listeners.forEach(l => l(value)); }
-    dispose() { this.listeners = []; }
-  }
-
-  return {
-    TreeItem, TreeItemCollapsibleState, ThemeIcon, ThemeColor, MarkdownString, EventEmitter,
-    Uri: {
-      parse: (s: string) => ({ toString: () => s }),
-      file: (s: string) => ({ toString: () => s, fsPath: s }),
-    },
+vi.mock('vscode', () =>
+  createVscodeMock({
     workspace: {
       getConfiguration: () => ({
         get: (key: string, defaultValue?: unknown) =>
           key === 'github.issueFilter' ? mockIssueFilterConfig : defaultValue,
       }),
     },
-  };
-});
+  }),
+);
 
 vi.mock('../github-client', () => ({
   isGhAvailable: (...args: unknown[]) => mockIsGhAvailable(...(args as [])),
@@ -112,8 +66,8 @@ describe('WorkItemsTreeProvider', () => {
     expect(children).toHaveLength(2);
     expect(children[0].label).toBe('Configure in GitHub');
     expect(children[1].label).toBe('Configure in ADO');
-    expect(children[0].iconPath).toBeDefined();
-    expect(children[1].iconPath).toBeDefined();
+    expect(children[0].iconPath).toEqual(new ThemeIcon('github'));
+    expect(children[1].iconPath).toEqual(new ThemeIcon('azure'));
   });
 
   it('should return empty array when getChildren is called with an unrecognised element', async () => {
@@ -244,8 +198,8 @@ describe('PRsTreeProvider', () => {
     expect(children).toHaveLength(2);
     expect(children[0].label).toBe('Configure in GitHub');
     expect(children[1].label).toBe('Configure in ADO');
-    expect(children[0].iconPath).toBeDefined();
-    expect(children[1].iconPath).toBeDefined();
+    expect(children[0].iconPath).toEqual(new ThemeIcon('github'));
+    expect(children[1].iconPath).toEqual(new ThemeIcon('azure'));
   });
 
   it('should return empty array when getChildren is called with an unrecognised element', async () => {

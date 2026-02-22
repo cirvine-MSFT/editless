@@ -29,6 +29,7 @@ import { getEdition } from './vscode-compat';
 import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
 import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
 import { buildDefaultLaunchCommand, buildCopilotCommand, getCliCommand } from './copilot-cli-builder';
+import { launchAndLabel } from './launch-utils';
 
 const execFileAsync = promisify(execFile);
 
@@ -988,18 +989,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!pick) return;
 
       const cfg = pick.squad;
-      const MAX_SESSION_NAME = 50;
       const rawName = `#${number} ${title}`;
-      let terminalName: string;
-      if (rawName.length <= MAX_SESSION_NAME) {
-        terminalName = rawName;
-      } else {
-        const spaceIdx = rawName.lastIndexOf(' ', MAX_SESSION_NAME);
-        const truncateAt = spaceIdx > 0 ? spaceIdx : MAX_SESSION_NAME;
-        terminalName = rawName.slice(0, truncateAt) + '…';
-      }
-      const terminal = terminalManager.launchTerminal(cfg, terminalName);
-      labelManager.setLabel(terminalManager.getLabelKey(terminal), terminalName);
+      launchAndLabel(terminalManager, labelManager, cfg, rawName);
 
       if (url) {
         await vscode.env.clipboard.writeText(url);
@@ -1080,18 +1071,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!pick) return;
 
       const cfg = pick.squad;
-      const MAX_SESSION_NAME = 50;
       const rawName = `PR #${number} ${title}`;
-      let terminalName: string;
-      if (rawName.length <= MAX_SESSION_NAME) {
-        terminalName = rawName;
-      } else {
-        const spaceIdx = rawName.lastIndexOf(' ', MAX_SESSION_NAME);
-        const truncateAt = spaceIdx > 0 ? spaceIdx : MAX_SESSION_NAME;
-        terminalName = rawName.slice(0, truncateAt) + '…';
-      }
-      const terminal = terminalManager.launchTerminal(cfg, terminalName);
-      labelManager.setLabel(terminalManager.getLabelKey(terminal), terminalName);
+      launchAndLabel(terminalManager, labelManager, cfg, rawName);
 
       if (url) {
         await vscode.env.clipboard.writeText(url);
