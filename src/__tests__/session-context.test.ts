@@ -329,6 +329,69 @@ summary: Modified`,
       
       expect(result).toBeNull();
     });
+
+    it('uses CWD index for O(1) lookups on repeat scans (200 sessions)', () => {
+      const targetSquad = path.join(tmpSessionDir, 'target-squad');
+
+      // Create 200 session directories, only one matching our target
+      for (let i = 0; i < 200; i++) {
+        const sessionDir = path.join(resolver._sessionStateDir, `session-${i}`);
+        fs.mkdirSync(sessionDir, { recursive: true });
+        const cwd = i === 42 ? targetSquad : path.join(tmpSessionDir, `other-squad-${i}`);
+        fs.writeFileSync(
+          path.join(sessionDir, 'workspace.yaml'),
+          `cwd: ${cwd}\nsummary: Session ${i}\nupdated_at: 2025-01-01T${String(i).padStart(2, '0')}:00:00Z`,
+          'utf-8',
+        );
+      }
+
+      // First call: builds the index (cold)
+      const result1 = resolver.resolveForSquad(targetSquad);
+      expect(result1?.sessionId).toBe('session-42');
+
+      // Clear only the per-call cache, keep the CWD index
+      resolver._cache = null;
+
+      // Second call: should reuse the CWD index (warm) — measure time
+      const start = performance.now();
+      const result2 = resolver.resolveForSquad(targetSquad);
+      const elapsed = performance.now() - start;
+
+      expect(result2?.sessionId).toBe('session-42');
+      expect(elapsed).toBeLessThan(10); // <10ms with index vs ~100ms without
+    });
+
+    it('rebuilds CWD index when new session directories appear', () => {
+      const squadPath = path.join(tmpSessionDir, 'test-squad');
+
+      // Create initial session
+      const session1Dir = path.join(resolver._sessionStateDir, 'session-old');
+      fs.mkdirSync(session1Dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(session1Dir, 'workspace.yaml'),
+        `cwd: ${squadPath}\nsummary: Old\nupdated_at: 2025-01-01T00:00:00Z`,
+        'utf-8',
+      );
+
+      const result1 = resolver.resolveForSquad(squadPath);
+      expect(result1?.summary).toBe('Old');
+
+      // Clear per-call cache but keep CWD index
+      resolver._cache = null;
+
+      // Add a new session directory — index should rebuild
+      const session2Dir = path.join(resolver._sessionStateDir, 'session-new');
+      fs.mkdirSync(session2Dir, { recursive: true });
+      fs.writeFileSync(
+        path.join(session2Dir, 'workspace.yaml'),
+        `cwd: ${squadPath}\nsummary: New\nupdated_at: 2025-01-02T00:00:00Z`,
+        'utf-8',
+      );
+
+      const result2 = resolver.resolveForSquad(squadPath);
+      expect(result2?.summary).toBe('New');
+      expect(result2?.sessionId).toBe('session-new');
+    });
   });
 
   describe('getLastEvent', () => {
