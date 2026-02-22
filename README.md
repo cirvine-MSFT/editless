@@ -53,8 +53,7 @@ New to agentic development? Start here — install EditLess, add a squad, and le
 - 🔔 **Notifications** — keep track of what your sessions are doing at a glance, so you never miss a call to action or leave a session idle
 - 🔍 **Auto-detection** — discovers agents in your workspace automatically
 - 🐙 **GitHub integration** — connect to GitHub issues and pull requests
-- 🏗️ **Azure DevOps integration** — pull in ADO work items and pull requests 
-- 🔄 **Keep your tools up to date** — EditLess lets you know when updates are available for [GitHub Copilot CLI](https://github.com/github/gh-copilot), so you're always running the latest
+- 🏗️ **Azure DevOps integration** — pull in ADO work items and pull requests
 
 ## Development
 

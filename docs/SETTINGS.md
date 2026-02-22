@@ -124,17 +124,15 @@ Settings for controlling desktop toasts and notifications.
 
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
-| `editless.notifications.enabled` | `boolean` | `true` | window | Master toggle for all EditLess notifications. When disabled, **all** EditLess toasts are suppressed — including inbox and update notifications. |
+| `editless.notifications.enabled` | `boolean` | `true` | window | Master toggle for all EditLess notifications. When disabled, **all** EditLess toasts are suppressed — including inbox notifications. |
 | `editless.notifications.inbox` | `boolean` | `true` | window | Show notifications when new inbox items arrive (pending decisions, work items). A toast fires when the inbox count transitions from 0 → N. Requires `editless.notifications.enabled` to be on. |
-| `editless.notifications.updates` | `boolean` | `true` | window | Show notifications when a CLI provider update is available. EditLess checks each detected provider on startup and displays a toast with installed and available versions. Requires `editless.notifications.enabled` to be on. |
 
 **Example:**
 
 ```jsonc
 {
   "editless.notifications.enabled": true,
-  "editless.notifications.inbox": true,
-  "editless.notifications.updates": true
+  "editless.notifications.inbox": true
 }
 ```
 
@@ -168,8 +166,7 @@ Settings for controlling desktop toasts and notifications.
 
   // Notifications
   "editless.notifications.enabled": true,
-  "editless.notifications.inbox": true,
-  "editless.notifications.updates": true
+  "editless.notifications.inbox": true
 }
 ```
 
