@@ -19,6 +19,7 @@ The dogfooding release. After a week of daily-driving 0.1.0, this fixes the roug
 - Terminal session persistence and reconciliation improvements
 - Orphan check deferred until terminal matching settles (fixes race condition)
 - Orphaned sessions now show silently in the tree (removed "Resume All" toast)
+- Better alignment with VS Code workspace model — squad discovery, session resolution, and terminal matching now respect workspace folder boundaries (based on user feedback)
 
 ### Fixed
 - ADO org→project hierarchy preserved when only one backend is visible (work items)
