@@ -491,11 +491,6 @@
           "group": "work-item@2"
         },
         {
-          "command": "editless.goToWorkItem",
-          "when": "viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
-          "group": "work-item@3"
-        },
-        {
           "command": "editless.launchFromPR",
           "when": "view == editlessPRs && viewItem =~ /^(pull-request|ado-pull-request)$/",
           "group": "inline@0"
@@ -514,11 +509,6 @@
           "command": "editless.openInBrowser",
           "when": "viewItem =~ /^(pull-request|ado-pull-request)$/",
           "group": "pull-request@2"
-        },
-        {
-          "command": "editless.goToPRInBrowser",
-          "when": "viewItem =~ /^(pull-request|ado-pull-request)$/",
-          "group": "pull-request@3"
         },
         {
           "command": "editless.relaunchSession",

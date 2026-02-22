@@ -576,11 +576,6 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         `Assignees: ${issue.assignees.join(', ')}`,
       ].join('\n\n'),
     );
-    item.command = {
-      command: 'vscode.open',
-      title: 'Open in Browser',
-      arguments: [vscode.Uri.parse(issue.url)],
-    };
     return item;
   }
 
@@ -606,11 +601,6 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         wi.tags.length > 0 ? `Labels: ${wi.tags.join(', ')}` : '',
       ].filter(Boolean).join('\n\n'),
     );
-    item.command = {
-      command: 'vscode.open',
-      title: 'Open in Browser',
-      arguments: [vscode.Uri.parse(wi.url)],
-    };
     return item;
   }
 

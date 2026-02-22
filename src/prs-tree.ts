@@ -508,11 +508,6 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       tooltipLines.push('⚠️ **This PR has merge conflicts**');
     }
     item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
-    item.command = {
-      command: 'vscode.open',
-      title: 'Open in Browser',
-      arguments: [vscode.Uri.parse(pr.url)],
-    };
     return item;
   }
 
@@ -536,11 +531,6 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
         pr.reviewers.length > 0 ? `Reviewers: ${pr.reviewers.join(', ')}` : '',
       ].filter(Boolean).join('\n\n'),
     );
-    item.command = {
-      command: 'vscode.open',
-      title: 'Open in Browser',
-      arguments: [vscode.Uri.parse(pr.url)],
-    };
     return item;
   }
 
