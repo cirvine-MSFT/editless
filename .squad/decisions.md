@@ -1,5 +1,49 @@
 
 
+### 2026-02-23: Filter UX Redesign: Hierarchical Backend-Aware Approach
+
+**Date:** 2026-02-23  
+**Status:** Approved (Morty implementing)  
+**Context:** Work items filter breaks for multi-backend users (GitHub + ADO) due to flat QuickPick mixing incompatible filter dimensions.
+
+## Decision
+
+Adopt a **hierarchical, backend-scoped filter model** with per-level filtering in the tree view (Variant D from design exploration).
+
+### Core Changes
+
+1. **Tree hierarchy**: Backend (ADO/GitHub) → Org → Project/Repo hierarchy with inline filter icons `[≡]` on each level
+2. **Backend-aware matching**: Filter dimensions apply only where relevant—ADO types only filter ADO items, GitHub labels only affect GitHub repos
+3. **Per-level QuickPick**: Clicking a level's filter icon opens a scoped QuickPick showing only options for that level
+4. **Global toolbar filter**: Preserved for quick multi-backend filtering with smart backend detection
+5. **Filter state display**: Group nodes show active filters inline (e.g., `Azure DevOps · Bug, Active`)
+
+### Why Hierarchical Over Flat
+
+- ✅ **No cross-contamination**: ADO types can't accidentally hide GitHub issues
+- ✅ **Intuitive scoping**: Users filter at the level they care about
+- ✅ **VS Code native**: Inline actions + context menus are standard patterns
+- ✅ **Addresses all pain points**: Type filter confusion, label scope mismatch, mixed flat options
+
+### Architecture Changes
+
+- `WorkItemsFilter`: Split `labels` → `githubLabels` + `adoTags`, rename `types` → `adoTypes`
+- `applyRuntimeFilter`: Only apply relevant filter dimensions per backend
+- `TreeItem.contextValue`: New values for backend/org/project/repo to scope filters
+
+### Out of Scope (Later Phases)
+
+- Filter persistence across sessions (intentional—filters are ephemeral)
+- Per-repo filter profiles (overkill for MVP)
+
+## Next Steps
+
+1. Morty: Implement hierarchical tree with backend nodes
+2. Morty: Add inline filter icons and scoped QuickPicks
+3. Summer: Review implementation UX
+
+---
+
 ### 2026-02-18: Dev Tooling: Isolated Environment Strategy
 
 **Date:** 2026-02-18  
