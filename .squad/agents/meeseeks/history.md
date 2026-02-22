@@ -10,6 +10,7 @@
 
 ## Learnings
 
+- **2026-02-20 — Hierarchical filter test coverage (#390):** Added 46 tests (24 work-items-tree, 22 prs-tree) covering level filter infrastructure. Key patterns: **LevelFilter lifecycle** — test get/set/clear/clearAll with event firing, verify undefined on missing keys. **getAvailableOptions()** — test all contextValue paths (github-backend, github-org, github-repo, ado-backend, ado-org, ado-project, and PR equivalents), verify correct option extraction (owners, repos, orgs, projects, types, labels, tags, states, statuses). **Hierarchy rendering with filters** — test getChildren() behavior when level filters applied to repo/project nodes, verify filter cascade (labels+states, types+tags+states, statuses+labels), test AND-across-groups label logic. **Edge cases** — test empty results when filter matches nothing, single backend configurations (GitHub-only, ADO-only), mixed backend (both GitHub and ADO). Commands not tested directly — extension-commands.test.ts already has mocks in place but no execution tests for filterLevel/filterPRLevel/clearLevelFilter/clearPRLevelFilter (noted as future P1 gap). Total: 746 tests passing (up from 700).
 
 📌 **Team update (2026-02-20):** Session state model simplified to 3 states: active, inactive, orphaned. Old model (working/waiting-on-input/idle/stale) removed. Test changes reflect deterministic state transitions based on shell execution only. — decided by Morty
 
