@@ -150,10 +150,7 @@ export class TerminalManager implements vscode.Disposable {
     if (config.launchCommand) {
       launchCmd = `${config.launchCommand} --resume ${uuid}`;
     } else {
-      const defaultAgent = vscode.workspace
-        .getConfiguration('editless.cli')
-        .get<string>('defaultAgent', 'squad');
-      launchCmd = buildCopilotCommand({ agent: defaultAgent, resume: uuid });
+      launchCmd = buildCopilotCommand({ agent: 'squad', resume: uuid });
     }
 
     const terminal = vscode.window.createTerminal({

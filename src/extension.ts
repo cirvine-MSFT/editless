@@ -34,7 +34,7 @@ import { launchAndLabel } from './launch-utils';
 const execFileAsync = promisify(execFile);
 
 function getCreateCommand(): string {
-  return vscode.workspace.getConfiguration('editless.cli').get<string>('createCommand', '');
+  return '';
 }
 
 export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {

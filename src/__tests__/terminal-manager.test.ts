@@ -46,8 +46,7 @@ vi.mock('vscode', () => ({
   workspace: {
     getConfiguration: () => ({
       get: (key: string, defaultValue?: unknown) => {
-        if (key === 'command') return 'copilot';
-        if (key === 'defaultAgent') return 'squad';
+        if (key === 'additionalArgs') return '';
         return defaultValue;
       },
     }),

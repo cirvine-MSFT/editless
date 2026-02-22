@@ -24,14 +24,11 @@ export interface CopilotCommandOptions {
 }
 
 /**
- * Returns the base CLI binary name from VS Code settings.
- * Defaults to `"copilot"` if not configured.
+ * Returns the base CLI binary name.
+ * Always returns `"copilot"`.
  */
 export function getCliCommand(): string {
-  const raw = vscode.workspace
-    .getConfiguration('editless.cli')
-    .get<string>('command', 'copilot');
-  return raw.replace(/\s*--agent\s+\$\(agent\)\s*/g, ' ').trim();
+  return 'copilot';
 }
 
 /**
@@ -85,13 +82,17 @@ export function buildCopilotCommand(options: CopilotCommandOptions = {}): string
 }
 
 /**
- * Build a default launch command using the VS Code setting for agent type.
- * This is the replacement for `getLaunchCommand()` / `$(agent)` interpolation.
+ * Build a default launch command with hardcoded agent type "squad".
+ * Reads `editless.cli.additionalArgs` and appends them as extraArgs.
  */
 export function buildDefaultLaunchCommand(): string {
-  const agentType = vscode.workspace
+  const additionalArgs = vscode.workspace
     .getConfiguration('editless.cli')
-    .get<string>('defaultAgent', 'squad');
+    .get<string>('additionalArgs', '');
 
-  return buildCopilotCommand({ agent: agentType });
+  const extraArgs = additionalArgs.trim()
+    ? additionalArgs.trim().split(/\s+/)
+    : undefined;
+
+  return buildCopilotCommand({ agent: 'squad', extraArgs });
 }
