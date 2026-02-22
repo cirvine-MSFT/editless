@@ -370,4 +370,84 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     expect(items).toHaveLength(1);
     expect(items[0].label).toContain('#1');
   });
+
+  it('should match labels with hyphens in the value (type:user-story)', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:user-story', 'release:v0.1'] }),
+        makeIssue({ number: 2, labels: ['type:bug', 'release:v0.1'] }),
+        makeIssue({ number: 3, labels: ['type:user-story'] }),
+      ],
+      { labels: ['type:user-story'] },
+    );
+    expect(items).toHaveLength(2);
+    expect(items.map(i => i.label)).toEqual(
+      expect.arrayContaining([expect.stringContaining('#1'), expect.stringContaining('#3')]),
+    );
+  });
+
+  it('should treat all states selected the same as showing all items', async () => {
+    const allIssues = [
+      makeIssue({ number: 1, assignees: ['user'], state: 'open' }),
+      makeIssue({ number: 2, assignees: [], state: 'open' }),
+      makeIssue({ number: 3, state: 'closed' }),
+    ];
+
+    // All states selected
+    const filtered = await getFilteredItems(allIssues, { states: ['open', 'active', 'closed'] });
+    // No filter
+    const unfiltered = await getFilteredItems(allIssues, {});
+
+    expect(filtered).toHaveLength(unfiltered.length);
+  });
+
+  it('should build description with multiple filter dimensions', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+
+    const provider = new WorkItemsTreeProvider();
+    const mockTreeView = { description: undefined as string | undefined };
+    provider.setTreeView(mockTreeView as any);
+
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    provider.setFilter({ repos: ['owner/repo'], labels: ['type:bug'], states: ['open'] });
+
+    expect(mockTreeView.description).toBe('repo:owner/repo · label:type:bug · state:open');
+  });
+
+  it('should clear description when filter is removed', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+
+    const provider = new WorkItemsTreeProvider();
+    const mockTreeView = { description: undefined as string | undefined };
+    provider.setTreeView(mockTreeView as any);
+
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    provider.setFilter({ repos: ['owner/repo'], labels: [], states: [] });
+    expect(mockTreeView.description).toBeDefined();
+
+    provider.clearFilter();
+    expect(mockTreeView.description).toBeUndefined();
+  });
+
+  it('should handle type labels with multiple hyphens (type:in-progress-review)', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:in-progress-review'] }),
+        makeIssue({ number: 2, labels: ['type:bug'] }),
+      ],
+      { labels: ['type:in-progress-review'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
 });

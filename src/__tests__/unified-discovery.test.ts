@@ -246,4 +246,79 @@ describe('discoverAll', () => {
       universe: 'staging',
     });
   });
+
+  it('filters squad.agent.md from squad folder but keeps agents in non-squad folder', () => {
+    // Folder A is a squad with squad.agent.md + helper.agent.md
+    const folderA = path.join(tmpDir, 'squad-project');
+    writeFixture('squad-project/.squad/team.md', '# Squad Project\n> A squad.\n**Universe:** prod\n');
+    writeFixture('squad-project/.github/agents/squad.agent.md', '# Squad\n> Governance.\n');
+    writeFixture('squad-project/.github/agents/helper.agent.md', '# Helper\n> Helps.\n');
+
+    // Folder B is NOT a squad, has its own agent
+    const folderB = path.join(tmpDir, 'plain-project');
+    writeFixture('plain-project/.github/agents/tools.agent.md', '# Tools\n> A tools agent.\n');
+
+    const registry = makeRegistry();
+    const result = discoverAll([wsFolder(folderA), wsFolder(folderB)], registry);
+
+    // squad.agent.md from squad folder should be filtered out
+    expect(result.find(i => i.type === 'agent' && path.basename(i.path) === 'squad.agent.md')).toBeUndefined();
+    // helper from squad folder should be kept
+    expect(result.find(i => i.id === 'helper')).toBeDefined();
+    // tools from plain folder should be kept
+    expect(result.find(i => i.id === 'tools')).toBeDefined();
+    // The squad itself should exist
+    expect(result.find(i => i.type === 'squad' && i.id === 'squad-project')).toBeDefined();
+  });
+
+  it('deduplicates squad.agent.md by id when same file exists in multiple workspace folders', () => {
+    // Both folders have squad.agent.md — only one should survive due to id dedup
+    const folderA = path.join(tmpDir, 'project-a');
+    writeFixture('project-a/.github/agents/squad.agent.md', '# Squad\n> First.\n');
+
+    const folderB = path.join(tmpDir, 'project-b');
+    writeFixture('project-b/.github/agents/squad.agent.md', '# Squad\n> Second.\n');
+
+    const registry = makeRegistry();
+    const result = discoverAll([wsFolder(folderA), wsFolder(folderB)], registry);
+
+    const squadAgents = result.filter(i => i.id === 'squad' && i.type === 'agent');
+    // Only one should survive (first wins dedup)
+    expect(squadAgents).toHaveLength(1);
+  });
+
+  it('handles case-insensitive path matching for squad.agent.md dedup on Windows', () => {
+    // The squad discovery path is lowercase internally — verify mixed-case paths still dedup
+    const wsDir = path.join(tmpDir, 'MySquad');
+    writeFixture('MySquad/.squad/team.md', '# My Squad\n> A squad.\n**Universe:** dev\n');
+    writeFixture('MySquad/.github/agents/squad.agent.md', '# Squad\n> Governance.\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(wsDir)], registry);
+
+    // squad.agent.md should still be filtered even with mixed-case folder name
+    const squadAgentMd = result.find(i => i.type === 'agent' && path.basename(i.path) === 'squad.agent.md');
+    expect(squadAgentMd).toBeUndefined();
+    // The squad itself should exist
+    expect(result.find(i => i.type === 'squad')).toBeDefined();
+  });
+
+  it('excludes registered squad by path with different casing', () => {
+    const workspaceDir = path.join(tmpDir, 'projects', 'my-project');
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    const squadDir = path.resolve(tmpDir, 'projects', 'CasedSquad');
+    writeFixture('projects/CasedSquad/.squad/team.md', '# Cased Squad\n> desc.\n**Universe:** test\n');
+
+    // Register with different casing
+    const registered: AgentTeamConfig = {
+      id: 'casedsquad', name: 'Cased Squad', path: squadDir.toUpperCase(),
+      icon: '🔷', universe: 'test',
+    };
+    const registry = makeRegistry([registered]);
+
+    const result = discoverAll([wsFolder(workspaceDir)], registry);
+
+    // Should be excluded because path matches case-insensitively (line 78/101)
+    expect(result.find(i => i.name === 'Cased Squad')).toBeUndefined();
+  });
 });
