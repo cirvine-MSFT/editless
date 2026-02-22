@@ -593,15 +593,17 @@ describe('EditlessTreeProvider — visibility filtering', () => {
     expect(roots[0].label).toContain('All agents hidden');
   });
 
-  it('"No agents yet" placeholder when truly empty', () => {
+  it('"No agents yet" welcome state when truly empty', () => {
     const registry = createMockRegistry([]);
     const visibility = { isHidden: () => false, getHiddenIds: () => [] };
     const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
 
     const roots = provider.getChildren();
 
-    expect(roots).toHaveLength(1);
-    expect(roots[0].label).toContain('No agents yet');
+    expect(roots).toHaveLength(3);
+    expect(roots[0].label).toContain('Welcome to EditLess');
+    expect(roots[1].label).toContain('Add a squad directory');
+    expect(roots[2].label).toContain('Discover agents in workspace');
   });
 });
 

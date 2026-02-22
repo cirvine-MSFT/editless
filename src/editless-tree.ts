@@ -195,15 +195,49 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
     if (items.length === 0) {
       const hasHiddenItems = (this._visibility?.getHiddenIds().length ?? 0) > 0;
-      const msg = new EditlessTreeItem(
-        hasHiddenItems
-          ? 'All agents hidden — use Show Hidden to restore'
-          : 'No agents yet — use + to add',
-        'category',
-        vscode.TreeItemCollapsibleState.None,
-      );
-      msg.iconPath = new vscode.ThemeIcon(hasHiddenItems ? 'eye-closed' : 'add');
-      items.push(msg);
+      if (hasHiddenItems) {
+        const msg = new EditlessTreeItem(
+          'All agents hidden — use Show Hidden to restore',
+          'category',
+          vscode.TreeItemCollapsibleState.None,
+        );
+        msg.iconPath = new vscode.ThemeIcon('eye-closed');
+        items.push(msg);
+      } else {
+        // First-time / empty workspace — welcome state
+        const welcome = new EditlessTreeItem(
+          'Welcome to EditLess',
+          'category',
+          vscode.TreeItemCollapsibleState.None,
+        );
+        welcome.iconPath = new vscode.ThemeIcon('rocket');
+        welcome.description = 'Get started below';
+        items.push(welcome);
+
+        const addSquad = new EditlessTreeItem(
+          'Add a squad directory',
+          'category',
+          vscode.TreeItemCollapsibleState.None,
+        );
+        addSquad.iconPath = new vscode.ThemeIcon('add');
+        addSquad.command = {
+          command: 'editless.addSquad',
+          title: 'Add Squad',
+        };
+        items.push(addSquad);
+
+        const discover = new EditlessTreeItem(
+          'Discover agents in workspace',
+          'category',
+          vscode.TreeItemCollapsibleState.None,
+        );
+        discover.iconPath = new vscode.ThemeIcon('search');
+        discover.command = {
+          command: 'editless.discoverSquads',
+          title: 'Discover',
+        };
+        items.push(discover);
+      }
     }
 
     return items;
@@ -306,6 +340,16 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
       for (const orphan of this.terminalManager.getOrphanedSessions().filter(o => o.squadId === squadId)) {
         children.push(this._buildOrphanItem(orphan));
+      }
+
+      // Hint when squad has no sessions yet
+      const hasTerminals = this.terminalManager.getTerminalsForSquad(squadId).length > 0;
+      const hasOrphans = this.terminalManager.getOrphanedSessions().some(o => o.squadId === squadId);
+      if (!hasTerminals && !hasOrphans) {
+        const hint = new EditlessTreeItem('No active sessions', 'category');
+        hint.description = 'Click + to launch';
+        hint.iconPath = new vscode.ThemeIcon('info');
+        children.push(hint);
       }
     }
 
