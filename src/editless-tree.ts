@@ -292,7 +292,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         const title = customLabel ? `🏷️ ${customLabel}` : info.displayName;
         const item = new EditlessTreeItem(title, 'terminal');
         item.terminal = terminal;
-        item.description = relative;
+        item.description = sessionState === 'launching' ? 'launching…' : relative;
         item.iconPath = getStateIcon(sessionState);
         item.contextValue = 'terminal';
         item.tooltip = this._buildTerminalTooltip(info.displayName, relative, sessionCtx, sessionState, lastActivityAt);

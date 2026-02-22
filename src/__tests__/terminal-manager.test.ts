@@ -925,11 +925,12 @@ describe('TerminalManager', () => {
     describe('SessionState type', () => {
       it('should export SessionState type with expected values', () => {
         const validStates: Array<import('../terminal-manager').SessionState> = [
+          'launching',
           'active',
           'inactive',
           'orphaned',
         ];
-        expect(validStates).toHaveLength(3);
+        expect(validStates).toHaveLength(4);
       });
     });
 
@@ -1007,15 +1008,15 @@ describe('TerminalManager', () => {
         expect(mgr.getSessionState(terminal)).toBe('inactive');
       });
 
-      it('should return inactive for terminal with recent activity but no execution', () => {
+      it('should return launching for terminal with no events yet (#337)', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
-        // Simulate recent activity (just created)
+        // Simulate recent activity (just created) — still in launching state
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('inactive');
+        expect(state).toBe('launching');
       });
 
       it('should return inactive for recently-reconnected terminal with old lastSeenAt', () => {
@@ -1050,14 +1051,14 @@ describe('TerminalManager', () => {
     });
 
     describe('getSessionState API', () => {
-      it('should return correct state for tracked terminal', () => {
+      it('should return launching state for newly-tracked terminal (#337)', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('inactive');
+        expect(state).toBe('launching');
       });
 
       it('should return orphaned for persisted-only session', () => {
@@ -1101,6 +1102,10 @@ describe('TerminalManager', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
 
+        const launchingIcon = mgr.getStateIcon('launching');
+        expect(launchingIcon).toBeDefined();
+        expect(launchingIcon.id).toBe('loading~spin');
+
         const activeIcon = mgr.getStateIcon('active');
         expect(activeIcon).toBeDefined();
         expect(activeIcon.id).toBe('loading~spin');
@@ -1114,9 +1119,10 @@ describe('TerminalManager', () => {
         expect(orphanedIcon.id).toBe('eye-closed');
       });
 
-      it('should return unique icons for all session states', () => {
+      it('should return unique icons for non-transient session states', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
+        // launching intentionally shares loading~spin with active — both mean "working"
         const states: SessionState[] = ['active', 'inactive', 'orphaned'];
         const icons = states.map(s => mgr.getStateIcon(s).id);
         expect(new Set(icons).size).toBe(states.length);
@@ -1127,6 +1133,9 @@ describe('TerminalManager', () => {
         const mgr = new TerminalManager(ctx);
 
         const info = makePersistedEntry();
+
+        const launchingDesc = mgr.getStateDescription('launching', info);
+        expect(launchingDesc).toContain('launching');
 
         const activeDesc = mgr.getStateDescription('active', info);
         expect(activeDesc.length).toBeGreaterThan(0);
@@ -1152,14 +1161,14 @@ describe('TerminalManager', () => {
     });
 
     describe('session state defaults (regression tests for #226)', () => {
-      it('should default to inactive when no shell execution is active', () => {
+      it('should show launching state immediately after launchTerminal (#337)', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('inactive');
+        expect(state).toBe('launching');
       });
 
       it('should show inactive after shell execution completes', () => {
@@ -1170,7 +1179,7 @@ describe('TerminalManager', () => {
 
         const execution = { commandLine: { value: 'echo "test"' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
-        // Shell execution alone no longer drives state — events.jsonl does
+        // Shell execution clears launching state
         expect(mgr.getSessionState(terminal)).toBe('inactive');
 
         capturedShellEndListener({ terminal, execution });
@@ -1178,18 +1187,18 @@ describe('TerminalManager', () => {
         expect(state).toBe('inactive');
       });
 
-      it('should stay inactive when execution starts (events.jsonl drives state)', () => {
+      it('should transition from launching to inactive when execution starts (#337)', () => {
         const ctx = makeMockContext();
         const mgr = new TerminalManager(ctx);
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
-        expect(mgr.getSessionState(terminal)).toBe('inactive');
+        expect(mgr.getSessionState(terminal)).toBe('launching');
 
         const execution = { commandLine: { value: 'npm test' } } as vscode.TerminalShellExecution;
         capturedShellStartListener({ terminal, execution });
         
-        // Shell execution alone no longer drives state — events.jsonl does
+        // Shell execution clears launching state → inactive (events.jsonl drives active)
         expect(mgr.getSessionState(terminal)).toBe('inactive');
       });
 

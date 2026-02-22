@@ -9,7 +9,7 @@ import { buildCopilotCommand } from './copilot-cli-builder';
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------
 
-export type SessionState = 'active' | 'inactive' | 'orphaned';
+export type SessionState = 'launching' | 'active' | 'inactive' | 'orphaned';
 
 export interface TerminalInfo {
   id: string;
@@ -58,6 +58,8 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _lastActivityAt = new Map<vscode.Terminal, number>();
   private readonly _sessionWatchers = new Map<vscode.Terminal, vscode.Disposable>();
   private readonly _lastSessionEvent = new Map<vscode.Terminal, SessionEvent>();
+  private readonly _launchingTerminals = new Set<vscode.Terminal>();
+  private readonly _launchTimers = new Map<vscode.Terminal, ReturnType<typeof setTimeout>>();
   private _matchTimer: ReturnType<typeof setTimeout> | undefined;
   private _persistTimer: ReturnType<typeof setInterval> | undefined;
   private _sessionResolver?: SessionContextResolver;
@@ -73,6 +75,7 @@ export class TerminalManager implements vscode.Disposable {
 
     this._disposables.push(
       vscode.window.onDidCloseTerminal(terminal => {
+        this._clearLaunching(terminal);
         this._shellExecutionActive.delete(terminal);
         this._lastActivityAt.delete(terminal);
         this._lastSessionEvent.delete(terminal);
@@ -87,6 +90,7 @@ export class TerminalManager implements vscode.Disposable {
         }
       }),
       vscode.window.onDidStartTerminalShellExecution(e => {
+        this._clearLaunching(e.terminal);
         this._shellExecutionActive.set(e.terminal, true);
         this._lastActivityAt.set(e.terminal, Date.now());
         this._onDidChange.fire();
@@ -97,6 +101,28 @@ export class TerminalManager implements vscode.Disposable {
         this._onDidChange.fire();
       }),
     );
+  }
+
+  // -- Launch state tracking (#337) ------------------------------------------
+
+  private static readonly LAUNCH_TIMEOUT_MS = 10_000;
+
+  private _setLaunching(terminal: vscode.Terminal): void {
+    this._launchingTerminals.add(terminal);
+    const timer = setTimeout(() => {
+      this._clearLaunching(terminal);
+      this._onDidChange.fire();
+    }, TerminalManager.LAUNCH_TIMEOUT_MS);
+    this._launchTimers.set(terminal, timer);
+  }
+
+  private _clearLaunching(terminal: vscode.Terminal): void {
+    this._launchingTerminals.delete(terminal);
+    const timer = this._launchTimers.get(terminal);
+    if (timer) {
+      clearTimeout(timer);
+      this._launchTimers.delete(terminal);
+    }
   }
 
   // -- Public API -----------------------------------------------------------
@@ -149,10 +175,12 @@ export class TerminalManager implements vscode.Disposable {
     };
 
     this._terminals.set(terminal, info);
+    this._setLaunching(terminal);
 
     // Start watching the session for activity (#324)
     if (this._sessionResolver) {
       const watcher = this._sessionResolver.watchSession(uuid, event => {
+        this._clearLaunching(terminal);
         this._lastSessionEvent.set(terminal, event);
         this._lastActivityAt.set(terminal, Date.now());
         this._onDidChange.fire();
@@ -365,10 +393,12 @@ export class TerminalManager implements vscode.Disposable {
       launchCommand: entry.launchCommand,
       squadPath: entry.squadPath,
     });
+    this._setLaunching(terminal);
 
     // Start watching the relaunched session for activity
     if (entry.agentSessionId && this._sessionResolver) {
       const watcher = this._sessionResolver.watchSession(entry.agentSessionId, event => {
+        this._clearLaunching(terminal);
         this._lastSessionEvent.set(terminal, event);
         this._lastActivityAt.set(terminal, Date.now());
         this._onDidChange.fire();
@@ -463,6 +493,11 @@ export class TerminalManager implements vscode.Disposable {
     const terminal = terminalOrId;
     const info = this._terminals.get(terminal);
     if (!info) { return undefined; }
+
+    // Show launching spinner until events arrive or timeout (#337)
+    if (this._launchingTerminals.has(terminal)) {
+      return 'launching';
+    }
 
     // Prefer events.jsonl data over shell execution tracking — it reflects
     // the actual copilot agent state rather than the outer shell process.
@@ -632,6 +667,11 @@ export class TerminalManager implements vscode.Disposable {
     if (this._persistTimer !== undefined) {
       clearInterval(this._persistTimer);
     }
+    for (const timer of this._launchTimers.values()) {
+      clearTimeout(timer);
+    }
+    this._launchTimers.clear();
+    this._launchingTerminals.clear();
     for (const w of this._sessionWatchers.values()) {
       w.dispose();
     }
@@ -661,6 +701,7 @@ function isWorkingEvent(eventType: string): boolean {
 
 export function getStateIcon(state: SessionState): vscode.ThemeIcon {
   switch (state) {
+    case 'launching':
     case 'active':
       return new vscode.ThemeIcon('loading~spin');
     case 'inactive':
@@ -674,6 +715,8 @@ export function getStateIcon(state: SessionState): vscode.ThemeIcon {
 
 export function getStateDescription(state: SessionState, lastActivityAt?: number): string {
   switch (state) {
+    case 'launching':
+      return 'launching…';
     case 'orphaned':
       return 'previous session';
     case 'active':
