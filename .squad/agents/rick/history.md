@@ -192,6 +192,25 @@ Final triage session before Monday v0.1 deadline. Analyzed all 25 open issues an
 Created two GitHub umbrella issues to track architectural cleanup and test quality work outside v0.1 release scope. **#246: Reduce coupling and split god objects** — Targets extension.ts (943 lines, 23 imports, 11+ managers), editless-tree.ts (453 lines, 9 module coupling), terminal-manager.ts (496 lines, 3 mixed concerns), work-items-tree.ts (443 lines, GitHub+ADO coupling), and scanner.ts (337 lines, facade work). Success criteria: all modules <300 lines, max 8 imports per module, clear single-concern design, circular dep check passes. **#247: Fix LLM-generated test antipatterns** — Addresses mock-call assertions without result validation (~25+ instances), tautological tests (16 in work-items-tree), shallow smoke tests (18+), fragile mock coupling (~40 in extension-commands), missing edge case coverage (scanner, status-bar, terminal-manager), and misleading test names (4+). Success criteria: all tests verify mocks AND actual behavior, no tautological tests, edge case coverage, accurate test names, public-API-based construction. Both issues tagged `type:chore` and `release:backlog`. These are non-urgent architectural improvements that can be tackled post-v0.1 as team capacity allows. Modularity work will improve maintainability and reduce future refactor friction; test quality work will increase signal-to-noise and confidence in the suite.
 
 ### 2026-02-17: Phase 2 addAgent feature issue created — #249
+
+### 2026-02-22: Architecture review — hierarchical filter system (commits 873c8fe→98ebb34)
+Reviewed the hierarchical filter architecture for Work Items and PRs trees introduced in issue #390. Four commits restructured flat filters into cascading backend→org→project/repo→items hierarchy with per-level inline filtering. **APPROVED WITH NOTES.** Core architecture is sound and consistent. The LevelFilter abstraction is clean, the cascading principle is correctly implemented, and context value naming follows clear conventions. The backend collapse logic (auto-hide hierarchy when single backend or single repo) delivers good UX. Global filter trim (sources-only) correctly delegates detailed filtering (states/labels/types) to per-level nodes.
+
+**Issues identified:**
+
+🟡 **Code duplication — moderate extraction opportunity:** WorkItemsTreeProvider and PRsTreeProvider share identical patterns for level filter management (_levelFilters Map, get/set/clear/clearAll methods line-for-line identical), matchesLabelFilter logic (prefix grouping + AND/OR), and hierarchy construction patterns (_getGitHubOwnerNodes, _getAdoOrgNodes structure). Recommend extracting shared logic to a base class or utility module in v0.2. Not a blocking issue — duplication is localized and stable.
+
+🟡 **Context value collision risk — low:** Work items use `ado-backend`, `github-backend`; PRs use `ado-pr-backend`, `github-pr-backend`. The `-pr-` infix prevents collisions in package.json when clauses. Pattern is safe but creates coupling: if another tree needs backend nodes, the naming convention must be explicitly documented. Consider a context value naming convention doc in .squad/decisions.
+
+🟡 **LevelFilter vs PRLevelFilter divergence:** WorkItemsTreeProvider uses LevelFilter with types/tags/labels/states/selectedChildren. PRsTreeProvider uses PRLevelFilter with statuses/labels/selectedChildren. Difference: "states" vs "statuses" (semantically identical), "types" and "tags" absent from PRLevelFilter. The asymmetry is correct (ADO work items have types/tags; PRs don't) but could cause confusion. Recommend documenting the semantic equivalence of states/statuses in code comments or unifying to a single term.
+
+🟢 **ADO single-org-single-project assumption is future-proof:** Code reads org/project from config as single strings and stores in _adoOrg/_adoProject private fields. The hierarchy always shows exactly one org and one project node. This is NOT a constraint — to support multi-org/multi-project, you'd just change setAdoConfig to accept arrays and expand _getAdoOrgNodes/_getAdoProjectNodes to loop. The data model is ready for the change. Current UX assumption (single org/project) matches user config reality.
+
+🟢 **Filter cascade correctness verified:** getAvailableOptions correctly returns direct children at each level (backend→owners/orgs, org→repos/projects, repo/project→labels/states/types). Cascade logic in getChildren applies parent filter first (applyRuntimeFilter) then per-level filter. Milestone grouping preserves filter state correctly via repoFilter lookup. No edge cases found where filters produce empty results unexpectedly (all nodes show item counts in descriptions).
+
+🟢 **Command duplication is acceptable:** filterLevel/clearLevelFilter vs filterPRLevel/clearPRLevelFilter are duplicated but context-bound (different tree views, different item types, different filter interfaces). Sharing would require generic typing and lose clarity. Current approach is pragmatic.
+
+**Decision:** No blocking issues. Code duplication and naming can be addressed in v0.2 modularity refactor (issue #246 already tracks god object splitting). The architecture scales cleanly and the implementation is correct.
 Created GitHub issue #249 to implement Phase 2 of the addAgent work from #125. This issue adds local/repo mode prompting to the `editless.addAgent` command. Dependency on #101 (`createCommand` in cli-provider.ts) is resolved. Assigned to Morty (implementation) and Meeseeks (tests) with labels `type:feature`, `release:backlog`, and `squad:morty`.
 
 ### 2026-02-17: PR #273 squad init fallback logic — changes requested
@@ -357,6 +376,44 @@ Reviewed `terminal-manager.ts` and `session-context.ts` for Phase 2 terminal int
 **What's solid:** Module boundary is clean (session-context.ts has zero vscode imports, uses own Disposable interface). Watcher lifecycle in TerminalManager is thorough — onDidCloseTerminal cleans per-terminal, dispose() cleans all. Pre-generated UUID eliminates session-detection race condition. Debounced fs.watch with tail reading is efficient. focusTerminal string-overload validates liveness correctly. `watchSessionDir` is unused in production code (forward-looking for Phase 3) — acceptable as speculative API.
 
 **Decision:** Filed `.squad/decisions/inbox/rick-phase2-review.md` documenting the relaunchSession guard requirement.
+## Learnings
+
+### 2026-02-23: v0.1.1 Code Review — Performance & Reliability Wins
+
+Reviewed PR #385 (v0.1.1 release candidate). **Verdict: APPROVED.**
+
+**Key validation:**
+1.  **Performance:** CWD-indexed session cache (`SessionContextResolver`) eliminates O(N) file reads per poll. `parseSimpleYaml` is a smart optimization for metadata.
+2.  **Reliability:** Orphan matching strategy is now deterministic (Index → Exact → Emoji-stripped). Removed risky substring fallback that caused false positives.
+3.  **UX:** Launch progress indicator (`launching` state) bridges the gap between terminal creation and first event.
+4.  **Quality:** 654 tests passing. New tests cover race conditions and edge cases.
+
+**Advisory:**
+-   `SessionContextResolver` watcher retry loop is still unbounded (intentional for now, but monitor for CPU usage in v0.2).
+-   Work items ADO integration is clean but assumes flat list first, then hierarchy. Large ADO queries might need pagination in future.
+
+**Decision:** Merging PR #385 for v0.1.1 release.
+
+### 2026-02-23: v0.1.1 Follow-up Review — Discovery & Work Item Filters
+
+**Task:** Review changes on branch v0.1.1 (e4bf49b..HEAD).
+
+1.  **Discovery dedup fix:** ✅ APPROVED. Correctly filters `squad.agent.md` when it's part of a discovered squad structure. Tests cover both the exclusion and the standalone case.
+2.  **#387 Unified work items filter & Harmonization:** ✅ APPROVED. Unifying the filter UI is a good UX improvement. Mapping "Bug" -> `type:bug` is a sensible default for GitHub. "Labels" vs "Tags" harmonization reduces cognitive load for users switching between providers.
+3.  **#386 Refresh Tree after Dashboard Open:** ✅ APPROVED WITH NOTES. The fix addresses the stale tree issue. **Note:** `squadui.refreshTree` is a tactical fix. Ideally, the SquadUI extension should broadcast a change event that EditLess listens to, rather than EditLess imperatively refreshing it. Acceptable for now.
+
+**Decision:** Filed `.squad/decisions/inbox/rick-unified-work-item-types.md`.
+
+### 2026-02-23: Review Cycle 2 Summary
+
+**Reviewed 3 changes — all APPROVED:**
+1. Discovery dedup fix
+2. #387 Unified work items filter & Harmonization
+3. #386 SquadUI Refresh Tree after Dashboard Open
+
+**Decision filed:** Unified Work Item Types (`.squad/decisions/inbox/rick-unified-work-item-types.md`) — merged into `.squad/decisions.md`.
+
+**Meeseeks test audit:** 682 → 700 tests (+18 new tests), 52 new assertions across 3 files: `squad-ui-integration`, `work-items-tree`, `unified-discovery`.
 
 ### 2026-02-22: Squad Ecosystem Integration Roadmap — Multi-Modality Architecture Plan
 

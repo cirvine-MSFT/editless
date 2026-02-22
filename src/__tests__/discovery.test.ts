@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { discoverAgentTeams, autoRegisterWorkspaceSquads } from '../discovery';
+import { discoverAgentTeams, autoRegisterWorkspaceSquads, readUniverseFromRegistry } from '../discovery';
 import type { AgentTeamConfig } from '../types';
 
 // Mock vscode module
@@ -454,5 +454,102 @@ describe('autoRegisterWorkspaceSquads', () => {
     autoRegisterWorkspaceSquads(registry as never);
 
     expect(added).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Universe auto-detection from registry.json
+// ---------------------------------------------------------------------------
+
+describe('readUniverseFromRegistry', () => {
+  it('reads universe from .squad/casting/registry.json', () => {
+    writeFixture('squad-a/.squad/casting/registry.json', JSON.stringify({
+      agents: {
+        rick: { persistent_name: 'Rick', universe: 'Rick and Morty', status: 'active' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-a'))).toBe('Rick and Morty');
+  });
+
+  it('reads universe from .ai-team/casting/registry.json as fallback', () => {
+    writeFixture('squad-b/.ai-team/casting/registry.json', JSON.stringify({
+      agents: {
+        homer: { persistent_name: 'Homer', universe: 'The Simpsons', status: 'active' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-b'))).toBe('The Simpsons');
+  });
+
+  it('returns undefined when registry.json does not exist', () => {
+    fs.mkdirSync(path.join(tmpDir, 'squad-c'), { recursive: true });
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-c'))).toBeUndefined();
+  });
+
+  it('returns undefined when registry.json is malformed', () => {
+    writeFixture('squad-d/.squad/casting/registry.json', 'not valid json {{{');
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-d'))).toBeUndefined();
+  });
+
+  it('skips inactive agents', () => {
+    writeFixture('squad-e/.squad/casting/registry.json', JSON.stringify({
+      agents: {
+        rick: { persistent_name: 'Rick', universe: 'Inactive Universe', status: 'inactive' },
+        morty: { persistent_name: 'Morty', universe: 'Active Universe', status: 'active' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-e'))).toBe('Active Universe');
+  });
+
+  it('returns undefined when all agents are inactive', () => {
+    writeFixture('squad-f/.squad/casting/registry.json', JSON.stringify({
+      agents: {
+        rick: { persistent_name: 'Rick', universe: 'Rick and Morty', status: 'inactive' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-f'))).toBeUndefined();
+  });
+});
+
+describe('discoverAgentTeams universe fallback', () => {
+  it('auto-detects universe from registry.json when team.md lacks Universe marker', () => {
+    writeFixture('squad-a/.squad/team.md', '# Alpha Squad\n> The alpha team.\n');
+    writeFixture('squad-a/.squad/casting/registry.json', JSON.stringify({
+      agents: {
+        rick: { persistent_name: 'Rick', universe: 'Rick and Morty', status: 'active' },
+      },
+    }));
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].universe).toBe('Rick and Morty');
+  });
+
+  it('team.md Universe marker takes priority over registry.json', () => {
+    writeFixture('squad-a/.squad/team.md', '# Alpha Squad\n> The alpha team.\n**Universe:** Explicit Universe\n');
+    writeFixture('squad-a/.squad/casting/registry.json', JSON.stringify({
+      agents: {
+        rick: { persistent_name: 'Rick', universe: 'Rick and Morty', status: 'active' },
+      },
+    }));
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].universe).toBe('Explicit Universe');
+  });
+
+  it('falls back to unknown when registry.json is malformed', () => {
+    writeFixture('squad-a/.squad/team.md', '# Alpha Squad\n> The alpha team.\n');
+    writeFixture('squad-a/.squad/casting/registry.json', 'not valid json');
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].universe).toBe('unknown');
   });
 });

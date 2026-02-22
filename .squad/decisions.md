@@ -1,4 +1,70 @@
 
+### 2026-02-23: Default Exclusion of Closed/Merged Items
+
+**Date:** 2026-02-23  
+**Author:** Morty  
+**Status:** Implemented  
+**Issue:** #390
+
+## Context
+
+Work items and PRs trees showed closed/merged items by default, cluttering the view with stale items.
+
+## Decision
+
+All runtime filters now exclude closed work items and merged/closed PRs by default when no state/status filter is explicitly set. Users can see them by explicitly selecting those states in the filter QuickPick.
+
+## Impact
+
+- Tests that need closed/merged items must explicitly set state/status filters
+- `applyRuntimeFilter`, `applyAdoRuntimeFilter`, `_applyGitHubLevelFilter`, and `_applyAdoLevelFilter` all enforce this
+- Filter descriptions and `isFiltered` remain unchanged — this is a default behavior, not a visible filter state
+
+---
+
+### 2026-02-23: Filter UX Redesign: Hierarchical Backend-Aware Approach
+
+**Date:** 2026-02-23  
+**Status:** Approved (Morty implementing)  
+**Context:** Work items filter breaks for multi-backend users (GitHub + ADO) due to flat QuickPick mixing incompatible filter dimensions.
+
+## Decision
+
+Adopt a **hierarchical, backend-scoped filter model** with per-level filtering in the tree view (Variant D from design exploration).
+
+### Core Changes
+
+1. **Tree hierarchy**: Backend (ADO/GitHub) → Org → Project/Repo hierarchy with inline filter icons `[≡]` on each level
+2. **Backend-aware matching**: Filter dimensions apply only where relevant—ADO types only filter ADO items, GitHub labels only affect GitHub repos
+3. **Per-level QuickPick**: Clicking a level's filter icon opens a scoped QuickPick showing only options for that level
+4. **Global toolbar filter**: Preserved for quick multi-backend filtering with smart backend detection
+5. **Filter state display**: Group nodes show active filters inline (e.g., `Azure DevOps · Bug, Active`)
+
+### Why Hierarchical Over Flat
+
+- ✅ **No cross-contamination**: ADO types can't accidentally hide GitHub issues
+- ✅ **Intuitive scoping**: Users filter at the level they care about
+- ✅ **VS Code native**: Inline actions + context menus are standard patterns
+- ✅ **Addresses all pain points**: Type filter confusion, label scope mismatch, mixed flat options
+
+### Architecture Changes
+
+- `WorkItemsFilter`: Split `labels` → `githubLabels` + `adoTags`, rename `types` → `adoTypes`
+- `applyRuntimeFilter`: Only apply relevant filter dimensions per backend
+- `TreeItem.contextValue`: New values for backend/org/project/repo to scope filters
+
+### Out of Scope (Later Phases)
+
+- Filter persistence across sessions (intentional—filters are ephemeral)
+- Per-repo filter profiles (overkill for MVP)
+
+## Next Steps
+
+1. Morty: Implement hierarchical tree with backend nodes
+2. Morty: Add inline filter icons and scoped QuickPicks
+3. Summer: Review implementation UX
+
+---
 
 ### 2026-02-18: Dev Tooling: Isolated Environment Strategy
 
@@ -7102,6 +7168,156 @@ Process lifecycle fully controlled by EditLess
 
 ---
 
+## Jaguar ACP Deep Dive (Phase M5, 2026-02-22)
+
+**Author:** Jaguar (Copilot SDK Expert)
+
+Definitive analysis of the Agent Client Protocol (ACP) for EditLess integration. Key findings:
+
+- ACP is a JSON-RPC 2.0 standard (not GitHub-proprietary) for editor ↔ AI agent communication
+- Copilot CLI supports ACP in public preview as of Jan 28, 2026
+- ACP replaces the terminal UI entirely (headless subprocess with structured JSON-RPC communication)
+- Provides typed tool call content, permission interception, plan visibility, and session loading
+- **Recommendation:** Phase 1 (current) use Option A (Terminal + events.jsonl). Phase 2+ consider Option B (Full ACP) if EditLess evolves into full IDE panel ownership.
+
+**Sources:** ACP Spec, GitHub Docs, live testing with Copilot CLI v0.0.414
+
+---
+
+## ACP Model/Mode Switching — Log Only for Now (2026-02-23)
+
+**Author:** Jaguar
+
+UI dropdowns for model and mode selection are wired but protocol calls are deferred. session/new returns available models/modes, but no dedicated session/changeModel or session/changeMode method exists in current ACP spec.
+
+**Decision:** Log selection changes to output channel; implement switching once mechanism is discovered in future ACP SDK versions (pre-1.0 protocol still evolving).
+
+---
+
+## Phase 2 Test Coverage Gaps — 6 Tests Required (2026-02-20)
+
+**Author:** Meeseeks (Tester)
+
+Existing 18 Phase 2 tests are well-structured but miss critical session watcher lifecycle coverage.
+
+**Required additions:**
+- P0: launchTerminal calls watchSession with pre-generated UUID
+- P0: Watcher cleanup on terminal close
+- P0: dispose() clears all session watchers  
+- P0: Watcher wiring in econnectSession and elaunchSession
+- P1: Custom config.launchCommand path with --resume UUID append
+- P1: Malformed JSON graceful degradation in watchSession
+
+**Rationale:** FS watchers are a known source of resource leaks if dispose isn't called. Watcher lifecycle is the core new behavior in Phase 2.
+
+---
+
+## Windows Shell Quoting in ProcessPool Tests (2026-02-20)
+
+**Author:** Meeseeks
+
+When writing integration tests for ProcessPool (uses spawn() with shell: true), avoid console.log() in -e/-p arguments and single-quoted literals. On Windows, shell: true routes through cmd.exe which strips single quotes and interprets parentheses as grouping.
+
+**Safe patterns:** 
+ode --version, 
+ode -e "process.exit(42)", 
+ode -p "'string'" does NOT work
+
+---
+
+## ACP Terminal Operations Use child_process.spawn, Not VS Code Terminals (2026-02-22)
+
+**Author:** Morty
+
+ACP 	erminal/create, 	erminal/output, 	erminal/kill implemented with child_process.spawn() in ProcessPool class, not VS Code Terminal API.
+
+**Rationale:** ACP requires programmatic stdout/stderr capture and exit code tracking. VS Code Terminal API is a rendering surface only.
+
+**Impact:** ProcessPool is Disposable; DefaultAcpRequestHandler owns instance; xtension.ts calls handler.dispose() on ACP panel close. File writes auto-approve for now (spike scope).
+
+---
+
+## Terminal UUID Pre-generation Pattern (2026-02-21)
+
+**Author:** Morty
+
+Implemented across issues #323, #324, #326:
+
+**UUID Pre-generation:** Generate crypto.randomUUID() before launching terminal; pass to CLI via --resume <uuid>. Eliminates race conditions and orphan detection. Immediate session tracking from terminal creation.
+
+**Terminal Options:** isTransient: true (prevents zombie terminals), iconPath: new vscode.ThemeIcon('terminal'), env vars EDITLESS_TERMINAL_ID, EDITLESS_SQUAD_ID, EDITLESS_SQUAD_NAME
+
+**File Watching:** SessionContextResolver.watchSession(sessionId, callback) uses s.watch() with 100ms debouncing, tail-reads events.jsonl, auto-retries if file doesn't exist (1s interval). Returns VS Code Disposable.
+
+**Stable Focus:** ocusTerminal() accepts 	erminal | string. String ID lookups find terminal from map, validates existence before showing.
+
+**Backward Compatibility:** detectSessionIds() retained for pre-UUID terminals.
+
+---
+
+## Terminal Constants Bumped (#328, 2026-02-21)
+
+**Author:** Morty
+
+| Constant | Old | New | Rationale |
+|---|---|---|---|
+| EVENT_CACHE_TTL_MS | 3s | 10s | Reduce events.jsonl disk I/O |
+| STALE_SESSION_DAYS | 7 | 14 | Sessions resumable longer |
+| MAX_REBOOT_COUNT | 2 | 5 | Orphans survive more restarts |
+| isWorkingEvent() types | 5 | 9 | Added assistant.thinking, assistant.code_edit, tool.result, session.resume |
+
+Note: IDLE_THRESHOLD_MS and STALE_THRESHOLD_MS removed in PR #354.
+
+---
+
+## Phase 2 Code Review — APPROVE with Advisory Notes (2026-02-21)
+
+**Author:** Rick (Lead)
+
+**Approved:** UUID pre-generation, TerminalOptions, focusTerminal string overload, fs.watch lifecycle, buildCopilotCommand integration
+
+**Advisory (non-blocking):**
+1. Soft validation in elaunchSession — shows error but continues; consider early return
+2. Unbounded retry in watchSession.setupWatch() — retries 1s forever; recommend max ~30 retries or exponential backoff
+3. watchSessionDir is dead code (not called from production; acceptable as Phase 3 forward-looking API)
+
+**Platform note:** s.watch behavior differs (macOS kqueue, Linux inotify, Windows ReadDirectoryChangesW); 100ms debounce mitigates.
+
+---
+
+## Empty State & Onboarding UX (2026-02-22)
+
+**Author:** Summer
+
+Three distinct empty states implemented:
+
+1. **First-time / empty workspace:** $(rocket) "Welcome to EditLess" + $(add) "Add a squad directory" + $(search) "Discover agents"
+2. **All items hidden:** $(eye-closed) "All agents hidden" (power-user message, never on first launch)
+3. **Squad with zero sessions:** $(info) "No active sessions"
+
+**Icon conventions:** ocket = welcome, dd = create, search = discover, info = hint, ye-closed = hidden (power user)
+
+**Rationale:** First-time user sees clear, clickable actions; returning users see appropriate context for their state.
+
+---
+
+## Unified Work Item Types (2026-02-22)
+
+**Author:** Rick (Lead)
+**Status:** Accepted
+
+**Context:** We support both Azure DevOps (Work Items) and GitHub (Issues). ADO has native "Types" (Bug, User Story, Task), while GitHub uses labels.
+
+**Decision:** We will treat GitHub labels starting with `type:` as equivalent to ADO Work Item types.
+- `type:bug` ≈ Bug
+- `type:feature` ≈ Feature/User Story
+- `type:task` ≈ Task
+
+The UI will present a unified "Type" filter that maps to these underlying representations.
+
+**Consequences:**
+- Users must follow `type:{name}` convention in GitHub for filters to work.
+- We standardized on "Labels" as the UI term for tags/labels across both providers.
 ### 2026-02-22: Squad Ecosystem Integration Roadmap — 3-Phase Plan
 
 **Author:** Rick (Orchestration)  
@@ -7171,6 +7387,67 @@ SquadUI v0.7.3 surface sufficient for Tier 1 integration (4 hours, v0.1). Keep t
 
 
 ---
+
+# Decision: Context Value Naming Convention for Tree View Nodes
+
+**Date:** 2026-02-22  
+**Author:** Rick  
+**Context:** Architecture review of hierarchical filter implementation (#390)  
+**Status:** Observation / Recommended Convention
+
+## Background
+
+The hierarchical filter implementation (commits 873c8fe→98ebb34) introduced backend-aware context values for Work Items and PRs tree nodes:
+
+- **Work Items:** `ado-backend`, `github-backend`, `ado-org`, `ado-project`, `github-org`, `github-repo`
+- **PRs:** `ado-pr-backend`, `github-pr-backend`, `ado-pr-org`, `ado-pr-project`, `github-pr-org`, `github-pr-repo`
+
+The `-pr-` infix prevents collisions when the same logical node type (e.g., "backend") appears in different tree views.
+
+## Decision
+
+**Adopt a naming convention for context values when multiple tree views need similar hierarchical structures:**
+
+```
+{source}-{domain}-{level}
+```
+
+Where:
+- `source` = backend provider (e.g., `ado`, `github`)
+- `domain` = tree-specific namespace (e.g., `pr`, `workitem`, omitted if unique)
+- `level` = hierarchy level (e.g., `backend`, `org`, `project`, `repo`)
+
+**Examples:**
+- Work Items (domain omitted): `ado-backend`, `github-org`, `ado-project`
+- PRs: `ado-pr-backend`, `github-pr-org`
+- Future (hypothetical) commits tree: `ado-commit-backend`, `github-commit-repo`
+
+## Rationale
+
+1. **Collision Prevention:** package.json `when` clauses match context values across all tree views. Without namespacing, `ado-backend` in Work Items would conflict with `ado-backend` in PRs.
+
+2. **Pattern Consistency:** When adding new hierarchical trees, developers can follow this convention without reverse-engineering existing code.
+
+3. **Regex Maintainability:** package.json uses regexes like `/^(ado|github)-pr-(backend|org|project|repo)$/` to match nodes. The convention makes these patterns predictable.
+
+## Implementation Notes
+
+- Context values set via `item.contextValue = 'ado-pr-backend'` in tree provider's `getChildren()`.
+- package.json contributions use regex patterns for inline menus:
+  ```json
+  "when": "view == editlessPRs && viewItem =~ /^(ado|github)-pr-(backend|org|project|repo)$/"
+  ```
+
+## Non-Impact
+
+This is **not a breaking change**. Existing context values don't need refactoring — they already follow this pattern. This decision documents the implicit convention for future development.
+
+## References
+
+- Issue #390 — Hierarchical filter implementation
+- `src/work-items-tree.ts` lines 352, 368, 391, 395
+- `src/prs-tree.ts` lines 315, 331, 349, 369
+- `package.json` lines 515, 530 (menu contributions)
 
 ## Launch Helper Extraction Pattern
 

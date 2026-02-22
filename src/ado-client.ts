@@ -10,6 +10,7 @@ export interface AdoWorkItem {
   assignedTo: string;
   areaPath: string;
   tags: string[];
+  parentId?: number;
 }
 
 export interface AdoPR {
@@ -138,7 +139,7 @@ export async function fetchAdoWorkItems(
 
   // Fetch work item details in batch (max 200)
   const batchIds = ids.slice(0, 50);
-  const detailsUrl = `https://dev.azure.com/${orgName}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Id,System.Title,System.State,System.WorkItemType,System.AssignedTo,System.AreaPath,System.Tags&api-version=7.1`;
+  const detailsUrl = `https://dev.azure.com/${orgName}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Id,System.Title,System.State,System.WorkItemType,System.AssignedTo,System.AreaPath,System.Tags,System.Parent&api-version=7.1`;
 
   interface WorkItemDetail {
     id: number;
@@ -158,6 +159,7 @@ export async function fetchAdoWorkItems(
       assignedTo: ((wi.fields['System.AssignedTo'] as { displayName?: string })?.displayName) ?? '',
       areaPath: (wi.fields['System.AreaPath'] as string) ?? '',
       tags: ((wi.fields['System.Tags'] as string) ?? '').split(';').map(t => t.trim()).filter(Boolean),
+      parentId: (wi.fields['System.Parent'] as number) ?? undefined,
     }));
   } catch {
     return [];

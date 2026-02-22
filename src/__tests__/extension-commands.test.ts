@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as vscode from 'vscode';
+import { MockEditlessTreeItem } from './mocks/vscode-mocks';
 
 // ----- Hoisted mocks --------------------------------------------------------
 const {
@@ -45,6 +46,12 @@ const {
   mockPRsClearFilter,
   mockPRsGetAllRepos,
   mockPRsGetAllLabels,
+  mockPRsClearAllLevelFilters,
+  mockPRsGetAvailableOptions,
+  mockPRsGetLevelFilter,
+  mockPRsSetLevelFilter,
+  mockPRsClearLevelFilter,
+  mockPRsSetAdoConfig,
   mockPromptAdoSignIn,
   mockOpenSquadUiDashboard,
   mockFetchLinkedPRs,
@@ -61,27 +68,9 @@ const {
   mockDiscoverAll,
   mockOnDidCloseTerminal,
   mockResolveTeamDir,
-  MockEditlessTreeItem,
-} = vi.hoisted(() => {
-  class MockEditlessTreeItem {
-    terminal?: unknown;
-    persistedEntry?: unknown;
-    parent?: unknown;
-    squadId?: string;
-    id?: string;
-    constructor(
-      public label: string,
-      public type: string,
-      public collapsibleState: number,
-      squadId?: string,
-    ) {
-      this.squadId = squadId;
-    }
-  }
-
-  return {
-    mockRegisterCommand: vi.fn(),
-    mockExecuteCommand: vi.fn(),
+} = vi.hoisted(() => ({
+  mockRegisterCommand: vi.fn(),
+  mockExecuteCommand: vi.fn(),
     mockShowQuickPick: vi.fn(),
     mockShowInputBox: vi.fn(),
     mockShowWarningMessage: vi.fn(),
@@ -122,6 +111,12 @@ const {
     mockPRsClearFilter: vi.fn(),
     mockPRsGetAllRepos: vi.fn().mockReturnValue([]),
     mockPRsGetAllLabels: vi.fn().mockReturnValue([]),
+    mockPRsClearAllLevelFilters: vi.fn(),
+    mockPRsGetAvailableOptions: vi.fn().mockReturnValue({}),
+    mockPRsGetLevelFilter: vi.fn(),
+    mockPRsSetLevelFilter: vi.fn(),
+    mockPRsClearLevelFilter: vi.fn(),
+    mockPRsSetAdoConfig: vi.fn(),
     mockPromptAdoSignIn: vi.fn(),
     mockOpenSquadUiDashboard: vi.fn(),
     mockFetchLinkedPRs: vi.fn(),
@@ -138,42 +133,16 @@ const {
     mockDiscoverAll: vi.fn().mockReturnValue([]),
     mockOnDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
     mockResolveTeamDir: vi.fn(),
-    MockEditlessTreeItem,
-  };
-});
+  }),
+);
 
 // Registered command handlers captured during activate()
 const commandHandlers = new Map<string, Function>();
 
 // ----- Mock: vscode ---------------------------------------------------------
-vi.mock('vscode', () => {
-  const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
-
-  class TreeItem {
-    label: string;
-    collapsibleState: number;
-    id?: string;
-    contextValue?: string;
-    constructor(label: string, collapsibleState = 0) {
-      this.label = label;
-      this.collapsibleState = collapsibleState;
-    }
-  }
-
-  class EventEmitter {
-    private listeners: Function[] = [];
-    get event() {
-      return (listener: Function) => {
-        this.listeners.push(listener);
-        return { dispose: () => { this.listeners = this.listeners.filter(l => l !== listener); } };
-      };
-    }
-    fire(value?: unknown) { this.listeners.forEach(l => l(value)); }
-    dispose() { this.listeners = []; }
-  }
-
-  class ThemeIcon { constructor(public id: string) {} }
-  class MarkdownString { constructor(public value: string) {} }
+vi.mock('vscode', async () => {
+  const { TreeItem, TreeItemCollapsibleState, ThemeIcon, MarkdownString, EventEmitter } =
+    await import('./mocks/vscode-mocks');
 
   mockRegisterCommand.mockImplementation((id: string, handler: Function) => {
     commandHandlers.set(id, handler);
@@ -260,6 +229,7 @@ vi.mock('../editless-tree', () => ({
     };
   }),
   EditlessTreeItem: MockEditlessTreeItem,
+  DEFAULT_COPILOT_CLI_ID: 'builtin:copilot-cli',
 }));
 
 vi.mock('../registry', () => ({
@@ -373,12 +343,18 @@ vi.mock('../work-items-tree', () => ({
       setTreeView: vi.fn(),
       setFilter: mockSetFilter,
       clearFilter: mockClearFilter,
-      filter: { repos: [], labels: [], states: [] },
+      filter: { repos: [], labels: [], states: [], types: [] },
       isFiltered: false,
       getAllRepos: mockGetAllRepos,
       getAllLabels: mockGetAllLabels,
       setAdoItems: vi.fn(),
+      setAdoConfig: vi.fn(),
       setAdoRefresh: vi.fn(),
+      getLevelFilter: vi.fn(),
+      setLevelFilter: vi.fn(),
+      clearLevelFilter: vi.fn(),
+      clearAllLevelFilters: vi.fn(),
+      getAvailableOptions: vi.fn().mockReturnValue({}),
     };
   }),
   WorkItemsTreeItem: class {
@@ -398,10 +374,16 @@ vi.mock('../prs-tree', () => ({
       setTreeView: vi.fn(),
       setFilter: mockPRsSetFilter,
       clearFilter: mockPRsClearFilter,
-      filter: { repos: [], labels: [], statuses: [] },
+      filter: { repos: [], labels: [], statuses: [], author: '' },
       isFiltered: false,
       getAllRepos: mockPRsGetAllRepos,
       getAllLabels: mockPRsGetAllLabels,
+      setAdoConfig: mockPRsSetAdoConfig,
+      clearAllLevelFilters: mockPRsClearAllLevelFilters,
+      getAvailableOptions: mockPRsGetAvailableOptions,
+      getLevelFilter: mockPRsGetLevelFilter,
+      setLevelFilter: mockPRsSetLevelFilter,
+      clearLevelFilter: mockPRsClearLevelFilter,
     };
   }),
   PRsTreeItem: class {
@@ -1254,15 +1236,15 @@ describe('extension command handlers', () => {
 
   describe('editless.filterWorkItems', () => {
     it('should show QuickPick with sources only', async () => {
-      mockGetAllRepos.mockReturnValue(['owner/repo1']);
-      mockGetAllLabels.mockReturnValue(['type:bug', 'release:v0.1']);
+      mockGetAllRepos.mockReturnValue(['owner/repo1', '(ADO)']);
       mockShowQuickPick.mockResolvedValue([]);
 
       await getHandler('editless.filterWorkItems')();
 
       expect(mockShowQuickPick).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({ label: 'owner/repo1', description: 'source' }),
+          expect.objectContaining({ label: 'owner/repo1', description: 'GitHub' }),
+          expect.objectContaining({ label: '(ADO)', description: 'Azure DevOps' }),
         ]),
         expect.objectContaining({ canPickMany: true, title: 'Show/Hide Sources' }),
       );
@@ -1272,11 +1254,10 @@ describe('extension command handlers', () => {
       expect(items.filter(i => i.description === 'label')).toHaveLength(0);
     });
 
-    it('should apply selected sources to provider with empty labels and states', async () => {
-      mockGetAllRepos.mockReturnValue(['owner/repo1']);
-      mockGetAllLabels.mockReturnValue(['type:bug']);
+    it('should apply selected sources to provider with empty labels/states/types', async () => {
+      mockGetAllRepos.mockReturnValue(['owner/repo1', '(ADO)']);
       mockShowQuickPick.mockResolvedValue([
-        { label: 'owner/repo1', description: 'source' },
+        { label: 'owner/repo1', description: 'GitHub' },
       ]);
 
       await getHandler('editless.filterWorkItems')();
@@ -1285,6 +1266,7 @@ describe('extension command handlers', () => {
         repos: ['owner/repo1'],
         labels: [],
         states: [],
+        types: [],
       });
     });
 
@@ -1297,14 +1279,14 @@ describe('extension command handlers', () => {
     it('should set empty filter when no items selected', async () => {
       mockShowQuickPick.mockResolvedValue([]);
       await getHandler('editless.filterWorkItems')();
-      expect(mockSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], states: [] });
+      expect(mockSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], states: [], types: [] });
     });
   });
 
   // --- editless.clearWorkItemsFilter -----------------------------------------
 
   describe('editless.clearWorkItemsFilter', () => {
-    it('should delegate to provider clearFilter', () => {
+    it('should delegate to provider clearFilter and clearAllLevelFilters', () => {
       getHandler('editless.clearWorkItemsFilter')();
       expect(mockClearFilter).toHaveBeenCalled();
     });
@@ -1313,43 +1295,34 @@ describe('extension command handlers', () => {
   // --- editless.filterPRs ---------------------------------------------------
 
   describe('editless.filterPRs', () => {
-    it('should show QuickPick with repos, statuses, and labels', async () => {
-      mockPRsGetAllRepos.mockReturnValue(['owner/repo1']);
-      mockPRsGetAllLabels.mockReturnValue(['type:bug', 'release:v0.1']);
+    it('should show QuickPick with sources only', async () => {
+      mockPRsGetAllRepos.mockReturnValue(['owner/repo1', '(ADO)']);
       mockShowQuickPick.mockResolvedValue([]);
 
       await getHandler('editless.filterPRs')();
 
       expect(mockShowQuickPick).toHaveBeenCalledWith(
         expect.arrayContaining([
-          expect.objectContaining({ label: 'owner/repo1', description: 'repo' }),
-          expect.objectContaining({ label: 'Draft', description: 'status' }),
-          expect.objectContaining({ label: 'Open', description: 'status' }),
-          expect.objectContaining({ label: 'Approved', description: 'status' }),
-          expect.objectContaining({ label: 'Changes Requested', description: 'status' }),
-          expect.objectContaining({ label: 'Auto-merge', description: 'status' }),
-          expect.objectContaining({ label: 'type:bug', description: 'label' }),
-          expect.objectContaining({ label: 'release:v0.1', description: 'label' }),
+          expect.objectContaining({ label: 'owner/repo1', description: 'GitHub' }),
+          expect.objectContaining({ label: '(ADO)', description: 'Azure DevOps' }),
         ]),
-        expect.objectContaining({ canPickMany: true }),
+        expect.objectContaining({ canPickMany: true, title: 'Show/Hide Sources' }),
       );
     });
 
-    it('should apply selected filters to provider', async () => {
+    it('should apply selected sources to provider', async () => {
       mockPRsGetAllRepos.mockReturnValue(['owner/repo1']);
-      mockPRsGetAllLabels.mockReturnValue(['type:bug']);
       mockShowQuickPick.mockResolvedValue([
-        { label: 'owner/repo1', description: 'repo' },
-        { label: 'type:bug', description: 'label' },
-        { label: 'Draft', description: 'status' },
+        { label: 'owner/repo1', description: 'GitHub' },
       ]);
 
       await getHandler('editless.filterPRs')();
 
       expect(mockPRsSetFilter).toHaveBeenCalledWith({
         repos: ['owner/repo1'],
-        labels: ['type:bug'],
-        statuses: ['draft'],
+        labels: [],
+        statuses: [],
+        author: '',
       });
     });
 
@@ -1362,16 +1335,17 @@ describe('extension command handlers', () => {
     it('should set empty filter when no items selected', async () => {
       mockShowQuickPick.mockResolvedValue([]);
       await getHandler('editless.filterPRs')();
-      expect(mockPRsSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], statuses: [] });
+      expect(mockPRsSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], statuses: [], author: '' });
     });
   });
 
   // --- editless.clearPRsFilter -----------------------------------------------
 
   describe('editless.clearPRsFilter', () => {
-    it('should delegate to provider clearFilter', () => {
+    it('should delegate to provider clearFilter and clearAllLevelFilters', () => {
       getHandler('editless.clearPRsFilter')();
       expect(mockPRsClearFilter).toHaveBeenCalled();
+      expect(mockPRsClearAllLevelFilters).toHaveBeenCalled();
     });
   });
 

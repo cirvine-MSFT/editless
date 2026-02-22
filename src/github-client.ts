@@ -60,22 +60,22 @@ export async function fetchAssignedIssues(repo: string): Promise<GitHubIssue[]> 
 
 const BASE_PR_FIELDS = 'number,title,state,isDraft,url,headRefName,baseRefName,reviewDecision,mergeable,labels';
 
-export async function fetchMyPRs(repo: string): Promise<GitHubPR[]> {
+export async function fetchMyPRs(repo: string, author?: string): Promise<GitHubPR[]> {
   try {
-    const { stdout } = await execFileAsync('gh', [
-      'pr', 'list', '--repo', repo, '--author', '@me', '--state', 'open',
-      '--json', `${BASE_PR_FIELDS},autoMergeRequest`, '--limit', '50',
-    ]);
+    const args = ['pr', 'list', '--repo', repo, '--state', 'open',
+      '--json', `${BASE_PR_FIELDS},autoMergeRequest`, '--limit', '50'];
+    if (author) args.splice(4, 0, '--author', author);
+    const { stdout } = await execFileAsync('gh', args);
     const raw: unknown[] = JSON.parse(stdout);
     return raw.map((p) => parsePR(p, repo));
   } catch (err) {
     // autoMergeRequest not available in older gh CLI versions — retry without it
     if (err instanceof Error && err.message.includes('Unknown JSON field')) {
       try {
-        const { stdout } = await execFileAsync('gh', [
-          'pr', 'list', '--repo', repo, '--author', '@me', '--state', 'open',
-          '--json', BASE_PR_FIELDS, '--limit', '50',
-        ]);
+        const args = ['pr', 'list', '--repo', repo, '--state', 'open',
+          '--json', BASE_PR_FIELDS, '--limit', '50'];
+        if (author) args.splice(4, 0, '--author', author);
+        const { stdout } = await execFileAsync('gh', args);
         const raw: unknown[] = JSON.parse(stdout);
         return raw.map((p) => parsePR(p, repo));
       } catch {

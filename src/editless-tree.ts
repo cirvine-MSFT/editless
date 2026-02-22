@@ -16,7 +16,10 @@ import type { AgentVisibilityManager } from './visibility';
 // Tree item types
 // ---------------------------------------------------------------------------
 
-export type TreeItemType = 'squad' | 'category' | 'agent' | 'terminal' | 'discovered-agent' | 'discovered-squad' | 'orphanedSession';
+export type TreeItemType = 'squad' | 'category' | 'agent' | 'terminal' | 'discovered-agent' | 'discovered-squad' | 'orphanedSession' | 'default-agent';
+
+/** Sentinel ID for the built-in Copilot CLI entry. */
+export const DEFAULT_COPILOT_CLI_ID = 'builtin:copilot-cli';
 type CategoryKind = 'roster' | 'discovered' | 'hidden';
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
@@ -128,10 +131,17 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
     // Build the parent squad item so getParent() can traverse back to root
     const rootItems = this.getRootItems();
-    const squadItem = rootItems.find(item => item.type === 'squad' && item.squadId === info.squadId);
-    if (!squadItem) return undefined;
+    const parentItem = rootItems.find(item =>
+      (item.type === 'squad' || item.type === 'default-agent') && item.squadId === info.squadId,
+    );
+    if (!parentItem) return undefined;
 
-    const squadChildren = this.getSquadChildren(info.squadId, squadItem);
+    if (parentItem.type === 'default-agent') {
+      return this.getDefaultAgentChildren(parentItem)
+        .find(item => item.type === 'terminal' && item.terminal === terminal);
+    }
+
+    const squadChildren = this.getSquadChildren(info.squadId, parentItem);
     return squadChildren.find(item => item.type === 'terminal' && item.terminal === terminal);
   }
 
@@ -149,6 +159,9 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     if (!element) {
       return this.getRootItems();
     }
+    if (element.type === 'default-agent' && element.squadId) {
+      return this.getDefaultAgentChildren(element);
+    }
     if (element.type === 'squad' && element.squadId) {
       return this.getSquadChildren(element.squadId, element);
     }
@@ -165,9 +178,16 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private getRootItems(): EditlessTreeItem[] {
     const squads = this.registry.loadSquads();
-    const items = squads
-      .filter(cfg => !this._visibility?.isHidden(cfg.id))
-      .map(cfg => this.buildSquadItem(cfg));
+    const items: EditlessTreeItem[] = [];
+
+    // Built-in Copilot CLI — always present at top
+    items.push(this.buildDefaultAgentItem());
+
+    for (const cfg of squads) {
+      if (!this._visibility?.isHidden(cfg.id)) {
+        items.push(this.buildSquadItem(cfg));
+      }
+    }
 
     // Unified "Discovered" section — agents + squads from unified discovery
     const visibleItems = this._discoveredItems.filter(i => !this._visibility?.isHidden(i.id));
@@ -193,20 +213,77 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       items.push(header);
     }
 
-    if (items.length === 0) {
+    if (items.length === 1) {
+      // Only the default Copilot CLI entry — no registered or discovered agents
       const hasHiddenItems = (this._visibility?.getHiddenIds().length ?? 0) > 0;
-      const msg = new EditlessTreeItem(
-        hasHiddenItems
-          ? 'All agents hidden — use Show Hidden to restore'
-          : 'No agents yet — use + to add',
-        'category',
-        vscode.TreeItemCollapsibleState.None,
-      );
-      msg.iconPath = new vscode.ThemeIcon(hasHiddenItems ? 'eye-closed' : 'add');
-      items.push(msg);
+      if (hasHiddenItems) {
+        const msg = new EditlessTreeItem(
+          'All agents hidden — use Show Hidden to restore',
+          'category',
+          vscode.TreeItemCollapsibleState.None,
+        );
+        msg.iconPath = new vscode.ThemeIcon('eye-closed');
+        items.push(msg);
+      }
     }
 
     return items;
+  }
+
+  private buildDefaultAgentItem(): EditlessTreeItem {
+    const terminalCount = this.terminalManager
+      ? this.terminalManager.getTerminalsForSquad(DEFAULT_COPILOT_CLI_ID).length
+      : 0;
+
+    const item = new EditlessTreeItem(
+      'Copilot CLI',
+      'default-agent',
+      terminalCount > 0
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None,
+      DEFAULT_COPILOT_CLI_ID,
+    );
+    item.id = DEFAULT_COPILOT_CLI_ID;
+    item.iconPath = new vscode.ThemeIcon('terminal');
+    item.description = terminalCount > 0
+      ? `${terminalCount} session${terminalCount === 1 ? '' : 's'}`
+      : 'Generic Copilot agent';
+    item.tooltip = new vscode.MarkdownString(
+      '**Copilot CLI**\n\nLaunch the generic Copilot CLI without a specific agent.',
+    );
+    return item;
+  }
+
+  private getDefaultAgentChildren(parentItem: EditlessTreeItem): EditlessTreeItem[] {
+    if (!this.terminalManager) return [];
+
+    const children: EditlessTreeItem[] = [];
+    for (const { terminal, info } of this.terminalManager.getTerminalsForSquad(DEFAULT_COPILOT_CLI_ID)) {
+      const sessionState = this.terminalManager.getSessionState(terminal) ?? 'inactive';
+      const lastActivityAt = this.terminalManager.getLastActivityAt(terminal);
+
+      const elapsed = Date.now() - info.createdAt.getTime();
+      const mins = Math.floor(elapsed / 60_000);
+      const relative = mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`;
+
+      const customLabel = this.labelManager?.getLabel(info.labelKey);
+      const title = customLabel ? `🏷️ ${customLabel}` : info.displayName;
+      const item = new EditlessTreeItem(title, 'terminal');
+      item.terminal = terminal;
+      item.description = sessionState === 'launching' ? 'launching…' : relative;
+      item.iconPath = getStateIcon(sessionState);
+      item.contextValue = 'terminal';
+      item.tooltip = `${info.displayName} — started ${relative}`;
+      item.command = {
+        command: 'editless.focusTerminal',
+        title: 'Focus',
+        arguments: [terminal],
+      };
+      item.parent = parentItem;
+      children.push(item);
+    }
+
+    return children;
   }
 
   private buildSquadItem(cfg: AgentTeamConfig): EditlessTreeItem {
@@ -292,7 +369,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         const title = customLabel ? `🏷️ ${customLabel}` : info.displayName;
         const item = new EditlessTreeItem(title, 'terminal');
         item.terminal = terminal;
-        item.description = relative;
+        item.description = sessionState === 'launching' ? 'launching…' : relative;
         item.iconPath = getStateIcon(sessionState);
         item.contextValue = 'terminal';
         item.tooltip = this._buildTerminalTooltip(info.displayName, relative, sessionCtx, sessionState, lastActivityAt);
@@ -306,6 +383,16 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
       for (const orphan of this.terminalManager.getOrphanedSessions().filter(o => o.squadId === squadId)) {
         children.push(this._buildOrphanItem(orphan));
+      }
+
+      // Hint when squad has no sessions yet
+      const hasTerminals = this.terminalManager.getTerminalsForSquad(squadId).length > 0;
+      const hasOrphans = this.terminalManager.getOrphanedSessions().some(o => o.squadId === squadId);
+      if (!hasTerminals && !hasOrphans) {
+        const hint = new EditlessTreeItem('No active sessions', 'category');
+        hint.description = 'Click + to launch';
+        hint.iconPath = new vscode.ThemeIcon('info');
+        children.push(hint);
       }
     }
 
@@ -460,18 +547,23 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   // -- Orphan item builder --------------------------------------------------
 
   private _buildOrphanItem(entry: PersistedTerminalInfo): EditlessTreeItem {
+    const resumable = !!entry.agentSessionId;
     const item = new EditlessTreeItem(entry.displayName, 'orphanedSession');
     item.id = `orphan:${entry.id}`;
     item.persistedEntry = entry;
-    item.description = '· orphaned — re-launch?';
-    item.iconPath = new vscode.ThemeIcon('debug-disconnect', new vscode.ThemeColor('disabledForeground'));
+    item.description = resumable ? 'previous session — resume' : 'session ended';
+    item.iconPath = resumable
+      ? new vscode.ThemeIcon('history')
+      : new vscode.ThemeIcon('circle-outline', new vscode.ThemeColor('disabledForeground'));
     item.contextValue = 'orphanedSession';
     item.tooltip = new vscode.MarkdownString(
-      [`**👻 ${entry.displayName}**`, `Squad: ${entry.squadName}`, 'This session has no live terminal. Re-launch or dismiss it.'].join('\n\n'),
+      resumable
+        ? [`**${entry.displayName}**`, `Squad: ${entry.squadName}`, 'Your conversation is saved. Click to pick up where you left off.'].join('\n\n')
+        : [`**${entry.displayName}**`, `Squad: ${entry.squadName}`, 'This terminal was closed. The conversation cannot be resumed.'].join('\n\n'),
     );
     item.command = {
       command: 'editless.relaunchSession',
-      title: 'Re-launch Session',
+      title: 'Resume Session',
       arguments: [item],
     };
     return item;

@@ -1,64 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import {
+  createVscodeMock,
+  ThemeIcon,
+} from './mocks/vscode-mocks';
 
 const mockIsGhAvailable = vi.fn<() => Promise<boolean>>().mockResolvedValue(false);
 const mockFetchAssignedIssues = vi.fn().mockResolvedValue([]);
 const mockFetchMyPRs = vi.fn().mockResolvedValue([]);
 let mockIssueFilterConfig: Record<string, unknown> = {};
 
-vi.mock('vscode', () => {
-  const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
-
-  class TreeItem {
-    label: string;
-    collapsibleState: number;
-    iconPath?: unknown;
-    description?: string;
-    contextValue?: string;
-    tooltip?: unknown;
-    command?: unknown;
-    id?: string;
-    constructor(label: string, collapsibleState: number = TreeItemCollapsibleState.None) {
-      this.label = label;
-      this.collapsibleState = collapsibleState;
-    }
-  }
-
-  class ThemeIcon {
-    id: string;
-    constructor(id: string) { this.id = id; }
-  }
-
-  class MarkdownString {
-    value: string;
-    constructor(value: string) { this.value = value; }
-  }
-
-  class EventEmitter {
-    private listeners: Function[] = [];
-    get event() {
-      return (listener: Function) => {
-        this.listeners.push(listener);
-        return { dispose: () => { this.listeners = this.listeners.filter(l => l !== listener); } };
-      };
-    }
-    fire(value?: unknown) { this.listeners.forEach(l => l(value)); }
-    dispose() { this.listeners = []; }
-  }
-
-  return {
-    TreeItem, TreeItemCollapsibleState, ThemeIcon, MarkdownString, EventEmitter,
-    Uri: {
-      parse: (s: string) => ({ toString: () => s }),
-      file: (s: string) => ({ toString: () => s, fsPath: s }),
-    },
+vi.mock('vscode', () =>
+  createVscodeMock({
     workspace: {
       getConfiguration: () => ({
         get: (key: string, defaultValue?: unknown) =>
           key === 'github.issueFilter' ? mockIssueFilterConfig : defaultValue,
       }),
     },
-  };
-});
+  }),
+);
 
 vi.mock('../github-client', () => ({
   isGhAvailable: (...args: unknown[]) => mockIsGhAvailable(...(args as [])),
@@ -106,8 +66,8 @@ describe('WorkItemsTreeProvider', () => {
     expect(children).toHaveLength(2);
     expect(children[0].label).toBe('Configure in GitHub');
     expect(children[1].label).toBe('Configure in ADO');
-    expect(children[0].iconPath).toBeDefined();
-    expect(children[1].iconPath).toBeDefined();
+    expect(children[0].iconPath).toEqual(new ThemeIcon('github'));
+    expect(children[1].iconPath).toEqual(new ThemeIcon('azure'));
   });
 
   it('should return empty array when getChildren is called with an unrecognised element', async () => {
@@ -238,8 +198,8 @@ describe('PRsTreeProvider', () => {
     expect(children).toHaveLength(2);
     expect(children[0].label).toBe('Configure in GitHub');
     expect(children[1].label).toBe('Configure in ADO');
-    expect(children[0].iconPath).toBeDefined();
-    expect(children[1].iconPath).toBeDefined();
+    expect(children[0].iconPath).toEqual(new ThemeIcon('github'));
+    expect(children[1].iconPath).toEqual(new ThemeIcon('azure'));
   });
 
   it('should return empty array when getChildren is called with an unrecognised element', async () => {
@@ -589,11 +549,13 @@ describe('EditlessTreeProvider — visibility filtering', () => {
 
     const roots = provider.getChildren();
 
-    expect(roots).toHaveLength(1);
-    expect(roots[0].label).toContain('All agents hidden');
+    // First item is always the built-in Copilot CLI, then the "all hidden" message
+    expect(roots).toHaveLength(2);
+    expect(roots[0].type).toBe('default-agent');
+    expect(roots[1].label).toContain('All agents hidden');
   });
 
-  it('"No agents yet" placeholder when truly empty', () => {
+  it('shows default Copilot CLI agent when no squads registered', () => {
     const registry = createMockRegistry([]);
     const visibility = { isHidden: () => false, getHiddenIds: () => [] };
     const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
@@ -601,7 +563,86 @@ describe('EditlessTreeProvider — visibility filtering', () => {
     const roots = provider.getChildren();
 
     expect(roots).toHaveLength(1);
-    expect(roots[0].label).toContain('No agents yet');
+    expect(roots[0].type).toBe('default-agent');
+    expect(roots[0].label).toBe('Copilot CLI');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — default Copilot CLI agent
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — default Copilot CLI agent', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  it('always appears as the first root item', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+
+    expect(roots[0].type).toBe('default-agent');
+    expect(roots[0].label).toBe('Copilot CLI');
+    expect(roots[0].id).toBe('builtin:copilot-cli');
+  });
+
+  it('coexists with registered squads', () => {
+    const squads = [
+      { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
+      { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
+    ];
+    const registry = createMockRegistry(squads);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+
+    expect(roots).toHaveLength(3); // default + 2 squads
+    expect(roots[0].type).toBe('default-agent');
+    expect(roots[1].type).toBe('squad');
+    expect(roots[2].type).toBe('squad');
+  });
+
+  it('has contextValue "default-agent" for menu targeting', () => {
+    const registry = createMockRegistry([]);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+    const defaultItem = roots.find(r => r.type === 'default-agent');
+
+    expect(defaultItem).toBeDefined();
+    expect(defaultItem!.contextValue).toBe('default-agent');
+  });
+
+  it('is not affected by visibility manager', () => {
+    const registry = createMockRegistry([]);
+    const visibility = { isHidden: () => true, getHiddenIds: () => [] };
+    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
+
+    const roots = provider.getChildren();
+    const defaultItem = roots.find(r => r.type === 'default-agent');
+
+    expect(defaultItem).toBeDefined();
+    expect(defaultItem!.label).toBe('Copilot CLI');
+  });
+
+  it('shows "Generic Copilot agent" description when no sessions', () => {
+    const registry = createMockRegistry([]);
+    const provider = new EditlessTreeProvider(registry as never);
+
+    const roots = provider.getChildren();
+    const defaultItem = roots.find(r => r.type === 'default-agent');
+
+    expect(defaultItem!.description).toBe('Generic Copilot agent');
   });
 });
 
@@ -840,5 +881,124 @@ describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
     const uniqueIds = new Set(allIds);
 
     expect(allIds.length).toBe(uniqueIds.size);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — orphan item resumable vs non-resumable (#338)
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — orphan item resumability', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  function makeTerminalManager(orphans: Array<Record<string, unknown>>) {
+    return {
+      getTerminalsForSquad: () => [],
+      getOrphanedSessions: () => orphans,
+      onDidChange: (cb: Function) => ({ dispose: () => {} }),
+      getSessionState: () => 'orphaned',
+      getLastActivityAt: () => undefined,
+      getStateIcon: vi.fn(),
+      getStateDescription: vi.fn(),
+      getTerminalInfo: () => undefined,
+    };
+  }
+
+  const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'standalone' }];
+
+  it('should show "previous session — resume" for resumable orphan', () => {
+    const orphan = {
+      id: 'orphan-1',
+      labelKey: 'terminal:orphan-1',
+      displayName: '🤖 Squad A #1',
+      squadId: 'squad-a',
+      squadName: 'Squad A',
+      squadIcon: '🤖',
+      index: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      terminalName: '🤖 Squad A #1',
+      lastSeenAt: Date.now(),
+      rebootCount: 0,
+      agentSessionId: 'session-abc',
+    };
+
+    const registry = createMockRegistry(squads);
+    const tm = makeTerminalManager([orphan]);
+    const provider = new EditlessTreeProvider(registry as never, tm as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    const children = provider.getChildren(squadItem);
+    const orphanItem = children.find(c => c.type === 'orphanedSession');
+
+    expect(orphanItem).toBeDefined();
+    expect(orphanItem!.description).toContain('resume');
+    expect((orphanItem!.iconPath as { id: string }).id).toBe('history');
+  });
+
+  it('should show "session ended" for non-resumable orphan (no agentSessionId)', () => {
+    const orphan = {
+      id: 'orphan-2',
+      labelKey: 'terminal:orphan-2',
+      displayName: '🤖 Squad A #1',
+      squadId: 'squad-a',
+      squadName: 'Squad A',
+      squadIcon: '🤖',
+      index: 1,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      terminalName: '🤖 Squad A #1',
+      lastSeenAt: Date.now(),
+      rebootCount: 0,
+      // no agentSessionId
+    };
+
+    const registry = createMockRegistry(squads);
+    const tm = makeTerminalManager([orphan]);
+    const provider = new EditlessTreeProvider(registry as never, tm as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    const children = provider.getChildren(squadItem);
+    const orphanItem = children.find(c => c.type === 'orphanedSession');
+
+    expect(orphanItem).toBeDefined();
+    expect(orphanItem!.description).toBe('session ended');
+    expect((orphanItem!.iconPath as { id: string }).id).toBe('circle-outline');
+  });
+
+  it('should have different tooltip for resumable vs non-resumable', () => {
+    const resumableOrphan = {
+      id: 'res-1', labelKey: 'terminal:res-1', displayName: 'Test', squadId: 'squad-a',
+      squadName: 'Squad A', squadIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z',
+      terminalName: 'Test', lastSeenAt: Date.now(), rebootCount: 0, agentSessionId: 'sess-1',
+    };
+    const nonResumableOrphan = {
+      id: 'non-1', labelKey: 'terminal:non-1', displayName: 'Test2', squadId: 'squad-a',
+      squadName: 'Squad A', squadIcon: '🤖', index: 2, createdAt: '2026-01-01T00:00:00.000Z',
+      terminalName: 'Test2', lastSeenAt: Date.now(), rebootCount: 0,
+    };
+
+    const registry = createMockRegistry(squads);
+    const tm = makeTerminalManager([resumableOrphan, nonResumableOrphan]);
+    const provider = new EditlessTreeProvider(registry as never, tm as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    const children = provider.getChildren(squadItem);
+    const orphanItems = children.filter(c => c.type === 'orphanedSession');
+
+    expect(orphanItems).toHaveLength(2);
+    const resumableTooltip = (orphanItems.find(o => o.persistedEntry?.id === 'res-1')!.tooltip as { value: string }).value;
+    const nonResumableTooltip = (orphanItems.find(o => o.persistedEntry?.id === 'non-1')!.tooltip as { value: string }).value;
+
+    expect(resumableTooltip).toContain('pick up where you left off');
+    expect(nonResumableTooltip).toContain('cannot be resumed');
   });
 });

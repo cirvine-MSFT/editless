@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir } from './agent-discovery';
-import { discoverAgentTeams, parseTeamMd, toKebabCase } from './discovery';
+import { discoverAgentTeams, parseTeamMd, toKebabCase, readUniverseFromRegistry } from './discovery';
 import { resolveTeamMd } from './team-dir';
 import type { EditlessRegistry } from './registry';
 import type { AgentTeamConfig } from './types';
@@ -78,6 +78,9 @@ export function discoverAll(
       if (!registeredIds.has(id) && !seenIds.has(id) && !registeredPaths.has(folderPath.toLowerCase())) {
         const content = fs.readFileSync(teamMdPath, 'utf-8');
         const parsed = parseTeamMd(content, folderName);
+        const universe = parsed.universe === 'unknown'
+          ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
+          : parsed.universe;
         seenIds.add(id);
         items.push({
           id,
@@ -86,7 +89,7 @@ export function discoverAll(
           source: 'workspace',
           path: folderPath,
           description: parsed.description,
-          universe: parsed.universe,
+          universe,
         });
       }
     }
@@ -104,19 +107,25 @@ export function discoverAll(
     }
   }
 
-  // Filter out squad governance agents (squad.agent.md) that duplicate a discovered squad
-  const squadFolderPaths = new Set(
-    items
-      .filter(i => i.type === 'squad' && i.source === 'workspace')
-      .map(i => i.path.toLowerCase()),
+  // Filter out squad governance agents (e.g. squad.agent.md) that duplicate a discovered squad
+  const squadRoots = new Set(
+    items.filter(i => i.type === 'squad' && i.source === 'workspace').map(i => i.path.toLowerCase()),
   );
-
   return items.filter(item => {
-    if (item.type !== 'agent') { return true; }
-    if (path.basename(item.path).toLowerCase() !== 'squad.agent.md') { return true; }
-    // squad.agent.md lives at <root>/.github/agents/squad.agent.md — root is 3 levels up
-    const workspaceRoot = path.dirname(path.dirname(path.dirname(item.path)));
-    return !squadFolderPaths.has(workspaceRoot.toLowerCase());
+    if (item.type !== 'agent') return true;
+    // Only filter the squad governance file, not other agents in the same folder
+    const basename = path.basename(item.path).toLowerCase();
+    if (basename !== 'squad.agent.md') return true;
+    // Agent at {root}/.github/agents/squad.agent.md → root is 3 levels up
+    // Agent at {root}/squad.agent.md → root is 1 level up
+    // Check if path includes .github/agents to determine depth
+    const itemDir = path.dirname(item.path);
+    const parentOfItemDir = path.dirname(itemDir);
+    const isInGithubAgents = path.basename(itemDir) === 'agents' && path.basename(parentOfItemDir) === '.github';
+    const root = isInGithubAgents 
+      ? path.dirname(parentOfItemDir)  // {root}/.github/agents/squad.agent.md
+      : itemDir;                        // {root}/squad.agent.md
+    return !squadRoots.has(root.toLowerCase());
   });
 }
 

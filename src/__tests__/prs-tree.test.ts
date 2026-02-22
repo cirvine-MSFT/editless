@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createVscodeMock } from './mocks/vscode-mocks';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -7,58 +8,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockIsGhAvailable = vi.fn<() => Promise<boolean>>().mockResolvedValue(false);
 const mockFetchMyPRs = vi.fn().mockResolvedValue([]);
 
-vi.mock('vscode', () => {
-  const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
-
-  class TreeItem {
-    label: string;
-    collapsibleState: number;
-    iconPath?: unknown;
-    description?: string;
-    contextValue?: string;
-    tooltip?: unknown;
-    command?: unknown;
-    id?: string;
-    pr?: unknown;
-    constructor(label: string, collapsibleState: number = TreeItemCollapsibleState.None) {
-      this.label = label;
-      this.collapsibleState = collapsibleState;
-    }
-  }
-
-  class ThemeIcon {
-    id: string;
-    constructor(id: string) { this.id = id; }
-  }
-
-  class MarkdownString {
-    value: string;
-    constructor(value: string) { this.value = value; }
-  }
-
-  class EventEmitter {
-    private listeners: Function[] = [];
-    get event() {
-      return (listener: Function) => {
-        this.listeners.push(listener);
-        return { dispose: () => { this.listeners = this.listeners.filter(l => l !== listener); } };
-      };
-    }
-    fire(value?: unknown) { this.listeners.forEach(l => l(value)); }
-    dispose() { this.listeners = []; }
-  }
-
-  class ThemeColor {
-    id: string;
-    constructor(id: string) { this.id = id; }
-  }
-
-  return {
-    TreeItem, TreeItemCollapsibleState, ThemeIcon, ThemeColor, MarkdownString, EventEmitter,
-    Uri: { parse: (s: string) => ({ toString: () => s }) },
-    commands: { executeCommand: vi.fn() },
-  };
-});
+vi.mock('vscode', () => createVscodeMock({
+  commands: { executeCommand: vi.fn() },
+}));
 
 vi.mock('../github-client', () => ({
   isGhAvailable: (...args: unknown[]) => mockIsGhAvailable(...(args as [])),
@@ -121,11 +73,37 @@ describe('PRsTreeProvider — derivePRState', () => {
   });
 
   it('should derive "merged" state', async () => {
-    expect(await getPRItemState(makePR({ state: 'MERGED' }))).toBe('merged');
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR({ state: 'MERGED' })]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    // Must include 'merged' in statuses since merged PRs are hidden by default
+    provider.setFilter({ repos: [], labels: [], statuses: ['merged'], author: '' });
+    const children = provider.getChildren();
+    expect(children).toHaveLength(1);
+    expect((children[0].description as string).split(' · ')[0]).toBe('merged');
   });
 
   it('should derive "closed" state', async () => {
-    expect(await getPRItemState(makePR({ state: 'CLOSED' }))).toBe('closed');
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR({ state: 'CLOSED' })]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    // Must include 'closed' in statuses since closed PRs are hidden by default
+    provider.setFilter({ repos: [], labels: [], statuses: ['closed'], author: '' });
+    const children = provider.getChildren();
+    expect(children).toHaveLength(1);
+    expect((children[0].description as string).split(' · ')[0]).toBe('closed');
   });
 
   it('should derive "approved" state', async () => {
@@ -169,7 +147,7 @@ describe('PRsTreeProvider — multi-repo grouping', () => {
     expect(children[0].contextValue).toBe('pull-request');
   });
 
-  it('should show repo headers for multiple repos', async () => {
+  it('should show owner → repo hierarchy for multiple repos', async () => {
     mockIsGhAvailable.mockResolvedValue(true);
     mockFetchMyPRs.mockImplementation(async (repo: string) => {
       if (repo === 'owner/repo-a') return [makePR({ number: 1, repository: 'owner/repo-a' })];
@@ -183,14 +161,20 @@ describe('PRsTreeProvider — multi-repo grouping', () => {
     provider.setRepos(['owner/repo-a', 'owner/repo-b']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
+    // Root shows owner node (same owner for both repos)
     const roots = provider.getChildren();
-    expect(roots).toHaveLength(2);
-    expect(roots[0].contextValue).toBe('repo-group');
-    expect(roots[0].label).toBe('owner/repo-a');
-    expect(roots[1].label).toBe('owner/repo-b');
+    expect(roots).toHaveLength(1);
+    expect(roots[0].contextValue).toBe('github-pr-org');
+    expect(roots[0].label).toBe('owner');
 
-    // Children of repo header are PRs
-    const repoAPRs = provider.getChildren(roots[0]);
+    // Owner node children are repo nodes
+    const repoNodes = provider.getChildren(roots[0]);
+    expect(repoNodes).toHaveLength(2);
+    expect(repoNodes[0].contextValue).toBe('github-pr-repo');
+    expect(repoNodes[0].label).toBe('owner/repo-a');
+
+    // Children of repo node are PRs
+    const repoAPRs = provider.getChildren(repoNodes[0]);
     expect(repoAPRs).toHaveLength(1);
     expect(repoAPRs[0].contextValue).toBe('pull-request');
   });
@@ -305,26 +289,26 @@ describe('PRsTreeProvider — filter', () => {
 
   it('isFiltered should return true when repo filter set', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: ['owner/repo'], labels: [], statuses: [] });
+    provider.setFilter({ repos: ['owner/repo'], labels: [], statuses: [], author: '' });
     expect(provider.isFiltered).toBe(true);
   });
 
   it('isFiltered should return true when status filter set', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], statuses: ['draft'] });
+    provider.setFilter({ repos: [], labels: [], statuses: ['draft'], author: '' });
     expect(provider.isFiltered).toBe(true);
   });
 
   it('isFiltered should return false after clearFilter', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: ['r'], labels: ['l'], statuses: ['s'] });
+    provider.setFilter({ repos: ['r'], labels: ['l'], statuses: ['s'], author: '' });
     provider.clearFilter();
     expect(provider.isFiltered).toBe(false);
   });
 
   it('getFilterDescription should show active filters', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: ['owner/repo'], labels: ['bug'], statuses: ['draft'] });
+    provider.setFilter({ repos: ['owner/repo'], labels: ['bug'], statuses: ['draft'], author: '' });
     const desc = provider.getFilterDescription();
     expect(desc).toContain('repo:owner/repo');
     expect(desc).toContain('status:draft');
@@ -333,7 +317,7 @@ describe('PRsTreeProvider — filter', () => {
 
   it('getFilterDescription should show only set filters', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], statuses: ['open'] });
+    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '' });
     expect(provider.getFilterDescription()).toBe('status:open');
   });
 });
@@ -356,7 +340,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
       makePR({ number: 2 }),
       makePR({ number: 3, reviewDecision: 'APPROVED' }),
     ];
-    provider.setFilter({ repos: [], labels: [], statuses: ['draft'] });
+    provider.setFilter({ repos: [], labels: [], statuses: ['draft'], author: '' });
     const filtered = provider.applyRuntimeFilter(prs);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].number).toBe(1);
@@ -369,7 +353,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
       makePR({ number: 2, labels: ['type:feature'] }),
       makePR({ number: 3, labels: ['release:v1'] }),
     ];
-    provider.setFilter({ repos: [], labels: ['type:bug', 'type:feature'], statuses: [] });
+    provider.setFilter({ repos: [], labels: ['type:bug', 'type:feature'], statuses: [], author: '' });
     const filtered = provider.applyRuntimeFilter(prs);
     expect(filtered).toHaveLength(2);
   });
@@ -381,7 +365,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
       makePR({ number: 2, labels: ['type:bug'] }),
       makePR({ number: 3, labels: ['release:v1'] }),
     ];
-    provider.setFilter({ repos: [], labels: ['type:bug', 'release:v1'], statuses: [] });
+    provider.setFilter({ repos: [], labels: ['type:bug', 'release:v1'], statuses: [], author: '' });
     const filtered = provider.applyRuntimeFilter(prs);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].number).toBe(1);
@@ -393,7 +377,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
       makePR({ number: 1, repository: 'owner/repo1' }),
       makePR({ number: 2, repository: 'owner/repo2' }),
     ];
-    provider.setFilter({ repos: ['owner/repo1'], labels: [], statuses: [] });
+    provider.setFilter({ repos: ['owner/repo1'], labels: [], statuses: [], author: '' });
     const filtered = provider.applyRuntimeFilter(prs);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].repository).toBe('owner/repo1');
@@ -405,7 +389,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
       makePR({ number: 1, autoMergeRequest: { mergeMethod: 'SQUASH' } }),
       makePR({ number: 2 }),
     ];
-    provider.setFilter({ repos: [], labels: [], statuses: ['auto-merge'] });
+    provider.setFilter({ repos: [], labels: [], statuses: ['auto-merge'], author: '' });
     const filtered = provider.applyRuntimeFilter(prs);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].number).toBe(1);
@@ -421,9 +405,399 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalled());
 
-    provider.setFilter({ repos: [], labels: [], statuses: ['approved'] });
+    provider.setFilter({ repos: [], labels: [], statuses: ['approved'], author: '' });
     const children = provider.getChildren();
     expect(children).toHaveLength(1);
     expect(children[0].label).toBe('No PRs match current filter');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Author filter (#280)
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — author filter', () => {
+  it('isFiltered should return true when author is set', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    expect(provider.isFiltered).toBe(true);
+  });
+
+  it('isFiltered should return false when author is empty string', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '' });
+    expect(provider.isFiltered).toBe(false);
+  });
+
+  it('getFilterDescription should include author:me when author set', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    expect(provider.getFilterDescription()).toContain('author:me');
+  });
+
+  it('getFilterDescription should not include author when empty', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '' });
+    expect(provider.getFilterDescription()).not.toContain('author');
+  });
+
+  it('clearFilter should reset author to empty', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    expect(provider.isFiltered).toBe(true);
+    provider.clearFilter();
+    expect(provider.isFiltered).toBe(false);
+    expect(provider.filter.author).toBe('');
+  });
+
+  it('should trigger fetchAll when author changes', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR()]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalled());
+
+    listener.mockClear();
+    mockFetchMyPRs.mockClear();
+
+    // Change author → should trigger a new fetchAll
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    await vi.waitFor(() => expect(mockFetchMyPRs).toHaveBeenCalled());
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PRLevelFilter lifecycle (#390)
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — PRLevelFilter lifecycle', () => {
+  it('should get undefined when no level filter set', () => {
+    const provider = new PRsTreeProvider();
+    expect(provider.getLevelFilter('github-pr:owner/repo:f0')).toBeUndefined();
+  });
+
+  it('should set and get level filter', () => {
+    const provider = new PRsTreeProvider();
+    const filter = { statuses: ['draft'], labels: ['urgent'] };
+    provider.setLevelFilter('github-pr:owner/repo:f0', filter);
+    expect(provider.getLevelFilter('github-pr:owner/repo:f0')).toEqual(filter);
+  });
+
+  it('should fire tree data change when setting level filter', () => {
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setLevelFilter('github-pr:owner/repo:f0', { statuses: ['draft'] });
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it('should clear level filter by nodeId', () => {
+    const provider = new PRsTreeProvider();
+    provider.setLevelFilter('github-pr:owner/repo:f0', { statuses: ['draft'] });
+    provider.clearLevelFilter('github-pr:owner/repo:f0');
+    expect(provider.getLevelFilter('github-pr:owner/repo:f0')).toBeUndefined();
+  });
+
+  it('should fire tree data change when clearing level filter', () => {
+    const provider = new PRsTreeProvider();
+    provider.setLevelFilter('github-pr:owner/repo:f0', { statuses: ['draft'] });
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.clearLevelFilter('github-pr:owner/repo:f0');
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it('should clear all level filters', () => {
+    const provider = new PRsTreeProvider();
+    provider.setLevelFilter('github-pr:owner/repo:f0', { statuses: ['draft'] });
+    provider.setLevelFilter('ado-pr:org:project:f0', { statuses: ['active'] });
+    provider.clearAllLevelFilters();
+    expect(provider.getLevelFilter('github-pr:owner/repo:f0')).toBeUndefined();
+    expect(provider.getLevelFilter('ado-pr:org:project:f0')).toBeUndefined();
+  });
+
+  it('should fire tree data change when clearing all level filters', () => {
+    const provider = new PRsTreeProvider();
+    provider.setLevelFilter('github-pr:owner/repo:f0', { statuses: ['draft'] });
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.clearAllLevelFilters();
+    expect(listener).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getAvailableOptions (#390)
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — getAvailableOptions', () => {
+  it('should return owners for github-pr-backend', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR()]);
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner1/repo1', 'owner2/repo2']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const options = provider.getAvailableOptions('github-pr:', 'github-pr-backend');
+    expect(options.owners).toEqual(['owner1', 'owner2']);
+  });
+
+  it('should return repos for github-pr-org', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR()]);
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo-a', 'owner/repo-b']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const options = provider.getAvailableOptions('github-pr:owner', 'github-pr-org');
+    expect(options.repos).toEqual(['owner/repo-a', 'owner/repo-b']);
+  });
+
+  it('should return statuses and labels for github-pr-repo', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([
+      makePR({ labels: ['bug', 'urgent'] }),
+      makePR({ labels: ['feature'] }),
+    ]);
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const options = provider.getAvailableOptions('github-pr:owner/repo', 'github-pr-repo');
+    expect(options.statuses).toEqual(['draft', 'open', 'approved', 'changes-requested', 'auto-merge']);
+    expect(options.labels).toEqual(['bug', 'feature', 'urgent']);
+  });
+
+  it('should return orgs for ado-pr-backend', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoConfig('my-org', 'my-project');
+    const options = provider.getAvailableOptions('ado-pr:', 'ado-pr-backend');
+    expect(options.orgs).toEqual(['my-org']);
+  });
+
+  it('should return projects for ado-pr-org', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoConfig('my-org', 'my-project');
+    const options = provider.getAvailableOptions('ado-pr:my-org', 'ado-pr-org');
+    expect(options.projects).toEqual(['my-project']);
+  });
+
+  it('should return statuses for ado-pr-project', () => {
+    const provider = new PRsTreeProvider();
+    const options = provider.getAvailableOptions('ado-pr:org:project', 'ado-pr-project');
+    expect(options.statuses).toEqual(['draft', 'active', 'merged']);
+  });
+
+  it('should return empty for unknown contextValue', () => {
+    const provider = new PRsTreeProvider();
+    const options = provider.getAvailableOptions('unknown', 'unknown-context');
+    expect(options).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hierarchy rendering with level filters (#390)
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — hierarchy rendering with level filters', () => {
+  it('should apply level filter to GitHub repo node', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockImplementation(async (repo: string) => {
+      if (repo === 'owner/repo') {
+        return [
+          makePR({ number: 1, isDraft: true }),
+          makePR({ number: 2, reviewDecision: 'APPROVED' }),
+        ];
+      }
+      return [];
+    });
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    // Get repo node
+    const root = provider.getChildren();
+    expect(root).toHaveLength(2); // 2 PRs
+
+    // Now apply level filter to the repo
+    const repoNode = new PRsTreeItem('owner/repo', 1);
+    repoNode.id = 'github-pr:owner/repo:f1';
+    repoNode.contextValue = 'github-pr-repo';
+    provider.setLevelFilter('github-pr:owner/repo:f1', { statuses: ['draft'] });
+
+    // Get children with filter applied
+    const filtered = provider.getChildren(repoNode);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toContain('#1');
+  });
+
+  it('should apply label filter in level filter', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([
+      makePR({ number: 1, labels: ['bug'] }),
+      makePR({ number: 2, labels: ['feature'] }),
+    ]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const repoNode = new PRsTreeItem('owner/repo', 1);
+    repoNode.id = 'github-pr:owner/repo:f1';
+    repoNode.contextValue = 'github-pr-repo';
+    provider.setLevelFilter('github-pr:owner/repo:f1', { labels: ['bug'] });
+
+    const filtered = provider.getChildren(repoNode);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toContain('#1');
+  });
+
+  it('should apply combined status and label filter in level filter', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([
+      makePR({ number: 1, isDraft: true, labels: ['urgent'] }),
+      makePR({ number: 2, isDraft: true, labels: ['low-priority'] }),
+      makePR({ number: 3, reviewDecision: 'APPROVED', labels: ['urgent'] }),
+    ]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const repoNode = new PRsTreeItem('owner/repo', 1);
+    repoNode.id = 'github-pr:owner/repo:f1';
+    repoNode.contextValue = 'github-pr-repo';
+    provider.setLevelFilter('github-pr:owner/repo:f1', {
+      statuses: ['draft'],
+      labels: ['urgent'],
+    });
+
+    const filtered = provider.getChildren(repoNode);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toContain('#1');
+  });
+
+  it('should apply level filter to ADO project node', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoPRs([
+      {
+        id: 1, title: 'PR 1', isDraft: true, status: 'active',
+        url: 'url', sourceRef: 'feature', targetRef: 'main',
+        repository: 'repo', reviewers: [],
+      },
+      {
+        id: 2, title: 'PR 2', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'fix', targetRef: 'main',
+        repository: 'repo', reviewers: [],
+      },
+    ]);
+
+    const projectNode = new PRsTreeItem('project', 2);
+    projectNode.id = 'ado-pr:org:project:f1';
+    projectNode.contextValue = 'ado-pr-project';
+    provider.setLevelFilter('ado-pr:org:project:f1', { statuses: ['draft'] });
+
+    const filtered = provider.getChildren(projectNode);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toContain('#1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge cases (#390)
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — level filter edge cases', () => {
+  it('should handle empty result when level filter matches nothing', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR({ reviewDecision: 'APPROVED' })]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const repoNode = new PRsTreeItem('owner/repo', 1);
+    repoNode.id = 'github-pr:owner/repo:f1';
+    repoNode.contextValue = 'github-pr-repo';
+    provider.setLevelFilter('github-pr:owner/repo:f1', { statuses: ['draft'] });
+
+    const filtered = provider.getChildren(repoNode);
+    expect(filtered).toHaveLength(0);
+  });
+
+  it('should handle single backend GitHub-only configuration', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR({ number: 1 })]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    // Single backend, single repo → flat list
+    const root = provider.getChildren();
+    expect(root).toHaveLength(1);
+    expect(root[0].contextValue).toBe('pull-request');
+  });
+
+  it('should handle single backend ADO-only configuration', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoPRs([
+      {
+        id: 1, title: 'PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'feature', targetRef: 'main',
+        repository: 'repo', reviewers: [],
+      },
+    ]);
+
+    // Single backend, ADO → flat list
+    const root = provider.getChildren();
+    expect(root).toHaveLength(1);
+    expect(root[0].contextValue).toBe('ado-pull-request');
+  });
+
+  it('should show both backends when both GitHub and ADO configured', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR()]);
+
+    const provider = new PRsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoPRs([
+      {
+        id: 1, title: 'PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'feature', targetRef: 'main',
+        repository: 'repo', reviewers: [],
+      },
+    ]);
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const root = provider.getChildren();
+    expect(root).toHaveLength(2);
+    expect(root.some(n => n.contextValue === 'ado-pr-backend')).toBe(true);
+    expect(root.some(n => n.contextValue === 'github-pr-backend')).toBe(true);
   });
 });

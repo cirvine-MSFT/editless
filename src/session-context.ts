@@ -48,14 +48,28 @@ interface EventCacheEntry {
   event: SessionEvent | null;
 }
 
+/** Lightweight record stored in the CWD index — no plan.md parsing. */
+interface CwdIndexEntry {
+  sessionId: string;
+  cwd: string;
+  summary: string;
+  branch: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export class SessionContextResolver {
   private _cache: CacheEntry | null = null;
   private readonly _eventCache = new Map<string, EventCacheEntry>();
-  private static readonly EVENT_CACHE_TTL_MS = 3_000;
-  static readonly STALE_SESSION_DAYS = 7;
+  private static readonly EVENT_CACHE_TTL_MS = 10_000;
+  static readonly STALE_SESSION_DAYS = 14;
   private readonly _sessionStateDir: string;
   private readonly _fileWatchers = new Map<string, fs.FSWatcher>();
   private readonly _watcherPending = new Map<string, ReturnType<typeof setTimeout>>();
+
+  /** CWD → session entries index for O(1) lookups. Rebuilt when dir count changes. */
+  private _cwdIndex: Map<string, CwdIndexEntry[]> | null = null;
+  private _indexedDirCount: number = 0;
 
   constructor() {
     this._sessionStateDir = path.join(os.homedir(), '.copilot', 'session-state');
@@ -116,6 +130,8 @@ export class SessionContextResolver {
 
   clearCache(): void {
     this._cache = null;
+    this._cwdIndex = null;
+    this._indexedDirCount = 0;
   }
 
   getLastEvent(sessionId: string): SessionEvent | null {
@@ -338,28 +354,30 @@ export class SessionContextResolver {
     };
   }
 
-  private _scan(squadPaths: string[]): Map<string, SessionContext> {
-    const result = new Map<string, SessionContext>();
-
-    const normalizedLookup = new Map<string, string>();
-    for (const sp of squadPaths) {
-      normalizedLookup.set(normalizePath(sp), sp);
-    }
-
-    const candidates = new Map<string, SessionContext>();
-
-    let sessionDirs: string[];
+  /**
+   * Build or revalidate the CWD → session index. Rebuilds only when the
+   * number of session directories changes (new session created / deleted).
+   */
+  private _ensureIndex(): Map<string, CwdIndexEntry[]> {
+    let dirEntries: fs.Dirent[];
     try {
-      sessionDirs = fs.readdirSync(this._sessionStateDir, { withFileTypes: true })
-        .filter(e => e.isDirectory())
-        .map(e => e.name);
+      dirEntries = fs.readdirSync(this._sessionStateDir, { withFileTypes: true })
+        .filter(e => e.isDirectory());
     } catch {
-      return result;
+      return this._cwdIndex ?? new Map();
     }
 
-    for (const sessionId of sessionDirs) {
-      const sessionDir = path.join(this._sessionStateDir, sessionId);
-      const workspacePath = path.join(sessionDir, 'workspace.yaml');
+    // Fast path: directory count unchanged → index is still valid
+    if (this._cwdIndex && dirEntries.length === this._indexedDirCount) {
+      return this._cwdIndex;
+    }
+
+    // Rebuild index from all session directories
+    const index = new Map<string, CwdIndexEntry[]>();
+
+    for (const dirEntry of dirEntries) {
+      const sessionId = dirEntry.name;
+      const workspacePath = path.join(this._sessionStateDir, sessionId, 'workspace.yaml');
 
       let yamlContent: string;
       try {
@@ -373,34 +391,62 @@ export class SessionContextResolver {
       if (!sessionCwd) continue;
 
       const normalizedCwd = normalizePath(sessionCwd);
-      const matchedSquadPath = normalizedLookup.get(normalizedCwd);
-      if (!matchedSquadPath) continue;
+      const entry: CwdIndexEntry = {
+        sessionId,
+        cwd: sessionCwd,
+        summary: yaml['summary'] || '',
+        branch: yaml['branch'] || '',
+        createdAt: yaml['created_at'] || '',
+        updatedAt: yaml['updated_at'] || '',
+      };
 
+      const existing = index.get(normalizedCwd);
+      if (existing) {
+        existing.push(entry);
+      } else {
+        index.set(normalizedCwd, [entry]);
+      }
+    }
+
+    this._cwdIndex = index;
+    this._indexedDirCount = dirEntries.length;
+    return index;
+  }
+
+  private _scan(squadPaths: string[]): Map<string, SessionContext> {
+    const result = new Map<string, SessionContext>();
+    const index = this._ensureIndex();
+
+    for (const sp of squadPaths) {
+      const normalizedSp = normalizePath(sp);
+      const entries = index.get(normalizedSp);
+      if (!entries || entries.length === 0) continue;
+
+      // Pick the most recently updated entry
+      let best = entries[0];
+      for (let i = 1; i < entries.length; i++) {
+        if (entries[i].updatedAt > best.updatedAt) {
+          best = entries[i];
+        }
+      }
+
+      // Read plan.md only for the best match
       let references = extractReferences('');
-      const planPath = path.join(sessionDir, 'plan.md');
+      const planPath = path.join(this._sessionStateDir, best.sessionId, 'plan.md');
       try {
         const planContent = fs.readFileSync(planPath, 'utf-8').slice(0, 500);
         references = extractReferences(planContent);
       } catch { /* no plan.md */ }
 
-      const ctx: SessionContext = {
-        sessionId,
-        summary: yaml['summary'] || '',
-        cwd: sessionCwd,
-        branch: yaml['branch'] || '',
-        createdAt: yaml['created_at'] || '',
-        updatedAt: yaml['updated_at'] || '',
+      result.set(sp, {
+        sessionId: best.sessionId,
+        summary: best.summary,
+        cwd: best.cwd,
+        branch: best.branch,
+        createdAt: best.createdAt,
+        updatedAt: best.updatedAt,
         references,
-      };
-
-      const existing = candidates.get(matchedSquadPath);
-      if (!existing || ctx.updatedAt > existing.updatedAt) {
-        candidates.set(matchedSquadPath, ctx);
-      }
-    }
-
-    for (const [squadPath, ctx] of candidates) {
-      result.set(squadPath, ctx);
+      });
     }
 
     return result;
