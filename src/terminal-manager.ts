@@ -47,6 +47,13 @@ export interface PersistedTerminalInfo {
 
 const STORAGE_KEY = 'editless.terminalSessions';
 
+/** Strip Unicode emoji (and variation selectors / ZWJ sequences) from a string. */
+export function stripEmoji(str: string): string {
+  return str
+    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]\uFE0F?(\u200D[\p{Emoji_Presentation}\p{Extended_Pictographic}]\uFE0F?)*/gu, '')
+    .trim();
+}
+
 // ---------------------------------------------------------------------------
 // TerminalManager
 // ---------------------------------------------------------------------------
@@ -537,7 +544,8 @@ export class TerminalManager implements vscode.Disposable {
         lastSeenAt: entry.lastSeenAt ?? Date.now(),
         rebootCount: (entry.rebootCount ?? 0) + 1,
       }))
-      .filter(entry => entry.rebootCount < TerminalManager.MAX_REBOOT_COUNT);
+      .filter(entry => entry.rebootCount < TerminalManager.MAX_REBOOT_COUNT)
+      .slice(0, 50);
 
     this._tryMatchTerminals();
 
@@ -607,12 +615,25 @@ export class TerminalManager implements vscode.Disposable {
     };
 
     // Multi-signal matching: each stage only considers unclaimed terminals
+    // Pass 1: Index-based — match by squadId + terminal index
+    runPass((t, p) => {
+      for (const [, info] of this._terminals) {
+        if (info.squadId === p.squadId && info.index === p.index - 1) return true;
+        if (info.squadId === p.squadId && info.index === p.index + 1) return true;
+      }
+      return false;
+    });
+    // Pass 2–4: Name-based matching
     runPass((t, p) => t.name === p.terminalName);
     runPass((t, p) => t.name === (p.originalName ?? p.displayName));
     runPass((t, p) => t.name === p.displayName);
+    // Pass 5: Emoji-stripped name comparison
     runPass((t, p) => {
-      const orig = p.originalName ?? p.displayName;
-      return t.name.includes(orig) || p.terminalName.includes(t.name);
+      const stripped = stripEmoji(t.name);
+      if (stripped.length === 0) return false;
+      return stripped === stripEmoji(p.terminalName)
+        || stripped === stripEmoji(p.originalName ?? p.displayName)
+        || stripped === stripEmoji(p.displayName);
     });
 
     this._pendingSaved = unmatched;

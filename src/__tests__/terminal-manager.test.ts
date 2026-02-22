@@ -68,7 +68,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { TerminalManager, type PersistedTerminalInfo, type SessionState } from '../terminal-manager';
+import { TerminalManager, type PersistedTerminalInfo, type SessionState, stripEmoji } from '../terminal-manager';
 import * as vscodeModule from 'vscode';
 
 function makeMockTerminal(name: string): vscode.Terminal {
@@ -729,7 +729,7 @@ describe('TerminalManager', () => {
       expect(all[0].info.id).toBe('signal-original-1');
     });
 
-    it('should reconcile via contains-match when terminal name is substring', () => {
+    it('should NOT reconcile via contains-match (substring fallback removed #327)', () => {
       const entry = makePersistedEntry({
         id: 'signal-contains-1',
         terminalName: 'no-match',
@@ -743,10 +743,9 @@ describe('TerminalManager', () => {
       const mgr = new TerminalManager(ctx);
       mgr.reconcile();
 
-      const all = mgr.getAllTerminals();
-      expect(all).toHaveLength(1);
-      expect(all[0].terminal).toBe(liveTerminal);
-      expect(all[0].info.id).toBe('signal-contains-1');
+      expect(mgr.getAllTerminals()).toHaveLength(0);
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.find(e => e.id === 'signal-contains-1')).toBeDefined();
     });
 
     it('should NOT match terminals that have no signal overlap', () => {
@@ -2201,6 +2200,143 @@ describe('TerminalManager', () => {
 
       const infoAfter = mgr.getTerminalInfo(terminal);
       expect(infoAfter?.agentSessionId).toBe('detected-session');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // #327 — Strengthened orphan matching
+  // ---------------------------------------------------------------------------
+
+  describe('stripEmoji helper (#327)', () => {
+    it('should strip emoji from a string', () => {
+      expect(stripEmoji('🧪 Test Squad #1')).toBe('Test Squad #1');
+    });
+
+    it('should handle strings with no emoji', () => {
+      expect(stripEmoji('Test Squad #1')).toBe('Test Squad #1');
+    });
+
+    it('should handle emoji-only strings', () => {
+      expect(stripEmoji('🧪🚀')).toBe('');
+    });
+
+    it('should handle empty strings', () => {
+      expect(stripEmoji('')).toBe('');
+    });
+  });
+
+  describe('emoji-stripped name matching (#327)', () => {
+    it('should match when shell strips emoji from terminal name', () => {
+      const entry = makePersistedEntry({
+        id: 'emoji-strip-1',
+        terminalName: '🧪 Test Squad #1',
+        displayName: '🧪 Test Squad #1',
+        originalName: '🧪 Test Squad #1',
+      });
+      const liveTerminal = makeMockTerminal('Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const all = mgr.getAllTerminals();
+      expect(all).toHaveLength(1);
+      expect(all[0].terminal).toBe(liveTerminal);
+      expect(all[0].info.id).toBe('emoji-strip-1');
+    });
+
+    it('should NOT emoji-match when stripped names differ', () => {
+      const entry = makePersistedEntry({
+        id: 'emoji-strip-2',
+        terminalName: '🧪 Alpha #1',
+        displayName: '🧪 Alpha #1',
+        originalName: '🧪 Alpha #1',
+      });
+      const liveTerminal = makeMockTerminal('Beta #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      expect(mgr.getAllTerminals()).toHaveLength(0);
+    });
+  });
+
+  describe('index-based matching (#327)', () => {
+    it('should match by squadId + sequential index when a sibling is already tracked', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ id: 'idx-squad', name: 'Idx Squad', icon: '🔢' });
+
+      // Launch a terminal so there's a tracked terminal with index 1
+      mockRandomUUID.mockReturnValueOnce('00000000-0000-0000-0000-aaaaaaaaaaaa' as any);
+      const t1 = mgr.launchTerminal(config);
+
+      // Simulate a persisted entry with index 2 that has mismatched names
+      const entry = makePersistedEntry({
+        id: 'idx-match-2',
+        squadId: 'idx-squad',
+        index: 2,
+        terminalName: 'shell-mangled-name',
+        displayName: 'shell-mangled-name',
+        originalName: 'shell-mangled-name',
+      });
+      const liveTerminal = makeMockTerminal('completely-different');
+      mockTerminals.push(liveTerminal);
+
+      // Load persisted entry manually to trigger matching
+      (mgr as any)._pendingSaved = [entry];
+      (mgr as any)._tryMatchTerminals();
+
+      const all = mgr.getAllTerminals();
+      // Should have the launched terminal + the index-matched one
+      const matched = all.find(a => a.info.id === 'idx-match-2');
+      expect(matched).toBeDefined();
+      expect(matched!.terminal).toBe(liveTerminal);
+    });
+  });
+
+  describe('pendingSaved cap at 50 (#327)', () => {
+    it('should cap _pendingSaved at 50 entries', () => {
+      const entries = Array.from({ length: 60 }, (_, i) =>
+        makePersistedEntry({
+          id: `cap-${i}`,
+          terminalName: `term-${i}`,
+          displayName: `term-${i}`,
+          rebootCount: 0,
+        }),
+      );
+
+      const ctx = makeMockContext(entries);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.length).toBeLessThanOrEqual(50);
+    });
+  });
+
+  describe('substring fallback removal (#327)', () => {
+    it('should NOT match via permissive substring includes', () => {
+      const entry = makePersistedEntry({
+        id: 'substr-false-positive',
+        terminalName: 'bash',
+        displayName: 'bash',
+        originalName: 'bash',
+      });
+      // "bash" would have matched "bash: 🧪 Squad #1" with old .includes()
+      const liveTerminal = makeMockTerminal('bash: 🧪 Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+      mgr.reconcile();
+
+      expect(mgr.getAllTerminals()).toHaveLength(0);
+      const orphans = mgr.getOrphanedSessions();
+      expect(orphans.find(e => e.id === 'substr-false-positive')).toBeDefined();
     });
   });
 });
