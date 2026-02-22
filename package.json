@@ -296,6 +296,18 @@
         "title": "Resume All Previous Sessions",
         "category": "EditLess",
         "icon": "$(debug-restart)"
+      },
+      {
+        "command": "editless.filterLevel",
+        "title": "Filter...",
+        "category": "EditLess",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "editless.clearLevelFilter",
+        "title": "Clear Filter",
+        "category": "EditLess",
+        "icon": "$(clear-all)"
       }
     ],
     "keybindings": [
@@ -485,6 +497,21 @@
           "command": "editless.dismissOrphan",
           "when": "viewItem == orphanedSession",
           "group": "inline@2"
+        },
+        {
+          "command": "editless.filterLevel",
+          "when": "view == editlessWorkItems && viewItem =~ /^(ado|github)-(backend|org|project|repo)$/",
+          "group": "inline@1"
+        },
+        {
+          "command": "editless.filterLevel",
+          "when": "view == editlessWorkItems && viewItem =~ /^(ado|github)-(backend|org|project|repo)$/",
+          "group": "filter@1"
+        },
+        {
+          "command": "editless.clearLevelFilter",
+          "when": "view == editlessWorkItems && viewItem =~ /^(ado|github)-(backend|org|project|repo)$/",
+          "group": "filter@2"
         }
       ],
       "commandPalette": [
@@ -606,6 +633,14 @@
         },
         {
           "command": "editless.goToPRInBrowser",
+          "when": "false"
+        },
+        {
+          "command": "editless.filterLevel",
+          "when": "false"
+        },
+        {
+          "command": "editless.clearLevelFilter",
           "when": "false"
         }
       ]

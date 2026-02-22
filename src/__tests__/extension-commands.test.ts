@@ -378,7 +378,12 @@ vi.mock('../work-items-tree', () => ({
       getAllRepos: mockGetAllRepos,
       getAllLabels: mockGetAllLabels,
       setAdoItems: vi.fn(),
+      setAdoConfig: vi.fn(),
       setAdoRefresh: vi.fn(),
+      getLevelFilter: vi.fn(),
+      setLevelFilter: vi.fn(),
+      clearLevelFilter: vi.fn(),
+      getAvailableOptions: vi.fn().mockReturnValue({}),
     };
   }),
   WorkItemsTreeItem: class {

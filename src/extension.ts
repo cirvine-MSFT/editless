@@ -22,7 +22,7 @@ import { SessionContextResolver } from './session-context';
 import { scanSquad } from './scanner';
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
 import { resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
-import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState } from './work-items-tree';
+import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState, type LevelFilter } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem, type PRsFilter } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
@@ -622,6 +622,121 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       workItemsProvider.setFilter({ repos, labels, states, types });
     }),
     vscode.commands.registerCommand('editless.clearWorkItemsFilter', () => workItemsProvider.clearFilter()),
+    // Per-level filtering (#390)
+    vscode.commands.registerCommand('editless.filterLevel', async (item: WorkItemsTreeItem) => {
+      if (!item?.id || !item.contextValue) return;
+      
+      const nodeId = item.id;
+      const contextValue = item.contextValue;
+      const options = workItemsProvider.getAvailableOptions(nodeId, contextValue);
+      const currentFilter = workItemsProvider.getLevelFilter(nodeId) ?? {};
+
+      const items: vscode.QuickPickItem[] = [];
+
+      // Owners (GitHub backend)
+      if (options.owners && options.owners.length > 0) {
+        items.push({ label: 'Owners', kind: vscode.QuickPickItemKind.Separator });
+        for (const owner of options.owners) {
+          items.push({ label: owner, description: 'owner', picked: currentFilter.selectedChildren?.includes(owner) });
+        }
+      }
+
+      // Orgs (ADO backend)
+      if (options.orgs && options.orgs.length > 0) {
+        items.push({ label: 'Organizations', kind: vscode.QuickPickItemKind.Separator });
+        for (const org of options.orgs) {
+          items.push({ label: org, description: 'org', picked: currentFilter.selectedChildren?.includes(org) });
+        }
+      }
+
+      // Projects (ADO org)
+      if (options.projects && options.projects.length > 0) {
+        items.push({ label: 'Projects', kind: vscode.QuickPickItemKind.Separator });
+        for (const project of options.projects) {
+          items.push({ label: project, description: 'project', picked: currentFilter.selectedChildren?.includes(project) });
+        }
+      }
+
+      // Repos (GitHub org)
+      if (options.repos && options.repos.length > 0) {
+        items.push({ label: 'Repositories', kind: vscode.QuickPickItemKind.Separator });
+        for (const repo of options.repos) {
+          items.push({ label: repo, description: 'repo', picked: currentFilter.selectedChildren?.includes(repo) });
+        }
+      }
+
+      // Types (ADO project)
+      if (options.types && options.types.length > 0) {
+        items.push({ label: 'Type', kind: vscode.QuickPickItemKind.Separator });
+        for (const type of options.types) {
+          items.push({ label: type, description: 'type', picked: currentFilter.types?.includes(type) });
+        }
+      }
+
+      // Labels (GitHub repo)
+      if (options.labels && options.labels.length > 0) {
+        items.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
+        for (const label of options.labels) {
+          items.push({ label, description: 'label', picked: currentFilter.labels?.includes(label) });
+        }
+      }
+
+      // Tags (ADO project)
+      if (options.tags && options.tags.length > 0) {
+        items.push({ label: 'Tags', kind: vscode.QuickPickItemKind.Separator });
+        for (const tag of options.tags) {
+          items.push({ label: tag, description: 'tag', picked: currentFilter.tags?.includes(tag) });
+        }
+      }
+
+      // States
+      if (options.states && options.states.length > 0) {
+        items.push({ label: 'State', kind: vscode.QuickPickItemKind.Separator });
+        const stateLabels = { open: 'Open (New)', active: 'Active / In Progress', closed: 'Closed' };
+        for (const state of options.states) {
+          items.push({ label: stateLabels[state], description: 'state', picked: currentFilter.states?.includes(state) });
+        }
+      }
+
+      if (items.length === 0) {
+        vscode.window.showInformationMessage('No filter options available for this level');
+        return;
+      }
+
+      const picks = await vscode.window.showQuickPick(items, {
+        title: `Filter ${item.label}`,
+        canPickMany: true,
+        placeHolder: 'Select filters (leave empty to show all)',
+      });
+      if (picks === undefined) return;
+
+      const filter: LevelFilter = {};
+      filter.selectedChildren = picks.filter(p => p.description === 'owner' || p.description === 'org' || p.description === 'project' || p.description === 'repo').map(p => p.label);
+      filter.types = picks.filter(p => p.description === 'type').map(p => p.label);
+      filter.labels = picks.filter(p => p.description === 'label').map(p => p.label);
+      filter.tags = picks.filter(p => p.description === 'tag').map(p => p.label);
+      const stateLabels = { 'Open (New)': 'open', 'Active / In Progress': 'active', 'Closed': 'closed' };
+      filter.states = picks.filter(p => p.description === 'state')
+        .map(p => stateLabels[p.label as keyof typeof stateLabels])
+        .filter((s): s is UnifiedState => s !== undefined);
+
+      if (filter.selectedChildren?.length === 0) delete filter.selectedChildren;
+      if (filter.types?.length === 0) delete filter.types;
+      if (filter.labels?.length === 0) delete filter.labels;
+      if (filter.tags?.length === 0) delete filter.tags;
+      if (filter.states?.length === 0) delete filter.states;
+
+      if (Object.keys(filter).length === 0) {
+        workItemsProvider.clearLevelFilter(nodeId);
+      } else {
+        workItemsProvider.setLevelFilter(nodeId, filter);
+      }
+    }),
+    vscode.commands.registerCommand('editless.clearLevelFilter', (item: WorkItemsTreeItem) => {
+      if (item?.id) {
+        workItemsProvider.clearLevelFilter(item.id);
+      }
+    }),
     // Keep command registered for backward compat — delegates to unified filter
     vscode.commands.registerCommand('editless.workItems.filterByType', () =>
       vscode.commands.executeCommand('editless.filterWorkItems'),
@@ -1236,8 +1351,11 @@ async function initAdoIntegration(
   const project = String(config.get<string>('ado.project') ?? '').trim();
 
   if (!org || !project) {
+    workItemsProvider.setAdoConfig(undefined, undefined);
     return;
   }
+
+  workItemsProvider.setAdoConfig(org, project);
 
   async function fetchAdoData(): Promise<void> {
     let token = await getAdoToken(context.secrets);
