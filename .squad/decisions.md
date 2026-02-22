@@ -7169,3 +7169,89 @@ SquadUI v0.7.3 surface sufficient for Tier 1 integration (4 hours, v0.1). Keep t
 **What:** EditLess is a window/tab/terminal manager — NOT a dashboard or information display. SquadUI should handle the dashboard, team info, decisions view, etc. EditLess just manages what's running where and which tabs need attention. "I really just want to be like a window kind of manager. I don't necessarily want to be sending a bunch of information back and forth."
 **Why:** User directive — scopes EditLess's role in the Squad ecosystem
 
+
+---
+
+## Launch Helper Extraction Pattern
+
+**Status:** Implemented  
+**Date:** 2026-02-21  
+**Context:** Issue #337 — Launch progress indicator  
+**Author:** Morty (Extension Dev)
+
+### Decision
+
+Extracted duplicated terminal launch logic from launchFromWorkItem and launchFromPR into shared utilities in src/launch-utils.ts.
+
+### Implementation
+
+Created three exports:
+
+1. **MAX_SESSION_NAME constant** — Value: 50. Single source of truth for name length limit.
+
+2. **uildSessionName(rawName: string): string** — Pure function that handles truncation logic:
+   - Returns raw name unchanged if ≤ MAX_SESSION_NAME
+   - Truncates at last space before limit (smart word boundary)
+   - Falls back to hard truncation at limit if no space exists
+   - Appends ellipsis character (…) to truncated names
+
+3. **launchAndLabel(terminalManager, labelManager, cfg, rawName): Terminal** — Orchestration function:
+   - Calls uildSessionName() to process the raw name
+   - Launches terminal via 	erminalManager.launchTerminal()
+   - Sets label via labelManager.setLabel()
+   - Returns the created terminal
+
+### Rationale
+
+- **DRY principle**: Eliminated 12 identical lines × 2 locations = 24 lines of duplication
+- **Single responsibility**: uildSessionName() has one job, testable in isolation
+- **Type safety**: Proper TypeScript types for all parameters
+- **Maintainability**: Future changes to truncation logic only need to be made once
+- **Testability**: 14 comprehensive test cases covering edge cases
+
+### Usage Pattern
+
+Both launchFromWorkItem and launchFromPR now:
+1. Build the raw name with the appropriate prefix (# or PR #)
+2. Call launchAndLabel(terminalManager, labelManager, cfg, rawName)
+
+This pattern should be applied to any future commands that launch terminals with custom names.
+
+### Testing
+
+All 774 tests pass, including 14 new tests for the extracted utilities covering:
+- Short names (no truncation)
+- Long names (truncation at word boundary)
+- Long names without spaces (hard truncation)
+- Ellipsis character validation
+- Real-world work item and PR name scenarios
+- Integration with TerminalManager and SessionLabelManager
+
+### Files Changed
+
+- **Created:** src/launch-utils.ts (51 lines)
+- **Created:** src/__tests__/launch-utils.test.ts (164 lines)
+- **Modified:** src/extension.ts (reduced by 20 lines)
+
+---
+
+## Worktree Handoff Architecture (User Directive)
+
+**Date:** 2026-02-22T19:14:56Z  
+**By:** Casey Irvine (via Copilot)  
+**Status:** Deferred to bradygaster/squad
+
+### Decision
+
+Worktree handoff (auto-creating a worktree when starting work and handing off squad state) should be a Squad CLI feature, NOT an EditLess feature. EditLess should follow squad's state, not own the worktree lifecycle.
+
+### Rationale
+
+- User request — captured for team memory
+- EditLess role: Window/tab/terminal manager only
+- Squad CLI role: Lifecycle management and state orchestration
+
+### Action Items
+
+1. File as a feature request on bradygaster/squad if it doesn't exist
+2. EditLess will integrate Squad CLI worktree output when available
