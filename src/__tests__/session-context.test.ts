@@ -166,14 +166,10 @@ path: c:\\Users\\test`;
       const module = await import('../session-context');
       resolver = new module.SessionContextResolver();
       
-      // Override the session state dir by patching the internal path
-      // We do this by monkey-patching os.homedir behavior indirectly
-      // through file system operations
-      const homeDir = path.dirname(tmpSessionDir);
-      const aiTeamPath = path.join(homeDir, '.copilot', 'session-state');
+      // Use isolated session-state dir inside tmpSessionDir (cleaned up per test)
+      const aiTeamPath = path.join(tmpSessionDir, '.copilot', 'session-state');
       fs.mkdirSync(aiTeamPath, { recursive: true });
       
-      // We'll copy test session files to the expected location
       resolver._sessionStateDir = aiTeamPath;
     });
 
