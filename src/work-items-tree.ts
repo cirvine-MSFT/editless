@@ -362,8 +362,8 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
           adoGroup.id = `ado::f${fseq}`;
           items.push(adoGroup);
         } else {
-          // Only ADO configured - show work items directly (since we only support one org+project)
-          return this._getAdoRootItems(filteredAdo).map(wi => this.buildAdoItem(wi));
+          // Only ADO configured - preserve org→project hierarchy
+          return this._getAdoOrgNodes(filteredAdo);
         }
       }
 
