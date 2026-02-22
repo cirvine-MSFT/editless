@@ -11,6 +11,30 @@
 
 ## Learnings
 
+### 2026-02-22: v0.1.1 Release Planning — Viability Fixes & Scope Prioritization
+
+Analyzed 9 issues across 3 domains to define v0.1.1 as a **viability release**. EditLess shipped in v0.1 functionally but with UX gaps and performance issues that made it unreliable for terminal sessions and work item management.
+
+**Key planning decisions:**
+
+1. **Terminal session performance (#331) is P1:** Session resolution was 100ms per poll, causing observable UI lag. CWD-indexed cache reduces to <5ms — a 20x improvement that's critical for "feels responsive" perception.
+
+2. **Orphan session UX is a narrative:** Issues #327, #337, #338 tell one story: "Your sessions are safe and recoverable." Orphan matching false positives (#327) destroy trust. Launch progress indicator (#337) shows something is happening. Better UX copy (#338) explains what "orphaned" means. These should land together in same PR for narrative cohesion.
+
+3. **Empty state onboarding (#339) prevents cliff:** New users saw "All agents hidden — use Show Hidden to restore" — wrong message for first-time experience. Welcome state is low-effort, high-impact UX fix. Unblocks adoption.
+
+4. **Work items fixes (#280, #291, #292) are quality gates:** v0.1 shipped with flat work item list, no PR filtering, broken hierarchy. These are "credibility" fixes — not viability-critical but important for users to trust the feature set.
+
+5. **No hard blockers:** All 9 issues can run in parallel (3 devs: Morty terminal-session+work-items, Summer terminal-ux). Estimated 2–3 days elapsed time with ~13–15 dev hours.
+
+6. **Risk profile:** Low risk on constants (#328) and empty state (#339). Medium risk on performance (#331, #327) and UX timing (#337). Tree structure change (#291) needs careful testing for regressions.
+
+**Release narrative:** "v0.1.1 makes EditLess reliable and usable. Terminal sessions are 20x faster, orphan recovery is trustworthy, work items are discoverable."
+
+**Decision record:** Created `.squad/decisions/inbox/rick-v011-release-plan.md` with full execution plan, dependency graph, agent assignments, testing strategy, and rollout communication.
+
+---
+
 ### 2026-02-17: v0.1 Retrospective — Speed vs. Quality Tradeoffs
 Completed comprehensive retrospective analysis of v0.1 release cycle (103 closed issues, 96 merged PRs, 275+ commits in 3 days). **Key patterns identified:**
 
@@ -263,3 +287,25 @@ Reviewed `terminal-manager.ts` and `session-context.ts` for Phase 2 terminal int
 **What's solid:** Module boundary is clean (session-context.ts has zero vscode imports, uses own Disposable interface). Watcher lifecycle in TerminalManager is thorough — onDidCloseTerminal cleans per-terminal, dispose() cleans all. Pre-generated UUID eliminates session-detection race condition. Debounced fs.watch with tail reading is efficient. focusTerminal string-overload validates liveness correctly. `watchSessionDir` is unused in production code (forward-looking for Phase 3) — acceptable as speculative API.
 
 **Decision:** Filed `.squad/decisions/inbox/rick-phase2-review.md` documenting the relaunchSession guard requirement.
+
+### 2026-02-22: Squad Ecosystem Integration Roadmap — Multi-Modality Architecture Plan
+
+Created comprehensive GitHub milestone "Squad Ecosystem Integration" with 12 issues spanning three phases: Foundation (NOW), Copilot SDK Integration (research), and Advanced Coordination (BLOCKED on Brady).
+
+**Context:** Casey wants EditLess to be the universal terminal orchestration layer for all Squad modalities — CLI agents, Squad SDK sessions, and native chat side-by-side. Current EditLess treats all terminals homogeneously with no modality awareness. Squad ecosystem consists of four components: @github/copilot-sdk (production), @bradygaster/squad-sdk (STUB), @bradygaster/squad-cli (STUB), csharpfritz/SquadUI (production).
+
+**Phase 1 — Foundation (NOW, v0.2.0):** 5 issues for core multi-modality support using existing APIs. Key work: (1) Session modality type system — extend TerminalInfo with modalityType: 'copilot-cli' | 'squad-cli' | 'squad-sdk' | 'native-chat', (2) Squad CLI command builder — buildSquadCommand() for `squad`, `squad loop`, `squad watch`, (3) Launch Squad CLI terminals — commands for squad workflows from UI, (4) Terminal attention state — needsAttention flag derived from shell execution + activity timing, (5) Modality-aware icons — different visual indicators per session type. All routed to Morty (extension dev) except icons (Summer for UX design).
+
+**Phase 2 — Copilot SDK Integration (NOW, research):** 3 issues exploring @github/copilot-sdk foundation. (6) Copilot SDK research spike — install SDK, explore JSON-RPC API, assess EditLess use cases, (7) SDK session discovery prototype — can EditLess discover/attach to SDK-managed sessions?, (8) SDK vs CLI architecture decision — should EditLess migrate to SDK, stay CLI-only, or hybrid? Routed to Jaguar (Copilot SDK expert) for research, Rick for final decision.
+
+**Phase 3 — Advanced Coordination (BLOCKED on Brady):** 4 issues requiring Squad SDK/CLI real implementations. (9) Squad SDK terminal integration — integrate SquadClient for persistent sessions, (10) Event bus monitoring — subscribe to agent:task-complete, agent:error for attention routing, (11) HookPipeline integration — surface governance violations (PII, file-write guards), (12) Ralph monitor integration — display work loop state from RalphMonitor. All tagged `release:backlog` and routed to Morty.
+
+**Routing logic:** Issues #1-4 (core terminal work) → Morty, #5 (visual design) → Summer, #6-7 (SDK research) → Jaguar, #8 (architecture decision) → Rick, #9-12 (blocked SDK features) → Morty + release:backlog.
+
+**Key decisions:** (1) Modality type system is the foundation — all other work depends on it. (2) Squad CLI integration can ship NOW with existing APIs (no Brady dependency). (3) SDK exploration starts in parallel (research spike) to derisk while waiting. (4) Blocked features clearly separated in backlog to avoid premature work.
+
+**Casey education:** Explained GitHub milestone concept (grouping related issues for a release goal), issue labeling strategy (type, squad member, release, area), and dependency management (MUST/SHOULD complete first). Created decision document at `.squad/decisions/inbox/rick-squad-integration-roadmap.md` with full context, rationale, and success metrics.
+
+**Release plan:** Phase 1 (v0.2.0) delivers immediate value — users can launch squad CLI workflows, see modality-specific icons, understand which terminals need attention. Phase 2 informs long-term architecture. Phase 3 waits for Brady but is pre-planned for fast integration when unblocked.
+
+**Milestone created:** GitHub milestone #2 "Squad Ecosystem Integration" with 12 issues (8 NOW work, 4 backlog). All issues have clear problem statements, acceptance criteria, file lists, size estimates, and WHY explanations per Casey's preference for context-rich issues.

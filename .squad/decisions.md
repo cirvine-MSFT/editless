@@ -6687,3 +6687,60 @@ Process lifecycle fully controlled by EditLess
 
 **Don't pursue:** Mixing pseudoterminal + --acp (they're mutually exclusive).
 
+
+---
+
+### 2026-02-22: Squad Ecosystem Integration Roadmap — 3-Phase Plan
+
+**Author:** Rick (Orchestration)  
+**Date:** 2026-02-22  
+**Status:** Planned
+
+## Decision
+
+Three-phase integration plan (12 GitHub issues) to position EditLess as the universal terminal orchestration layer for Squad ecosystem.
+
+**Phase 1 (Foundation, v0.2.0):** Session modality types, Squad CLI builder, launch commands, attention state, icons — 5 issues unblocked.  
+**Phase 2 (SDK Research, v0.2.x):** Copilot SDK spike, session discovery — 2 issues.  
+**Phase 3 (Blocked):** EventBus, RalphMonitor, HookPipeline, Ralph integration — 4 issues in backlog pending Brady's SDK.
+
+**Key Insights:** Session modality awareness + file-based events unblock Phase 1. EditLess becomes universal terminal layer for all Squad modalities (CLI, SDK, native-chat).
+
+---
+
+### 2026-02-22: Squad CLI/SDK Integration Architecture
+
+**Author:** Squanchy (Architecture)  
+**Date:** 2026-02-22  
+**Status:** Planned
+
+## Decision
+
+Squad CLI/SDK are process orchestration (not terminal management). Design extends TerminalInfo with modality awareness and event subscriptions.
+
+**Session Modality Type:** 'copilot-standard' | 'squad-loop' | 'squad-watch' | 'squad-interactive' | 'unknown'
+
+**Event Consumption:** File-based events via .squad/events-realtime.jsonl (Option C) — aligns with Squad architecture, unblocks Phase 1, swappable when SDK ships real EventBus.
+
+**Actionable NOW (7 hours):** Modality detection + file watcher + Ralph badge detection. No SDK required.
+
+---
+
+### 2026-02-22: SquadUI Integration Surface Analysis
+
+**Author:** Unity (Integration)  
+**Date:** 2026-02-22  
+**Status:** Planned
+
+## Decision
+
+SquadUI v0.7.3 surface sufficient for Tier 1 integration (4 hours, v0.1). Keep tree views separate (EditLess terminal-centric, SquadUI team-centric). Lazy sync for root coordination.
+
+**Tier 1 NOW:** Charter deep-link, refreshTree on selection, openDashboard root-aware, shared globalState squad.currentRoot.
+
+---
+
+### 2026-02-22: User Directive — Brady's Multi-Frontend Vision
+
+**From:** Casey Irvine (2026-02-22T03:39Z)  
+**What:** Brady confirmed multi-frontend approach. EditLess integrates Squad CLI as launchable session type + SquadUI as complementary sidebar. @github/copilot-sdk v0.1.25 is JSON-RPC foundation.
