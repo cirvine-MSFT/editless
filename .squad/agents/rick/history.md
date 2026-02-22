@@ -280,3 +280,13 @@ Reviewed PR #385 (v0.1.1 release candidate). **Verdict: APPROVED.**
 -   Work items ADO integration is clean but assumes flat list first, then hierarchy. Large ADO queries might need pagination in future.
 
 **Decision:** Merging PR #385 for v0.1.1 release.
+
+### 2026-02-23: v0.1.1 Follow-up Review — Discovery & Work Item Filters
+
+**Task:** Review changes on branch v0.1.1 (e4bf49b..HEAD).
+
+1.  **Discovery dedup fix:** ✅ APPROVED. Correctly filters `squad.agent.md` when it's part of a discovered squad structure. Tests cover both the exclusion and the standalone case.
+2.  **#387 Unified work items filter & Harmonization:** ✅ APPROVED. Unifying the filter UI is a good UX improvement. Mapping "Bug" -> `type:bug` is a sensible default for GitHub. "Labels" vs "Tags" harmonization reduces cognitive load for users switching between providers.
+3.  **#386 Refresh Tree after Dashboard Open:** ✅ APPROVED WITH NOTES. The fix addresses the stale tree issue. **Note:** `squadui.refreshTree` is a tactical fix. Ideally, the SquadUI extension should broadcast a change event that EditLess listens to, rather than EditLess imperatively refreshing it. Acceptable for now.
+
+**Decision:** Filed `.squad/decisions/inbox/rick-unified-work-item-types.md`.

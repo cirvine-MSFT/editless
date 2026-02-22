@@ -712,4 +712,164 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
     provider.setFilter({ repos: [], labels: ['frontend'], states: [], types: [] });
     expect(mockTreeView.description).toContain('label:frontend');
   });
+
+  it('should include type in filter description', () => {
+    const provider = new WorkItemsTreeProvider();
+    const mockTreeView = { description: undefined as string | undefined };
+    provider.setTreeView(mockTreeView as any);
+
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'] });
+    expect(mockTreeView.description).toContain('type:Bug');
+  });
+
+  it('should join multiple filter dimensions with separator', () => {
+    const provider = new WorkItemsTreeProvider();
+    const mockTreeView = { description: undefined as string | undefined };
+    provider.setTreeView(mockTreeView as any);
+
+    provider.setFilter({ repos: ['owner/repo'], labels: ['urgent'], states: ['open'], types: ['Bug'] });
+    expect(mockTreeView.description).toContain('repo:owner/repo');
+    expect(mockTreeView.description).toContain('label:urgent');
+    expect(mockTreeView.description).toContain('state:open');
+    expect(mockTreeView.description).toContain('type:Bug');
+    expect(mockTreeView.description).toContain(' · ');
+  });
+
+  it('should clear description when filter is cleared', () => {
+    const provider = new WorkItemsTreeProvider();
+    const mockTreeView = { description: undefined as string | undefined };
+    provider.setTreeView(mockTreeView as any);
+
+    provider.setFilter({ repos: [], labels: ['bug'], states: [], types: ['Bug'] });
+    expect(mockTreeView.description).toBeDefined();
+
+    provider.clearFilter();
+    expect(mockTreeView.description).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Additional mapAdoState coverage
+// ---------------------------------------------------------------------------
+
+describe('mapAdoState — additional states', () => {
+  it('should map "Doing" to "active"', () => {
+    expect(mapAdoState('Doing')).toBe('active');
+  });
+
+  it('should be case-insensitive', () => {
+    expect(mapAdoState('new')).toBe('open');
+    expect(mapAdoState('ACTIVE')).toBe('active');
+  });
+
+  it('should map unknown states to "closed"', () => {
+    expect(mapAdoState('Resolved')).toBe('closed');
+    expect(mapAdoState('Done')).toBe('closed');
+    expect(mapAdoState('Removed')).toBe('closed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Combined filters (#387)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — combined type + label/state filters', () => {
+  async function getFilteredItems(
+    issues: GitHubIssue[],
+    filter: { repos?: string[]; labels?: string[]; states?: Array<'open' | 'active' | 'closed'>; types?: string[] },
+  ): Promise<WorkItemsTreeItem[]> {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue(issues);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    provider.setFilter({
+      repos: filter.repos ?? [],
+      labels: filter.labels ?? [],
+      states: filter.states ?? [],
+      types: filter.types ?? [],
+    });
+
+    return provider.getChildren();
+  }
+
+  it('should apply type AND label filters together', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:bug', 'release:v0.1'] }),
+        makeIssue({ number: 2, labels: ['type:bug', 'release:backlog'] }),
+        makeIssue({ number: 3, labels: ['type:feature', 'release:v0.1'] }),
+      ],
+      { types: ['Bug'], labels: ['release:v0.1'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+
+  it('should apply type AND state filters together', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:bug'], assignees: ['user'] }),
+        makeIssue({ number: 2, labels: ['type:bug'], assignees: [] }),
+        makeIssue({ number: 3, labels: ['type:feature'], assignees: ['user'] }),
+      ],
+      { types: ['Bug'], states: ['active'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+
+  it('should apply all filter dimensions simultaneously', async () => {
+    const items = await getFilteredItems(
+      [
+        makeIssue({ number: 1, labels: ['type:bug', 'release:v0.1'], assignees: ['user'], repository: 'owner/repo' }),
+        makeIssue({ number: 2, labels: ['type:bug', 'release:v0.1'], assignees: [], repository: 'owner/repo' }),
+        makeIssue({ number: 3, labels: ['type:feature', 'release:v0.1'], assignees: ['user'], repository: 'owner/repo' }),
+      ],
+      { repos: ['owner/repo'], labels: ['release:v0.1'], states: ['active'], types: ['Bug'] },
+    );
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getAllRepos / getAllLabels with ADO (#387)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — getAllRepos with ADO', () => {
+  function makeAdoItem(overrides: Partial<import('../ado-client').AdoWorkItem> = {}): import('../ado-client').AdoWorkItem {
+    return {
+      id: 1, title: 'Item', state: 'Active', type: 'Bug',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/1',
+      assignedTo: 'user', areaPath: 'Area', tags: [],
+      ...overrides,
+    };
+  }
+
+  it('should include (ADO) in getAllRepos when ADO is configured', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([makeAdoItem()]);
+    const repos = provider.getAllRepos();
+    expect(repos).toContain('(ADO)');
+  });
+
+  it('should not include (ADO) when ADO is not configured', () => {
+    const provider = new WorkItemsTreeProvider();
+    const repos = provider.getAllRepos();
+    expect(repos).not.toContain('(ADO)');
+  });
+
+  it('should merge ADO tags into getAllLabels', () => {
+    mockIsGhAvailable.mockResolvedValue(false);
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([makeAdoItem({ tags: ['ado-tag', 'shared'] })]);
+    const labels = provider.getAllLabels();
+    expect(labels).toContain('ado-tag');
+    expect(labels).toContain('shared');
+  });
 });

@@ -225,6 +225,40 @@ describe('discoverAll', () => {
     expect(result.find(i => i.id === 'squad')).toBeDefined();
   });
 
+  it('keeps squad.agent.md when squad is discovered from a different workspace root', () => {
+    // ws1 has a squad, ws2 has squad.agent.md but no squad
+    const ws1 = path.join(tmpDir, 'ws1');
+    const ws2 = path.join(tmpDir, 'ws2');
+    writeFixture('ws1/.squad/team.md', '# WS1 Squad\n> Squad in ws1.\n**Universe:** test\n');
+    writeFixture('ws2/.github/agents/squad.agent.md', '# Squad Agent\n> Governance in ws2.\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(ws1), wsFolder(ws2)], registry);
+
+    // ws2's squad.agent.md should survive — its root (ws2) has no squad
+    const squadAgent = result.find(i => i.id === 'squad' && i.type === 'agent');
+    expect(squadAgent).toBeDefined();
+    expect(squadAgent!.path).toContain('ws2');
+  });
+
+  it('does not filter non-governance agents even when squad is discovered in the same root', () => {
+    // ws has both a squad AND a regular agent — only squad.agent.md is filtered
+    const ws = path.join(tmpDir, 'ws');
+    writeFixture('ws/.squad/team.md', '# WS Squad\n> Squad.\n**Universe:** test\n');
+    writeFixture('ws/.github/agents/squad.agent.md', '# Governance\n> Filtered.\n');
+    writeFixture('ws/.github/agents/deploy.agent.md', '# Deploy\n> Not filtered.\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(ws)], registry);
+
+    // squad.agent.md filtered (governance for discovered squad)
+    expect(result.find(i => i.id === 'squad' && i.type === 'agent')).toBeUndefined();
+    // deploy.agent.md kept (not a governance file)
+    expect(result.find(i => i.id === 'deploy')).toBeDefined();
+    // The squad itself is present
+    expect(result.find(i => i.type === 'squad')).toBeDefined();
+  });
+
   it('sets correct DiscoveredItem fields for squads', () => {
     const workspaceDir = path.join(tmpDir, 'projects', 'my-project');
     fs.mkdirSync(workspaceDir, { recursive: true });
