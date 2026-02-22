@@ -72,3 +72,28 @@
 
 
 📌 Team update (2026-02-19): Session rename & resume architectural decisions finalized. Key decisions: (1) Display dual names (EditLess + Copilot summary), (2) Fix #277 with TerminalOptions, (3) Create custom Copilot Sessions tree view, (4) No write-access to workspace.yaml. — decided by Casey Irvine
+
+### 2026-02-20: Squad CLI/SDK Integration Architecture Analysis
+
+**Request:** Casey asked Squanchy to analyze how Squad CLI (v0.7.0 stub) and SDK (v0.7.0 stub) should integrate with EditLess.
+
+**Key findings:**
+- Squad CLI tools (`loop`, `watch`) are **process orchestration**, not terminal management. They're daemon-like, distinct from individual agent terminals.
+- Current TerminalInfo treats all sessions homogeneously. Requires extension with **modality** field: `'copilot-standard' | 'squad-loop' | 'squad-watch' | 'copilot-ceremony' | ...`
+- EventBus integration blocked until SDK ships real code. **MVP strategy: file-based events** via `.squad/events-realtime.jsonl` (aligns with Squad's drop-box pattern, no new protocols).
+- Ralph integration: Detect presence from `workspace.yaml`, show status badge in tree. When SDK ships, consume `RalphMonitor` APIs.
+- **Phase 1 (actionable NOW, no SDK required): 7 hours of work** — add modality field, detection logic, tree view rendering, Squad event watcher, squad command builders. Delivers all UI/UX for Squad CLI terminals without waiting for SDK stubs.
+- **Phase 2 (blocked on SDK): Swap event transport layer** — when EventBus is real, replace file watcher with SDK subscription. No UI changes needed.
+
+**Decision:** Proceed with Phase 1 immediately. File-based events are low-risk, backward-compatible, and unblock Squad CLI launches.
+
+**Output:** Full technical brief written to `.squad/decisions/inbox/squanchy-squad-integration-architecture.md`. Includes:
+- Section 1: Squad CLI as managed process (launch patterns, state tracking, TerminalInfo extensions)
+- Section 2: Session modality design (enum, detection strategy, tree view per modality)
+- Section 3: SDK event consumption (transport options, file-drop-box MVP, EventBus swap strategy)
+- Section 4: Ralph integration (current state, surface areas, when SDK ships)
+- Section 5: Detailed blocked vs actionable analysis
+- Section 6: Modality architecture rationale
+- Section 7: Next steps for Squad team
+
+**Metrics:** ~17,600 words, 7 detailed sections, 4 architecture diagrams, implementation cost estimates for all proposals.

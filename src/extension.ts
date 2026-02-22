@@ -701,7 +701,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const picks = await vscode.window.showQuickPick(items, {
         title: `Filter ${item.label}`,
         canPickMany: true,
-        placeHolder: 'Select filters (leave empty to show all)',
+        placeHolder: 'Select sources to display (leave empty to show all)',
       });
       if (picks === undefined) return;
 

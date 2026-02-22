@@ -6164,6 +6164,418 @@ buildCopilotCommand({
 
 ---
 
+## 2026-02-22 — Post-Work Session Merge (Morty #337 Completion)
+
+### 2026-02-22T06:43:00Z: User directive — Attention state is CORE value prop
+**By:** Casey Irvine (via Copilot)
+**What:** Attention state (working / idle / needs-decision) is a CORE value prop of EditLess and must NOT be cut. Users need to understand from the sidebar what needs their attention across all modalities — Copilot CLI, Squad CLI, and VS Code native chat. If we need to look into Squad APIs to surface this for squad-cli terminals, then we should. This is not "rich status" scope creep — this is the fundamental reason EditLess exists.
+**Why:** User directive — corrects Summer's recommendation to cut attention state. The three states (working, idle, needs-decision) are the minimum viable attention signal, not optional polish.
+
+---
+
+### 2026-02-22T06:43:00Z: User directive — EditLess integrates frontends, not builds them
+**By:** Casey Irvine (via Copilot)
+**What:** EditLess should integrate with frontends others build (like SquadUI), not build its own frontend. Brady wants lots of people to build frontends for Squad — EditLess's role is to manage windows/tabs and route users to those frontends. Don't integrate with frontends that don't make sense. SquadUI is a strong candidate because it's a VS Code extension. The SDK's "frontend" concept is not something EditLess should implement — we're the orchestrator, not the renderer.
+**Why:** User directive — defines EditLess's position in the Squad frontend ecosystem.
+
+---
+
+### 2026-02-22T04:05:00Z: User directive — Minimal Squad integration scope
+**By:** Casey Irvine (via Copilot)
+**What:** Keep Squad integration minimal. Only two integration points: (1) know if terminal is squad-cli vs copilot-cli and handle differently, (2) refresh SquadUI when terminal activity completes so the views stay fresh. No rich idle/working status. No active-work markers. No SDK event monitoring. Ship users to SquadUI for anything squad-in-depth. Support launching squad terminals and having multiple squad tabs open.
+**Why:** User directive — EditLess is a window manager, not a Squad dashboard.
+
+---
+
+### 2026-02-22T06:43:00Z: User directive — Native chat support is DEFERRED, not cut
+**By:** Casey Irvine (via Copilot)
+**What:** Native chat (VS Code Copilot Chat) support is DEFERRED, not cut. It must stay on the roadmap. Users will want to do things in CLI or native chat interchangeably, and EditLess needs to manage both — including minimizing the terminal panel when switching to a chat tab. The flow for managing terminals-as-tabs alongside chat-as-tabs needs to be figured out. Scope it out of v0.2 if needed, but keep it as a future modality.
+**Why:** User directive — ensures native-chat doesn't get permanently dropped from the vision.
+
+---
+
+### 2026-02-22T15:54:00Z: User directive — Scope guard for Squad CLI command integration
+**By:** Casey Irvine (via Copilot)
+**What:** When integrating new Squad CLI commands (from PR #131 remote mode, repo mode, hub mode), only add commands that make sense for the add/remove flows in EditLess. SquadUI will likely integrate with the rest. Don't duplicate what SquadUI will cover. This is future work, not high priority.
+**Why:** User directive — scoping guard for Squad CLI command integration.
+
+---
+
+### 2026-02-22T06:45:00Z: User directive (REVISED) — Squad upgrades and insider mode owned by SquadUI
+**By:** Casey Irvine (via Copilot)
+**What:** Squad upgrades and insider mode are fully owned by SquadUI. EditLess does NOT need upgrade buttons, settings, or commands. If SquadUI is installed, users go to SquadUI for upgrade/insider functionality. EditLess just needs to ensure `squad-ui-integration.ts` can detect and link to SquadUI's upgrade capabilities when available.
+**Why:** SquadUI v0.8.0 already has `upgradeSquad` and `checkForUpdates` commands. No reason to duplicate. Noted as part of #377 (modality icons) existing work.
+**Supersedes:** Initial directive to "bring back squad upgrades with upgrade button per squad + insider mode setting" — scope collapsed after confirming SquadUI covers it.
+
+---
+
+### 2026-02-22T04:12:00Z: User directive — Unified vision for tab/terminal management
+**By:** Casey Irvine (via Copilot)
+**What:** EditLess needs a congealed, unified vision for tab/terminal management across all session types: squad CLI terminals, squad UI tabs, regular copilot CLI terminals, and potentially VS Code native chat. Squads are first-class citizens but also "just agents" — don't add a ton of squad-specific features. The tab management should eventually work with all modalities (including native VS Code chat integration). There's a real tension between VS Code terminal tabs and editor-area tabs that may need solving — possibly via pseudo-terminals as editor tabs. Whatever we build for squad integration should fit into this broader unified flow, not be a one-off.
+**Why:** User directive — ensures squad integration doesn't create disconnected UX concepts that conflict with the broader EditLess vision.
+
+---
+
+# CWD-Indexed Session Cache (v0.1.1 Performance)
+
+**Date:** 2026-02-21  
+**Author:** Morty (Extension Dev)  
+**Issue:** #331  
+
+## Decision
+
+SessionContextResolver now uses a CWD → session ID index (`Map<normalizedCWD, CwdIndexEntry[]>`) instead of linearly scanning all session-state directories on every cache miss.
+
+## Architecture
+
+- **Index structure:** `CwdIndexEntry` stores sessionId, cwd, summary, branch, createdAt, updatedAt — everything except plan.md references (read lazily only for matching sessions).
+- **Invalidation strategy:** Directory count comparison. `_ensureIndex()` calls `readdirSync` to count directories; if count matches `_indexedDirCount`, the existing index is reused. New sessions trigger a full rebuild.
+- **Cache layers:** Two-level — `_cache` (30s TTL, per-call results) gates calls to `_scan()`, which uses `_cwdIndex` (invalidated by dir count) for O(1) lookups.
+- **clearCache()** clears both layers.
+
+## Trade-offs
+
+- Directory count is a heuristic — if a session is deleted and replaced (same count), the index won't rebuild until the next `clearCache()` or count change. Acceptable for append-only session lifecycle.
+- `readdirSync` still runs on every `_scan()` call (~1ms for 200 dirs), but avoids 200× `readFileSync` calls (~100ms savings).
+
+## Impact
+
+Reduces per-poll session resolution from ~100ms to <5ms for 200+ sessions. No API changes — `resolveAll()` and `resolveForSquad()` behave identically.
+
+---
+
+# Architecture: Registry ↔ Workspace Interaction Pattern
+
+**Author:** Rick (Lead Architect)  
+**Requested by:** Casey  
+**Date:** 2025-07-17  
+**Status:** Recommendation (Phase 1 implementation ready)  
+**Scope:** `agent-registry.json`, unified discovery, workspace folder integration, SquadUI interop
+
+## Context
+
+EditLess has three interacting subsystems for discovering squads/agents:
+1. **Registry** (`agent-registry.json`) — User-added squads with metadata (icon, universe, launchCommand)
+2. **Discovery** (`unified-discovery.ts`) — Filesystem scan of workspace folders + parents + `~/.copilot/`
+3. **VS Code workspace** — `workspaceFolders` managed by VS Code
+
+The coupling problem: registered squads can live outside workspace folders, discovery can't find external paths if registry is deleted, and SquadUI integration is brittle for external squads.
+
+## Recommendation: Hybrid (Option 3)
+
+Registry stays as metadata source and source of truth. Workspace folders are a derived view kept in soft sync via opt-in reconciliation:
+
+- **Registry → Workspace:** On activation, offer to add registry squad paths to workspace folders (respecting user preference per path).
+- **Workspace → Registry:** Existing `autoRegisterWorkspaceSquads()` auto-registers new workspace squads.
+- **Stale detection:** On activation, check each registry path for existence; mark stale entries with warning icon.
+
+This provides SquadUI file-watching benefit (squads in workspace) without forcing multi-root workspaces on unwilling users.
+
+## Implementation Phases
+
+### Phase 1: Foundation (Minimal, Safe)
+1. Add `removeSquad()` / `removeAgent()` commands (UI + API)
+2. Add stale entry detection on `loadSquads()`
+3. Add `editless.autoAddToWorkspace` setting ("prompt" | "always" | "never")
+
+### Phase 2: Reconciliation
+1. Registry → Workspace sync on activation
+2. Workspace → Registry sync (wire up existing `autoRegisterWorkspaceSquads()`)
+3. SquadUI integration improvement (no extra calls needed after `updateWorkspaceFolders()`)
+
+### Phase 3: Polish
+1. Multi-root registry resolution (resolve relative paths against workspace storage root)
+2. Optional: Remove from workspace on `removeSquad()`
+
+## Edge Cases Handled
+
+| Scenario | After Phase 2 |
+|----------|--------------|
+| Squad in registry, folder deleted from disk | Tree shows ⚠️ stale indicator; "Remove stale" command available |
+| Squad in registry, not in workspace folders | Prompt to add to workspace (or auto-add per setting) |
+| Squad in workspace folders, not in registry | `autoRegisterWorkspaceSquads()` auto-registers on activation |
+| User removes workspace folder via VS Code UI | Squad stays in registry; SquadUI removal is optional |
+| User manually edits registry JSON to add entry | `watchRegistry()` fires; reconciliation offers to add path to workspace |
+
+---
+
+# Squad Ecosystem v0.2: Scope Narrowed — Watch Daemon Removed, Native-Chat Deferred
+
+**Date:** 2026-02-22  
+**Lead:** Rick  
+**Status:** Implemented (5 GitHub issues updated)  
+**Issues Updated:** #373, #374, #375, #376, #377
+
+## Decision
+
+EditLess is a **terminal session manager**, not a process daemon launcher. v0.2 scope is narrowed to focus on user-facing interactive sessions. Background daemons (watch, background processes) and infrastructure integrations (SDK, native chat) are deferred to v0.3+.
+
+## Rationale
+
+Casey's core directive for v0.2: "The user needs to know when something is working, when it's idle, or when it needs a decision. Whether they're looking at Copilot CLI or Squad CLI, it should be obvious from the sidebar what needs their attention."
+
+v0.2 spec was creeping into infrastructure concerns: process daemon management, SDK integration, chat UI integration. These are valuable future work but distract from core v0.2 value prop.
+
+## Changes
+
+### Issue #373: Squad CLI Command Builder
+- **Old scope:** `squad`, `squad loop`, `squad watch`, `squad init`, `squad upgrade`, `squad status`
+- **New scope:** `squad`, `squad loop`, `squad init`, `squad upgrade`, `squad add` (watch daemon removed)
+- **Watch removed:** "watch is intentionally excluded — it's a background daemon, not a terminal session."
+
+### Issue #374: Session Modality Type System
+- **Old scope:** 5 modalities (copilot-cli, squad-cli, squad-sdk, native-chat, unknown)
+- **New scope:** 3 modalities (copilot-cli, squad-cli, unknown)
+- **Future modalities (deferred, not cut):** native-chat deferred to v0.3+
+
+### Issue #375: Squad CLI Terminal Launch Commands
+- **Old scope:** `launchSquad`, `launchSquadLoop`, `launchSquadWatch`
+- **New scope:** `launchSquad`, `launchSquadLoop` (watch removed)
+
+### Issue #376: Terminal Attention State Tracking
+- **Old approach (rejected):** Complex heuristics (output pattern matching, timeout-based idle detection)
+- **New approach:** Three-state model using only VS Code shell execution events:
+  ```typescript
+  type AttentionState = 'working' | 'idle' | 'needs-decision';
+  ```
+  - `working` — shell execution is active
+  - `idle` — shell execution ended, no pending prompt detected
+  - `needs-decision` — shell execution ended AND terminal has recent output
+
+**Key principle:** "Do NOT add complex heuristics. Start with shell execution events only. The detection may be imperfect initially. That's OK — ship it, iterate."
+
+### Issue #377: Modality-Aware Terminal Icons
+- **Old scope:** 5 modality icons (including squad-sdk, native-chat); emoji vs SVG decision deferred
+- **New scope:** VS Code ThemeIcons (themeable, consistent with design language) for 3 modalities only:
+  - `copilot-cli` → `$(copilot)` or `$(github)`
+  - `squad-cli` (REPL) → `$(organization)` or `$(people)`
+  - `squad-cli` (loop) → `$(sync)`
+- **Future:** "native-chat icon deferred to when native-chat modality is added."
+
+## Architecture Clarity
+
+EditLess is a **session manager**, not a process daemon launcher.
+
+- **In scope:** User-facing terminal sessions (copilot-cli, squad CLI REPL, squad CLI loop)
+- **Out of scope v0.2:** Background daemons (watch), programmatic SDKs, chat UI platforms
+- **Design principle:** "The editorless IDE panel" — focus on user interaction, not infrastructure
+
+## User Impact
+
+v0.2 delivers on Casey's core directive without scope creep:
+
+1. **Multi-modality support:** Users can run Copilot CLI and Squad CLI sessions side-by-side
+2. **Attention state:** Clear visual signals (tree icons, status bar) for which sessions need interaction vs. which are working
+3. **No feature debt:** No half-baked SDK integration, no chat UI placeholders
+4. **Clear deferred work:** Native-chat integration is acknowledged, dated to v0.3+
+
+---
+
+# Launch Progress Indicator — Transient State UX
+
+**Author:** Summer (Product Designer)  
+**Date:** 2026-02-22  
+**Status:** Implemented  
+**Issue:** #337  
+
+## Decision
+
+Added 'launching' as a transient fourth state to `SessionState`: `'launching' | 'active' | 'inactive' | 'orphaned'`.
+
+**Icon:** `loading~spin` — same spinner as 'active'. Both states mean "something is happening." The description text differentiates them.
+
+**Description:** `'launching…'` — this is the only state that shows status text instead of relative time in the tree item description. Justified because there's no meaningful time to show during a 2-5 second transient startup window.
+
+**Transitions:**
+- `launchTerminal()` / `relaunchSession()` → sets 'launching'
+- Shell execution starts → clears to 'inactive'
+- events.jsonl data arrives → clears to 'active' or 'inactive'
+- 10-second timeout → falls back to 'inactive'
+
+## Rationale
+
+Users reported 2-8 seconds of uncertainty after clicking "Launch Session" with no visual feedback. The 'inactive' circle-outline icon implied nothing was happening. The spinner provides immediate confirmation that the extension received the launch command and is working on it.
+
+---
+
+# Squad CLI Integration — Comprehensive UX Review
+
+**Reviewer:** Summer (Product Designer)  
+**Date:** 2025-01-28  
+**Status:** Design Review — Strategy Document  
+
+## Executive Summary
+
+EditLess should NOT become SquadUI-lite. The proposed integration should be stripped down to two primitives: (1) terminal type differentiation, (2) refresh trigger. Everything else is scope creep.
+
+The core design principle: **EditLess is a router**, not a replacement for SquadUI or Squad CLI. It manages windows/tabs and routes user attention, not dashboards or work tracking.
+
+## Minimum Viable Differentiation
+
+**Icons (only visible differentiation needed):**
+- Copilot CLI: `$(github)` or `$(copilot)`
+- Squad CLI REPL: `$(organization)` or `$(people)`
+- Squad loop: `$(sync)` or `$(debug-continue)`
+
+**No new statuses needed beyond active/inactive.** Existing active/inactive state covers "needs attention" via VS Code shell execution events.
+
+## What to KEEP ✅
+
+1. **Terminal launch commands** — `launchSession` from squads, agents, work items
+2. **Session lifecycle tracking** — active, inactive, orphaned states
+3. **SquadUI command forwarding** — `openDashboard`, `viewCharter`
+4. **Terminal type differentiation (icons only)** — visual distinction between copilot/squad sessions
+
+## What to CUT ❌
+
+1. **Rich modality tracking** — no "working", "idle", "awaiting input" statuses beyond active/inactive
+2. **Agent mention resolution** — parsing @agent syntax from terminal output
+3. **Auto-refresh SquadUI on terminal activity** — do NOT ping SquadUI on every event
+4. **Squad watch monitoring** — do NOT track `squad watch` processes
+5. **Session-specific work item display** — "this terminal is working on PR #42"
+
+## What to ADD (Minimal) 🟢
+
+1. **Squad CLI command builder** — `buildSquadCommand()` helper function
+2. **"Show Dashboard + Terminal" command** — split view for squad dashboard + terminal
+3. **Status bar attention indicator** — "$(bell) Terminal needs attention" → click to focus
+
+## EditLess as Router (Not Dashboard)
+
+EditLess's role:
+- **Launch sessions fast** (existing)
+- **Organize sessions clearly** (existing)
+- **Route users to the right place** (terminal panel, SquadUI dashboard, etc.)
+
+When a user clicks a terminal in the sidebar: focus the terminal panel.  
+When a user clicks "Open in Squad UI": open the dashboard tab.  
+When a session finishes: show clickable status bar item (if enabled) or rely on native terminal badges.
+
+## Terminal Pseudo-Tab Problem (Acknowledged, Not v0.2)
+
+There's real tension between VS Code terminal tabs (bottom panel) and editor-area tabs (where SquadUI dashboards live). This creates three attention zones (Editor, Terminal Panel, EditLess Sidebar). Pseudo-terminals as editor tabs might reduce this to two zones, but:
+
+- ❌ High implementation cost (finicky APIs)
+- ❌ Breaks user expectations
+- ❌ Doesn't solve for users who keep terminal panel open anyway
+
+**Recommendation:** Don't pursue pseudo-terminals yet. Lean into EditLess as a router. Phase 4+ research (not v0.2).
+
+## SquadUI Integration Details
+
+### Commands EditLess Can Call (SquadUI v0.8.0)
+- `squadui.openDashboard` → Opens/switches singleton dashboard ✅
+- `squadui.viewCharter` → Opens agent charter in markdown preview ✅
+- `squadui.refreshTree` → Refreshes SquadUI's tree views ⚠️ Use after squad file changes
+- `squadui.generateStandup`, `checkForUpdates`, `upgradeSquad`, `initSquad` → ❌ Don't integrate
+
+### Status Model Distinction (Important)
+
+EditLess shows **terminal session state**: active/inactive/orphaned (based on shell execution).  
+SquadUI shows **task/work state**: working/idle/monitoring (based on log activity).
+
+These are **complementary signals**, not conflicts. A terminal can be "active" (running) but "idle" in SquadUI (no recent logs).
+
+### Risks
+
+- **Medium Risk:** SquadUI's FileWatcher only watches workspace root. External squads show stale data until manually refreshed. **Mitigation:** Call `squadui.refreshTree(teamRoot)` after `openDashboard()` for external paths.
+- **Not a risk:** Multi-dashboard. SquadUI uses singleton WebviewPanel. This is the right model for foreseeable future.
+
+## Next Steps
+
+1. **Keep current integration as-is.** Context menu "Open in Squad UI" is the right pattern.
+2. **Add a `refreshTree` call** after `openDashboard` in `squad-ui-integration.ts` for external paths.
+3. **Document the two-status-model distinction** in user-facing docs.
+4. **Watch SquadUI's future releases** for `exports` field or new commands (signals programmatic API expansion).
+5. **Don't add any new SquadUI integration points.** Keep EditLess focused on terminal/tab routing.
+
+---
+
+# SquadUI Dashboard Integration — UX Design & Architecture
+
+**Author:** Summer (Product Designer)  
+**Date:** 2026-02-22  
+**Status:** Proposal  
+
+## Core Constraint & Mental Model
+
+SquadUI's dashboard is a **singleton webview panel** — only one instance can be open at a time. When `squadui.openDashboard(teamRoot)` is called with a different path, the existing panel switches context (refreshes data for the new squad).
+
+This maps cleanly to EditLess's role: we're a **window manager**, not a dashboard. We don't own the dashboard content — we just tell SquadUI which squad to show. The right analogy is **VS Code's Source Control view** with multiple repositories.
+
+## Recommended UX Flow
+
+### Click Behavior (Default)
+- **Clicking a squad** in the tree view: **Expands/collapses** the squad to show terminal sessions and roster. No side effects.
+- **Clicking a terminal session** under a squad: **Focuses that terminal.** This is the core EditLess value.
+
+### "Show Dashboard" Action
+- **Context menu** on squad items: "Open in Squad UI" (gated by `editless.squadUiSupportsDeepLink`)
+- **No inline dashboard button.** Rationale: EditLess is a terminal/window manager. Adding a dashboard button to every squad item promotes SquadUI over EditLess's own value (session management). The context menu is discoverable enough.
+- **Command palette**: `EditLess: Open in Squad UI` remains available for keyboard-first users.
+
+### Switching Behavior
+When switching squads in SquadUI (via EditLess context menu):
+- **SquadUI switches context automatically.** The `switchToRoot()` function handles this — updates data provider, refreshes tree, re-renders dashboard panel.
+- **No confirmation dialog needed.** The user initiated the action; result is self-evident.
+- **No toast/notification.** The dashboard tab title stays "Squad Dashboard" — the content changes. Mirrors clicking a different file in Explorer.
+
+### When SquadUI Isn't Installed
+- The "Open in Squad UI" context menu item is **hidden** (`editless.squadUiSupportsDeepLink` context key is false)
+- **No nagging prompts.** EditLess stands on its own as a terminal manager. If the user wants dashboards, they'll find SquadUI through marketplace or docs.
+
+### Multiple Terminals + Dashboard (Typical Layout)
+
+```
+┌──────────────────────────────────────┐
+│ EditLess Sidebar │ Squad Dashboard   │
+│ 🏢 My Squad     │ or                 │
+│   ├─ 🔄 rick    │ Terminal: Rick     │
+│   ├─ 🔄 morty   │ working on #42     │
+│   └─ ⭕ summer  │                    │
+│                  │                    │
+│ 🤖 Standalone   │                    │
+│   └─ 🔄 copilot │                    │
+└──────────────────────────────────────┘
+```
+
+The dashboard is another **editor tab**. Terminals occupy the **terminal panel** below. EditLess manages **attention state** (which sessions are active). The dashboard provides **analysis** (velocity, burndown). These are complementary, not competing.
+
+## What NOT to Do
+
+1. **Don't auto-open the dashboard** when a squad is selected. Violates window-manager philosophy.
+2. **Don't add an inline dashboard icon** on squad tree items. Visual clutter that promotes SquadUI over EditLess's core value.
+3. **Don't try to sync state bidirectionally.** EditLess → SquadUI is one-way via `openDashboard(teamRoot)`. SquadUI doesn't expose events we need.
+4. **Don't duplicate SquadUI features.** No burndown charts, no velocity views, no standup reports in EditLess. We manage terminals and attention; they manage dashboards.
+
+## SquadUI Integration Surface (v0.8.0)
+
+### Commands EditLess Should Call
+- `squadui.openDashboard` (teamRoot?: string) ✅ Already wired
+- `squadui.viewCharter` (memberName, teamRoot?: string) ✅ Already wired
+- `squadui.refreshTree` (teamRoot?: string) ⚠️ Consider after squad file changes
+
+### Commands NOT to Call
+- `squadui.generateStandup` — it's SquadUI's feature
+- `squadui.checkForUpdates` / `squadui.upgradeSquad` — per Casey's directive, SquadUI owns this
+- `squadui.initSquad` — SquadUI owns initialization
+
+### High-Risk Integration Points
+
+1. **SquadUI's FileWatcher only watches workspace root.** External squads show stale data until manual refresh. **Mitigation:** Call `squadui.refreshTree(teamRoot)` after `openDashboard()` for external paths.
+
+2. **Status model confusion.** EditLess shows "is terminal alive?" SquadUI shows "is agent producing work?" **Mitigation:** Clear documentation distinguishing the two models.
+
+## Next Steps (Concrete)
+
+1. **Keep current integration as-is.** Context menu "Open in Squad UI" with deep-link gating is the right pattern.
+2. **Add a `refreshTree` call** after `openDashboard` in `squad-ui-integration.ts` when opening external squad paths.
+3. **Document the two-status-model distinction** in user-facing docs when both extensions are installed.
+4. **Watch SquadUI's `package.json`** for an `exports` field or new commands. If they expose events, EditLess could subscribe to agent status changes for richer attention state.
+5. **Don't add any new SquadUI integration points.** Casey's directive: minimal squad functionality. Be a good tab/terminal manager, not a feature duplicate.
+
+---
+
 # Decision: Unified Discovery Flow — Agents & Squads
 
 **Date:** 2026-02-21
@@ -6906,6 +7318,72 @@ The UI will present a unified "Type" filter that maps to these underlying repres
 **Consequences:**
 - Users must follow `type:{name}` convention in GitHub for filters to work.
 - We standardized on "Labels" as the UI term for tags/labels across both providers.
+### 2026-02-22: Squad Ecosystem Integration Roadmap — 3-Phase Plan
+
+**Author:** Rick (Orchestration)  
+**Date:** 2026-02-22  
+**Status:** Planned
+
+## Decision
+
+Three-phase integration plan (12 GitHub issues) to position EditLess as the universal terminal orchestration layer for Squad ecosystem.
+
+**Phase 1 (Foundation, v0.2.0):** Session modality types, Squad CLI builder, launch commands, attention state, icons — 5 issues unblocked.  
+**Phase 2 (SDK Research, v0.2.x):** Copilot SDK spike, session discovery — 2 issues.  
+**Phase 3 (Blocked):** EventBus, RalphMonitor, HookPipeline, Ralph integration — 4 issues in backlog pending Brady's SDK.
+
+**Key Insights:** Session modality awareness + file-based events unblock Phase 1. EditLess becomes universal terminal layer for all Squad modalities (CLI, SDK, native-chat).
+
+---
+
+### 2026-02-22: Squad CLI/SDK Integration Architecture
+
+**Author:** Squanchy (Architecture)  
+**Date:** 2026-02-22  
+**Status:** Planned
+
+## Decision
+
+Squad CLI/SDK are process orchestration (not terminal management). Design extends TerminalInfo with modality awareness and event subscriptions.
+
+**Session Modality Type:** 'copilot-standard' | 'squad-loop' | 'squad-watch' | 'squad-interactive' | 'unknown'
+
+**Event Consumption:** File-based events via .squad/events-realtime.jsonl (Option C) — aligns with Squad architecture, unblocks Phase 1, swappable when SDK ships real EventBus.
+
+**Actionable NOW (7 hours):** Modality detection + file watcher + Ralph badge detection. No SDK required.
+
+---
+
+### 2026-02-22: SquadUI Integration Surface Analysis
+
+**Author:** Unity (Integration)  
+**Date:** 2026-02-22  
+**Status:** Planned
+
+## Decision
+
+SquadUI v0.7.3 surface sufficient for Tier 1 integration (4 hours, v0.1). Keep tree views separate (EditLess terminal-centric, SquadUI team-centric). Lazy sync for root coordination.
+
+**Tier 1 NOW:** Charter deep-link, refreshTree on selection, openDashboard root-aware, shared globalState squad.currentRoot.
+
+---
+
+### 2026-02-22: User Directive — Brady's Multi-Frontend Vision
+
+**From:** Casey Irvine (2026-02-22T03:39Z)  
+**What:** Brady confirmed multi-frontend approach. EditLess integrates Squad CLI as launchable session type + SquadUI as complementary sidebar. @github/copilot-sdk v0.1.25 is JSON-RPC foundation.
+
+---
+### 2026-02-22T03:20:00Z: User directive
+**By:** Casey Irvine (via Copilot)
+**What:** Be mindful of work items that look like they've already been tackled. Don't put changes on top of changes if the existing code in master already handles the issue. Verify what's already fixed before making new changes.
+**Why:** User request — captured for team memory. Several v0.1.1 issues were already partially or fully fixed (as discovered during triage). Agents should check existing code before implementing, to avoid redundant or conflicting changes.
+
+---
+### 2026-02-22T03:51:00Z: User directive
+**By:** Casey Irvine (via Copilot)
+**What:** EditLess is a window/tab/terminal manager — NOT a dashboard or information display. SquadUI should handle the dashboard, team info, decisions view, etc. EditLess just manages what's running where and which tabs need attention. "I really just want to be like a window kind of manager. I don't necessarily want to be sending a bunch of information back and forth."
+**Why:** User directive — scopes EditLess's role in the Squad ecosystem
 
 
 ---
@@ -6971,3 +7449,86 @@ This is **not a breaking change**. Existing context values don't need refactorin
 - `src/prs-tree.ts` lines 315, 331, 349, 369
 - `package.json` lines 515, 530 (menu contributions)
 
+## Launch Helper Extraction Pattern
+
+**Status:** Implemented  
+**Date:** 2026-02-21  
+**Context:** Issue #337 — Launch progress indicator  
+**Author:** Morty (Extension Dev)
+
+### Decision
+
+Extracted duplicated terminal launch logic from launchFromWorkItem and launchFromPR into shared utilities in src/launch-utils.ts.
+
+### Implementation
+
+Created three exports:
+
+1. **MAX_SESSION_NAME constant** — Value: 50. Single source of truth for name length limit.
+
+2. **uildSessionName(rawName: string): string** — Pure function that handles truncation logic:
+   - Returns raw name unchanged if ≤ MAX_SESSION_NAME
+   - Truncates at last space before limit (smart word boundary)
+   - Falls back to hard truncation at limit if no space exists
+   - Appends ellipsis character (…) to truncated names
+
+3. **launchAndLabel(terminalManager, labelManager, cfg, rawName): Terminal** — Orchestration function:
+   - Calls uildSessionName() to process the raw name
+   - Launches terminal via 	erminalManager.launchTerminal()
+   - Sets label via labelManager.setLabel()
+   - Returns the created terminal
+
+### Rationale
+
+- **DRY principle**: Eliminated 12 identical lines × 2 locations = 24 lines of duplication
+- **Single responsibility**: uildSessionName() has one job, testable in isolation
+- **Type safety**: Proper TypeScript types for all parameters
+- **Maintainability**: Future changes to truncation logic only need to be made once
+- **Testability**: 14 comprehensive test cases covering edge cases
+
+### Usage Pattern
+
+Both launchFromWorkItem and launchFromPR now:
+1. Build the raw name with the appropriate prefix (# or PR #)
+2. Call launchAndLabel(terminalManager, labelManager, cfg, rawName)
+
+This pattern should be applied to any future commands that launch terminals with custom names.
+
+### Testing
+
+All 774 tests pass, including 14 new tests for the extracted utilities covering:
+- Short names (no truncation)
+- Long names (truncation at word boundary)
+- Long names without spaces (hard truncation)
+- Ellipsis character validation
+- Real-world work item and PR name scenarios
+- Integration with TerminalManager and SessionLabelManager
+
+### Files Changed
+
+- **Created:** src/launch-utils.ts (51 lines)
+- **Created:** src/__tests__/launch-utils.test.ts (164 lines)
+- **Modified:** src/extension.ts (reduced by 20 lines)
+
+---
+
+## Worktree Handoff Architecture (User Directive)
+
+**Date:** 2026-02-22T19:14:56Z  
+**By:** Casey Irvine (via Copilot)  
+**Status:** Deferred to bradygaster/squad
+
+### Decision
+
+Worktree handoff (auto-creating a worktree when starting work and handing off squad state) should be a Squad CLI feature, NOT an EditLess feature. EditLess should follow squad's state, not own the worktree lifecycle.
+
+### Rationale
+
+- User request — captured for team memory
+- EditLess role: Window/tab/terminal manager only
+- Squad CLI role: Lifecycle management and state orchestration
+
+### Action Items
+
+1. File as a feature request on bradygaster/squad if it doesn't exist
+2. EditLess will integrate Squad CLI worktree output when available

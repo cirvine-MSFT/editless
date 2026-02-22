@@ -152,34 +152,36 @@ describe('squad-ui-integration', () => {
       await expect(openSquadUiDashboard()).resolves.toBeUndefined();
     });
 
-    it('should call refreshTree after openDashboard', async () => {
+    it('should call squadui.refreshTree after openDashboard', async () => {
+      mockExecuteCommand.mockResolvedValue(undefined);
+      await openSquadUiDashboard('/my/squad');
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.openDashboard', '/my/squad');
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.refreshTree', '/my/squad');
+      // refreshTree should be called AFTER openDashboard
+      const calls = mockExecuteCommand.mock.calls.map((c: unknown[]) => c[0]);
+      expect(calls.indexOf('squadui.openDashboard')).toBeLessThan(calls.indexOf('squadui.refreshTree'));
+    });
+
+    it('should pass teamRoot to squadui.refreshTree', async () => {
+      mockExecuteCommand.mockResolvedValue(undefined);
+      await openSquadUiDashboard('/path/to/team');
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.refreshTree', '/path/to/team');
+    });
+
+    it('should pass undefined to squadui.refreshTree when teamRoot is undefined', async () => {
       mockExecuteCommand.mockResolvedValue(undefined);
       await openSquadUiDashboard();
       expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.refreshTree', undefined);
     });
 
-    it('should pass teamRoot to refreshTree when provided', async () => {
-      mockExecuteCommand.mockResolvedValue(undefined);
-      await openSquadUiDashboard('/path/to/squad');
-      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.refreshTree', '/path/to/squad');
-    });
-
-    it('should call openDashboard before refreshTree', async () => {
-      const callOrder: string[] = [];
-      mockExecuteCommand.mockImplementation(async (cmd: string) => {
-        callOrder.push(cmd);
-      });
-      await openSquadUiDashboard('/root');
-      expect(callOrder).toEqual(['squadui.openDashboard', 'squadui.refreshTree']);
-    });
-
-    it('should not throw when refreshTree fails but openDashboard succeeds', async () => {
-      let callCount = 0;
-      mockExecuteCommand.mockImplementation(async () => {
-        callCount++;
-        if (callCount === 2) throw new Error('refreshTree not found');
-      });
-      await expect(openSquadUiDashboard()).resolves.toBeUndefined();
+    it('should not throw when only refreshTree command fails (older SquadUI)', async () => {
+      // openDashboard succeeds, refreshTree throws
+      mockExecuteCommand
+        .mockResolvedValueOnce(undefined)   // openDashboard
+        .mockRejectedValueOnce(new Error('command squadui.refreshTree not found'));
+      await expect(openSquadUiDashboard('/path')).resolves.toBeUndefined();
+      // Verify openDashboard was still called
+      expect(mockExecuteCommand).toHaveBeenCalledWith('squadui.openDashboard', '/path');
     });
   });
 

@@ -1248,6 +1248,10 @@ describe('extension command handlers', () => {
         ]),
         expect.objectContaining({ canPickMany: true, title: 'Show/Hide Sources' }),
       );
+      // State and label options should NOT appear
+      const items = mockShowQuickPick.mock.calls[0][0] as { description?: string }[];
+      expect(items.filter(i => i.description === 'state')).toHaveLength(0);
+      expect(items.filter(i => i.description === 'label')).toHaveLength(0);
     });
 
     it('should apply selected sources to provider with empty labels/states/types', async () => {
