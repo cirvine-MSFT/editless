@@ -79,6 +79,10 @@ describe('launch-utils', () => {
       expect(result).toMatch(/…$/);
       expect(result).toContain('PR #456');
     });
+
+    it('should handle empty string', () => {
+      expect(buildSessionName('')).toBe('');
+    });
   });
 
   describe('launchAndLabel', () => {

@@ -117,7 +117,14 @@ export function discoverAll(
     const basename = path.basename(item.path).toLowerCase();
     if (basename !== 'squad.agent.md') return true;
     // Agent at {root}/.github/agents/squad.agent.md → root is 3 levels up
-    const root = path.dirname(path.dirname(path.dirname(item.path)));
+    // Agent at {root}/squad.agent.md → root is 1 level up
+    // Check if path includes .github/agents to determine depth
+    const itemDir = path.dirname(item.path);
+    const parentOfItemDir = path.dirname(itemDir);
+    const isInGithubAgents = path.basename(itemDir) === 'agents' && path.basename(parentOfItemDir) === '.github';
+    const root = isInGithubAgents 
+      ? path.dirname(parentOfItemDir)  // {root}/.github/agents/squad.agent.md
+      : itemDir;                        // {root}/squad.agent.md
     return !squadRoots.has(root.toLowerCase());
   });
 }

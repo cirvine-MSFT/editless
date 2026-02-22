@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createVscodeMock } from './mocks/vscode-mocks';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -7,58 +8,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockIsGhAvailable = vi.fn<() => Promise<boolean>>().mockResolvedValue(false);
 const mockFetchMyPRs = vi.fn().mockResolvedValue([]);
 
-vi.mock('vscode', () => {
-  const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
-
-  class TreeItem {
-    label: string;
-    collapsibleState: number;
-    iconPath?: unknown;
-    description?: string;
-    contextValue?: string;
-    tooltip?: unknown;
-    command?: unknown;
-    id?: string;
-    pr?: unknown;
-    constructor(label: string, collapsibleState: number = TreeItemCollapsibleState.None) {
-      this.label = label;
-      this.collapsibleState = collapsibleState;
-    }
-  }
-
-  class ThemeIcon {
-    id: string;
-    constructor(id: string) { this.id = id; }
-  }
-
-  class MarkdownString {
-    value: string;
-    constructor(value: string) { this.value = value; }
-  }
-
-  class EventEmitter {
-    private listeners: Function[] = [];
-    get event() {
-      return (listener: Function) => {
-        this.listeners.push(listener);
-        return { dispose: () => { this.listeners = this.listeners.filter(l => l !== listener); } };
-      };
-    }
-    fire(value?: unknown) { this.listeners.forEach(l => l(value)); }
-    dispose() { this.listeners = []; }
-  }
-
-  class ThemeColor {
-    id: string;
-    constructor(id: string) { this.id = id; }
-  }
-
-  return {
-    TreeItem, TreeItemCollapsibleState, ThemeIcon, ThemeColor, MarkdownString, EventEmitter,
-    Uri: { parse: (s: string) => ({ toString: () => s }) },
-    commands: { executeCommand: vi.fn() },
-  };
-});
+vi.mock('vscode', () => createVscodeMock({
+  commands: { executeCommand: vi.fn() },
+}));
 
 vi.mock('../github-client', () => ({
   isGhAvailable: (...args: unknown[]) => mockIsGhAvailable(...(args as [])),

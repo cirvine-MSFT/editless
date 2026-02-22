@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createVscodeMock, ThemeIcon } from './mocks/vscode-mocks';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -7,67 +8,17 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mockIsGhAvailable = vi.fn<() => Promise<boolean>>().mockResolvedValue(false);
 const mockFetchAssignedIssues = vi.fn().mockResolvedValue([]);
 
-vi.mock('vscode', () => {
-  const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
-
-  class TreeItem {
-    label: string;
-    collapsibleState: number;
-    iconPath?: unknown;
-    description?: string;
-    contextValue?: string;
-    tooltip?: unknown;
-    command?: unknown;
-    id?: string;
-    issue?: unknown;
-    constructor(label: string, collapsibleState: number = TreeItemCollapsibleState.None) {
-      this.label = label;
-      this.collapsibleState = collapsibleState;
-    }
-  }
-
-  class ThemeIcon {
-    id: string;
-    color?: unknown;
-    constructor(id: string, color?: unknown) { this.id = id; this.color = color; }
-  }
-
-  class ThemeColor {
-    id: string;
-    constructor(id: string) { this.id = id; }
-  }
-
-  class MarkdownString {
-    value: string;
-    constructor(value: string) { this.value = value; }
-  }
-
-  class EventEmitter {
-    private listeners: Function[] = [];
-    get event() {
-      return (listener: Function) => {
-        this.listeners.push(listener);
-        return { dispose: () => { this.listeners = this.listeners.filter(l => l !== listener); } };
-      };
-    }
-    fire(value?: unknown) { this.listeners.forEach(l => l(value)); }
-    dispose() { this.listeners = []; }
-  }
-
-  return {
-    TreeItem, TreeItemCollapsibleState, ThemeIcon, ThemeColor, MarkdownString, EventEmitter,
-    Uri: { parse: (s: string) => ({ toString: () => s }) },
-    commands: {
-      executeCommand: vi.fn(),
-    },
-    workspace: {
-      workspaceFolders: [],
-      getConfiguration: () => ({
-        get: () => ({}),
-      }),
-    },
-  };
-});
+vi.mock('vscode', () => createVscodeMock({
+  commands: {
+    executeCommand: vi.fn(),
+  },
+  workspace: {
+    workspaceFolders: [],
+    getConfiguration: () => ({
+      get: () => ({}),
+    }),
+  },
+}));
 
 vi.mock('../github-client', () => ({
   isGhAvailable: (...args: unknown[]) => mockIsGhAvailable(...(args as [])),
@@ -370,6 +321,39 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     );
     expect(items).toHaveLength(1);
     expect(items[0].label).toContain('#1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Icon assertions (#PR review)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — icon paths', () => {
+  it('should set "issues" icon for GitHub issues', async () => {
+    const items = await getIssueItems([makeIssue({ number: 1 })]);
+    expect(items).toHaveLength(1);
+    expect(items[0].iconPath).toBeInstanceOf(ThemeIcon);
+    expect((items[0].iconPath as ThemeIcon).id).toBe('issues');
+  });
+
+  it('should set "azure" icon for ADO work items', () => {
+    const provider = new WorkItemsTreeProvider();
+    const adoItem = {
+      id: 123,
+      title: 'ADO Item',
+      state: 'Active',
+      type: 'User Story',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/123',
+      assignedTo: 'user',
+      areaPath: 'Project\\Area',
+      tags: [],
+    };
+    provider.setAdoItems([adoItem]);
+
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(1);
+    expect(roots[0].iconPath).toBeInstanceOf(ThemeIcon);
+    expect((roots[0].iconPath as ThemeIcon).id).toBe('azure');
   });
 });
 
