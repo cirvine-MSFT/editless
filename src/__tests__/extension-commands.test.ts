@@ -398,7 +398,7 @@ vi.mock('../prs-tree', () => ({
       setTreeView: vi.fn(),
       setFilter: mockPRsSetFilter,
       clearFilter: mockPRsClearFilter,
-      filter: { repos: [], labels: [], statuses: [] },
+      filter: { repos: [], labels: [], statuses: [], author: '' },
       isFiltered: false,
       getAllRepos: mockPRsGetAllRepos,
       getAllLabels: mockPRsGetAllLabels,
@@ -1351,6 +1351,7 @@ describe('extension command handlers', () => {
         repos: ['owner/repo1'],
         labels: ['type:bug'],
         statuses: ['draft'],
+        author: '',
       });
     });
 
@@ -1363,7 +1364,7 @@ describe('extension command handlers', () => {
     it('should set empty filter when no items selected', async () => {
       mockShowQuickPick.mockResolvedValue([]);
       await getHandler('editless.filterPRs')();
-      expect(mockPRsSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], statuses: [] });
+      expect(mockPRsSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], statuses: [], author: '' });
     });
   });
 

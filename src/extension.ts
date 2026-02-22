@@ -664,11 +664,21 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         .map(p => prStatusOptions.find(s => s.label === p.label)?.value)
         .filter((s): s is string => s !== undefined);
 
-      prsProvider.setFilter({ repos, labels, statuses });
+      prsProvider.setFilter({ repos, labels, statuses, author: prsProvider.filter.author });
     }),
     vscode.commands.registerCommand('editless.clearPRsFilter', () => prsProvider.clearFilter()),
   );
   vscode.commands.executeCommand('setContext', 'editless.prsFiltered', false);
+  vscode.commands.executeCommand('setContext', 'editless.prsMyOnly', false);
+
+  // Toggle "created by me" PR filter (#280)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.prs.toggleMyPRs', () => {
+      const current = prsProvider.filter;
+      const newAuthor = current.author ? '' : '@me';
+      prsProvider.setFilter({ ...current, author: newAuthor });
+    }),
+  );
 
   // Configure GitHub repos (opens settings)
   context.subscriptions.push(

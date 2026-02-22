@@ -195,6 +195,12 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "editless.prs.toggleMyPRs",
+        "title": "Toggle My PRs",
+        "category": "EditLess",
+        "icon": "$(account)"
+      },
+      {
         "command": "editless.refreshPRs",
         "title": "Refresh PRs",
         "category": "EditLess",
@@ -309,9 +315,11 @@
         { "command": "editless.clearWorkItemsFilter", "when": "view == editlessWorkItems && editless.workItemsFiltered", "group": "navigation@3" },
         { "command": "editless.configureWorkItems", "when": "view == editlessWorkItems", "group": "navigation@4" },
         { "command": "editless.refreshPRs", "when": "view == editlessPRs", "group": "navigation@1" },
-        { "command": "editless.filterPRs", "when": "view == editlessPRs", "group": "navigation@2" },
-        { "command": "editless.clearPRsFilter", "when": "view == editlessPRs && editless.prsFiltered", "group": "navigation@3" },
-        { "command": "editless.configurePRs", "when": "view == editlessPRs", "group": "navigation@4" }
+        { "command": "editless.prs.toggleMyPRs", "when": "view == editlessPRs && !editless.prsMyOnly", "group": "navigation@2" },
+        { "command": "editless.prs.toggleMyPRs", "when": "view == editlessPRs && editless.prsMyOnly", "group": "navigation@2" },
+        { "command": "editless.filterPRs", "when": "view == editlessPRs", "group": "navigation@3" },
+        { "command": "editless.clearPRsFilter", "when": "view == editlessPRs && editless.prsFiltered", "group": "navigation@4" },
+        { "command": "editless.configurePRs", "when": "view == editlessPRs", "group": "navigation@5" }
       ],
       "view/item/context": [
         { "command": "editless.launchSession", "when": "view == editlessTree && viewItem =~ /^squad|^agent$/", "group": "inline@0" },
@@ -352,6 +360,7 @@
         { "command": "editless.clearWorkItemsFilter", "when": "false" },
         { "command": "editless.configureWorkItems", "when": "false" },
         { "command": "editless.refreshPRs", "when": "false" },
+        { "command": "editless.prs.toggleMyPRs", "when": "false" },
         { "command": "editless.filterPRs", "when": "false" },
         { "command": "editless.clearPRsFilter", "when": "false" },
         { "command": "editless.configurePRs", "when": "false" },
