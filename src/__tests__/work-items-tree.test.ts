@@ -873,3 +873,383 @@ describe('WorkItemsTreeProvider — getAllRepos with ADO', () => {
     expect(labels).toContain('shared');
   });
 });
+
+// ---------------------------------------------------------------------------
+// LevelFilter lifecycle (#390)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — LevelFilter lifecycle', () => {
+  it('should get undefined when no level filter set', () => {
+    const provider = new WorkItemsTreeProvider();
+    expect(provider.getLevelFilter('github:owner/repo:f0')).toBeUndefined();
+  });
+
+  it('should set and get level filter', () => {
+    const provider = new WorkItemsTreeProvider();
+    const filter = { labels: ['bug'], states: ['open'] as UnifiedState[] };
+    provider.setLevelFilter('github:owner/repo:f0', filter);
+    expect(provider.getLevelFilter('github:owner/repo:f0')).toEqual(filter);
+  });
+
+  it('should fire tree data change when setting level filter', () => {
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setLevelFilter('github:owner/repo:f0', { labels: ['bug'] });
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it('should clear level filter by nodeId', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setLevelFilter('github:owner/repo:f0', { labels: ['bug'] });
+    provider.clearLevelFilter('github:owner/repo:f0');
+    expect(provider.getLevelFilter('github:owner/repo:f0')).toBeUndefined();
+  });
+
+  it('should fire tree data change when clearing level filter', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setLevelFilter('github:owner/repo:f0', { labels: ['bug'] });
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.clearLevelFilter('github:owner/repo:f0');
+    expect(listener).toHaveBeenCalledOnce();
+  });
+
+  it('should clear all level filters', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setLevelFilter('github:owner/repo:f0', { labels: ['bug'] });
+    provider.setLevelFilter('ado:org:project:f0', { types: ['Bug'] });
+    provider.clearAllLevelFilters();
+    expect(provider.getLevelFilter('github:owner/repo:f0')).toBeUndefined();
+    expect(provider.getLevelFilter('ado:org:project:f0')).toBeUndefined();
+  });
+
+  it('should fire tree data change when clearing all level filters', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setLevelFilter('github:owner/repo:f0', { labels: ['bug'] });
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.clearAllLevelFilters();
+    expect(listener).toHaveBeenCalledOnce();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getAvailableOptions (#390)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — getAvailableOptions', () => {
+  function makeAdoItem(overrides: Partial<import('../ado-client').AdoWorkItem> = {}): import('../ado-client').AdoWorkItem {
+    return {
+      id: 1, title: 'Item', state: 'Active', type: 'Bug',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/1',
+      assignedTo: 'user', areaPath: 'Area', tags: [],
+      ...overrides,
+    };
+  }
+
+  it('should return owners for github-backend', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner1/repo1', 'owner2/repo2']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const options = provider.getAvailableOptions('github:', 'github-backend');
+    expect(options.owners).toEqual(['owner1', 'owner2']);
+  });
+
+  it('should return repos for github-org', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo-a', 'owner/repo-b']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const options = provider.getAvailableOptions('github:owner', 'github-org');
+    expect(options.repos).toEqual(['owner/repo-a', 'owner/repo-b']);
+  });
+
+  it('should return labels and states for github-repo', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      makeIssue({ labels: ['bug', 'urgent'] }),
+      makeIssue({ labels: ['feature'] }),
+    ]);
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const options = provider.getAvailableOptions('github:owner/repo', 'github-repo');
+    expect(options.labels).toEqual(['bug', 'feature', 'urgent']);
+    expect(options.states).toEqual(['open', 'active', 'closed']);
+  });
+
+  it('should return orgs for ado-backend', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('my-org', 'my-project');
+    const options = provider.getAvailableOptions('ado:', 'ado-backend');
+    expect(options.orgs).toEqual(['my-org']);
+  });
+
+  it('should return projects for ado-org', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('my-org', 'my-project');
+    const options = provider.getAvailableOptions('ado:my-org', 'ado-org');
+    expect(options.projects).toEqual(['my-project']);
+  });
+
+  it('should return types, states, and tags for ado-project', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoItems([
+      makeAdoItem({ type: 'Bug', tags: ['frontend'] }),
+      makeAdoItem({ type: 'User Story', tags: ['backend', 'api'] }),
+    ]);
+    const options = provider.getAvailableOptions('ado:org:project', 'ado-project');
+    expect(options.types).toEqual(['Bug', 'User Story']);
+    expect(options.states).toEqual(['open', 'active', 'closed']);
+    expect(options.tags).toEqual(['api', 'backend', 'frontend']);
+  });
+
+  it('should return empty for unknown contextValue', () => {
+    const provider = new WorkItemsTreeProvider();
+    const options = provider.getAvailableOptions('unknown', 'unknown-context');
+    expect(options).toEqual({});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Hierarchy rendering with level filters (#390)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — hierarchy rendering with level filters', () => {
+  function makeAdoItem(overrides: Partial<import('../ado-client').AdoWorkItem> = {}): import('../ado-client').AdoWorkItem {
+    return {
+      id: 1, title: 'Item', state: 'Active', type: 'Bug',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/1',
+      assignedTo: 'user', areaPath: 'Area', tags: [],
+      ...overrides,
+    };
+  }
+
+  it('should apply level filter to GitHub repo node', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockImplementation(async (repo: string) => {
+      if (repo === 'owner/repo') {
+        return [
+          makeIssue({ number: 1, labels: ['bug'] }),
+          makeIssue({ number: 2, labels: ['feature'] }),
+        ];
+      }
+      return [];
+    });
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    // Get repo node
+    const root = provider.getChildren();
+    expect(root).toHaveLength(2); // 2 issues
+
+    // Now apply level filter to the repo
+    const repoNode = new WorkItemsTreeItem('owner/repo', 1);
+    repoNode.id = 'github:owner/repo:f1';
+    repoNode.contextValue = 'github-repo';
+    provider.setLevelFilter('github:owner/repo:f1', { labels: ['bug'] });
+
+    // Get children with filter applied
+    const filtered = provider.getChildren(repoNode);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toContain('#1');
+  });
+
+  it('should apply level filter to ADO project node', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, type: 'Bug' }),
+      makeAdoItem({ id: 2, type: 'User Story' }),
+    ]);
+
+    const projectNode = new WorkItemsTreeItem('project', 2);
+    projectNode.id = 'ado:org:project:f1';
+    projectNode.contextValue = 'ado-project';
+    provider.setLevelFilter('ado:org:project:f1', { types: ['Bug'] });
+
+    const filtered = provider.getChildren(projectNode);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toContain('#1');
+  });
+
+  it('should apply label filter with AND-across-groups logic in level filter', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      makeIssue({ number: 1, labels: ['type:bug', 'release:v0.1'] }),
+      makeIssue({ number: 2, labels: ['type:bug'] }),
+      makeIssue({ number: 3, labels: ['release:v0.1'] }),
+    ]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const repoNode = new WorkItemsTreeItem('owner/repo', 1);
+    repoNode.id = 'github:owner/repo:f1';
+    repoNode.contextValue = 'github-repo';
+    provider.setLevelFilter('github:owner/repo:f1', { labels: ['type:bug', 'release:v0.1'] });
+
+    const filtered = provider.getChildren(repoNode);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toContain('#1');
+  });
+
+  it('should apply state filter in level filter', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      makeIssue({ number: 1, assignees: ['user'] }),
+      makeIssue({ number: 2, assignees: [] }),
+    ]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const repoNode = new WorkItemsTreeItem('owner/repo', 1);
+    repoNode.id = 'github:owner/repo:f1';
+    repoNode.contextValue = 'github-repo';
+    provider.setLevelFilter('github:owner/repo:f1', { states: ['active'] });
+
+    const filtered = provider.getChildren(repoNode);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toContain('#1');
+  });
+
+  it('should apply tags filter in ADO level filter', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, tags: ['frontend'] }),
+      makeAdoItem({ id: 2, tags: ['backend'] }),
+    ]);
+
+    const projectNode = new WorkItemsTreeItem('project', 2);
+    projectNode.id = 'ado:org:project:f1';
+    projectNode.contextValue = 'ado-project';
+    provider.setLevelFilter('ado:org:project:f1', { tags: ['frontend'] });
+
+    const filtered = provider.getChildren(projectNode);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toContain('#1');
+  });
+
+  it('should apply combined type, tags, and state filter in ADO level filter', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, type: 'Bug', state: 'Active', tags: ['frontend'] }),
+      makeAdoItem({ id: 2, type: 'Bug', state: 'Active', tags: ['backend'] }),
+      makeAdoItem({ id: 3, type: 'User Story', state: 'Active', tags: ['frontend'] }),
+      makeAdoItem({ id: 4, type: 'Bug', state: 'New', tags: ['frontend'] }),
+    ]);
+
+    const projectNode = new WorkItemsTreeItem('project', 2);
+    projectNode.id = 'ado:org:project:f1';
+    projectNode.contextValue = 'ado-project';
+    provider.setLevelFilter('ado:org:project:f1', {
+      types: ['Bug'],
+      tags: ['frontend'],
+      states: ['active'],
+    });
+
+    const filtered = provider.getChildren(projectNode);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].label).toContain('#1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge cases (#390)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — level filter edge cases', () => {
+  it('should handle empty result when level filter matches nothing', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue({ labels: ['feature'] })]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const repoNode = new WorkItemsTreeItem('owner/repo', 1);
+    repoNode.id = 'github:owner/repo:f1';
+    repoNode.contextValue = 'github-repo';
+    provider.setLevelFilter('github:owner/repo:f1', { labels: ['bug'] });
+
+    const filtered = provider.getChildren(repoNode);
+    expect(filtered).toHaveLength(0);
+  });
+
+  it('should handle single backend GitHub-only configuration', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue({ number: 1 })]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    // Single backend, single repo → flat list
+    const root = provider.getChildren();
+    expect(root).toHaveLength(1);
+    expect(root[0].contextValue).toBe('work-item');
+  });
+
+  it('should handle single backend ADO-only configuration', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoItems([
+      { id: 1, title: 'Item', state: 'Active', type: 'Bug', url: 'url', assignedTo: 'user', areaPath: 'Area', tags: [] },
+    ]);
+
+    // Single backend, ADO → flat list
+    const root = provider.getChildren();
+    expect(root).toHaveLength(1);
+    expect(root[0].contextValue).toBe('ado-work-item');
+  });
+
+  it('should show both backends when both GitHub and ADO configured', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoItems([
+      { id: 1, title: 'Item', state: 'Active', type: 'Bug', url: 'url', assignedTo: 'user', areaPath: 'Area', tags: [] },
+    ]);
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const root = provider.getChildren();
+    expect(root).toHaveLength(2);
+    expect(root.some(n => n.contextValue === 'ado-backend')).toBe(true);
+    expect(root.some(n => n.contextValue === 'github-backend')).toBe(true);
+  });
+});
