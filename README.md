@@ -54,7 +54,7 @@ New to agentic development? Start here — install EditLess, add a squad, and le
 - 🔍 **Auto-detection** — discovers agents in your workspace automatically
 - 🐙 **GitHub integration** — connect to GitHub issues and pull requests
 - 🏗️ **Azure DevOps integration** — pull in ADO work items and pull requests 
-- 🔄 **Keep your tools up to date** — EditLess lets you know when updates are available for [GitHub Copilot CLI](https://github.com/github/gh-copilot) and [Squad](https://github.com/bradygaster/squad), so you're always running the latest
+- 🔄 **Keep your tools up to date** — EditLess lets you know when updates are available for [GitHub Copilot CLI](https://github.com/github/gh-copilot), so you're always running the latest
 
 ## Development
 

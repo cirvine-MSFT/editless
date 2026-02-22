@@ -30,51 +30,19 @@ Settings for discovering and registering agent teams and standalone agents.
 
 ---
 
-## CLI Providers
+## CLI
 
-Settings for configuring CLI tools used to launch agent sessions.
+Settings for configuring how EditLess launches Copilot CLI sessions.
 
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
-| `editless.cli.providers` | `array` | See below | window | Array of CLI provider configurations. Each provider defines a CLI tool with version detection and launch support. Copilot CLI is included by default and will be re-added if removed. |
-| `editless.cli.activeProvider` | `string` | `"auto"` | window | Active CLI provider: set to `"auto"` to use the first detected provider, or specify a provider name from `editless.cli.providers`. |
+| `editless.cli.additionalArgs` | `string` | `""` | window | Additional command-line arguments appended to the Copilot CLI when launching sessions. Use this to pass flags like `--yolo` to every session. |
 
-### CLI Provider Object Schema
-
-Each entry in `editless.cli.providers` has this structure:
-
-```typescript
-{
-  name: string;                    // Display name (e.g., "Copilot CLI")
-  command: string;                 // Command to run (e.g., "copilot")
-  versionCommand: string;          // Command to check version (e.g., "copilot --version")
-  versionRegex: string;            // Regex to extract version (e.g., "(\\d+\\.\\d+[\\d.]*)")
-  launchCommand: string;           // Command to launch agent (e.g., "copilot --agent $(agent)")
-  createCommand: string;           // Command to create new agent (optional)
-  updateCommand: string;           // Command to check for updates (optional)
-  updateRunCommand: string;        // Command to run updates (optional)
-  upToDatePattern: string;         // Pattern in output when up to date
-}
-```
-
-**Default (Copilot CLI):**
+**Example:**
 
 ```jsonc
 {
-  "editless.cli.providers": [
-    {
-      "name": "Copilot CLI",
-      "command": "copilot",
-      "versionCommand": "copilot --version",
-      "versionRegex": "(\\d+\\.\\d+[\\d.]*)",
-      "launchCommand": "copilot --agent $(agent)",
-      "createCommand": "",
-      "updateCommand": "",
-      "updateRunCommand": "",
-      "upToDatePattern": "up to date"
-    }
-  ],
-  "editless.cli.activeProvider": "auto"
+  "editless.cli.additionalArgs": "--yolo"
 }
 ```
 
@@ -182,8 +150,7 @@ Settings for controlling desktop toasts and notifications.
   "editless.scanDebounceMs": 500,
 
   // CLI
-  "editless.cli.activeProvider": "auto",
-  // (cli.providers omitted; uses default Copilot CLI)
+  "editless.cli.additionalArgs": "",
 
   // GitHub
   "editless.github.repos": ["myorg/frontend", "myorg/backend"],

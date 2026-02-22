@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.1.1] - 2026-02-22
+
+The dogfooding release. After a week of daily-driving 0.1.0, this fixes the rough edges that made real usage painful — broken hierarchy views, race conditions in terminal session tracking, and a CLI settings model that was way over-engineered. If 0.1.0 was "it works," 0.1.1 is "it works when you actually use it all day."
+
+### Added
+- Universe auto-detection from squad files (`team.md` Universe marker, `registry.json` fallback)
+- Hierarchical filtering for Work Items tree (ADO org→project, GitHub owner→repo drill-down with level filters)
+- Hierarchical filtering for Pull Requests tree (same drill-down pattern)
+- File preview for work items and PRs
+- ADO PR filtering by author when `author:me` is active (`createdBy` / `fetchAdoMe`)
+
+### Changed
+- CLI command builder rewritten with typed options (no more `$(agent)` interpolation)
+- Simplified CLI settings to a single `editless.cli.additionalArgs` setting
+- Default agent ("Copilot CLI") always shown at top of agent tree
+- Session state model: launching / active / inactive / orphaned with distinct icons
+- Terminal session persistence and reconciliation improvements
+- Orphan check deferred until terminal matching settles (fixes race condition)
+- Orphaned sessions now show silently in the tree (removed "Resume All" toast)
+
+### Fixed
+- ADO org→project hierarchy preserved when only one backend is visible (work items)
+- PR tree hierarchy preserved when only one backend is visible
+- Terminal session race condition during startup reconciliation
+
+### Removed
+- Squad update detection and upgrade indicator (#303) — version checking, persistent badge, `editless.upgradeSquad` / `editless.upgradeAllSquads` commands
+- `editless.cli.command`, `editless.cli.launchCommand`, `editless.cli.defaultAgent`, `editless.cli.createCommand` settings (replaced by `editless.cli.additionalArgs`)
+
 ## [0.1.0] - 2026-02-16
 
 ### Added
@@ -28,7 +57,3 @@
 ### Removed
 - Redactor module (not needed for public release)
 
-## [Unreleased]
-
-### Removed
-- Squad update detection and upgrade indicator (#303) — version checking, persistent badge, `editless.upgradeSquad` / `editless.upgradeAllSquads` commands. Shared utilities extracted to `squad-utils.ts`. Already-initialized squads now silently register without running a terminal.
