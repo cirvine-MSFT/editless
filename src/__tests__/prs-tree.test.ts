@@ -121,11 +121,37 @@ describe('PRsTreeProvider — derivePRState', () => {
   });
 
   it('should derive "merged" state', async () => {
-    expect(await getPRItemState(makePR({ state: 'MERGED' }))).toBe('merged');
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR({ state: 'MERGED' })]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    // Must include 'merged' in statuses since merged PRs are hidden by default
+    provider.setFilter({ repos: [], labels: [], statuses: ['merged'], author: '' });
+    const children = provider.getChildren();
+    expect(children).toHaveLength(1);
+    expect((children[0].description as string).split(' · ')[0]).toBe('merged');
   });
 
   it('should derive "closed" state', async () => {
-    expect(await getPRItemState(makePR({ state: 'CLOSED' }))).toBe('closed');
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchMyPRs.mockResolvedValue([makePR({ state: 'CLOSED' })]);
+
+    const provider = new PRsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    // Must include 'closed' in statuses since closed PRs are hidden by default
+    provider.setFilter({ repos: [], labels: [], statuses: ['closed'], author: '' });
+    const children = provider.getChildren();
+    expect(children).toHaveLength(1);
+    expect((children[0].description as string).split(' · ')[0]).toBe('closed');
   });
 
   it('should derive "approved" state', async () => {

@@ -145,18 +145,20 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     return repos;
   }
 
+  private _cleanNodeId(id: string): string { return id.replace(/:f\d+$/, ''); }
+
   getLevelFilter(nodeId: string): LevelFilter | undefined {
-    return this._levelFilters.get(nodeId);
+    return this._levelFilters.get(this._cleanNodeId(nodeId));
   }
 
   setLevelFilter(nodeId: string, filter: LevelFilter): void {
-    this._levelFilters.set(nodeId, filter);
+    this._levelFilters.set(this._cleanNodeId(nodeId), filter);
     this._filterSeq++;
     this._onDidChangeTreeData.fire();
   }
 
   clearLevelFilter(nodeId: string): void {
-    this._levelFilters.delete(nodeId);
+    this._levelFilters.delete(this._cleanNodeId(nodeId));
     this._filterSeq++;
     this._onDidChangeTreeData.fire();
   }
@@ -167,10 +169,15 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     this._onDidChangeTreeData.fire();
   }
 
+  private _contextWithFilter(base: string, nodeId: string): string {
+    return this._levelFilters.has(this._cleanNodeId(nodeId)) ? `${base}-filtered` : base;
+  }
+
   getAvailableOptions(nodeId: string, contextValue: string): { owners?: string[]; repos?: string[]; orgs?: string[]; projects?: string[]; types?: string[]; labels?: string[]; states?: UnifiedState[]; tags?: string[] } {
-    // Strip :f{seq} suffix from node IDs before data lookup
+    // Strip :f{seq} suffix from node IDs and -filtered from contextValue before data lookup
     const cleanId = nodeId.replace(/:f\d+$/, '');
-    if (contextValue === 'github-backend') {
+    const baseContext = contextValue.replace(/-filtered$/, '');
+    if (baseContext === 'github-backend') {
       // Extract unique owners from repo names
       const owners = new Set<string>();
       for (const repo of this._repos) {
@@ -180,14 +187,14 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       return { owners: [...owners].sort() };
     }
 
-    if (contextValue === 'github-org') {
+    if (baseContext === 'github-org') {
       // Extract repos for this owner
       const owner = cleanId.replace('github:', '');
       const repos = this._repos.filter(r => r.startsWith(owner + '/'));
       return { repos };
     }
 
-    if (contextValue === 'github-repo') {
+    if (baseContext === 'github-repo') {
       // Labels, states, milestones for this repo
       const repoName = cleanId.replace('github:', '');
       const issues = this._issues.get(repoName) ?? [];
@@ -201,17 +208,17 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       };
     }
 
-    if (contextValue === 'ado-backend') {
+    if (baseContext === 'ado-backend') {
       // Return configured org
       return { orgs: this._adoOrg ? [this._adoOrg] : [] };
     }
 
-    if (contextValue === 'ado-org') {
+    if (baseContext === 'ado-org') {
       // Return configured project
       return { projects: this._adoProject ? [this._adoProject] : [] };
     }
 
-    if (contextValue === 'ado-project') {
+    if (baseContext === 'ado-project') {
       // Types, states, tags for ADO items
       const types = new Set<string>();
       const tags = new Set<string>();
@@ -351,7 +358,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
           adoGroup.iconPath = new vscode.ThemeIcon('azure');
           const totalCount = filteredAdo.length;
           adoGroup.description = this._getFilterDescription('ado:', totalCount);
-          adoGroup.contextValue = 'ado-backend';
+          adoGroup.contextValue = this._contextWithFilter('ado-backend', `ado:`);
           adoGroup.id = `ado::f${fseq}`;
           items.push(adoGroup);
         } else {
@@ -367,7 +374,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
           ghGroup.iconPath = new vscode.ThemeIcon('github');
           const totalCount = [...filteredIssues.values()].flat().length;
           ghGroup.description = this._getFilterDescription('github:', totalCount);
-          ghGroup.contextValue = 'github-backend';
+          ghGroup.contextValue = this._contextWithFilter('github-backend', `github:`);
           ghGroup.id = `github::f${fseq}`;
           items.push(ghGroup);
         } else {
@@ -389,12 +396,15 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       return items;
     }
 
+    // Strip -filtered suffix for dispatch
+    const ctx = element.contextValue?.replace(/-filtered$/, '') ?? '';
+
     // Handle backend group expansions
-    if (element.contextValue === 'ado-backend') {
+    if (ctx === 'ado-backend') {
       return this._getAdoOrgNodes(this.applyAdoRuntimeFilter(this._adoItems));
     }
 
-    if (element.contextValue === 'github-backend') {
+    if (ctx === 'github-backend') {
       const filteredIssues = new Map<string, GitHubIssue[]>();
       for (const [repo, issues] of this._issues.entries()) {
         const filtered = this.applyRuntimeFilter(issues);
@@ -404,14 +414,14 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     }
 
     // ADO org node
-    if (element.contextValue === 'ado-org') {
+    if (ctx === 'ado-org') {
       return this._getAdoProjectNodes(this.applyAdoRuntimeFilter(this._adoItems));
     }
 
     // ADO project node
-    if (element.contextValue === 'ado-project') {
+    if (ctx === 'ado-project') {
       const filteredAdo = this.applyAdoRuntimeFilter(this._adoItems);
-      const projectFilter = this._levelFilters.get(element.id ?? '');
+      const projectFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       let filtered = filteredAdo;
       if (projectFilter) {
         filtered = this._applyAdoLevelFilter(filteredAdo, projectFilter);
@@ -420,7 +430,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     }
 
     // ADO parent item
-    if (element.contextValue === 'ado-parent-item' && element.adoWorkItem) {
+    if (ctx === 'ado-parent-item' && element.adoWorkItem) {
       const childIds = this._adoChildMap.get(element.adoWorkItem.id) ?? [];
       const filtered = this.applyAdoRuntimeFilter(this._adoItems);
       const filteredIdSet = new Set(filtered.map(wi => wi.id));
@@ -430,7 +440,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     }
 
     // GitHub owner node
-    if (element.contextValue === 'github-org') {
+    if (ctx === 'github-org') {
       const owner = element.id?.replace(/^github:|:f\d+$/g, '') ?? '';
       const filteredIssues = new Map<string, GitHubIssue[]>();
       for (const [repo, issues] of this._issues.entries()) {
@@ -443,12 +453,12 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     }
 
     // GitHub repo node
-    if (element.contextValue === 'github-repo') {
+    if (ctx === 'github-repo') {
       const repoName = element.id?.replace(/^github:|:f\d+$/g, '') ?? '';
       const issues = this._issues.get(repoName) ?? [];
       let filtered = this.applyRuntimeFilter(issues);
       
-      const repoFilter = this._levelFilters.get(element.id ?? '');
+      const repoFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       if (repoFilter) {
         filtered = this._applyGitHubLevelFilter(filtered, repoFilter);
       }
@@ -461,14 +471,14 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     }
 
     // Milestone group
-    if (element.contextValue === 'milestone-group') {
+    if (ctx === 'milestone-group') {
       const parts = element.id?.split(':') ?? [];
       // Format: ms:repoName:milestoneName:f{seq}
       const repoId = parts[1] ?? '';
       const msName = parts[2] ?? '';
       const issues = this._issues.get(repoId) ?? [];
       const filtered = this.applyRuntimeFilter(issues);
-      const repoFilter = this._levelFilters.get(`github:${repoId}:f${this._filterSeq}`);
+      const repoFilter = this._levelFilters.get(`github:${repoId}`);
       const levelFiltered = repoFilter ? this._applyGitHubLevelFilter(filtered, repoFilter) : filtered;
       
       const msFiltered = msName === '__none__'
@@ -526,8 +536,9 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   private applyRuntimeFilter(issues: GitHubIssue[]): GitHubIssue[] {
-    if (!this.isFiltered) return issues;
     return issues.filter(issue => {
+      // Default exclusion: hide closed items unless user explicitly includes 'closed'
+      if (this._filter.states.length === 0 && mapGitHubState(issue) === 'closed') return false;
       if (this._filter.repos.length > 0 && !this._filter.repos.includes(issue.repository)) return false;
       if (this._filter.labels.length > 0 && !this.matchesLabelFilter(issue.labels, this._filter.labels)) return false;
       if (this._filter.states.length > 0 && !this._filter.states.includes(mapGitHubState(issue))) return false;
@@ -537,8 +548,9 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   private applyAdoRuntimeFilter(items: AdoWorkItem[]): AdoWorkItem[] {
-    if (!this.isFiltered) return items;
     return items.filter(wi => {
+      // Default exclusion: hide closed items unless user explicitly includes 'closed'
+      if (this._filter.states.length === 0 && mapAdoState(wi.state) === 'closed') return false;
       if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
       if (this._filter.labels.length > 0 && !this.matchesLabelFilter(wi.tags, this._filter.labels)) return false;
       if (this._filter.states.length > 0 && !this._filter.states.includes(mapAdoState(wi.state))) return false;
@@ -620,7 +632,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   private _getFilterDescription(nodeId: string, itemCount: number): string {
-    const filter = this._levelFilters.get(nodeId);
+    const filter = this._levelFilters.get(this._cleanNodeId(nodeId));
     const parts: string[] = [];
     
     if (filter?.types && filter.types.length > 0) {
@@ -647,7 +659,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     const orgItem = new WorkItemsTreeItem(this._adoOrg, vscode.TreeItemCollapsibleState.Expanded);
     orgItem.iconPath = new vscode.ThemeIcon('organization');
     orgItem.description = this._getFilterDescription(`ado:${this._adoOrg}`, filteredAdo.length);
-    orgItem.contextValue = 'ado-org';
+    orgItem.contextValue = this._contextWithFilter('ado-org', `ado:${this._adoOrg}`);
     orgItem.id = `ado:${this._adoOrg}:f${fseq}`;
     return [orgItem];
   }
@@ -659,7 +671,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     const projectItem = new WorkItemsTreeItem(this._adoProject, vscode.TreeItemCollapsibleState.Expanded);
     projectItem.iconPath = new vscode.ThemeIcon('folder');
     projectItem.description = this._getFilterDescription(`ado:${this._adoOrg}:${this._adoProject}`, filteredAdo.length);
-    projectItem.contextValue = 'ado-project';
+    projectItem.contextValue = this._contextWithFilter('ado-project', `ado:${this._adoOrg}:${this._adoProject}`);
     projectItem.id = `ado:${this._adoOrg}:${this._adoProject}:f${fseq}`;
     return [projectItem];
   }
@@ -681,7 +693,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       const ownerItem = new WorkItemsTreeItem(owner, vscode.TreeItemCollapsibleState.Expanded);
       ownerItem.iconPath = new vscode.ThemeIcon('organization');
       ownerItem.description = this._getFilterDescription(`github:${owner}`, issues.length);
-      ownerItem.contextValue = 'github-org';
+      ownerItem.contextValue = this._contextWithFilter('github-org', `github:${owner}`);
       ownerItem.id = `github:${owner}:f${fseq}`;
       items.push(ownerItem);
     }
@@ -696,7 +708,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         const repoItem = new WorkItemsTreeItem(repo, vscode.TreeItemCollapsibleState.Expanded);
         repoItem.iconPath = new vscode.ThemeIcon('repo');
         repoItem.description = this._getFilterDescription(`github:${repo}`, issues.length);
-        repoItem.contextValue = 'github-repo';
+        repoItem.contextValue = this._contextWithFilter('github-repo', `github:${repo}`);
         repoItem.id = `github:${repo}:f${fseq}`;
         items.push(repoItem);
       }
@@ -708,6 +720,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     return items.filter(wi => {
       if (filter.types && filter.types.length > 0 && !filter.types.includes(wi.type)) return false;
       if (filter.tags && filter.tags.length > 0 && !this.matchesLabelFilter(wi.tags, filter.tags)) return false;
+      if ((!filter.states || filter.states.length === 0) && mapAdoState(wi.state) === 'closed') return false;
       if (filter.states && filter.states.length > 0 && !filter.states.includes(mapAdoState(wi.state))) return false;
       return true;
     });
@@ -716,6 +729,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   private _applyGitHubLevelFilter(issues: GitHubIssue[], filter: LevelFilter): GitHubIssue[] {
     return issues.filter(issue => {
       if (filter.labels && filter.labels.length > 0 && !this.matchesLabelFilter(issue.labels, filter.labels)) return false;
+      if ((!filter.states || filter.states.length === 0) && mapGitHubState(issue) === 'closed') return false;
       if (filter.states && filter.states.length > 0 && !filter.states.includes(mapGitHubState(issue))) return false;
       return true;
     });

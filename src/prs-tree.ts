@@ -97,18 +97,20 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     this.setFilter({ repos: [], labels: [], statuses: [], author: '' });
   }
 
+  private _cleanNodeId(id: string): string { return id.replace(/:f\d+$/, ''); }
+
   getLevelFilter(nodeId: string): PRLevelFilter | undefined {
-    return this._levelFilters.get(nodeId);
+    return this._levelFilters.get(this._cleanNodeId(nodeId));
   }
 
   setLevelFilter(nodeId: string, filter: PRLevelFilter): void {
-    this._levelFilters.set(nodeId, filter);
+    this._levelFilters.set(this._cleanNodeId(nodeId), filter);
     this._filterSeq++;
     this._onDidChangeTreeData.fire();
   }
 
   clearLevelFilter(nodeId: string): void {
-    this._levelFilters.delete(nodeId);
+    this._levelFilters.delete(this._cleanNodeId(nodeId));
     this._filterSeq++;
     this._onDidChangeTreeData.fire();
   }
@@ -119,10 +121,15 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     this._onDidChangeTreeData.fire();
   }
 
+  private _contextWithFilter(base: string, nodeId: string): string {
+    return this._levelFilters.has(this._cleanNodeId(nodeId)) ? `${base}-filtered` : base;
+  }
+
   getAvailableOptions(nodeId: string, contextValue: string): { owners?: string[]; repos?: string[]; orgs?: string[]; projects?: string[]; statuses?: string[]; labels?: string[] } {
-    // Strip :f{seq} suffix from node IDs before data lookup
+    // Strip :f{seq} suffix from node IDs and -filtered from contextValue before data lookup
     const cleanId = nodeId.replace(/:f\d+$/, '');
-    if (contextValue === 'github-pr-backend') {
+    const baseContext = contextValue.replace(/-filtered$/, '');
+    if (baseContext === 'github-pr-backend') {
       const owners = new Set<string>();
       for (const repo of this._repos) {
         const owner = repo.split('/')[0];
@@ -131,13 +138,13 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       return { owners: [...owners].sort() };
     }
 
-    if (contextValue === 'github-pr-org') {
+    if (baseContext === 'github-pr-org') {
       const owner = cleanId.replace('github-pr:', '');
       const repos = this._repos.filter(r => r.startsWith(owner + '/'));
       return { repos };
     }
 
-    if (contextValue === 'github-pr-repo') {
+    if (baseContext === 'github-pr-repo') {
       const repoName = cleanId.replace('github-pr:', '');
       const prs = this._prs.get(repoName) ?? [];
       const labels = new Set<string>();
@@ -150,15 +157,15 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       };
     }
 
-    if (contextValue === 'ado-pr-backend') {
+    if (baseContext === 'ado-pr-backend') {
       return { orgs: this._adoOrg ? [this._adoOrg] : [] };
     }
 
-    if (contextValue === 'ado-pr-org') {
+    if (baseContext === 'ado-pr-org') {
       return { projects: this._adoProject ? [this._adoProject] : [] };
     }
 
-    if (contextValue === 'ado-pr-project') {
+    if (baseContext === 'ado-pr-project') {
       return {
         statuses: ['draft', 'active', 'merged'],
       };
@@ -314,7 +321,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
           const adoGroup = new PRsTreeItem('Azure DevOps', vscode.TreeItemCollapsibleState.Expanded);
           adoGroup.iconPath = new vscode.ThemeIcon('azure');
           adoGroup.description = this._getFilterDescription('ado-pr:', filteredAdoPRs.length);
-          adoGroup.contextValue = 'ado-pr-backend';
+          adoGroup.contextValue = this._contextWithFilter('ado-pr-backend', 'ado-pr:');
           adoGroup.id = `ado-pr::f${fseq}`;
           items.push(adoGroup);
         } else {
@@ -330,7 +337,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
           ghGroup.iconPath = new vscode.ThemeIcon('github');
           const totalCount = [...filteredPRs.values()].flat().length;
           ghGroup.description = this._getFilterDescription('github-pr:', totalCount);
-          ghGroup.contextValue = 'github-pr-backend';
+          ghGroup.contextValue = this._contextWithFilter('github-pr-backend', 'github-pr:');
           ghGroup.id = `github-pr::f${fseq}`;
           items.push(ghGroup);
         } else {
@@ -347,20 +354,23 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       return items;
     }
 
+    // Strip -filtered suffix for dispatch
+    const ctx = element.contextValue?.replace(/-filtered$/, '') ?? '';
+
     // ADO backend → org nodes
-    if (element.contextValue === 'ado-pr-backend') {
+    if (ctx === 'ado-pr-backend') {
       return this._getAdoOrgNodes(this.applyAdoRuntimeFilter(this._adoPRs));
     }
 
     // ADO org → project nodes
-    if (element.contextValue === 'ado-pr-org') {
+    if (ctx === 'ado-pr-org') {
       return this._getAdoProjectNodes(this.applyAdoRuntimeFilter(this._adoPRs));
     }
 
     // ADO project → PR items
-    if (element.contextValue === 'ado-pr-project') {
+    if (ctx === 'ado-pr-project') {
       let filtered = this.applyAdoRuntimeFilter(this._adoPRs);
-      const projectFilter = this._levelFilters.get(element.id ?? '');
+      const projectFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       if (projectFilter) {
         filtered = this._applyAdoLevelFilter(filtered, projectFilter);
       }
@@ -368,7 +378,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     }
 
     // GitHub backend → owner nodes
-    if (element.contextValue === 'github-pr-backend') {
+    if (ctx === 'github-pr-backend') {
       const filteredPRs = new Map<string, GitHubPR[]>();
       for (const [repo, prs] of this._prs.entries()) {
         const filtered = this.applyRuntimeFilter(prs);
@@ -378,7 +388,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     }
 
     // GitHub owner → repo nodes
-    if (element.contextValue === 'github-pr-org') {
+    if (ctx === 'github-pr-org') {
       const owner = element.id?.replace(/^github-pr:|:f\d+$/g, '') ?? '';
       const filteredPRs = new Map<string, GitHubPR[]>();
       for (const [repo, prs] of this._prs.entries()) {
@@ -391,10 +401,10 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     }
 
     // GitHub repo → PR items
-    if (element.contextValue === 'github-pr-repo') {
+    if (ctx === 'github-pr-repo') {
       const repoName = element.id?.replace(/^github-pr:|:f\d+$/g, '') ?? '';
       let filtered = this.applyRuntimeFilter(this._prs.get(repoName) ?? []);
-      const repoFilter = this._levelFilters.get(element.id ?? '');
+      const repoFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       if (repoFilter) {
         filtered = this._applyGitHubLevelFilter(filtered, repoFilter);
       }
@@ -455,23 +465,24 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   }
 
   applyRuntimeFilter(prs: GitHubPR[]): GitHubPR[] {
-    if (!this.isFiltered) return prs;
     return prs.filter(pr => {
+      const state = this.derivePRState(pr);
+      // Default exclusion: hide merged/closed unless user explicitly includes them
+      if (this._filter.statuses.length === 0 && (state === 'merged' || state === 'closed')) return false;
       if (this._filter.repos.length > 0 && !this._filter.repos.includes(pr.repository)) return false;
       if (this._filter.labels.length > 0 && !this.matchesLabelFilter(pr.labels, this._filter.labels)) return false;
-      if (this._filter.statuses.length > 0 && !this._filter.statuses.includes(this.derivePRState(pr))) return false;
+      if (this._filter.statuses.length > 0 && !this._filter.statuses.includes(state)) return false;
       return true;
     });
   }
 
   applyAdoRuntimeFilter(prs: AdoPR[]): AdoPR[] {
-    if (!this.isFiltered) return prs;
     return prs.filter(pr => {
+      const state = pr.isDraft ? 'draft' : pr.status;
+      // Default exclusion: hide merged/closed unless user explicitly includes them
+      if (this._filter.statuses.length === 0 && (state === 'merged' || state === 'closed')) return false;
       if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
-      if (this._filter.statuses.length > 0) {
-        const state = pr.isDraft ? 'draft' : pr.status;
-        if (!this._filter.statuses.includes(state)) return false;
-      }
+      if (this._filter.statuses.length > 0 && !this._filter.statuses.includes(state)) return false;
       return true;
     });
   }
@@ -534,7 +545,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   }
 
   private _getFilterDescription(nodeId: string, itemCount: number): string {
-    const filter = this._levelFilters.get(nodeId);
+    const filter = this._levelFilters.get(this._cleanNodeId(nodeId));
     const parts: string[] = [];
 
     if (filter?.statuses && filter.statuses.length > 0) {
@@ -555,7 +566,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     const orgItem = new PRsTreeItem(this._adoOrg, vscode.TreeItemCollapsibleState.Expanded);
     orgItem.iconPath = new vscode.ThemeIcon('organization');
     orgItem.description = this._getFilterDescription(`ado-pr:${this._adoOrg}`, filteredAdo.length);
-    orgItem.contextValue = 'ado-pr-org';
+    orgItem.contextValue = this._contextWithFilter('ado-pr-org', `ado-pr:${this._adoOrg}`);
     orgItem.id = `ado-pr:${this._adoOrg}:f${fseq}`;
     return [orgItem];
   }
@@ -567,7 +578,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
     const projectItem = new PRsTreeItem(this._adoProject, vscode.TreeItemCollapsibleState.Expanded);
     projectItem.iconPath = new vscode.ThemeIcon('folder');
     projectItem.description = this._getFilterDescription(`ado-pr:${this._adoOrg}:${this._adoProject}`, filteredAdo.length);
-    projectItem.contextValue = 'ado-pr-project';
+    projectItem.contextValue = this._contextWithFilter('ado-pr-project', `ado-pr:${this._adoOrg}:${this._adoProject}`);
     projectItem.id = `ado-pr:${this._adoOrg}:${this._adoProject}:f${fseq}`;
     return [projectItem];
   }
@@ -589,7 +600,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       const ownerItem = new PRsTreeItem(owner, vscode.TreeItemCollapsibleState.Expanded);
       ownerItem.iconPath = new vscode.ThemeIcon('organization');
       ownerItem.description = this._getFilterDescription(`github-pr:${owner}`, prs.length);
-      ownerItem.contextValue = 'github-pr-org';
+      ownerItem.contextValue = this._contextWithFilter('github-pr-org', `github-pr:${owner}`);
       ownerItem.id = `github-pr:${owner}:f${fseq}`;
       items.push(ownerItem);
     }
@@ -604,7 +615,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
         const repoItem = new PRsTreeItem(repo, vscode.TreeItemCollapsibleState.Expanded);
         repoItem.iconPath = new vscode.ThemeIcon('repo');
         repoItem.description = this._getFilterDescription(`github-pr:${repo}`, prs.length);
-        repoItem.contextValue = 'github-pr-repo';
+        repoItem.contextValue = this._contextWithFilter('github-pr-repo', `github-pr:${repo}`);
         repoItem.id = `github-pr:${repo}:f${fseq}`;
         items.push(repoItem);
       }
@@ -614,17 +625,18 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
   private _applyAdoLevelFilter(prs: AdoPR[], filter: PRLevelFilter): AdoPR[] {
     return prs.filter(pr => {
-      if (filter.statuses && filter.statuses.length > 0) {
-        const state = pr.isDraft ? 'draft' : pr.status;
-        if (!filter.statuses.includes(state)) return false;
-      }
+      const state = pr.isDraft ? 'draft' : pr.status;
+      if ((!filter.statuses || filter.statuses.length === 0) && (state === 'merged' || state === 'closed')) return false;
+      if (filter.statuses && filter.statuses.length > 0 && !filter.statuses.includes(state)) return false;
       return true;
     });
   }
 
   private _applyGitHubLevelFilter(prs: GitHubPR[], filter: PRLevelFilter): GitHubPR[] {
     return prs.filter(pr => {
-      if (filter.statuses && filter.statuses.length > 0 && !filter.statuses.includes(this.derivePRState(pr))) return false;
+      const state = this.derivePRState(pr);
+      if ((!filter.statuses || filter.statuses.length === 0) && (state === 'merged' || state === 'closed')) return false;
+      if (filter.statuses && filter.statuses.length > 0 && !filter.statuses.includes(state)) return false;
       if (filter.labels && filter.labels.length > 0 && !this.matchesLabelFilter(pr.labels, filter.labels)) return false;
       return true;
     });
