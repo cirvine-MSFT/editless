@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.2] - 2026-02-24
+
+Well, it didn't take long to find a serious bug. Whoops! Turns out we were scanning the *parent* of your workspace instead of the workspace itself, which means squad discovery was running wild looking in all the wrong places. We also added smarter recursive discovery (up to 4 levels deep with sensible exclusions), case-insensitive directory handling for Windows, and locked down hidden directories for security. Your legacy `.ai-team` stuff still works too.
+
+### Fixed
+- Parent directory discovery bug — was scanning parent of workspace instead of workspace itself (#405)
+- Case-insensitive directory exclusion for Windows compatibility
+- Prevent recursion into hidden directories (security hardening)
+
+### Added
+- Recursive squad discovery — scans up to 4 levels deep with smart exclusions (node_modules, hidden dirs, etc.)
+- Legacy `.ai-team` format still discovered correctly
+
 ## [0.1.1] - 2026-02-22
 
 The dogfooding release. After a week of daily-driving 0.1.0, this fixes the rough edges that made real usage painful — broken hierarchy views, race conditions in terminal session tracking, and a CLI settings model that was way over-engineered. We also cut aspirational features that weren't working well and eliminated duplication with SquadUI, prioritizing a focused, stable foundation. If 0.1.0 was "it works," 0.1.1 is "it works when you actually use it all day."
