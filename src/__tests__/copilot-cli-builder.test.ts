@@ -267,6 +267,16 @@ describe('copilot-cli-builder', () => {
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('--model'));
       warnSpy.mockRestore();
     });
+
+    it('strips --agent=value syntax from additionalArgs when agentFlag is set', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--agent=other-agent --yolo',
+      });
+      expect(cmd).toBe('copilot --agent squad --yolo');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('--agent'));
+      warnSpy.mockRestore();
+    });
   });
 
   describe('shell quoting', () => {
