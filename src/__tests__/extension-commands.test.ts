@@ -191,9 +191,7 @@ vi.mock('vscode', async () => {
     workspace: {
       getConfiguration: () => ({
         get: (key: string, defaultValue?: unknown) => {
-          if (key === 'command') return 'copilot';
-          if (key === 'defaultAgent') return 'squad';
-          if (key === 'createCommand') return '';
+          if (key === 'additionalArgs') return '';
           return defaultValue ?? [];
         },
       }),
@@ -259,6 +257,7 @@ vi.mock('../terminal-manager', () => ({
       relaunchAllOrphans: mockRelaunchAllOrphans,
       persist: vi.fn(),
       reconcile: vi.fn(),
+      waitForReconciliation: vi.fn().mockResolvedValue(undefined),
       setSessionResolver: vi.fn(),
       setAgentSessionId: vi.fn(),
       getOrphanedSessions: vi.fn().mockReturnValue([]),
@@ -460,7 +459,7 @@ function makeSquad(overrides: Record<string, unknown> = {}) {
     icon: '🚀',
     universe: 'test',
     path: '/squads/alpha',
-    launchCommand: 'copilot --agent squad --model gpt-5',
+    model: 'gpt-5',
     ...overrides,
   };
 }
@@ -1019,16 +1018,16 @@ describe('extension command handlers', () => {
   // --- editless.changeModel -------------------------------------------------
 
   describe('editless.changeModel', () => {
-    it('should update launch command model and refresh tree', async () => {
+    it('should update model field and refresh tree', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      const squad = makeSquad({ launchCommand: 'copilot --agent squad --model gpt-5' });
+      const squad = makeSquad({ model: 'gpt-5' });
       mockGetSquad.mockReturnValue(squad);
       mockShowQuickPick.mockResolvedValue({ label: 'claude-sonnet-4' });
 
       await getHandler('editless.changeModel')(item);
 
       expect(mockUpdateSquad).toHaveBeenCalledWith('squad-1', {
-        launchCommand: 'copilot --agent squad --model claude-sonnet-4',
+        model: 'claude-sonnet-4',
       });
       expect(mockTreeRefresh).toHaveBeenCalled();
     });
@@ -1039,9 +1038,9 @@ describe('extension command handlers', () => {
       expect(mockUpdateSquad).not.toHaveBeenCalled();
     });
 
-    it('should no-op when squad has no launchCommand', async () => {
+    it('should no-op when squad is not found', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: undefined }));
+      mockGetSquad.mockReturnValue(undefined);
       await getHandler('editless.changeModel')(item);
       expect(mockShowQuickPick).not.toHaveBeenCalled();
     });
@@ -1057,22 +1056,22 @@ describe('extension command handlers', () => {
 
     it('should no-op when selected model is same as current', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: 'copilot --agent squad --model gpt-5' }));
+      mockGetSquad.mockReturnValue(makeSquad({ model: 'gpt-5' }));
       mockShowQuickPick.mockResolvedValue({ label: 'gpt-5' });
 
       await getHandler('editless.changeModel')(item);
       expect(mockUpdateSquad).not.toHaveBeenCalled();
     });
 
-    it('should append --model when launch command has no model flag', async () => {
+    it('should set model when config has no model yet', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad({ launchCommand: 'copilot --agent squad' }));
+      mockGetSquad.mockReturnValue(makeSquad({ model: undefined }));
       mockShowQuickPick.mockResolvedValue({ label: 'claude-sonnet-4' });
 
       await getHandler('editless.changeModel')(item);
 
       expect(mockUpdateSquad).toHaveBeenCalledWith('squad-1', {
-        launchCommand: 'copilot --agent squad --model claude-sonnet-4',
+        model: 'claude-sonnet-4',
       });
     });
   });
@@ -1153,14 +1152,14 @@ describe('extension command handlers', () => {
       expect(mockShowQuickPick).not.toHaveBeenCalled();
     });
 
-    it('should show location picker with Personal and Workspace options', async () => {
+    it('should show location picker with Personal and Project options', async () => {
       mockShowInputBox.mockResolvedValueOnce('test-agent');
       mockShowQuickPick.mockResolvedValueOnce(undefined);
       await getHandler('editless.addAgent')();
       expect(mockShowQuickPick).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ value: 'personal' }),
-          expect.objectContaining({ value: 'workspace' }),
+          expect.objectContaining({ value: 'project' }),
         ]),
         expect.any(Object),
       );
@@ -1173,7 +1172,7 @@ describe('extension command handlers', () => {
       expect(mockShowTextDocument).not.toHaveBeenCalled();
     });
 
-    it('should create personal agent in ~/.config/copilot/agents/', async () => {
+    it('should create personal agent in ~/.copilot/agents/', async () => {
       const os = await import('os');
       mockShowInputBox.mockResolvedValueOnce('test-agent');
       mockShowQuickPick.mockResolvedValueOnce({ value: 'personal' });
@@ -1182,43 +1181,25 @@ describe('extension command handlers', () => {
       expect(mockShowQuickPick).toHaveBeenCalledTimes(1);
     });
 
-    it('should warn when workspace agent selected with no workspace folder', async () => {
-      const vscodeModule = await import('vscode');
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: undefined, configurable: true });
+    it('should show folder picker when project agent selected', async () => {
       mockShowInputBox.mockResolvedValueOnce('test-agent');
-      mockShowQuickPick.mockResolvedValueOnce({ value: 'workspace' });
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+      mockShowOpenDialog.mockResolvedValueOnce(undefined); // cancel folder picker
       await getHandler('editless.addAgent')();
-      expect(mockShowWarningMessage).toHaveBeenCalledWith('No workspace folder open.');
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+      expect(mockShowOpenDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ canSelectFolders: true, canSelectFiles: false }),
+      );
+      expect(mockShowTextDocument).not.toHaveBeenCalled();
     });
 
-    it('should use single workspace folder directly without folder picker', async () => {
-      const vscodeModule = await import('vscode');
+    it('should create project agent in .github/agents/ under selected folder', async () => {
       const os = await import('os');
-      const testFolders = [{ uri: { fsPath: os.tmpdir() }, name: 'test' }];
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      const projectDir = os.tmpdir();
       mockShowInputBox.mockResolvedValueOnce('test-agent');
-      mockShowQuickPick.mockResolvedValueOnce({ value: 'workspace' });
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+      mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
       try { await getHandler('editless.addAgent')(); } catch { /* fs write expected to fail */ }
-      // Only 1 quick pick (location picker), no folder picker for single workspace
-      expect(mockShowQuickPick).toHaveBeenCalledTimes(1);
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
-    });
-
-    it('should show folder picker when multiple workspace folders exist', async () => {
-      const vscodeModule = await import('vscode');
-      const testFolders = [
-        { uri: { fsPath: '/workspace1' }, name: 'ws1' },
-        { uri: { fsPath: '/workspace2' }, name: 'ws2' },
-      ];
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
-      mockShowInputBox.mockResolvedValueOnce('test-agent');
-      mockShowQuickPick
-        .mockResolvedValueOnce({ value: 'workspace' })
-        .mockResolvedValueOnce(undefined); // cancel folder picker
-      await getHandler('editless.addAgent')();
-      expect(mockShowQuickPick).toHaveBeenCalledTimes(2);
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+      expect(mockShowOpenDialog).toHaveBeenCalled();
     });
   });
 
@@ -1870,7 +1851,6 @@ describe('editless.promoteDiscoveredAgent', () => {
         icon: '🤖',
         universe: 'standalone',
         description: 'A test agent',
-        launchCommand: 'copilot --agent squad',
       }),
     ]);
   });
@@ -1970,7 +1950,6 @@ describe('editless.promoteDiscoveredAgent', () => {
         icon: '🔷',
         universe: 'acme-corp',
         description: 'A squad',
-        launchCommand: 'copilot --agent squad',
       }),
     ]);
   });

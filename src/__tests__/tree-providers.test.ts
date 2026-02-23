@@ -1002,3 +1002,86 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
     expect(nonResumableTooltip).toContain('cannot be resumed');
   });
 });
+
+// ---------------------------------------------------------------------------
+// EditlessTreeProvider — resumable session count at tree level (#397)
+// ---------------------------------------------------------------------------
+
+describe('EditlessTreeProvider — resumable session count at tree level', () => {
+  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return {
+      loadSquads: () => squads,
+      getSquad: (id: string) => squads.find(s => s.id === id),
+      registryPath: '/tmp/registry.json',
+      updateSquad: vi.fn(),
+    };
+  }
+
+  function makeTerminalManager(
+    terminals: Array<{ terminal: object; info: object }>,
+    orphans: Array<Record<string, unknown>>,
+  ) {
+    return {
+      getTerminalsForSquad: vi.fn().mockReturnValue(terminals),
+      getOrphanedSessions: vi.fn().mockReturnValue(orphans),
+      onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      getSessionState: vi.fn().mockReturnValue('orphaned'),
+      getLastActivityAt: vi.fn().mockReturnValue(undefined),
+    };
+  }
+
+  const standaloneSquad = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'standalone' }];
+
+  it('squad item shows resumable count in description when orphans exist', () => {
+    const orphans = [
+      { id: 'o1', squadId: 'squad-a', agentSessionId: 'sess-1', displayName: 'Test', labelKey: 'k', squadName: 'A', squadIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T', lastSeenAt: Date.now(), rebootCount: 0 },
+      { id: 'o2', squadId: 'squad-a', agentSessionId: 'sess-2', displayName: 'Test2', labelKey: 'k2', squadName: 'A', squadIcon: '🤖', index: 2, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T2', lastSeenAt: Date.now(), rebootCount: 0 },
+    ];
+    const tm = makeTerminalManager([], orphans);
+    const provider = new EditlessTreeProvider(createMockRegistry(standaloneSquad) as never, tm as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    expect(squadItem.description).toContain('2 resumable');
+  });
+
+  it('standalone squad with 0 terminals but orphans still shows as Collapsed', () => {
+    const orphans = [
+      { id: 'o1', squadId: 'squad-a', agentSessionId: 'sess-1', displayName: 'Test', labelKey: 'k', squadName: 'A', squadIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T', lastSeenAt: Date.now(), rebootCount: 0 },
+    ];
+    const tm = makeTerminalManager([], orphans);
+    const provider = new EditlessTreeProvider(createMockRegistry(standaloneSquad) as never, tm as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    // Collapsed (1) not None (0)
+    expect(squadItem.collapsibleState).toBe(1);
+  });
+
+  it('default agent item shows resumable count in description', () => {
+    const orphans = [
+      { id: 'o1', squadId: 'builtin:copilot-cli', agentSessionId: 'sess-1', displayName: 'CLI', labelKey: 'k', squadName: 'CLI', squadIcon: '', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'CLI', lastSeenAt: Date.now(), rebootCount: 0 },
+    ];
+    const tm = makeTerminalManager([], orphans);
+    const provider = new EditlessTreeProvider(createMockRegistry([]) as never, tm as never);
+
+    const roots = provider.getChildren();
+    const defaultItem = roots.find(r => r.type === 'default-agent')!;
+    expect(defaultItem.description).toContain('1 resumable');
+    // Should be Collapsed, not None
+    expect(defaultItem.collapsibleState).toBe(1);
+  });
+
+  it('description has no resumable text when no orphans exist', () => {
+    const tm = makeTerminalManager([], []);
+    const provider = new EditlessTreeProvider(createMockRegistry(standaloneSquad) as never, tm as never);
+
+    const roots = provider.getChildren();
+    const squadItem = roots.find(r => r.type === 'squad')!;
+    expect(squadItem.description).not.toContain('resumable');
+
+    const defaultItem = roots.find(r => r.type === 'default-agent')!;
+    expect(defaultItem.description).not.toContain('resumable');
+    expect(defaultItem.description).toBe('Generic Copilot agent');
+  });
+});

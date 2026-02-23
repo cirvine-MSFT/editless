@@ -436,3 +436,17 @@ Created comprehensive GitHub milestone "Squad Ecosystem Integration" with 12 iss
 **Release plan:** Phase 1 (v0.2.0) delivers immediate value — users can launch squad CLI workflows, see modality-specific icons, understand which terminals need attention. Phase 2 informs long-term architecture. Phase 3 waits for Brady but is pre-planned for fast integration when unblocked.
 
 **Milestone created:** GitHub milestone #2 "Squad Ecosystem Integration" with 12 issues (8 NOW work, 4 backlog). All issues have clear problem statements, acceptance criteria, file lists, size estimates, and WHY explanations per Casey's preference for context-rich issues.
+
+---
+
+### 2026-02-23: Settings & Registry Edge Cases — Pre-Documentation Audit
+
+Comprehensive edge case analysis of VS Code settings and agent-registry.json interactions.
+
+**15 edge cases identified:**
+- 2 critical: changeModel regex surgery on launchCommand; no onDidChangeConfiguration for CLI settings
+- 7 medium: launchCommand baked at registration (#401 related); config.path overloading (#403 related); changeModel silent no-op; registry write-read race; file watcher race; TYPED_FLAGS missing --model (#404 confirmed); changeModel String.replace first-occurrence bug
+- 6 low: empty registry handling (robust), migration edge cases, legacy flag stripping, --resume outside builder, tree disk reads
+
+Existing issues confirmed: #403, #404. New issues needed: 2 critical, 5 medium.
+Decision document: .squad/decisions/inbox/rick-settings-edge-cases.md

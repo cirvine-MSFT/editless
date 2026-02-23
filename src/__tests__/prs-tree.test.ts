@@ -63,7 +63,12 @@ describe('PRsTreeProvider — derivePRState', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    const children = provider.getChildren();
+    // Navigate owner→repo→PR hierarchy
+    const ownerNodes = provider.getChildren();
+    expect(ownerNodes).toHaveLength(1);
+    const repoNodes = provider.getChildren(ownerNodes[0]);
+    expect(repoNodes).toHaveLength(1);
+    const children = provider.getChildren(repoNodes[0]);
     expect(children).toHaveLength(1);
     return (children[0].description as string).split(' · ')[0];
   }
@@ -84,7 +89,12 @@ describe('PRsTreeProvider — derivePRState', () => {
 
     // Must include 'merged' in statuses since merged PRs are hidden by default
     provider.setFilter({ repos: [], labels: [], statuses: ['merged'], author: '' });
-    const children = provider.getChildren();
+    // Navigate owner→repo→PR hierarchy
+    const ownerNodes = provider.getChildren();
+    expect(ownerNodes).toHaveLength(1);
+    const repoNodes = provider.getChildren(ownerNodes[0]);
+    expect(repoNodes).toHaveLength(1);
+    const children = provider.getChildren(repoNodes[0]);
     expect(children).toHaveLength(1);
     expect((children[0].description as string).split(' · ')[0]).toBe('merged');
   });
@@ -101,7 +111,12 @@ describe('PRsTreeProvider — derivePRState', () => {
 
     // Must include 'closed' in statuses since closed PRs are hidden by default
     provider.setFilter({ repos: [], labels: [], statuses: ['closed'], author: '' });
-    const children = provider.getChildren();
+    // Navigate owner→repo→PR hierarchy
+    const ownerNodes = provider.getChildren();
+    expect(ownerNodes).toHaveLength(1);
+    const repoNodes = provider.getChildren(ownerNodes[0]);
+    expect(repoNodes).toHaveLength(1);
+    const children = provider.getChildren(repoNodes[0]);
     expect(children).toHaveLength(1);
     expect((children[0].description as string).split(' · ')[0]).toBe('closed');
   });
@@ -132,7 +147,7 @@ describe('PRsTreeProvider — derivePRState', () => {
 // ---------------------------------------------------------------------------
 
 describe('PRsTreeProvider — multi-repo grouping', () => {
-  it('should show flat PR list for single repo', async () => {
+  it('should show owner → repo hierarchy for single repo', async () => {
     mockIsGhAvailable.mockResolvedValue(true);
     mockFetchMyPRs.mockResolvedValue([makePR({ number: 1 }), makePR({ number: 2, title: 'Second' })]);
 
@@ -142,9 +157,19 @@ describe('PRsTreeProvider — multi-repo grouping', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    const children = provider.getChildren();
-    expect(children).toHaveLength(2);
-    expect(children[0].contextValue).toBe('pull-request');
+    // Single repo still shows owner→repo hierarchy
+    const roots = provider.getChildren();
+    expect(roots).toHaveLength(1);
+    expect(roots[0].contextValue).toBe('github-pr-org');
+    expect(roots[0].label).toBe('owner');
+
+    const repoNodes = provider.getChildren(roots[0]);
+    expect(repoNodes).toHaveLength(1);
+    expect(repoNodes[0].contextValue).toBe('github-pr-repo');
+
+    const prItems = provider.getChildren(repoNodes[0]);
+    expect(prItems).toHaveLength(2);
+    expect(prItems[0].contextValue).toBe('pull-request');
   });
 
   it('should show owner → repo hierarchy for multiple repos', async () => {
@@ -236,7 +261,12 @@ describe('PRsTreeProvider — merge conflict indicator', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    const children = provider.getChildren();
+    // Navigate owner→repo→PR hierarchy
+    const ownerNodes = provider.getChildren();
+    expect(ownerNodes).toHaveLength(1);
+    const repoNodes = provider.getChildren(ownerNodes[0]);
+    expect(repoNodes).toHaveLength(1);
+    const children = provider.getChildren(repoNodes[0]);
     expect(children).toHaveLength(1);
     return children[0];
   }
@@ -513,7 +543,7 @@ describe('PRsTreeProvider — PRLevelFilter lifecycle', () => {
   it('should clear all level filters', () => {
     const provider = new PRsTreeProvider();
     provider.setLevelFilter('github-pr:owner/repo:f0', { statuses: ['draft'] });
-    provider.setLevelFilter('ado-pr:org:project:f0', { statuses: ['active'] });
+    provider.setLevelFilter('ado-pr:org:project:f0', { statuses: ['open'] });
     provider.clearAllLevelFilters();
     expect(provider.getLevelFilter('github-pr:owner/repo:f0')).toBeUndefined();
     expect(provider.getLevelFilter('ado-pr:org:project:f0')).toBeUndefined();
@@ -594,7 +624,7 @@ describe('PRsTreeProvider — getAvailableOptions', () => {
   it('should return statuses for ado-pr-project', () => {
     const provider = new PRsTreeProvider();
     const options = provider.getAvailableOptions('ado-pr:org:project', 'ado-pr-project');
-    expect(options.statuses).toEqual(['draft', 'active', 'merged']);
+    expect(options.statuses).toEqual(['draft', 'open', 'merged']);
   });
 
   it('should return empty for unknown contextValue', () => {
@@ -627,9 +657,11 @@ describe('PRsTreeProvider — hierarchy rendering with level filters', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    // Get repo node
+    // Get owner→repo hierarchy
     const root = provider.getChildren();
-    expect(root).toHaveLength(2); // 2 PRs
+    expect(root).toHaveLength(1); // 1 owner node
+    const repoNodes = provider.getChildren(root[0]);
+    expect(repoNodes).toHaveLength(1); // 1 repo node
 
     // Now apply level filter to the repo
     const repoNode = new PRsTreeItem('owner/repo', 1);
@@ -700,12 +732,12 @@ describe('PRsTreeProvider — hierarchy rendering with level filters', () => {
       {
         id: 1, title: 'PR 1', isDraft: true, status: 'active',
         url: 'url', sourceRef: 'feature', targetRef: 'main',
-        repository: 'repo', reviewers: [],
+        repository: 'repo', reviewers: [], createdBy: 'user1@example.com',
       },
       {
         id: 2, title: 'PR 2', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'fix', targetRef: 'main',
-        repository: 'repo', reviewers: [],
+        repository: 'repo', reviewers: [], createdBy: 'user2@example.com',
       },
     ]);
 
@@ -754,10 +786,19 @@ describe('PRsTreeProvider — level filter edge cases', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    // Single backend, single repo → flat list
+    // Single backend, single repo → owner→repo hierarchy
     const root = provider.getChildren();
     expect(root).toHaveLength(1);
-    expect(root[0].contextValue).toBe('pull-request');
+    expect(root[0].contextValue).toBe('github-pr-org');
+    expect(root[0].label).toBe('owner');
+
+    const repoNodes = provider.getChildren(root[0]);
+    expect(repoNodes).toHaveLength(1);
+    expect(repoNodes[0].contextValue).toBe('github-pr-repo');
+
+    const prItems = provider.getChildren(repoNodes[0]);
+    expect(prItems).toHaveLength(1);
+    expect(prItems[0].contextValue).toBe('pull-request');
   });
 
   it('should handle single backend ADO-only configuration', () => {
@@ -767,14 +808,23 @@ describe('PRsTreeProvider — level filter edge cases', () => {
       {
         id: 1, title: 'PR', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'feature', targetRef: 'main',
-        repository: 'repo', reviewers: [],
+        repository: 'repo', reviewers: [], createdBy: 'user@example.com',
       },
     ]);
 
-    // Single backend, ADO → flat list
+    // Single backend, ADO → org→project hierarchy
     const root = provider.getChildren();
     expect(root).toHaveLength(1);
-    expect(root[0].contextValue).toBe('ado-pull-request');
+    expect(root[0].contextValue).toBe('ado-pr-org');
+    expect(root[0].label).toBe('org');
+
+    const projectNodes = provider.getChildren(root[0]);
+    expect(projectNodes).toHaveLength(1);
+    expect(projectNodes[0].contextValue).toBe('ado-pr-project');
+
+    const prItems = provider.getChildren(projectNodes[0]);
+    expect(prItems).toHaveLength(1);
+    expect(prItems[0].contextValue).toBe('ado-pull-request');
   });
 
   it('should show both backends when both GitHub and ADO configured', async () => {
@@ -787,7 +837,7 @@ describe('PRsTreeProvider — level filter edge cases', () => {
       {
         id: 1, title: 'PR', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'feature', targetRef: 'main',
-        repository: 'repo', reviewers: [],
+        repository: 'repo', reviewers: [], createdBy: 'user@example.com',
       },
     ]);
     const listener = vi.fn();
@@ -799,5 +849,108 @@ describe('PRsTreeProvider — level filter edge cases', () => {
     expect(root).toHaveLength(2);
     expect(root.some(n => n.contextValue === 'ado-pr-backend')).toBe(true);
     expect(root.some(n => n.contextValue === 'github-pr-backend')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ADO author filter
+// ---------------------------------------------------------------------------
+
+describe('PRsTreeProvider — ADO author filter', () => {
+  function makeAdoPRs() {
+    return [
+      {
+        id: 1, title: 'My PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'feature', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'me@example.com',
+      },
+      {
+        id: 2, title: 'Other PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'fix', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'other@example.com',
+      },
+      {
+        id: 3, title: 'Draft PR', isDraft: true, status: 'active',
+        url: 'url', sourceRef: 'draft-branch', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'me@example.com',
+      },
+    ];
+  }
+
+  it('should filter ADO PRs by author when author filter is active', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoMe('me@example.com');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every(pr => pr.createdBy === 'me@example.com')).toBe(true);
+  });
+
+  it('should use case-insensitive matching for ADO author', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoMe('ME@EXAMPLE.COM');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every(pr => pr.createdBy.toLowerCase() === 'me@example.com')).toBe(true);
+  });
+
+  it('should show all ADO PRs when author filter is not active', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoMe('me@example.com');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
+    // 3 total, but draft/active are kept (merged/closed excluded by default)
+    expect(filtered).toHaveLength(3);
+  });
+
+  it('should not filter by author when adoMe is not set', () => {
+    const provider = new PRsTreeProvider();
+    // No setAdoMe call
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
+    expect(filtered).toHaveLength(3);
+  });
+
+  it('should show createdBy in tree item description when not in author mode', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoPRs(makeAdoPRs());
+
+    const projectNode = new PRsTreeItem('project', 2);
+    projectNode.id = 'ado-pr:org:project:f1';
+    projectNode.contextValue = 'ado-pr-project';
+
+    const items = provider.getChildren(projectNode);
+    expect(items[0].description).toContain('me@example.com');
+  });
+
+  it('should hide createdBy in tree item description when author filter is active', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoConfig('org', 'project');
+    provider.setAdoMe('me@example.com');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    provider.setAdoPRs(makeAdoPRs());
+
+    const projectNode = new PRsTreeItem('project', 2);
+    projectNode.id = 'ado-pr:org:project:f1';
+    projectNode.contextValue = 'ado-pr-project';
+
+    const items = provider.getChildren(projectNode);
+    expect(items[0].description).not.toContain('me@example.com');
+  });
+
+  it('should filter ADO PRs by "open" status (maps from API "active")', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
+    // PR 1 and 2 are active (mapped to open); PR 3 is draft — excluded
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every(pr => !pr.isDraft)).toBe(true);
   });
 });

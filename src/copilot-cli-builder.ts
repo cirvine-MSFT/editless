@@ -24,14 +24,11 @@ export interface CopilotCommandOptions {
 }
 
 /**
- * Returns the base CLI binary name from VS Code settings.
- * Defaults to `"copilot"` if not configured.
+ * Returns the base CLI binary name.
+ * Always returns `"copilot"`.
  */
 export function getCliCommand(): string {
-  const raw = vscode.workspace
-    .getConfiguration('editless.cli')
-    .get<string>('command', 'copilot');
-  return raw.replace(/\s*--agent\s+\$\(agent\)\s*/g, ' ').trim();
+  return 'copilot';
 }
 
 /**
@@ -85,13 +82,45 @@ export function buildCopilotCommand(options: CopilotCommandOptions = {}): string
 }
 
 /**
- * Build a default launch command using the VS Code setting for agent type.
- * This is the replacement for `getLaunchCommand()` / `$(agent)` interpolation.
+ * Build a launch command from structured config fields.
+ * Merges per-config additionalArgs with global `editless.cli.additionalArgs`.
+ */
+export function buildLaunchCommandForConfig(config: { id: string; universe: string; model?: string; additionalArgs?: string }): string {
+  // Derive --agent flag value from id/universe
+  let agentFlag: string | undefined;
+  if (config.id === 'builtin:copilot-cli') {
+    agentFlag = undefined;
+  } else if (config.universe === 'standalone') {
+    agentFlag = config.id;
+  } else {
+    agentFlag = 'squad';
+  }
+
+  const globalAdditional = vscode.workspace
+    .getConfiguration('editless.cli')
+    .get<string>('additionalArgs', '');
+
+  const allExtra = [config.additionalArgs, globalAdditional]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const modelArgs = config.model ? ['--model', config.model] : [];
+  const extraArgs = [...modelArgs, ...allExtra];
+
+  return buildCopilotCommand({
+    agent: agentFlag,
+    extraArgs: extraArgs.length ? extraArgs : undefined,
+  });
+}
+
+/**
+ * @deprecated Use `buildLaunchCommandForConfig()` instead.
+ * Build a default launch command with hardcoded agent type "squad".
+ * Reads `editless.cli.additionalArgs` and appends them as extraArgs.
  */
 export function buildDefaultLaunchCommand(): string {
-  const agentType = vscode.workspace
-    .getConfiguration('editless.cli')
-    .get<string>('defaultAgent', 'squad');
-
-  return buildCopilotCommand({ agent: agentType });
+  return buildLaunchCommandForConfig({ id: 'default', universe: 'unknown' });
 }

@@ -46,8 +46,7 @@ vi.mock('vscode', () => ({
   workspace: {
     getConfiguration: () => ({
       get: (key: string, defaultValue?: unknown) => {
-        if (key === 'command') return 'copilot';
-        if (key === 'defaultAgent') return 'squad';
+        if (key === 'additionalArgs') return '';
         return defaultValue;
       },
     }),
@@ -141,6 +140,8 @@ function getLastPersistedState(ctx: vscode.ExtensionContext): PersistedTerminalI
 let capturedCloseListener: CloseListener;
 let capturedShellStartListener: ShellExecutionListener;
 let capturedShellEndListener: ShellExecutionListener;
+type OpenListener = (terminal: vscode.Terminal) => void;
+let capturedOpenListener: OpenListener | undefined;
 
 // ---------------------------------------------------------------------------
 // Setup
@@ -149,13 +150,15 @@ let capturedShellEndListener: ShellExecutionListener;
 beforeEach(() => {
   vi.clearAllMocks();
   mockTerminals.length = 0;
+  capturedOpenListener = undefined;
 
   mockOnDidCloseTerminal.mockImplementation((listener: CloseListener) => {
     capturedCloseListener = listener;
     return { dispose: vi.fn() };
   });
 
-  mockOnDidOpenTerminal.mockImplementation(() => {
+  mockOnDidOpenTerminal.mockImplementation((listener: OpenListener) => {
+    capturedOpenListener = listener;
     return { dispose: vi.fn() };
   });
 
@@ -1303,10 +1306,10 @@ describe('TerminalManager', () => {
   });
 
   describe('launch command persistence (#94)', () => {
-    it('should persist launchCommand from squad config', () => {
+    it('should persist launchCommand built from config', () => {
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig({ launchCommand: 'copilot --agent squad' });
+      const config = makeSquadConfig();
 
       mgr.launchTerminal(config);
 
@@ -2050,17 +2053,17 @@ describe('TerminalManager', () => {
       );
     });
 
-    it('launchTerminal with custom config.launchCommand appends --resume UUID', () => {
+    it('launchTerminal with standalone agent appends --resume UUID', () => {
       const mockUuid = 'custom-cmd-uuid' as `${string}-${string}-${string}-${string}-${string}`;
       mockRandomUUID.mockReturnValue(mockUuid);
 
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig({ launchCommand: 'my-cli --agent custom' });
+      const config = makeSquadConfig({ id: 'custom', universe: 'standalone' });
 
       const terminal = mgr.launchTerminal(config);
 
-      expect(terminal.sendText).toHaveBeenCalledWith('my-cli --agent custom --resume custom-cmd-uuid');
+      expect(terminal.sendText).toHaveBeenCalledWith('copilot --agent custom --resume custom-cmd-uuid');
     });
   });
 
@@ -2452,6 +2455,150 @@ describe('TerminalManager', () => {
       // rebootCount was 4, incremented to 5 — evicted
       const orphans = mgr.getOrphanedSessions();
       expect(orphans).toHaveLength(0);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // waitForReconciliation — deferred orphan check (#race-fix)
+  // ---------------------------------------------------------------------------
+
+  describe('waitForReconciliation', () => {
+    it('resolves immediately when no pending saved entries exist', async () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+
+      // No reconcile() called — _pendingSaved is empty
+      await expect(mgr.waitForReconciliation()).resolves.toBeUndefined();
+    });
+
+    it('resolves immediately when all entries matched during reconcile()', async () => {
+      const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(liveTerminal);
+
+      const saved = [makePersistedEntry()];
+      const ctx = makeMockContext(saved);
+      const mgr = new TerminalManager(ctx);
+
+      mgr.reconcile();
+
+      // All matched synchronously — should resolve immediately
+      await expect(mgr.waitForReconciliation()).resolves.toBeUndefined();
+    });
+
+    it('resolves after debounced match succeeds for late-arriving terminals', async () => {
+      vi.useFakeTimers();
+
+      const saved = [makePersistedEntry({ terminalName: '🧪 Test Squad #1' })];
+      const ctx = makeMockContext(saved);
+      const mgr = new TerminalManager(ctx);
+
+      mgr.reconcile();
+
+      // No live terminals yet — entry is pending
+      expect(mgr.getOrphanedSessions()).toHaveLength(1);
+
+      const promise = mgr.waitForReconciliation();
+
+      // Simulate a late-arriving terminal via onDidOpenTerminal
+      const lateTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(lateTerminal);
+      capturedOpenListener!(lateTerminal);
+
+      // Advance past the 200ms debounce in _scheduleMatch
+      vi.advanceTimersByTime(250);
+
+      await promise;
+
+      // Now the entry should be matched, not orphaned
+      expect(mgr.getOrphanedSessions()).toHaveLength(0);
+      expect(mgr.getAllTerminals()).toHaveLength(1);
+
+      vi.useRealTimers();
+    });
+
+    it('resolves on max timeout when terminals never appear', async () => {
+      vi.useFakeTimers();
+
+      const saved = [makePersistedEntry({ terminalName: '🧪 Ghost #1' })];
+      const ctx = makeMockContext(saved);
+      const mgr = new TerminalManager(ctx);
+
+      mgr.reconcile();
+
+      const promise = mgr.waitForReconciliation();
+
+      // Advance past the 2000ms max timeout
+      vi.advanceTimersByTime(2100);
+
+      await promise;
+
+      // Entry is still orphaned — but the promise resolved
+      expect(mgr.getOrphanedSessions()).toHaveLength(1);
+
+      vi.useRealTimers();
+    });
+
+    it('no resumable orphans when terminals match during debounce window', async () => {
+      vi.useFakeTimers();
+
+      const saved = [makePersistedEntry({
+        terminalName: '🧪 Test Squad #1',
+        agentSessionId: 'session-abc',
+      })];
+      const ctx = makeMockContext(saved);
+      const mgr = new TerminalManager(ctx);
+
+      mgr.reconcile();
+
+      const promise = mgr.waitForReconciliation();
+
+      // Terminal arrives late
+      const lateTerminal = makeMockTerminal('🧪 Test Squad #1');
+      mockTerminals.push(lateTerminal);
+      capturedOpenListener!(lateTerminal);
+
+      vi.advanceTimersByTime(250);
+      await promise;
+
+      // After reconciliation settles, no resumable orphans should exist
+      const orphans = mgr.getOrphanedSessions();
+      const resumable = orphans.filter(o => o.agentSessionId);
+      expect(resumable).toHaveLength(0);
+
+      vi.useRealTimers();
+    });
+
+    it('relaunchSession still works for truly dead sessions after timeout', async () => {
+      vi.useFakeTimers();
+
+      const entry = makePersistedEntry({
+        id: 'dead-session-1',
+        terminalName: '🧪 Dead #1',
+        displayName: '🧪 Dead #1',
+        agentSessionId: 'dead-uuid',
+        launchCommand: 'copilot --agent squad',
+      });
+      const ctx = makeMockContext([entry]);
+      const mgr = new TerminalManager(ctx);
+
+      mgr.reconcile();
+
+      const promise = mgr.waitForReconciliation();
+      vi.advanceTimersByTime(2100);
+      await promise;
+
+      // Entry is truly orphaned — relaunch should create new terminal
+      const terminal = mgr.relaunchSession(entry);
+      expect(terminal).toBeDefined();
+      expect(mockCreateTerminal).toHaveBeenCalledWith(
+        expect.objectContaining({ name: '🧪 Dead #1' }),
+      );
+      expect(terminal!.sendText).toHaveBeenCalledWith('copilot --agent squad --resume dead-uuid');
+
+      // Orphan should be removed after relaunch
+      expect(mgr.getOrphanedSessions().find(e => e.id === 'dead-session-1')).toBeUndefined();
+
+      vi.useRealTimers();
     });
   });
 });

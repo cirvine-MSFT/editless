@@ -6860,6 +6860,420 @@ terminal.sendText(`${entry.launchCommand} --resume ${entry.agentSessionId}`);
 
 ---
 
+# Settings & Registry Edge Cases — Comprehensive Analysis
+
+**Date:** 2026-02-23  
+**Author:** Rick  
+**Status:** Analysis complete  
+**Requested by:** Casey Irvine  
+
+## Context
+
+Casey asked for a full edge case audit of VS Code settings ↔ agent-registry.json interactions before documenting the system. This covers settings precedence, migration hazards, config.path overloading, flag duplication, file watcher races, runtime settings changes, and invalid registry states.
+
+## Decision
+
+The following 15 edge cases are catalogued with severity and issue status. **3 are already filed. 12 need new issues or should be folded into existing ones.**
+
+The highest-impact findings are:
+1. **`changeModel` uses fragile regex surgery on launchCommand strings** — this is the single most dangerous pattern in the codebase right now.
+2. **No `onDidChangeConfiguration` listener for CLI settings** — settings changes are silently ignored until next terminal launch.
+3. **`config.path` overloading** — already partially addressed by #403 but the dedup-key problem remains.
+
+## Numbered Edge Cases
+
+### 1. 🔴 `changeModel` regex surgery on launchCommand (CRITICAL)
+
+`extension.ts:283-296` uses `config.launchCommand.replace('--model X', '--model Y')` — a naive string replace. Breaks when:
+- `--model` appears twice in the string (only first replaced)
+- Model name contains regex-special characters
+- `--model=value` syntax (not matched by `--model\s+`)
+- launchCommand is undefined (early return on line 281 handles this, but newly registered agents without launchCommand silently skip model changes)
+
+**Filed:** Partially covered by #404 (duplicate flags), but the regex fragility is a **separate bug**. Needs new issue.
+
+### 2. 🔴 Settings changes don't propagate to existing terminals (CRITICAL)
+
+There is **no** `onDidChangeConfiguration` listener for `editless.cli.*` settings. The only config change listener is for `editless.refreshInterval` (line 1371). If a user changes `editless.cli.command`, `editless.cli.defaultAgent`, or `editless.cli.launchCommand` in settings:
+- Already-running terminals: unaffected (expected)
+- **Already-registered agents**: their `launchCommand` was baked in at registration time by `buildDefaultLaunchCommand()` and persisted to agent-registry.json. Changing settings **never updates existing registry entries**.
+- **New terminals**: `launchTerminal()` line 148 checks `config.launchCommand` first, only falls back to settings if undefined. So registered agents ignore settings changes entirely.
+
+**Filed:** No. Needs new issue. This is a settings-are-lies problem — user changes a setting, nothing happens.
+
+### 3. 🟡 `launchCommand` is baked at registration, never refreshed (MEDIUM)
+
+Every code path that registers agents calls `buildDefaultLaunchCommand()` at registration time and stores the result in `launchCommand`:
+- `discovery.ts:121` (discoverAgentTeams)
+- `discovery.ts:207, 217` (autoRegisterWorkspaceSquads)
+- `extension.ts:167` (workspace watcher)
+- `extension.ts:520-521` (promoteDiscoveredAgent)
+- `extension.ts:539` (promoteDiscoveredAgent fallback)
+- `extension.ts:1236` (addAgent command)
+- `extension.ts:1283, 1319` (addSquad command)
+
+The launch command string `"copilot --agent squad"` is frozen in JSON. If the user later changes `editless.cli.command` to `ghcs` or `editless.cli.defaultAgent` to `my-agent`, old registrations still say `"copilot --agent squad"`.
+
+**Filed:** Partially covered by #401 (universe stays 'unknown' forever — same root cause: no re-detection). Should be expanded to cover launchCommand staleness.
+
+### 4. 🟡 `config.path` dual-purpose collision for personal agents (MEDIUM)
+
+`config.path` is used as:
+- Terminal CWD (`terminal-manager.ts:159`)
+- Squad scanner root (`scanner.ts:135` via `resolveTeamDir(config.path)`)
+- File watcher root (`watcher.ts:35` via `path.join(squad.path, teamDirName)`)
+- Dedup key (`discovery.ts:96` — `existingPaths` set, case-insensitive)
+
+For personal agents where `path = ~/.copilot/agents/`, the scanner tries to find `.squad/team.md` inside `~/.copilot/agents/` (fails silently), the watcher watches `~/.copilot/agents/.squad/**/*` (doesn't exist), and **multiple personal agents with the same path are deduplicated as one entry** because the dedup key is path-based.
+
+**Filed:** #403 covers CWD, but watcher/scanner/dedup issues are **not filed**. Needs expansion or new issue.
+
+### 5. 🟡 `changeModel` command ignores agents without launchCommand (MEDIUM)
+
+Line 281: `if (!config?.launchCommand) return;` — silently no-ops. If an agent was registered with `launchCommand: undefined` (possible via manual edit or code path that doesn't set it), the "Change Model" context menu item appears but does nothing. No error shown to user.
+
+**Filed:** No. Needs new issue or fold into #404.
+
+### 6. 🟡 Registry write-read race in `updateSquad` and `addSquads` (MEDIUM)
+
+Both `updateSquad` (line 38) and `addSquads` (line 55) follow this pattern:
+1. `this.loadSquads()` — reads file into memory
+2. Modify in-memory array
+3. Read file AGAIN (line 43-49) to get the `existing` wrapper
+4. Write back to file
+
+Step 3 re-reads the file independently of step 1. If another process (or the file watcher) modifies the file between steps 1 and 3, the in-memory squads and the `existing` wrapper could be out of sync. The write on line 51 uses the step-1 squads array overwriting whatever step 3 read for `existing.squads`.
+
+Also: `fs.writeFileSync` is not atomic. A crash mid-write corrupts the file. No backup or temp-file-rename pattern.
+
+**Filed:** No. Needs new issue.
+
+### 7. 🟡 File watcher triggers loadSquads during concurrent write (MEDIUM)
+
+`watchRegistry` (line 96-109) calls `registry.loadSquads()` on every file change event. If `addSquads` is writing to the file (line 69), the watcher fires, reads a partial/mid-write file, and `JSON.parse` throws. The catch block (line 23-30) sets `_squads = []` — temporarily blanking the in-memory registry.
+
+The debounce in `SquadWatcher` (500ms) doesn't help here because `watchRegistry` has **no debounce** — it fires on every `onDidChange` event immediately.
+
+**Filed:** No. Needs new issue. Could cause momentary "empty tree" flicker.
+
+### 8. 🟡 TYPED_FLAGS dedup doesn't cover --model (MEDIUM)
+
+`copilot-cli-builder.ts:63`: `TYPED_FLAGS = new Set(['--agent', '--resume', '--add-dir'])`. The dedup logic only strips `--agent`, `--resume`, and `--add-dir` when they conflict with typed options. `--model` is **not** in TYPED_FLAGS because it's passed through `extraArgs`, not as a typed option.
+
+This means if `extraArgs` contains `['--model', 'gpt-5', '--model', 'claude-sonnet-4']`, **both** pass through. The copilot CLI gets duplicate `--model` flags.
+
+**Filed:** #404 covers this exact scenario. This is the code-level confirmation.
+
+### 9. 🟡 `changeModel` string replace can corrupt launchCommand (MEDIUM)
+
+`extension.ts:294-296`: `config.launchCommand.replace('--model X', '--model Y')` uses JavaScript's `String.replace` which only replaces the **first** occurrence. If launchCommand is `"copilot --model gpt-5 --add-dir /path --model gpt-5"` (duplicated via bug #404), only the first `--model` gets replaced, leaving an inconsistent command.
+
+Worse: if the model name contains a substring of another flag value, the replace could match incorrectly (e.g., model name `gpt-5.1` partially matching `gpt-5.1-codex`).
+
+**Filed:** Related to #404 but this is a **separate** string-manipulation bug. Needs new issue.
+
+### 10. 🟢 Empty/invalid registry file handling (LOW)
+
+- **Empty file:** `JSON.parse('')` throws → catch block sets `_squads = []`. Fine.
+- **Invalid JSON:** Same catch path. Fine.
+- **Valid JSON, missing `squads` key:** Line 15 `Array.isArray(data.squads) ? data.squads : []` → returns empty. Fine.
+- **Valid JSON, `squads` is not array:** Same check → returns empty. Fine.
+- **File doesn't exist:** ENOENT caught specifically (line 24). Fine.
+- **Missing fields on individual entries:** No validation. An entry with `{id: "x"}` and no `path`, `name`, etc. will be loaded and cause crashes downstream when accessed.
+
+**Filed:** No. Low severity — only happens via manual editing. Could add schema validation but not urgent.
+
+### 11. 🟢 Registry migration from squad-registry.json is rename-only (LOW)
+
+`createRegistry` line 86-91: If `agent-registry.json` doesn't exist but `squad-registry.json` does, it renames the file. This is correct but **one-way**. If the user has both files (manually created), only `agent-registry.json` is used, and `squad-registry.json` is silently ignored. No warning.
+
+Also: the `replace('agent-registry.json', 'squad-registry.json')` on line 88 is a string replace on the **full path**. If the path contains `agent-registry.json` as a directory name component, this could misfire. Unlikely but worth noting.
+
+**Filed:** No. Low risk.
+
+### 12. 🟢 `getCliCommand` strips `$(agent)` from legacy settings (LOW)
+
+`copilot-cli-builder.ts:34`: `raw.replace(/\s*--agent\s+\$\(agent\)\s*/g, ' ').trim()` — this handles backward compat for users who had `"copilot --agent $(agent)"` in their settings. But if a user has `"copilot --agent $(agent) --model gpt-5"`, the regex strips `--agent $(agent)` but leaves `--model gpt-5`. This orphaned `--model` then gets appended to every command built by `buildDefaultLaunchCommand`, potentially conflicting with per-agent model settings.
+
+**Filed:** No. Low risk — legacy migration edge case.
+
+### 13. 🟢 Default agent launch uses `getCliCommand()` without `--agent` (LOW)
+
+`extension.ts:327`: The built-in Copilot CLI default agent sets `launchCommand: getCliCommand()` — which is just the binary name (e.g., `"copilot"`), **without** `--agent`. This is intentional for the default agent. But if `getCliCommand()` returns a command with leftover flags from legacy settings (see #12), those flags leak into the default agent launch.
+
+**Filed:** No. Low risk.
+
+### 14. 🟢 `--resume` appended outside builder for registered agents (LOW)
+
+`terminal-manager.ts:149`: `launchCmd = '${config.launchCommand} --resume ${uuid}'` — string concatenation outside the builder. If `config.launchCommand` already contains `--resume` (stale from a previous session or manual edit), the CLI gets duplicate `--resume` flags.
+
+**Filed:** No. Low risk — `--resume` values are UUIDs so collision is astronomically unlikely, but the pattern is inconsistent with the builder's dedup philosophy.
+
+### 15. 🟢 Tree view reads stale registry on every render (LOW)
+
+`editless-tree.ts:180`: `getRootItems()` calls `this.registry.loadSquads()` — which reads the file from disk on **every** tree render. This is intentional for freshness but means: (a) file I/O on every tree paint, and (b) if the file is mid-write from `addSquads`, the tree briefly shows stale or empty data.
+
+**Filed:** No. Performance issue, not correctness. Low priority.
+
+## Summary
+
+| Severity | Count | Filed | New Issues Needed |
+|----------|-------|-------|-------------------|
+| 🔴 Critical | 2 | 0 | 2 |
+| 🟡 Medium | 7 | 2 (#403, #404) | 5 |
+| 🟢 Low | 6 | 0 | 0 (documentation-only) |
+
+## Recommended Actions
+
+1. **File issues for #1 and #2** (critical) immediately — block v0.1.2 on these.
+2. **Expand #401** to cover launchCommand staleness (#3), not just universe.
+3. **Expand #403** to cover watcher/scanner/dedup path issues (#4).
+4. **File issue for #6 and #7** (registry write race) — can be one combined issue.
+5. **#404 is confirmed** — the dedup gap (#8) is exactly what the issue describes.
+6. **File issue for #9** (changeModel string corruption) — separate from #404.
+7. **Low-severity items** (#10-15) should be documented in a "Known Limitations" section rather than filed as issues.
+
+---
+
+# 2026-02-22T18:43Z: User Directive — Always Show Default Copilot CLI Agent
+
+**By:** Casey Irvine (via Copilot)  
+**What:** EditLess should always show a default "Copilot CLI" agent in the tree, even with no squads/agents configured. This is the generic copilot CLI agent (no --agent flag). New users should never see an empty tree — they can launch a session parented to the generic agent without knowing about squads.  
+**Why:** User request — captured for team memory
+
+---
+
+# Inline Action Icons for Work Items & PRs
+
+**Date:** 2026-02-24  
+**Author:** Summer (Product Designer)  
+**Status:** Proposed  
+**Requested by:** Casey Irvine  
+
+## Decision
+
+Replace `$(play)` with `$(add)` for session launch on work item and PR leaf nodes. Keep `$(link-external)` for "Open in Browser." Two inline icons per item, consistent across both views.
+
+## Rationale
+
+### Why `$(add)` replaces `$(play)`
+
+1. **Consistency with main tree.** The Agents view already uses `$(add)` for "Launch Session" on squad/agent nodes (`inline@0`). Work items and PRs perform the same action — creating a new terminal session. Same action → same icon.
+
+2. **Casey's explicit ask.** _"There's maybe like a plus button that's like 'add a session.'"_ The `$(add)` icon directly maps to this mental model: you're _adding_ a session to your workspace, not _playing_ a recording.
+
+3. **Semantic accuracy.** `$(play)` implies "run" or "resume" — a state transition on something that already exists. `$(add)` implies "create" — which is what actually happens. The user selects an agent from a QuickPick and a new terminal session is created. That's an "add" operation.
+
+4. **No `$(play)` + `$(add)` dual icons.** Having both would raise the question "what's the difference?" The answer is nothing — they'd do the same thing. One icon, one meaning.
+
+### Why `$(link-external)` stays
+
+`$(link-external)` is VS Code's established convention for "open external URL" (used in Settings UI, built-in Git, etc.). Users already understand it. The `$(link-external)` collision with "Open in Squad UI" on squad nodes is a non-issue — squad nodes live in the Agents tree, not the Work Items or PRs trees. A user never sees both meanings simultaneously.
+
+### Why only 2 inline icons
+
+VS Code tree items get visually cluttered past 2-3 inline icons. Two icons keeps the layout clean and scannable. All supplementary actions (Go to Work Item, Go to PR) belong in the context menu where there's room for labels.
+
+## Spec
+
+### Inline Icons — Work Item Leaf Nodes
+
+Applies to `viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/`
+
+| Position | Icon | Command | Tooltip |
+|---|---|---|---|
+| `inline@0` | `$(add)` | `editless.launchFromWorkItem` | Launch with Agent |
+| `inline@1` | `$(link-external)` | `editless.openInBrowser` | Open in Browser |
+
+### Inline Icons — PR Leaf Nodes
+
+Applies to `viewItem =~ /^(pull-request|ado-pull-request)$/`
+
+| Position | Icon | Command | Tooltip |
+|---|---|---|---|
+| `inline@0` | `$(add)` | `editless.launchFromPR` | Launch with Agent |
+| `inline@1` | `$(link-external)` | `editless.openInBrowser` | Open in Browser |
+
+### Visual Layout (left → right)
+
+```
+Bug #1234: Fix login timeout     [+] [↗]
+PR #567: Add retry logic          [+] [↗]
+```
+
+`[+]` = `$(add)` — primary action, leftmost, closest to label
+`[↗]` = `$(link-external)` — secondary action, rightmost
+
+### Command Icon Changes
+
+Update the command definition for `editless.launchFromWorkItem` and `editless.launchFromPR`:
+
+| Command | Current Icon | New Icon |
+|---|---|---|
+| `editless.launchFromWorkItem` | `$(play)` | `$(add)` |
+| `editless.launchFromPR` | `$(play)` | `$(add)` |
+
+### Position Changes
+
+| Item | Current | New |
+|---|---|---|
+| Work item "Open in Browser" | `inline` (no position) | `inline@1` |
+| Work item "Launch with Agent" | `inline@10` | `inline@0` |
+| PR "Open in Browser" | `inline` (no position) | `inline@1` |
+| PR "Launch with Agent" | `inline@10` | `inline@0` |
+
+## Context Menu
+
+The right-click menu complements the inline icons with labeled entries. Every inline action should also appear in the context menu (discoverability — users who don't recognize an icon can right-click to find the same action with a text label).
+
+### Work Item Context Menu
+
+| Group | Command | Label |
+|---|---|---|
+| `work-item@1` | `editless.launchFromWorkItem` | Launch with Agent |
+| `work-item@2` | `editless.openInBrowser` | Open in Browser |
+| `work-item@3` | `editless.goToWorkItem` | Go to Work Item |
+
+### PR Context Menu
+
+| Group | Command | Label |
+|---|---|---|
+| `pull-request@1` | `editless.launchFromPR` | Launch with Agent |
+| `pull-request@2` | `editless.openInBrowser` | Open in Browser |
+| `pull-request@3` | `editless.goToPRInBrowser` | Go to PR |
+
+### Context Menu vs Inline Decision
+
+| Action | Inline? | Context Menu? | Why |
+|---|---|---|---|
+| Launch with Agent | ✅ | ✅ | Primary action — needs maximum discoverability |
+| Open in Browser | ✅ | ✅ | Common action — icon is universally understood, but label helps |
+| Go to Work Item / Go to PR | ❌ | ✅ | Tertiary action — would clutter inline; context menu is sufficient |
+
+## Migration Notes
+
+- The `editless.launchFromWorkItem` and `editless.launchFromPR` command definitions change their `icon` property from `$(play)` to `$(add)`.
+- The `view/item/context` menu entries change their `group` positions as specified above.
+- No new commands are needed. No command IDs change.
+- The `$(play)` icon is fully removed from the work items and PR views.
+
+## Consistency Matrix
+
+| View | Primary Action | Icon | Secondary Action | Icon |
+|---|---|---|---|---|
+| Agents tree (squad/agent) | Launch Session | `$(add)` | — | — |
+| Work Items tree (leaf) | Launch with Agent | `$(add)` | Open in Browser | `$(link-external)` |
+| PRs tree (leaf) | Launch with Agent | `$(add)` | Open in Browser | `$(link-external)` |
+
+All three views now use `$(add)` for "create a session." One icon vocabulary across the entire extension.
+
+---
+
+# Default Copilot CLI Agent
+
+**Date:** 2026-02-22  
+**Author:** Morty (Extension Dev)  
+**Issue:** #337  
+
+## Decision
+
+The EditLess tree always shows a built-in "Copilot CLI" entry at the top, even when no squads or agents are registered. This entry launches the generic Copilot CLI without a `--agent` flag. It cannot be hidden or deleted.
+
+## Rationale
+
+- New users should never see an empty sidebar — the default agent provides an immediate "launch" action.
+- The old welcome state (Welcome to EditLess / Add squad / Discover agents) is replaced — the default agent IS the onboarding entry point.
+- Uses `contextValue: 'default-agent'` to get the launch button but NOT delete/edit/hide context menu actions.
+
+## Implementation
+
+- `DEFAULT_COPILOT_CLI_ID = 'builtin:copilot-cli'` exported from `editless-tree.ts`
+- Synthetic `AgentTeamConfig` created on-the-fly in `launchSession` handler (not persisted to registry)
+- `launchCommand` set to `getCliCommand()` (just `copilot`) so no `--agent` flag is appended
+- Terminal sessions tracked under the sentinel squad ID like any other agent
+
+---
+
+# Decision: Defer orphan check until terminal matching settles
+
+**Date:** 2026-02-23  
+**Author:** Morty  
+**Status:** Implemented  
+
+## Context
+
+On window reload, `reconcile()` registers a debounced `onDidOpenTerminal` listener (200ms) because VS Code provides terminals lazily. But the orphan check in `extension.ts` ran synchronously right after `reconcile()`, before late-arriving terminals could be matched. This caused false-positive "Resume All" toasts that launched duplicate terminals.
+
+## Decision
+
+Added `TerminalManager.waitForReconciliation()` — a Promise that resolves when either (a) all pending saved entries are matched, or (b) a 2s max timeout expires. Extension.ts now defers the orphan toast behind this promise.
+
+## Impact
+
+- Any future code that reads `_pendingSaved` or `getOrphanedSessions()` after `reconcile()` should await `waitForReconciliation()` first
+- The `dispose()` method cleans up the reconciliation timer
+- Test mocks for TerminalManager must include `waitForReconciliation: vi.fn().mockResolvedValue(undefined)`
+
+---
+
+# Decision: Remove "Resume All" toast from activation
+
+**Author:** Morty (Extension Dev)  
+**Date:** 2025-07-25  
+**Requested by:** Casey Irvine  
+
+## Context
+
+On activation, EditLess showed a toast notification when orphaned sessions were found, offering "Resume All" / "Dismiss" buttons. Casey flagged two problems:
+
+1. **UX pressure** — a toast creates urgency for immediate action, which isn't appropriate during startup.
+2. **Race conditions** — the toast could fire before terminal reconciliation fully settled, leading to stale orphan counts.
+
+## Decision
+
+- Removed the `waitForReconciliation()` → `showInformationMessage` block from `activate()` in `src/extension.ts`.
+- Orphaned sessions now appear silently in the tree view. Terminals that reconnect during reconciliation auto-reattach. Users can resume individual orphans from the tree or use the `editless.relaunchAllOrphans` command from the palette.
+- The `waitForReconciliation()` method is preserved in `terminal-manager.ts` for future use.
+- The `editless.relaunchAllOrphans` command registration is preserved (tree context menu / command palette).
+
+## Impact
+
+- No user-facing notification on activation. Orphans are discoverable via the tree view.
+- All 793 tests pass. Lint clean.
+
+---
+
+# Universe Auto-Detection from Casting Registry
+
+**Author:** Morty  
+**Date:** 2026-02-23  
+**Issue:** #393  
+
+## Decision
+
+When `parseTeamMd()` returns `universe: 'unknown'` (no `**Universe:**` marker in team.md), discovery now falls back to reading `.squad/casting/registry.json` (or `.ai-team/casting/registry.json`) and extracting the `universe` field from the first active agent entry.
+
+## Detection Priority
+
+1. `**Universe:**` in team.md — explicit user override, highest priority
+2. `.squad/casting/registry.json` universe field — automatic fallback
+3. `'unknown'` — final fallback when neither source has a universe
+
+## Architecture
+
+- `parseTeamMd()` remains pure (text-only, no filesystem access)
+- New `readUniverseFromRegistry(squadPath)` handles the file read
+- Fallback logic lives at caller sites: `discoverAgentTeams()`, `autoRegisterWorkspaceSquads()`, `discoverAll()`
+- Checks `.squad/` before `.ai-team/` (same priority order as `resolveTeamMd`)
+- Only reads from active agents (`status: 'active'`)
+- Errors handled gracefully — malformed/missing files silently fall through to 'unknown'
+
+## Impact
+
+All discovery paths (scan, auto-register, unified) now consistently resolve the universe. Squads with casting data no longer show "unknown" in the tree view.
+
+---
+
 ## The Recommendation
 
 **Use regular terminal + events.jsonl + --resume. Do NOT build the pseudoterminal.**

@@ -30,51 +30,19 @@ Settings for discovering and registering agent teams and standalone agents.
 
 ---
 
-## CLI Providers
+## CLI
 
-Settings for configuring CLI tools used to launch agent sessions.
+Settings for configuring how EditLess launches Copilot CLI sessions.
 
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
-| `editless.cli.providers` | `array` | See below | window | Array of CLI provider configurations. Each provider defines a CLI tool with version detection and launch support. Copilot CLI is included by default and will be re-added if removed. |
-| `editless.cli.activeProvider` | `string` | `"auto"` | window | Active CLI provider: set to `"auto"` to use the first detected provider, or specify a provider name from `editless.cli.providers`. |
+| `editless.cli.additionalArgs` | `string` | `""` | window | Additional command-line arguments appended to the Copilot CLI when launching sessions. Use this to pass flags like `--yolo` to every session. |
 
-### CLI Provider Object Schema
-
-Each entry in `editless.cli.providers` has this structure:
-
-```typescript
-{
-  name: string;                    // Display name (e.g., "Copilot CLI")
-  command: string;                 // Command to run (e.g., "copilot")
-  versionCommand: string;          // Command to check version (e.g., "copilot --version")
-  versionRegex: string;            // Regex to extract version (e.g., "(\\d+\\.\\d+[\\d.]*)")
-  launchCommand: string;           // Command to launch agent (e.g., "copilot --agent $(agent)")
-  createCommand: string;           // Command to create new agent (optional)
-  updateCommand: string;           // Command to check for updates (optional)
-  updateRunCommand: string;        // Command to run updates (optional)
-  upToDatePattern: string;         // Pattern in output when up to date
-}
-```
-
-**Default (Copilot CLI):**
+**Example:**
 
 ```jsonc
 {
-  "editless.cli.providers": [
-    {
-      "name": "Copilot CLI",
-      "command": "copilot",
-      "versionCommand": "copilot --version",
-      "versionRegex": "(\\d+\\.\\d+[\\d.]*)",
-      "launchCommand": "copilot --agent $(agent)",
-      "createCommand": "",
-      "updateCommand": "",
-      "updateRunCommand": "",
-      "upToDatePattern": "up to date"
-    }
-  ],
-  "editless.cli.activeProvider": "auto"
+  "editless.cli.additionalArgs": "--yolo"
 }
 ```
 
@@ -156,17 +124,15 @@ Settings for controlling desktop toasts and notifications.
 
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
-| `editless.notifications.enabled` | `boolean` | `true` | window | Master toggle for all EditLess notifications. When disabled, **all** EditLess toasts are suppressed — including inbox and update notifications. |
+| `editless.notifications.enabled` | `boolean` | `true` | window | Master toggle for all EditLess notifications. When disabled, **all** EditLess toasts are suppressed — including inbox notifications. |
 | `editless.notifications.inbox` | `boolean` | `true` | window | Show notifications when new inbox items arrive (pending decisions, work items). A toast fires when the inbox count transitions from 0 → N. Requires `editless.notifications.enabled` to be on. |
-| `editless.notifications.updates` | `boolean` | `true` | window | Show notifications when a CLI provider update is available. EditLess checks each detected provider on startup and displays a toast with installed and available versions. Requires `editless.notifications.enabled` to be on. |
 
 **Example:**
 
 ```jsonc
 {
   "editless.notifications.enabled": true,
-  "editless.notifications.inbox": true,
-  "editless.notifications.updates": true
+  "editless.notifications.inbox": true
 }
 ```
 
@@ -182,8 +148,7 @@ Settings for controlling desktop toasts and notifications.
   "editless.scanDebounceMs": 500,
 
   // CLI
-  "editless.cli.activeProvider": "auto",
-  // (cli.providers omitted; uses default Copilot CLI)
+  "editless.cli.additionalArgs": "",
 
   // GitHub
   "editless.github.repos": ["myorg/frontend", "myorg/backend"],
@@ -201,10 +166,275 @@ Settings for controlling desktop toasts and notifications.
 
   // Notifications
   "editless.notifications.enabled": true,
-  "editless.notifications.inbox": true,
-  "editless.notifications.updates": true
+  "editless.notifications.inbox": true
 }
 ```
+
+---
+
+## Agent Registry Configuration
+
+The **agent registry** (`agent-registry.json`) is the per-user manifest that tracks registered agent teams and standalone agents. It's stored at the path configured in `editless.registryPath` (default: `./agent-registry.json` relative to workspace root).
+
+### Registry File Format
+
+```jsonc
+{
+  "version": "1.0",
+  "squads": [
+    {
+      "id": "my-squad",
+      "name": "My Squad",
+      "path": "/absolute/path/to/squad",
+      "icon": "🚀",
+      "universe": "my-org",
+      "description": "My custom squad",
+      "model": "gpt-4",
+      "additionalArgs": "--yolo"
+    }
+  ]
+}
+```
+
+### Agent Registry Schema
+
+Each entry in `squads` is an **AgentTeamConfig** object with the following fields:
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `id` | string | ✓ | Kebab-case unique identifier (e.g., `"my-squad"`). Used in CLI `--agent` flag. |
+| `name` | string | ✓ | Display name shown in UI (e.g., `"My Squad"`). |
+| `path` | string | ✓ | Absolute path to squad root directory. Used as working directory when launching. |
+| `icon` | string | ✓ | Emoji icon displayed in panes (e.g., `"🚀"`). |
+| `universe` | string | ✓ | Casting universe name. Either `"standalone"` for single agents or a squad name like `"my-org"`. |
+| `description` | string | — | Optional squad description shown in UI hover text. |
+| `terminalProfileName` | string | — | Optional Windows Terminal profile name for session matching. |
+| `terminalProfileGuid` | string | — | Optional Windows Terminal profile GUID. |
+| `model` | string | — | Optional. Sets `--model` flag for Copilot CLI. Overrides any global `editless.cli.additionalArgs` model setting. |
+| `additionalArgs` | string | — | Optional extra CLI flags for this agent (e.g., `"--yolo"`). Merged with global `editless.cli.additionalArgs` (not replaced). |
+
+### Example Configurations
+
+**Registering a squad:**
+
+```jsonc
+{
+  "version": "1.0",
+  "squads": [
+    {
+      "id": "platform",
+      "name": "Platform Squad",
+      "path": "/home/user/projects/platform",
+      "icon": "🏗️",
+      "universe": "acme-corp",
+      "description": "Infrastructure and deployment specialists",
+      "terminalProfileName": "PowerShell Admin"
+    }
+  ]
+}
+```
+
+**Registering multiple squads with per-agent models:**
+
+```jsonc
+{
+  "version": "1.0",
+  "squads": [
+    {
+      "id": "frontend",
+      "name": "Frontend Team",
+      "path": "/home/user/work/frontend",
+      "icon": "⚛️",
+      "universe": "mycompany",
+      "model": "gpt-4"
+    },
+    {
+      "id": "backend",
+      "name": "Backend Team",
+      "path": "/home/user/work/backend",
+      "icon": "🐍",
+      "universe": "mycompany",
+      "model": "claude-opus-4"
+    }
+  ]
+}
+```
+
+**Standalone agent with custom flags:**
+
+```jsonc
+{
+  "version": "1.0",
+  "squads": [
+    {
+      "id": "code-reviewer",
+      "name": "Code Reviewer",
+      "path": "/usr/local/agents/code-review",
+      "icon": "👀",
+      "universe": "standalone",
+      "additionalArgs": "--yolo --no-cache"
+    }
+  ]
+}
+```
+
+---
+
+## Per-Agent CLI Settings
+
+When launching an agent, EditLess builds a command line by combining global CLI settings with per-agent config overrides.
+
+### Model Override
+
+The `model` field in an agent's registry entry sets the Copilot CLI `--model` flag **for that agent only**, overriding any global settings:
+
+```jsonc
+{
+  "editless.cli.additionalArgs": "--yolo",
+  "editless.registryPath": "./agent-registry.json"
+}
+```
+
+```jsonc
+// agent-registry.json
+{
+  "version": "1.0",
+  "squads": [
+    {
+      "id": "my-squad",
+      "name": "My Squad",
+      "path": "/squad/path",
+      "icon": "🚀",
+      "universe": "myorg",
+      "model": "gpt-4"  // This squad always uses gpt-4
+    }
+  ]
+}
+```
+
+When this agent launches, the CLI receives: `--model gpt-4 --yolo` (global args still apply).
+
+### Additional Args Merge
+
+The `additionalArgs` field in agent config is **merged with** (not replaced by) global `editless.cli.additionalArgs`. The merge order is:
+
+1. Per-agent `additionalArgs` (applied first)
+2. Global `editless.cli.additionalArgs` (applied second)
+
+Flags are concatenated and split on whitespace. **Note:** Duplicate flags are not yet deduplicated (see [#404](https://github.com/microsoft/editless/issues/404)).
+
+**Example:**
+
+```jsonc
+// VS Code settings
+{
+  "editless.cli.additionalArgs": "--verbose --cache-dir=/tmp/cache"
+}
+
+// agent-registry.json
+{
+  "squads": [
+    {
+      "id": "my-agent",
+      "name": "My Agent",
+      "path": "/agent/path",
+      "icon": "🤖",
+      "universe": "standalone",
+      "additionalArgs": "--no-telemetry"
+    }
+  ]
+}
+```
+
+**Resulting command:** `--no-telemetry --verbose --cache-dir=/tmp/cache`
+
+---
+
+## CLI Command Assembly
+
+EditLess builds the final Copilot CLI command from multiple sources. The command is constructed in this order:
+
+1. **Binary:** `editless.cli.command` (or `copilot` if not set)
+2. **Agent flag:** Derived from registry `id` and `universe`:
+   - `id === "builtin:copilot-cli"` → no `--agent` flag
+   - `universe === "standalone"` → `--agent <id>`
+   - All others → `--agent squad`
+3. **Model:** From per-agent `model` field (if set) → `--model <model>`
+4. **Extra args:** Per-agent `additionalArgs` + global `editless.cli.additionalArgs` (concatenated, per-agent first)
+
+**Example build process:**
+
+```
+Binary:                    copilot
+--agent flag:              --agent squad
+--model flag:              --model gpt-4
+Per-agent args:            --yolo
+Global args:               --verbose
+─────────────────────────────────────
+Final command:             copilot --agent squad --model gpt-4 --yolo --verbose
+```
+
+---
+
+## Migration from v0.1.0
+
+The agent registry format changed in v0.1.1. Old registries are **automatically migrated** in memory on load, so existing entries continue to work. However, you should update your registry file format for clarity:
+
+### Removed & Renamed Fields
+
+| Old Field | New Approach |
+|-----------|--------------|
+| `launchCommand` | Auto-migrated to `model` + `additionalArgs` on load |
+| `agentFlag` | Now derived from `id` and `universe` (not stored) |
+
+### Auto-Migration Example
+
+**Old format (v0.1.0):**
+
+```jsonc
+{
+  "squads": [
+    {
+      "id": "my-squad",
+      "name": "My Squad",
+      "path": "/path",
+      "icon": "🚀",
+      "universe": "myorg",
+      "launchCommand": "copilot --agent squad --model gpt-4 --yolo"
+    }
+  ]
+}
+```
+
+**Auto-migrated to (v0.1.1, in memory):**
+
+```jsonc
+{
+  "squads": [
+    {
+      "id": "my-squad",
+      "name": "My Squad",
+      "path": "/path",
+      "icon": "🚀",
+      "universe": "myorg",
+      "model": "gpt-4",
+      "additionalArgs": "--yolo"
+    }
+  ]
+}
+```
+
+The migration extracts `--model <value>` and remaining flags into `additionalArgs`. **To persist the change**, save the registry using the UI (e.g., update squad settings and save).
+
+---
+
+## Known Limitations
+
+| Issue | Impact | Workaround |
+|-------|--------|-----------|
+| **Settings changes don't update existing entries** | When you change global `editless.cli.additionalArgs`, squads registered before the change won't pick up the new value until re-registered. | Manually update agent settings or delete and re-add the squad. |
+| **Duplicate flags not deduplicated** ([#404](https://github.com/cirvine-MSFT/editless/issues/404)) | If global and per-agent `additionalArgs` both contain the same flag, both will be passed to Copilot CLI. | Use distinct flags or ensure global and per-agent args don't overlap. |
+| **Personal agent path used as CWD** ([#403](https://github.com/cirvine-MSFT/editless/issues/403)) | When launching a personal agent, the session's working directory is set to the agent's squad path, which may not be correct for per-user agents. | Use squad agents instead or manage CWD manually after launch. |
 
 ---
 

@@ -49,8 +49,7 @@ extension.ts (activate)
         ├── SquadWatcher (watcher.ts) — watches squad dirs for changes
         ├── SessionLabelManager (session-labels.ts) — user labels on terminals
         ├── AgentVisibilityManager (visibility.ts) — hide/show agents
-        ├── NotificationManager (notifications.ts) — toasts for events
-        └── Squad Upgrader (squad-upgrader.ts) — check for package updates
+        └── NotificationManager (notifications.ts) — toasts for events
 ```
 
 ## Data Flow
@@ -224,8 +223,6 @@ Commands are registered in `extension.ts` and handlers in separate modules:
 | `editless.renameSession` | session-labels.ts | User-friendly terminal label |
 | `editless.refreshWorkItems` | work-items-tree.ts | Manual refresh work items |
 | `editless.discoverSquads` | discovery.ts | Scan for new squads |
-| `editless.updateCliProvider` | cli-provider.ts | Check & install CLI updates |
-| `editless.upgradeSquad` | squad-upgrader.ts | Upgrade squad package |
 
 ### Settings
 
@@ -267,7 +264,6 @@ src/
 ├── agent-discovery.ts           ← Standalone agent discovery
 ├── cli-provider.ts              ← CLI tool detection & launch
 ├── scanner.ts                   ← Squad directory scanning
-├── squad-upgrader.ts            ← Package version checking
 ├── watcher.ts                   ← Squad directory file watcher
 ├── visibility.ts                ← Hide/show agent visibility state
 ├── notifications.ts             ← Toast notifications
