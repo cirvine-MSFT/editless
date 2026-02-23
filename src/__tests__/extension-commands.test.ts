@@ -1152,14 +1152,14 @@ describe('extension command handlers', () => {
       expect(mockShowQuickPick).not.toHaveBeenCalled();
     });
 
-    it('should show location picker with Personal and Workspace options', async () => {
+    it('should show location picker with Personal and Project options', async () => {
       mockShowInputBox.mockResolvedValueOnce('test-agent');
       mockShowQuickPick.mockResolvedValueOnce(undefined);
       await getHandler('editless.addAgent')();
       expect(mockShowQuickPick).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({ value: 'personal' }),
-          expect.objectContaining({ value: 'workspace' }),
+          expect.objectContaining({ value: 'project' }),
         ]),
         expect.any(Object),
       );
@@ -1181,43 +1181,25 @@ describe('extension command handlers', () => {
       expect(mockShowQuickPick).toHaveBeenCalledTimes(1);
     });
 
-    it('should warn when workspace agent selected with no workspace folder', async () => {
-      const vscodeModule = await import('vscode');
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: undefined, configurable: true });
+    it('should show folder picker when project agent selected', async () => {
       mockShowInputBox.mockResolvedValueOnce('test-agent');
-      mockShowQuickPick.mockResolvedValueOnce({ value: 'workspace' });
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+      mockShowOpenDialog.mockResolvedValueOnce(undefined); // cancel folder picker
       await getHandler('editless.addAgent')();
-      expect(mockShowWarningMessage).toHaveBeenCalledWith('No workspace folder open.');
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+      expect(mockShowOpenDialog).toHaveBeenCalledWith(
+        expect.objectContaining({ canSelectFolders: true, canSelectFiles: false }),
+      );
+      expect(mockShowTextDocument).not.toHaveBeenCalled();
     });
 
-    it('should use single workspace folder directly without folder picker', async () => {
-      const vscodeModule = await import('vscode');
+    it('should create project agent in .github/agents/ under selected folder', async () => {
       const os = await import('os');
-      const testFolders = [{ uri: { fsPath: os.tmpdir() }, name: 'test' }];
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
+      const projectDir = os.tmpdir();
       mockShowInputBox.mockResolvedValueOnce('test-agent');
-      mockShowQuickPick.mockResolvedValueOnce({ value: 'workspace' });
+      mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+      mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
       try { await getHandler('editless.addAgent')(); } catch { /* fs write expected to fail */ }
-      // Only 1 quick pick (location picker), no folder picker for single workspace
-      expect(mockShowQuickPick).toHaveBeenCalledTimes(1);
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
-    });
-
-    it('should show folder picker when multiple workspace folders exist', async () => {
-      const vscodeModule = await import('vscode');
-      const testFolders = [
-        { uri: { fsPath: '/workspace1' }, name: 'ws1' },
-        { uri: { fsPath: '/workspace2' }, name: 'ws2' },
-      ];
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: testFolders, configurable: true });
-      mockShowInputBox.mockResolvedValueOnce('test-agent');
-      mockShowQuickPick
-        .mockResolvedValueOnce({ value: 'workspace' })
-        .mockResolvedValueOnce(undefined); // cancel folder picker
-      await getHandler('editless.addAgent')();
-      expect(mockShowQuickPick).toHaveBeenCalledTimes(2);
-      Object.defineProperty(vscodeModule.workspace, 'workspaceFolders', { value: [], configurable: true });
+      expect(mockShowOpenDialog).toHaveBeenCalled();
     });
   });
 

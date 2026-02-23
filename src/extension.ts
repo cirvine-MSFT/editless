@@ -37,6 +37,18 @@ function getCreateCommand(): string {
   return '';
 }
 
+/** For a discovered agent file path, derive the project root.
+ *  e.g. C:\project\.github\agents\foo.agent.md → C:\project
+ *  Falls back to dirname if not inside .github/agents/. */
+function deriveProjectRoot(agentFilePath: string): string {
+  const dir = path.dirname(agentFilePath);
+  const normalized = dir.replace(/\\/g, '/').toLowerCase();
+  if (normalized.endsWith('/.github/agents') || normalized.endsWith('/.github/agents/')) {
+    return path.resolve(dir, '..', '..');
+  }
+  return dir;
+}
+
 export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {
   const output = vscode.window.createOutputChannel('EditLess');
   context.subscriptions.push(output);
@@ -498,7 +510,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (disc) {
         const config: AgentTeamConfig = disc.type === 'squad'
           ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description }
-          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description };
+          : { id: disc.id, name: disc.name, path: deriveProjectRoot(disc.path), icon: '🤖', universe: 'standalone', description: disc.description };
         registry.addSquads([config]);
         refreshDiscovery();
         treeProvider.refresh();
@@ -1139,10 +1151,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       });
       if (!name) return;
 
-      type LocationValue = 'personal' | 'workspace';
+      type LocationValue = 'personal' | 'project';
       const locationItems: { label: string; description: string; value: LocationValue }[] = [
         { label: '$(account) Personal agent', description: '~/.copilot/agents/', value: 'personal' },
-        { label: '$(repo) Workspace agent', description: '.github/agents/ in current workspace', value: 'workspace' },
+        { label: '$(root-folder) Project agent', description: '.github/agents/ in a project directory', value: 'project' },
       ];
       const locationPick = await vscode.window.showQuickPick(locationItems, {
         placeHolder: 'Where should the agent live?',
@@ -1150,27 +1162,21 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!locationPick) return;
 
       let agentsDir: string;
+      let projectRoot: string | undefined;
 
       if (locationPick.value === 'personal') {
         agentsDir = path.join(os.homedir(), '.copilot', 'agents');
       } else {
-        const folders = vscode.workspace.workspaceFolders;
-        if (!folders || folders.length === 0) {
-          vscode.window.showWarningMessage('No workspace folder open.');
-          return;
-        }
-        let workspaceFolder: vscode.WorkspaceFolder;
-        if (folders.length === 1) {
-          workspaceFolder = folders[0];
-        } else {
-          const folderPick = await vscode.window.showQuickPick(
-            folders.map(f => ({ label: f.name, description: f.uri.fsPath, folder: f })),
-            { placeHolder: 'Which workspace folder?' },
-          );
-          if (!folderPick) return;
-          workspaceFolder = folderPick.folder;
-        }
-        agentsDir = path.join(workspaceFolder.uri.fsPath, '.github', 'agents');
+        const picked = await vscode.window.showOpenDialog({
+          canSelectFolders: true,
+          canSelectFiles: false,
+          canSelectMany: false,
+          openLabel: 'Select project root',
+          title: 'Select the project root directory',
+        });
+        if (!picked || picked.length === 0) return;
+        projectRoot = picked[0].fsPath;
+        agentsDir = path.join(projectRoot, '.github', 'agents');
       }
 
       await vscode.workspace.fs.createDirectory(vscode.Uri.file(agentsDir));
@@ -1209,7 +1215,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       registry.addSquads([{
         id: agentId,
         name: name.trim(),
-        path: agentsDir,
+        path: projectRoot ?? agentsDir,
         icon: '🤖',
         universe: 'standalone',
       }]);
