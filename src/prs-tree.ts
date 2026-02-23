@@ -172,7 +172,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
     if (baseContext === 'ado-pr-project') {
       return {
-        statuses: ['draft', 'active', 'merged'],
+        statuses: ['draft', 'open', 'merged'],
       };
     }
 

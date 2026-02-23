@@ -624,7 +624,7 @@ describe('PRsTreeProvider — getAvailableOptions', () => {
   it('should return statuses for ado-pr-project', () => {
     const provider = new PRsTreeProvider();
     const options = provider.getAvailableOptions('ado-pr:org:project', 'ado-pr-project');
-    expect(options.statuses).toEqual(['draft', 'active', 'merged']);
+    expect(options.statuses).toEqual(['draft', 'open', 'merged']);
   });
 
   it('should return empty for unknown contextValue', () => {

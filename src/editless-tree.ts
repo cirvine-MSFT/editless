@@ -192,10 +192,11 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     // Unified "Discovered" section — agents + squads from unified discovery
     const visibleItems = this._discoveredItems.filter(i => !this._visibility?.isHidden(i.id));
 
-    // Fallback: also include legacy discovered agents not already in unified items
+    // Fallback: also include legacy discovered agents not already in unified or registered items
     const unifiedIds = new Set(visibleItems.map(i => i.id));
+    const registeredIds = new Set(squads.map(s => s.id));
     const legacyAgents = this._discoveredAgents
-      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id));
+      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id) && !registeredIds.has(a.id));
 
     const totalDiscovered = visibleItems.length + legacyAgents.length;
 
