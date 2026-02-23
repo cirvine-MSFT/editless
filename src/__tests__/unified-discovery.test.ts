@@ -102,6 +102,22 @@ describe('discoverAll', () => {
     expect(squad!.path).toBe(workspaceDir);
   });
 
+  it('discovers .ai-team squad at workspace folder root', () => {
+    // Workspace folder itself IS a squad (has .ai-team/team.md at root — legacy format)
+    const workspaceDir = path.join(tmpDir, 'legacy-squad');
+    writeFixture('legacy-squad/.ai-team/team.md', '# Legacy Root Squad\n> A legacy squad at the root.\n**Universe:** legacy\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(workspaceDir)], registry);
+
+    const squad = result.find(i => i.id === 'legacy-squad');
+    expect(squad).toBeDefined();
+    expect(squad!.type).toBe('squad');
+    expect(squad!.source).toBe('workspace');
+    expect(squad!.universe).toBe('legacy');
+    expect(squad!.path).toBe(workspaceDir);
+  });
+
   it('discovers squads from immediate children of workspace folders', () => {
     // Workspace folder contains a child directory that is a squad
     const workspaceDir = path.join(tmpDir, 'projects');
@@ -377,16 +393,47 @@ describe('discoverAll', () => {
     expect(squad!.universe).toBe('nested');
   });
 
-  it('does NOT recurse into node_modules', () => {
+  it('discovers legacy .ai-team squad in nested subdirectories', () => {
     const workspaceDir = path.join(tmpDir, 'workspace');
     fs.mkdirSync(workspaceDir, { recursive: true });
-    writeFixture('workspace/node_modules/some-pkg/.squad/team.md', '# Hidden Squad\n> Should not be found.\n**Universe:** hidden\n');
+    writeFixture('workspace/org/legacy-project/.ai-team/team.md', '# Legacy Squad\n> Uses legacy .ai-team format.\n**Universe:** legacy\n');
     const registry = makeRegistry();
 
     const result = discoverAll([wsFolder(workspaceDir)], registry);
 
-    const squad = result.find(i => i.name === 'Hidden Squad');
-    expect(squad).toBeUndefined();
+    const squad = result.find(i => i.id === 'legacy-project');
+    expect(squad).toBeDefined();
+    expect(squad!.type).toBe('squad');
+    expect(squad!.source).toBe('workspace');
+    expect(squad!.universe).toBe('legacy');
+  });
+
+  it('does NOT recurse into node_modules', () => {
+    const workspaceDir = path.join(tmpDir, 'workspace');
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    writeFixture('workspace/node_modules/some-pkg/.squad/team.md', '# Hidden Squad\n> Should not be found.\n**Universe:** hidden\n');
+    // Positive control: a sibling non-excluded squad that IS found
+    writeFixture('workspace/legit-squad/.squad/team.md', '# Legit Squad\n> Should be found.\n**Universe:** legit\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(workspaceDir)], registry);
+
+    const hidden = result.find(i => i.name === 'Hidden Squad');
+    expect(hidden).toBeUndefined();
+    const legit = result.find(i => i.name === 'Legit Squad');
+    expect(legit).toBeDefined();
+  });
+
+  it('does not discover squads inside .squad metadata dirs', () => {
+    const workspaceDir = path.join(tmpDir, 'workspace');
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    writeFixture('workspace/.squad/malicious-squad/.squad/team.md', '# Malicious Squad\n> Should not be found.\n**Universe:** evil\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(workspaceDir)], registry);
+
+    const malicious = result.find(i => i.name === 'Malicious Squad');
+    expect(malicious).toBeUndefined();
   });
 
   it('does NOT recurse beyond maxDepth', () => {

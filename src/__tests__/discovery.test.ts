@@ -250,8 +250,68 @@ describe('discoverAgentTeams', () => {
     expect(result[0].universe).toBe('nested');
   });
 
+  it('discovers legacy .ai-team squad in nested child directories', () => {
+    // Legacy format (.ai-team/) at depth 2 — resolveTeamMd() checks before hidden-dir exclusion
+    writeFixture('org/projects/legacy-project/.ai-team/team.md', `# Legacy Squad
+> A squad using the legacy .ai-team directory format.
+**Universe:** legacy
+`);
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Legacy Squad');
+    expect(result[0].universe).toBe('legacy');
+    expect(result[0].path).toBe(path.resolve(tmpDir, 'org/projects/legacy-project'));
+  });
+
   it('skips node_modules directories', () => {
     writeFixture('node_modules/some-pkg/.squad/team.md', `# Hidden Squad
+> Should not be found.
+**Universe:** hidden
+`);
+    // Positive control: a sibling non-excluded squad that IS found
+    writeFixture('legit-squad/.squad/team.md', `# Legit Squad
+> Should be found.
+**Universe:** legit
+`);
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Legit Squad');
+  });
+
+  it('case-insensitive exclusion on Windows', () => {
+    writeFixture('Node_Modules/squad/.squad/team.md', `# NM Squad
+> Should not be found.
+**Universe:** hidden
+`);
+    // Positive control
+    writeFixture('real-squad/.squad/team.md', `# Real Squad
+> Should be found.
+**Universe:** real
+`);
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Real Squad');
+  });
+
+  it('does not recurse into .squad metadata directories', () => {
+    writeFixture('.squad/malicious-squad/.squad/team.md', `# Malicious Squad
+> Should not be found.
+**Universe:** evil
+`);
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(0);
+  });
+
+  it('skips hidden directories', () => {
+    writeFixture('.hidden/nested-squad/.squad/team.md', `# Hidden Nested Squad
 > Should not be found.
 **Universe:** hidden
 `);

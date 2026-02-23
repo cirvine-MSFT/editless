@@ -81,8 +81,9 @@ export function toKebabCase(name: string): string {
 }
 
 const EXCLUDED_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'out', '.next', '.nuxt',
+  'node_modules', '.git', '.hg', '.svn', 'dist', 'out', '.next', '.nuxt',
   'build', 'coverage', '__pycache__', '.venv', 'vendor',
+  'target', 'bin', 'obj', '.terraform',
 ]);
 
 export function discoverAgentTeams(
@@ -133,7 +134,7 @@ export function discoverAgentTeams(
       }
 
       // Skip excluded directories
-      if (EXCLUDED_DIRS.has(entry.name) || (entry.name.startsWith('.') && entry.name !== '.squad')) {
+      if (EXCLUDED_DIRS.has(entry.name.toLowerCase()) || entry.name.startsWith('.')) {
         continue;
       }
 
