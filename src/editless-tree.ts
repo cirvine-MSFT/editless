@@ -472,8 +472,9 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   private getDiscoveredChildren(parentItem: EditlessTreeItem): EditlessTreeItem[] {
     const visibleItems = this._discoveredItems.filter(i => !this._visibility?.isHidden(i.id));
     const unifiedIds = new Set(visibleItems.map(i => i.id));
+    const registeredIds = new Set(this.registry.loadSquads().map(s => s.id));
     const legacyAgents = this._discoveredAgents
-      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id));
+      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id) && !registeredIds.has(a.id));
 
     const children: EditlessTreeItem[] = [];
 
