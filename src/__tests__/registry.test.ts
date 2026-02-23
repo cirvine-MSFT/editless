@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
+import * as path from 'path';
 import type { AgentTeamConfig } from '../types';
 
 vi.mock('vscode', () => ({
@@ -12,7 +13,8 @@ vi.mock('vscode', () => ({
 
 vi.mock('fs');
 
-import { EditlessRegistry } from '../registry';
+import * as vscode from 'vscode';
+import { EditlessRegistry, createRegistry } from '../registry';
 
 const REGISTRY_PATH = '/tmp/test-registry.json';
 
@@ -64,6 +66,17 @@ describe('EditlessRegistry', () => {
       const result = registry.loadSquads();
 
       expect(result).toEqual([]);
+    });
+
+    it('returns empty array gracefully when writeFileSync would fail during ENOENT', () => {
+      const err = new Error('ENOENT') as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      vi.mocked(fs.readFileSync).mockImplementation(() => { throw err; });
+
+      const result = registry.loadSquads();
+
+      expect(result).toEqual([]);
+      expect(fs.writeFileSync).not.toHaveBeenCalled();
     });
 
     it('handles malformed JSON gracefully', () => {
@@ -191,9 +204,11 @@ describe('EditlessRegistry', () => {
       const newSquad = makeSquad({ id: 'squad-new' });
       registry.addSquads([newSquad]);
 
-      expect(fs.writeFileSync).toHaveBeenCalledOnce();
+      // Called once: for addSquads persist (no self-heal in loadSquads)
+      expect(fs.writeFileSync).toHaveBeenCalledTimes(1);
 
-      const written = JSON.parse(vi.mocked(fs.writeFileSync).mock.calls[0][1] as string);
+      const lastCall = vi.mocked(fs.writeFileSync).mock.calls[0];
+      const written = JSON.parse(lastCall[1] as string);
       expect(written.version).toBe('1.0');
       expect(written.squads.length).toBeGreaterThanOrEqual(1);
     });
@@ -218,5 +233,118 @@ describe('EditlessRegistry', () => {
       expect(result[0].name).toBe('First');
       expect(result[1].id).toBe('squad-b');
     });
+  });
+});
+
+// -------------------------------------------------------------------------
+// createRegistry
+// -------------------------------------------------------------------------
+
+describe('createRegistry', () => {
+  const mockContext = {
+    extensionPath: '/ext',
+    storageUri: { fsPath: '/storage' },
+  };
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+  });
+
+  it('creates parent directory with recursive: true when registry path does not exist', () => {
+    vi.mocked(vscode.workspace).getConfiguration.mockReturnValue({
+      get: vi.fn().mockReturnValue('./agent-registry.json'),
+    } as any);
+
+    vi.mocked(vscode.workspace).workspaceFolders = [
+      {
+        uri: { fsPath: '/workspace' },
+      },
+    ] as any;
+
+    const existsSyncMock = vi.fn();
+    existsSyncMock.mockReturnValueOnce(false); // registry doesn't exist (line 102)
+    existsSyncMock.mockReturnValueOnce(false); // old registry doesn't exist (line 104)
+    existsSyncMock.mockReturnValueOnce(false); // registry doesn't exist (line 110)
+    existsSyncMock.mockReturnValueOnce(false); // parent dir doesn't exist (line 112)
+    vi.mocked(fs.existsSync).mockImplementation(existsSyncMock);
+
+    createRegistry(mockContext as any);
+
+    expect(fs.mkdirSync).toHaveBeenCalledWith(expect.any(String), { recursive: true });
+    expect(fs.writeFileSync).toHaveBeenCalled();
+  });
+
+  it('creates empty registry file after parent directory creation', () => {
+    vi.mocked(vscode.workspace).getConfiguration.mockReturnValue({
+      get: vi.fn().mockReturnValue('./agent-registry.json'),
+    } as any);
+
+    vi.mocked(vscode.workspace).workspaceFolders = [
+      {
+        uri: { fsPath: '/workspace' },
+      },
+    ] as any;
+
+    const existsSyncMock = vi.fn();
+    existsSyncMock.mockReturnValueOnce(true); // workspace exists
+    existsSyncMock.mockReturnValueOnce(false); // registry doesn't exist
+    existsSyncMock.mockReturnValueOnce(false); // old registry doesn't exist
+    existsSyncMock.mockReturnValueOnce(false); // parent dir doesn't exist
+    existsSyncMock.mockReturnValueOnce(false); // check again after mkdir
+    vi.mocked(fs.existsSync).mockImplementation(existsSyncMock);
+
+    createRegistry(mockContext as any);
+
+    expect(fs.writeFileSync).toHaveBeenCalled();
+    const writeCall = vi.mocked(fs.writeFileSync).mock.calls[0];
+    const written = JSON.parse(writeCall[1] as string);
+    expect(written.version).toBe('1.0');
+    expect(written.squads).toEqual([]);
+  });
+
+  it('does not call mkdirSync when parent directory already exists', () => {
+    vi.mocked(vscode.workspace).getConfiguration.mockReturnValue({
+      get: vi.fn().mockReturnValue('./agent-registry.json'),
+    } as any);
+
+    vi.mocked(vscode.workspace).workspaceFolders = [
+      {
+        uri: { fsPath: '/workspace' },
+      },
+    ] as any;
+
+    const existsSyncMock = vi.fn();
+    existsSyncMock.mockReturnValueOnce(false); // registry doesn't exist (line 102)
+    existsSyncMock.mockReturnValueOnce(false); // old registry doesn't exist (line 104)
+    existsSyncMock.mockReturnValueOnce(false); // registry doesn't exist (line 110)
+    existsSyncMock.mockReturnValueOnce(true); // parent dir exists (line 112)
+    vi.mocked(fs.existsSync).mockImplementation(existsSyncMock);
+
+    createRegistry(mockContext as any);
+
+    expect(fs.mkdirSync).not.toHaveBeenCalled();
+    expect(fs.writeFileSync).toHaveBeenCalled();
+  });
+
+  it('does not create directory when registry file already exists', () => {
+    vi.mocked(vscode.workspace).getConfiguration.mockReturnValue({
+      get: vi.fn().mockReturnValue('./agent-registry.json'),
+    } as any);
+
+    vi.mocked(vscode.workspace).workspaceFolders = [
+      {
+        uri: { fsPath: '/workspace' },
+      },
+    ] as any;
+
+    const existsSyncMock = vi.fn();
+    existsSyncMock.mockReturnValueOnce(true); // workspace exists
+    existsSyncMock.mockReturnValueOnce(true); // registry exists
+    vi.mocked(fs.existsSync).mockImplementation(existsSyncMock);
+
+    createRegistry(mockContext as any);
+
+    expect(fs.mkdirSync).not.toHaveBeenCalled();
+    expect(fs.writeFileSync).not.toHaveBeenCalled();
   });
 });
