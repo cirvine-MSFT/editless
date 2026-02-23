@@ -95,7 +95,7 @@ export function discoverAll(
     }
   }
 
-  // --- Squad discovery (scan immediate children of workspace folders) ---
+  // --- Squad discovery (scan workspace folders recursively) ---
   for (const folder of workspaceFolders) {
     const folderPath = folder.uri.fsPath;
     const discovered = discoverAgentTeams(folderPath, registered);

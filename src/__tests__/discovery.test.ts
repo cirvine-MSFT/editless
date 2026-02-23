@@ -236,6 +236,47 @@ describe('discoverAgentTeams', () => {
     expect(result[0].universe).toBe('test');
   });
 
+  it('discovers squads in nested child directories', () => {
+    // Squad at depth 2 — should be found via recursive scan
+    writeFixture('parent/child/nested-squad/.squad/team.md', `# Nested Squad
+> A deeply nested squad.
+**Universe:** nested
+`);
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Nested Squad');
+    expect(result[0].universe).toBe('nested');
+  });
+
+  it('skips node_modules directories', () => {
+    writeFixture('node_modules/some-pkg/.squad/team.md', `# Hidden Squad
+> Should not be found.
+**Universe:** hidden
+`);
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(0);
+  });
+
+  it('respects maxDepth parameter', () => {
+    // Create a squad at depth 5 — beyond default maxDepth of 4
+    writeFixture('a/b/c/d/e/deep-squad/.squad/team.md', `# Deep Squad
+> Too deep.
+**Universe:** deep
+`);
+
+    // Default maxDepth (4) should not find it
+    const resultDefault = discoverAgentTeams(tmpDir, []);
+    expect(resultDefault.find(s => s.name === 'Deep Squad')).toBeUndefined();
+
+    // Explicit maxDepth of 6 should find it
+    const resultDeep = discoverAgentTeams(tmpDir, [], 6);
+    expect(resultDeep.find(s => s.name === 'Deep Squad')).toBeDefined();
+  });
+
   describe('edge cases', () => {
     it('handles malformed team.md files gracefully', () => {
       writeFixture('squad-a/.ai-team/team.md', `This is not proper markdown`);

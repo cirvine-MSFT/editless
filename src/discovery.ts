@@ -80,46 +80,69 @@ export function toKebabCase(name: string): string {
     .toLowerCase();
 }
 
-export function discoverAgentTeams(dirPath: string, existingSquads: AgentTeamConfig[]): AgentTeamConfig[] {
-  const discovered: AgentTeamConfig[] = [];
+const EXCLUDED_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'out', '.next', '.nuxt',
+  'build', 'coverage', '__pycache__', '.venv', 'vendor',
+]);
 
-  let entries: fs.Dirent[];
-  try {
-    entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  } catch {
-    return discovered;
-  }
-
+export function discoverAgentTeams(
+  dirPath: string,
+  existingSquads: AgentTeamConfig[],
+  maxDepth: number = 4,
+): AgentTeamConfig[] {
   const existingPaths = new Set(
     existingSquads.map(s => s.path.toLowerCase()),
   );
+  const discovered: AgentTeamConfig[] = [];
 
-  for (const entry of entries) {
-    if (!entry.isDirectory()) { continue; }
+  function scan(currentPath: string, depth: number): void {
+    if (depth > maxDepth) { return; }
 
-    const folderPath = path.resolve(dirPath, entry.name);
-    const teamMdPath = resolveTeamMd(folderPath);
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(currentPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
 
-    if (!teamMdPath) { continue; }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) { continue; }
 
-    if (existingPaths.has(folderPath.toLowerCase())) { continue; }
+      const folderPath = path.resolve(currentPath, entry.name);
+      const teamMdPath = resolveTeamMd(folderPath);
 
-    const content = fs.readFileSync(teamMdPath, 'utf-8');
-    const parsed = parseTeamMd(content, entry.name);
-    const universe = parsed.universe === 'unknown'
-      ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
-      : parsed.universe;
+      if (teamMdPath) {
+        // Found a squad — add it, but do NOT recurse into it
+        if (existingPaths.has(folderPath.toLowerCase())) { continue; }
 
-    discovered.push({
-      id: toKebabCase(entry.name),
-      name: parsed.name,
-      description: parsed.description,
-      path: folderPath,
-      icon: '🔷',
-      universe,
-    });
+        const content = fs.readFileSync(teamMdPath, 'utf-8');
+        const parsed = parseTeamMd(content, entry.name);
+        const universe = parsed.universe === 'unknown'
+          ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
+          : parsed.universe;
+
+        discovered.push({
+          id: toKebabCase(entry.name),
+          name: parsed.name,
+          description: parsed.description,
+          path: folderPath,
+          icon: '🔷',
+          universe,
+        });
+        continue; // don't recurse into squad dirs
+      }
+
+      // Skip excluded directories
+      if (EXCLUDED_DIRS.has(entry.name) || (entry.name.startsWith('.') && entry.name !== '.squad')) {
+        continue;
+      }
+
+      // Recurse into non-squad, non-excluded directories
+      scan(folderPath, depth + 1);
+    }
   }
 
+  scan(dirPath, 0);
   return discovered;
 }
 

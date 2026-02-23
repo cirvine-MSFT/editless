@@ -363,6 +363,60 @@ describe('discoverAll', () => {
     expect(result.find(i => i.type === 'squad')).toBeDefined();
   });
 
+  it('discovers squads in nested subdirectories', () => {
+    const workspaceDir = path.join(tmpDir, 'workspace');
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    writeFixture('workspace/client/my-app/.squad/team.md', '# Nested App Squad\n> Found at depth 2.\n**Universe:** nested\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(workspaceDir)], registry);
+
+    const squad = result.find(i => i.id === 'my-app');
+    expect(squad).toBeDefined();
+    expect(squad!.type).toBe('squad');
+    expect(squad!.universe).toBe('nested');
+  });
+
+  it('does NOT recurse into node_modules', () => {
+    const workspaceDir = path.join(tmpDir, 'workspace');
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    writeFixture('workspace/node_modules/some-pkg/.squad/team.md', '# Hidden Squad\n> Should not be found.\n**Universe:** hidden\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(workspaceDir)], registry);
+
+    const squad = result.find(i => i.name === 'Hidden Squad');
+    expect(squad).toBeUndefined();
+  });
+
+  it('does NOT recurse beyond maxDepth', () => {
+    // discoverAgentTeams has maxDepth=4 by default. A squad at depth 5 should not be found.
+    const workspaceDir = path.join(tmpDir, 'workspace');
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    writeFixture('workspace/a/b/c/d/e/deep-squad/.squad/team.md', '# Deep Squad\n> Too deep.\n**Universe:** deep\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(workspaceDir)], registry);
+
+    const squad = result.find(i => i.name === 'Deep Squad');
+    expect(squad).toBeUndefined();
+  });
+
+  it('does NOT recurse into discovered squad directories', () => {
+    const workspaceDir = path.join(tmpDir, 'workspace');
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    writeFixture('workspace/outer-squad/.squad/team.md', '# Outer Squad\n> The outer squad.\n**Universe:** outer\n');
+    writeFixture('workspace/outer-squad/inner-squad/.squad/team.md', '# Inner Squad\n> Should not be found.\n**Universe:** inner\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(workspaceDir)], registry);
+
+    const outer = result.find(i => i.name === 'Outer Squad');
+    expect(outer).toBeDefined();
+    const inner = result.find(i => i.name === 'Inner Squad');
+    expect(inner).toBeUndefined();
+  });
+
   it('excludes registered squad by path with different casing', () => {
     const workspaceDir = path.join(tmpDir, 'projects');
     fs.mkdirSync(workspaceDir, { recursive: true });
