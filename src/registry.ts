@@ -26,6 +26,13 @@ export class EditlessRegistry {
         if (raw.launchCommand) {
           const modelMatch = raw.launchCommand.match(/--model\s+(\S+)/);
           if (modelMatch) { squad.model = modelMatch[1]; }
+          // Extract remaining flags (strip copilot binary, --agent, --model)
+          const remaining = raw.launchCommand
+            .replace(/^\S+/, '')            // strip binary name
+            .replace(/--agent\s+\S+/g, '')
+            .replace(/--model\s+\S+/g, '')
+            .trim();
+          if (remaining) { squad.additionalArgs = remaining; }
           delete raw.launchCommand;
         }
       }

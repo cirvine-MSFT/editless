@@ -2,6 +2,13 @@ import * as vscode from 'vscode';
 import { GitHubPR, fetchMyPRs, isGhAvailable } from './github-client';
 import type { AdoPR } from './ado-client';
 
+/** Map ADO raw status to user-facing label (e.g. "active" → "open") */
+function deriveAdoState(pr: AdoPR): string {
+  if (pr.isDraft) return 'draft';
+  if (pr.status === 'active') return 'open';
+  return pr.status;
+}
+
 export interface PRsFilter {
   repos: string[];
   labels: string[];
@@ -478,7 +485,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
   applyAdoRuntimeFilter(prs: AdoPR[]): AdoPR[] {
     return prs.filter(pr => {
-      const state = pr.isDraft ? 'draft' : pr.status;
+      const state = deriveAdoState(pr);
       // Default exclusion: hide merged/closed unless user explicitly includes them
       if (this._filter.statuses.length === 0 && (state === 'merged' || state === 'closed')) return false;
       if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
@@ -515,7 +522,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   private buildAdoPRItem(pr: AdoPR): PRsTreeItem {
     const item = new PRsTreeItem(`#${pr.id} ${pr.title}`);
     item.adoPR = pr;
-    const stateLabel = pr.isDraft ? 'draft' : pr.status;
+    const stateLabel = deriveAdoState(pr);
     const authorSuffix = !this._filter.author && pr.createdBy ? ` · ${pr.createdBy}` : '';
     item.description = `${stateLabel} · ${pr.sourceRef} → ${pr.targetRef}${authorSuffix}`;
     item.iconPath = pr.isDraft
@@ -617,7 +624,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
   private _applyAdoLevelFilter(prs: AdoPR[], filter: PRLevelFilter): AdoPR[] {
     return prs.filter(pr => {
-      const state = pr.isDraft ? 'draft' : pr.status;
+      const state = deriveAdoState(pr);
       if ((!filter.statuses || filter.statuses.length === 0) && (state === 'merged' || state === 'closed')) return false;
       if (filter.statuses && filter.statuses.length > 0 && !filter.statuses.includes(state)) return false;
       return true;

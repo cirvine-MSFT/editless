@@ -543,7 +543,7 @@ describe('PRsTreeProvider — PRLevelFilter lifecycle', () => {
   it('should clear all level filters', () => {
     const provider = new PRsTreeProvider();
     provider.setLevelFilter('github-pr:owner/repo:f0', { statuses: ['draft'] });
-    provider.setLevelFilter('ado-pr:org:project:f0', { statuses: ['active'] });
+    provider.setLevelFilter('ado-pr:org:project:f0', { statuses: ['open'] });
     provider.clearAllLevelFilters();
     expect(provider.getLevelFilter('github-pr:owner/repo:f0')).toBeUndefined();
     expect(provider.getLevelFilter('ado-pr:org:project:f0')).toBeUndefined();
@@ -942,5 +942,15 @@ describe('PRsTreeProvider — ADO author filter', () => {
 
     const items = provider.getChildren(projectNode);
     expect(items[0].description).not.toContain('me@example.com');
+  });
+
+  it('should filter ADO PRs by "open" status (maps from API "active")', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
+    // PR 1 and 2 are active (mapped to open); PR 3 is draft — excluded
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every(pr => !pr.isDraft)).toBe(true);
   });
 });
