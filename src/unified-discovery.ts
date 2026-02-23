@@ -95,10 +95,10 @@ export function discoverAll(
     }
   }
 
-  // --- Squad discovery (scan parent dirs of workspace folders) ---
+  // --- Squad discovery (scan workspace folders recursively) ---
   for (const folder of workspaceFolders) {
-    const parentDir = path.dirname(folder.uri.fsPath);
-    const discovered = discoverAgentTeams(parentDir, registered);
+    const folderPath = folder.uri.fsPath;
+    const discovered = discoverAgentTeams(folderPath, registered);
     for (const squad of discovered) {
       if (registeredIds.has(squad.id) || seenIds.has(squad.id)) { continue; }
       if (registeredPaths.has(squad.path.toLowerCase())) { continue; }
