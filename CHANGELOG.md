@@ -14,6 +14,7 @@ The dogfooding release. After a week of daily-driving 0.1.0, this fixes the roug
 ### Changed
 - CLI command builder rewritten with typed options (no more `$(agent)` interpolation)
 - Simplified CLI settings to a single `editless.cli.additionalArgs` setting
+- **⚠️ Breaking:** Agent registry format changed — `launchCommand` replaced with structured fields (`agentFlag`, `model`, `additionalArgs`). Existing registries are auto-migrated on load, but third-party tools reading `agent-registry.json` directly may need updates.
 - Default agent ("Copilot CLI") always shown at top of agent tree
 - Session state model: launching / active / inactive / orphaned with distinct icons
 - Terminal session persistence and reconciliation improvements
