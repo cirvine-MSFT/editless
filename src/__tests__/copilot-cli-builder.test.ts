@@ -204,6 +204,69 @@ describe('copilot-cli-builder', () => {
     it('handles all undefined fields except id/universe', () => {
       expect(buildLaunchCommandForConfig({ id: 'builtin:copilot-cli', universe: 'unknown' })).toBe('copilot');
     });
+
+    it('strips --model from additionalArgs when config.model is set', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', model: 'gpt-5', additionalArgs: '--model claude-sonnet',
+      });
+      expect(cmd).toBe('copilot --agent squad --model gpt-5');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('--model'));
+      warnSpy.mockRestore();
+    });
+
+    it('strips --agent from additionalArgs when agentFlag is set', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--agent other',
+      });
+      expect(cmd).toBe('copilot --agent squad');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('--agent'));
+      warnSpy.mockRestore();
+    });
+
+    it('preserves non-duplicate flags in additionalArgs after stripping', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', model: 'gpt-5', additionalArgs: '--model claude-sonnet --yolo --verbose',
+      });
+      expect(cmd).toBe('copilot --agent squad --model gpt-5 --yolo --verbose');
+      warnSpy.mockRestore();
+    });
+
+    it('strips --model from global additionalArgs when config.model is set', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'additionalArgs') return '--model claude-sonnet';
+        return def;
+      });
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', model: 'gpt-5',
+      });
+      expect(cmd).toBe('copilot --agent squad --model gpt-5');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('--model'));
+      warnSpy.mockRestore();
+    });
+
+    it('passes through --model in additionalArgs when config.model is not set', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--model gpt-5',
+      });
+      expect(cmd).toBe('copilot --agent squad --model gpt-5');
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('strips --model=value syntax from additionalArgs when config.model is set', () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', model: 'gpt-5', additionalArgs: '--model=claude-sonnet',
+      });
+      expect(cmd).toBe('copilot --agent squad --model gpt-5');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('--model'));
+      warnSpy.mockRestore();
+    });
   });
 
   describe('shell quoting', () => {
