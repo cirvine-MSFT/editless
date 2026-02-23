@@ -100,12 +100,34 @@ export function buildLaunchCommandForConfig(config: { id: string; universe: stri
     .getConfiguration('editless.cli')
     .get<string>('additionalArgs', '');
 
-  const allExtra = [config.additionalArgs, globalAdditional]
+  let allExtra = [config.additionalArgs, globalAdditional]
     .filter(Boolean)
     .join(' ')
     .trim()
     .split(/\s+/)
     .filter(Boolean);
+
+  // Strip --model/--agent from additionalArgs when structured config fields set them
+  const configFlags = new Map<string, string>();
+  if (config.model) { configFlags.set('--model', 'config.model'); }
+  if (agentFlag) { configFlags.set('--agent', 'agentFlag'); }
+
+  if (configFlags.size > 0) {
+    const filtered: string[] = [];
+    for (let i = 0; i < allExtra.length; i++) {
+      const flag = allExtra[i].startsWith('--') ? allExtra[i].split(/[= ]/)[0] : null;
+      if (flag && configFlags.has(flag)) {
+        console.warn(`[editless] additionalArgs flag "${flag}" dropped — already set by ${configFlags.get(flag)}`);
+        // Skip dangling value (next arg if it's not a flag)
+        if (i + 1 < allExtra.length && !allExtra[i + 1].startsWith('--')) {
+          i++;
+        }
+      } else {
+        filtered.push(allExtra[i]);
+      }
+    }
+    allExtra = filtered;
+  }
 
   const modelArgs = config.model ? ['--model', config.model] : [];
   const extraArgs = [...modelArgs, ...allExtra];
