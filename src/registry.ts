@@ -20,6 +20,22 @@ export class EditlessRegistry {
         seen.add(s.id);
         return true;
       });
+      // Migrate legacy launchCommand entries to structured fields
+      for (const squad of this._squads) {
+        const raw = squad as AgentTeamConfig & { launchCommand?: string };
+        if (raw.launchCommand) {
+          const modelMatch = raw.launchCommand.match(/--model\s+(\S+)/);
+          if (modelMatch) { squad.model = modelMatch[1]; }
+          // Extract remaining flags (strip copilot binary, --agent, --model)
+          const remaining = raw.launchCommand
+            .replace(/^\S+/, '')            // strip binary name
+            .replace(/--agent\s+\S+/g, '')
+            .replace(/--model\s+\S+/g, '')
+            .trim();
+          if (remaining) { squad.additionalArgs = remaining; }
+          delete raw.launchCommand;
+        }
+      }
     } catch (err: unknown) {
       if (err instanceof Error && 'code' in err && (err as NodeJS.ErrnoException).code === 'ENOENT') {
         console.warn(`[EditlessRegistry] Registry file not found: ${this.registryPath}`);
@@ -35,7 +51,7 @@ export class EditlessRegistry {
     return this._squads.find(s => s.id === id);
   }
 
-  updateSquad(id: string, updates: Partial<Pick<AgentTeamConfig, 'name' | 'icon' | 'description' | 'universe' | 'launchCommand'>>): boolean {
+  updateSquad(id: string, updates: Partial<Pick<AgentTeamConfig, 'name' | 'icon' | 'description' | 'universe' | 'model' | 'additionalArgs'>>): boolean {
     this.loadSquads();
     const idx = this._squads.findIndex(s => s.id === id);
     if (idx === -1) return false;

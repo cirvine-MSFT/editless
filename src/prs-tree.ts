@@ -2,6 +2,13 @@ import * as vscode from 'vscode';
 import { GitHubPR, fetchMyPRs, isGhAvailable } from './github-client';
 import type { AdoPR } from './ado-client';
 
+/** Map ADO raw status to user-facing label (e.g. "active" → "open") */
+function deriveAdoState(pr: AdoPR): string {
+  if (pr.isDraft) return 'draft';
+  if (pr.status === 'active') return 'open';
+  return pr.status;
+}
+
 export interface PRsFilter {
   repos: string[];
   labels: string[];
@@ -43,6 +50,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   private _allLabels = new Set<string>();
   private _adoOrg: string | undefined;
   private _adoProject: string | undefined;
+  private _adoMe: string | undefined;
 
   setRepos(repos: string[]): void {
     this._repos = repos;
@@ -52,6 +60,10 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   setAdoConfig(org: string | undefined, project: string | undefined): void {
     this._adoOrg = org;
     this._adoProject = project;
+  }
+
+  setAdoMe(me: string): void {
+    this._adoMe = me;
   }
 
   setAdoPRs(prs: AdoPR[]): void {
@@ -167,7 +179,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
     if (baseContext === 'ado-pr-project') {
       return {
-        statuses: ['draft', 'active', 'merged'],
+        statuses: ['draft', 'open', 'merged'],
       };
     }
 
@@ -325,8 +337,8 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
           adoGroup.id = `ado-pr::f${fseq}`;
           items.push(adoGroup);
         } else {
-          // Only ADO — show PRs directly
-          return filteredAdoPRs.map(p => this.buildAdoPRItem(p));
+          // Only ADO — show org→project hierarchy
+          return this._getAdoOrgNodes(filteredAdoPRs);
         }
       }
 
@@ -341,13 +353,8 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
           ghGroup.id = `github-pr::f${fseq}`;
           items.push(ghGroup);
         } else {
-          // Only GitHub — collapse if single repo
-          if (filteredPRs.size === 1) {
-            const [, prs] = [...filteredPRs.entries()][0];
-            return prs.map((p) => this.buildPRItem(p));
-          } else {
-            return this._getGitHubOwnerNodes(filteredPRs);
-          }
+          // Only GitHub — always show owner→repo hierarchy
+          return this._getGitHubOwnerNodes(filteredPRs);
         }
       }
 
@@ -478,11 +485,12 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
   applyAdoRuntimeFilter(prs: AdoPR[]): AdoPR[] {
     return prs.filter(pr => {
-      const state = pr.isDraft ? 'draft' : pr.status;
+      const state = deriveAdoState(pr);
       // Default exclusion: hide merged/closed unless user explicitly includes them
       if (this._filter.statuses.length === 0 && (state === 'merged' || state === 'closed')) return false;
       if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
       if (this._filter.statuses.length > 0 && !this._filter.statuses.includes(state)) return false;
+      if (this._filter.author && this._adoMe && pr.createdBy.toLowerCase() !== this._adoMe.toLowerCase()) return false;
       return true;
     });
   }
@@ -514,8 +522,9 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   private buildAdoPRItem(pr: AdoPR): PRsTreeItem {
     const item = new PRsTreeItem(`#${pr.id} ${pr.title}`);
     item.adoPR = pr;
-    const stateLabel = pr.isDraft ? 'draft' : pr.status;
-    item.description = `${stateLabel} · ${pr.sourceRef} → ${pr.targetRef}`;
+    const stateLabel = deriveAdoState(pr);
+    const authorSuffix = !this._filter.author && pr.createdBy ? ` · ${pr.createdBy}` : '';
+    item.description = `${stateLabel} · ${pr.sourceRef} → ${pr.targetRef}${authorSuffix}`;
     item.iconPath = pr.isDraft
       ? new vscode.ThemeIcon('git-pull-request-draft')
       : pr.status === 'merged'
@@ -615,7 +624,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
 
   private _applyAdoLevelFilter(prs: AdoPR[], filter: PRLevelFilter): AdoPR[] {
     return prs.filter(pr => {
-      const state = pr.isDraft ? 'draft' : pr.status;
+      const state = deriveAdoState(pr);
       if ((!filter.statuses || filter.statuses.length === 0) && (state === 'merged' || state === 'closed')) return false;
       if (filter.statuses && filter.statuses.length > 0 && !filter.statuses.includes(state)) return false;
       return true;

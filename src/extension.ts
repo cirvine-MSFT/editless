@@ -27,14 +27,26 @@ import { PRsTreeProvider, PRsTreeItem, type PRsFilter, type PRLevelFilter } from
 import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
-import { fetchAdoWorkItems, fetchAdoPRs } from './ado-client';
-import { buildDefaultLaunchCommand, buildCopilotCommand, getCliCommand } from './copilot-cli-builder';
+import { fetchAdoWorkItems, fetchAdoPRs, fetchAdoMe } from './ado-client';
+
 import { launchAndLabel } from './launch-utils';
 
 const execFileAsync = promisify(execFile);
 
 function getCreateCommand(): string {
-  return vscode.workspace.getConfiguration('editless.cli').get<string>('createCommand', '');
+  return '';
+}
+
+/** For a discovered agent file path, derive the project root.
+ *  e.g. C:\project\.github\agents\foo.agent.md → C:\project
+ *  Falls back to dirname if not inside .github/agents/. */
+function deriveProjectRoot(agentFilePath: string): string {
+  const dir = path.dirname(agentFilePath);
+  const normalized = dir.replace(/\\/g, '/').toLowerCase();
+  if (normalized.endsWith('/.github/agents') || normalized.endsWith('/.github/agents/')) {
+    return path.resolve(dir, '..', '..');
+  }
+  return dir;
 }
 
 export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {
@@ -84,23 +96,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   prsProvider.setTreeView(prsView);
   context.subscriptions.push(prsView);
 
-  // Reconcile persisted terminal sessions with live terminals after reload
+  // Reconcile persisted terminal sessions with live terminals after reload.
+  // Orphaned sessions appear in the tree view — users can resume individually.
   terminalManager.reconcile();
-
-  // Crash recovery notification (fire-and-forget, non-blocking)
-  const orphans = terminalManager.getOrphanedSessions();
-  const resumable = orphans.filter(o => o.agentSessionId);
-  if (resumable.length > 0) {
-    void vscode.window.showInformationMessage(
-      `EditLess found ${resumable.length} previous session(s) that can be resumed.`,
-      'Resume All', 'Dismiss',
-    ).then(action => {
-      if (action === 'Resume All') {
-        terminalManager.relaunchAllOrphans();
-        treeProvider.refresh();
-      }
-    });
-  }
 
   // Sync tree selection when switching terminals via tab bar
   context.subscriptions.push(
@@ -164,7 +162,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               icon: '🔷',
               universe: parsed.universe ?? 'unknown',
               description: parsed.description,
-              launchCommand: buildDefaultLaunchCommand(),
             }]);
           } catch {
             // team.md may not be readable yet; fall through to discovery
@@ -278,9 +275,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     vscode.commands.registerCommand('editless.changeModel', async (item?: EditlessTreeItem) => {
       if (!item?.squadId) return;
       const config = registry.getSquad(item.squadId);
-      if (!config?.launchCommand) return;
+      if (!config) return;
 
-      const currentModel = config.launchCommand.match(/--model\s+(\S+)/)?.[1];
+      const currentModel = config.model;
       const picks = modelChoices.map(m => ({
         ...m,
         description: m.label === currentModel ? `${m.description} ✓ current` : m.description,
@@ -291,11 +288,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       });
       if (!pick || pick.label === currentModel) return;
 
-      const newCmd = currentModel
-        ? config.launchCommand.replace(`--model ${currentModel}`, `--model ${pick.label}`)
-        : `${config.launchCommand} --model ${pick.label}`;
-
-      registry.updateSquad(item.squadId, { launchCommand: newCmd });
+      registry.updateSquad(item.squadId, { model: pick.label });
       treeProvider.refresh();
       vscode.window.showInformationMessage(`${config.icon} ${config.name} model → ${pick.label}`);
     }),
@@ -324,7 +317,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
           path: cwd ?? '',
           icon: '🤖',
           universe: 'standalone',
-          launchCommand: getCliCommand(),
         };
         terminalManager.launchTerminal(defaultCfg);
         return;
@@ -517,8 +509,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const disc = discoveredItems.find(d => d.id === itemId);
       if (disc) {
         const config: AgentTeamConfig = disc.type === 'squad'
-          ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description, launchCommand: buildDefaultLaunchCommand() }
-          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description, launchCommand: buildCopilotCommand({ agent: disc.id }) };
+          ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description }
+          : { id: disc.id, name: disc.name, path: deriveProjectRoot(disc.path), icon: '🤖', universe: 'standalone', description: disc.description };
         registry.addSquads([config]);
         refreshDiscovery();
         treeProvider.refresh();
@@ -536,7 +528,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         icon: '🤖',
         universe: 'standalone',
         description: agent.description,
-        launchCommand: buildDefaultLaunchCommand(),
       };
 
       registry.addSquads([config]);
@@ -1160,10 +1151,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       });
       if (!name) return;
 
-      type LocationValue = 'personal' | 'workspace';
+      type LocationValue = 'personal' | 'project';
       const locationItems: { label: string; description: string; value: LocationValue }[] = [
-        { label: '$(account) Personal agent', description: '~/.config/copilot/agents/', value: 'personal' },
-        { label: '$(repo) Workspace agent', description: '.github/agents/ in current workspace', value: 'workspace' },
+        { label: '$(account) Personal agent', description: '~/.copilot/agents/', value: 'personal' },
+        { label: '$(root-folder) Project agent', description: '.github/agents/ in a project directory', value: 'project' },
       ];
       const locationPick = await vscode.window.showQuickPick(locationItems, {
         placeHolder: 'Where should the agent live?',
@@ -1171,27 +1162,21 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!locationPick) return;
 
       let agentsDir: string;
+      let projectRoot: string | undefined;
 
       if (locationPick.value === 'personal') {
-        agentsDir = path.join(os.homedir(), '.config', 'copilot', 'agents');
+        agentsDir = path.join(os.homedir(), '.copilot', 'agents');
       } else {
-        const folders = vscode.workspace.workspaceFolders;
-        if (!folders || folders.length === 0) {
-          vscode.window.showWarningMessage('No workspace folder open.');
-          return;
-        }
-        let workspaceFolder: vscode.WorkspaceFolder;
-        if (folders.length === 1) {
-          workspaceFolder = folders[0];
-        } else {
-          const folderPick = await vscode.window.showQuickPick(
-            folders.map(f => ({ label: f.name, description: f.uri.fsPath, folder: f })),
-            { placeHolder: 'Which workspace folder?' },
-          );
-          if (!folderPick) return;
-          workspaceFolder = folderPick.folder;
-        }
-        agentsDir = path.join(workspaceFolder.uri.fsPath, '.github', 'agents');
+        const picked = await vscode.window.showOpenDialog({
+          canSelectFolders: true,
+          canSelectFiles: false,
+          canSelectMany: false,
+          openLabel: 'Select project root',
+          title: 'Select the project root directory',
+        });
+        if (!picked || picked.length === 0) return;
+        projectRoot = picked[0].fsPath;
+        agentsDir = path.join(projectRoot, '.github', 'agents');
       }
 
       await vscode.workspace.fs.createDirectory(vscode.Uri.file(agentsDir));
@@ -1230,10 +1215,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       registry.addSquads([{
         id: agentId,
         name: name.trim(),
-        path: agentsDir,
+        path: projectRoot ?? agentsDir,
         icon: '🤖',
         universe: 'standalone',
-        launchCommand: buildCopilotCommand({ agent: agentId }),
       }]);
       refreshDiscovery();
       treeProvider.refresh();
@@ -1280,7 +1264,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               path: dirPath,
               icon: '🔷',
               universe: 'unknown',
-              launchCommand: buildDefaultLaunchCommand(),
             }]);
             treeProvider.refresh();
           }
@@ -1316,7 +1299,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               path: dirPath,
               icon: '🔷',
               universe: 'unknown',
-              launchCommand: buildDefaultLaunchCommand(),
             }]);
             treeProvider.refresh();
           }
@@ -1441,11 +1423,13 @@ async function initAdoIntegration(
     }
 
     try {
-      const [workItems, prs] = await Promise.all([
+      const [workItems, prs, adoMe] = await Promise.all([
         fetchAdoWorkItems(org, project, token),
         fetchAdoPRs(org, project, token),
+        fetchAdoMe(org, token),
       ]);
       workItemsProvider.setAdoItems(workItems);
+      if (adoMe) prsProvider.setAdoMe(adoMe);
       prsProvider.setAdoPRs(prs);
     } catch (err) {
       console.error('[EditLess] ADO fetch failed:', err);

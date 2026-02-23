@@ -11,8 +11,7 @@ vi.mock('vscode', () => ({
   workspace: {
     getConfiguration: () => ({
       get: (key: string, defaultValue?: unknown) => {
-        if (key === 'command') return 'copilot';
-        if (key === 'defaultAgent') return 'squad';
+        if (key === 'additionalArgs') return '';
         return defaultValue;
       },
     }),
@@ -226,7 +225,7 @@ describe('discoverAgentTeams', () => {
     expect(result[0].name).toBe('fallback-squad');
   });
 
-  it('sets default launchCommand for discovered agent teams', () => {
+  it('sets universe for discovered agent teams', () => {
     writeFixture('squad/.ai-team/team.md', `# Squad
 > Squad desc.
 **Universe:** test
@@ -234,7 +233,7 @@ describe('discoverAgentTeams', () => {
 
     const result = discoverAgentTeams(tmpDir, []);
     
-    expect(result[0].launchCommand).toBe('copilot --agent squad');
+    expect(result[0].universe).toBe('test');
   });
 
   describe('edge cases', () => {
@@ -361,7 +360,7 @@ describe('autoRegisterWorkspaceSquads', () => {
     const added: AgentTeamConfig[] = [];
     const existing: AgentTeamConfig = {
       id: 'project-a', name: 'Project A', path: folderPath,
-      icon: '🔷', universe: 'production', launchCommand: '',
+      icon: '🔷', universe: 'production',
     };
     const registry = {
       loadSquads: () => [existing],
@@ -398,7 +397,7 @@ describe('autoRegisterWorkspaceSquads', () => {
     const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
     const existing: AgentTeamConfig = {
       id: 'project-a', name: 'project-a', path: folderPath,
-      icon: '🔷', universe: 'unknown', launchCommand: '',
+      icon: '🔷', universe: 'unknown',
     };
     const registry = {
       loadSquads: () => [existing],
@@ -430,7 +429,7 @@ describe('autoRegisterWorkspaceSquads', () => {
     const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
     const existing: AgentTeamConfig = {
       id: 'project-a', name: 'Project A', path: folderPath,
-      icon: '🔷', universe: 'production', launchCommand: '',
+      icon: '🔷', universe: 'production',
     };
     const registry = {
       loadSquads: () => [existing],

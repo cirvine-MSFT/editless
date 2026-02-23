@@ -20,8 +20,10 @@ export interface AgentTeamConfig {
   terminalProfileGuid?: string;
   /** Windows Terminal profile name for matching */
   terminalProfileName?: string;
-  /** Command to launch in terminal (e.g., "copilot --agent squad") */
-  launchCommand?: string;
+  /** Value for --model flag, if set */
+  model?: string;
+  /** Per-squad extra CLI flags (e.g., "--yolo") */
+  additionalArgs?: string;
 }
 
 // ---------------------------------------------------------------------------

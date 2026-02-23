@@ -16,7 +16,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { buildCopilotCommand, buildDefaultLaunchCommand, getCliCommand } from '../copilot-cli-builder';
+import { buildCopilotCommand, buildDefaultLaunchCommand, buildLaunchCommandForConfig, getCliCommand } from '../copilot-cli-builder';
 import type { CopilotCommandOptions } from '../copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
@@ -26,24 +26,15 @@ import type { CopilotCommandOptions } from '../copilot-cli-builder';
 describe('copilot-cli-builder', () => {
   beforeEach(() => {
     mockGet.mockReset();
-    // Default mock: command=copilot, defaultAgent=squad
+    // Default mock: additionalArgs=''
     mockGet.mockImplementation((key: string, defaultValue?: unknown) => {
-      if (key === 'command') return 'copilot';
-      if (key === 'defaultAgent') return 'squad';
+      if (key === 'additionalArgs') return '';
       return defaultValue;
     });
   });
 
   describe('getCliCommand', () => {
-    it('returns configured CLI binary name', () => {
-      mockGet.mockImplementation((key: string, def?: unknown) => {
-        if (key === 'command') return 'gh-copilot';
-        return def;
-      });
-      expect(getCliCommand()).toBe('gh-copilot');
-    });
-
-    it('defaults to "copilot"', () => {
+    it('always returns "copilot"', () => {
       expect(getCliCommand()).toBe('copilot');
     });
   });
@@ -79,11 +70,8 @@ describe('copilot-cli-builder', () => {
     });
 
     it('uses configured CLI binary name', () => {
-      mockGet.mockImplementation((key: string, def?: unknown) => {
-        if (key === 'command') return 'my-cli';
-        return def;
-      });
-      expect(buildCopilotCommand({ agent: 'squad' })).toBe('my-cli --agent squad');
+      // CLI binary is now hardcoded to "copilot"
+      expect(buildCopilotCommand({ agent: 'squad' })).toBe('copilot --agent squad');
     });
 
     it('does not include $(agent) in output', () => {
@@ -145,23 +133,76 @@ describe('copilot-cli-builder', () => {
   });
 
   describe('buildDefaultLaunchCommand', () => {
-    it('builds command with default agent type', () => {
+    it('builds command with hardcoded agent "squad"', () => {
       expect(buildDefaultLaunchCommand()).toBe('copilot --agent squad');
     });
 
-    it('uses configured defaultAgent setting', () => {
+    it('appends additionalArgs from settings', () => {
       mockGet.mockImplementation((key: string, def?: unknown) => {
-        if (key === 'command') return 'copilot';
-        if (key === 'defaultAgent') return 'my-custom-agent';
+        if (key === 'additionalArgs') return '--yolo --model gpt-5';
         return def;
       });
-      expect(buildDefaultLaunchCommand()).toBe('copilot --agent my-custom-agent');
+      expect(buildDefaultLaunchCommand()).toBe('copilot --agent squad --yolo --model gpt-5');
+    });
+
+    it('handles empty additionalArgs', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'additionalArgs') return '';
+        return def;
+      });
+      expect(buildDefaultLaunchCommand()).toBe('copilot --agent squad');
+    });
+
+    it('handles whitespace-only additionalArgs', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'additionalArgs') return '   ';
+        return def;
+      });
+      expect(buildDefaultLaunchCommand()).toBe('copilot --agent squad');
     });
 
     it('never produces $(agent) interpolation tokens', () => {
       const cmd = buildDefaultLaunchCommand();
       expect(cmd).not.toContain('$(');
       expect(cmd).not.toContain('${');
+    });
+  });
+
+  describe('buildLaunchCommandForConfig', () => {
+    it('builds command with squad agent flag derived from universe', () => {
+      expect(buildLaunchCommandForConfig({ id: 'my-squad', universe: 'rick-and-morty' })).toBe('copilot --agent squad');
+    });
+
+    it('builds bare command when id is builtin:copilot-cli', () => {
+      expect(buildLaunchCommandForConfig({ id: 'builtin:copilot-cli', universe: 'unknown' })).toBe('copilot');
+    });
+
+    it('includes --model when model is set', () => {
+      expect(buildLaunchCommandForConfig({ id: 'my-squad', universe: 'rick-and-morty', model: 'gpt-5' }))
+        .toBe('copilot --agent squad --model gpt-5');
+    });
+
+    it('includes per-config additionalArgs', () => {
+      expect(buildLaunchCommandForConfig({ id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--yolo' }))
+        .toBe('copilot --agent squad --yolo');
+    });
+
+    it('merges per-config and global additionalArgs', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'additionalArgs') return '--verbose';
+        return def;
+      });
+      expect(buildLaunchCommandForConfig({ id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--yolo' }))
+        .toBe('copilot --agent squad --yolo --verbose');
+    });
+
+    it('includes model before additionalArgs', () => {
+      expect(buildLaunchCommandForConfig({ id: 'my-agent', universe: 'standalone', model: 'gpt-5', additionalArgs: '--yolo' }))
+        .toBe('copilot --agent my-agent --model gpt-5 --yolo');
+    });
+
+    it('handles all undefined fields except id/universe', () => {
+      expect(buildLaunchCommandForConfig({ id: 'builtin:copilot-cli', universe: 'unknown' })).toBe('copilot');
     });
   });
 
@@ -232,20 +273,8 @@ describe('copilot-cli-builder', () => {
   });
 
   describe('legacy config stripping', () => {
-    it('strips --agent $(agent) from configured command', () => {
-      mockGet.mockImplementation((key: string, def?: unknown) => {
-        if (key === 'command') return 'copilot --agent $(agent)';
-        return def;
-      });
+    it('getCliCommand always returns "copilot" regardless of mock', () => {
       expect(getCliCommand()).toBe('copilot');
-    });
-
-    it('strips --agent $(agent) mid-string from configured command', () => {
-      mockGet.mockImplementation((key: string, def?: unknown) => {
-        if (key === 'command') return 'copilot --agent $(agent) --verbose';
-        return def;
-      });
-      expect(getCliCommand()).toBe('copilot --verbose');
     });
   });
 });

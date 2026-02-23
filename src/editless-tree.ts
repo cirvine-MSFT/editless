@@ -192,10 +192,11 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     // Unified "Discovered" section — agents + squads from unified discovery
     const visibleItems = this._discoveredItems.filter(i => !this._visibility?.isHidden(i.id));
 
-    // Fallback: also include legacy discovered agents not already in unified items
+    // Fallback: also include legacy discovered agents not already in unified or registered items
     const unifiedIds = new Set(visibleItems.map(i => i.id));
+    const registeredIds = new Set(squads.map(s => s.id));
     const legacyAgents = this._discoveredAgents
-      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id));
+      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id) && !registeredIds.has(a.id));
 
     const totalDiscovered = visibleItems.length + legacyAgents.length;
 
@@ -235,19 +236,32 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       ? this.terminalManager.getTerminalsForSquad(DEFAULT_COPILOT_CLI_ID).length
       : 0;
 
+    const orphanCount = this.terminalManager
+      ? this.terminalManager.getOrphanedSessions()
+          .filter(o => o.squadId === DEFAULT_COPILOT_CLI_ID && !!o.agentSessionId)
+          .length
+      : 0;
+
     const item = new EditlessTreeItem(
       'Copilot CLI',
       'default-agent',
-      terminalCount > 0
+      (terminalCount > 0 || orphanCount > 0)
         ? vscode.TreeItemCollapsibleState.Collapsed
         : vscode.TreeItemCollapsibleState.None,
       DEFAULT_COPILOT_CLI_ID,
     );
     item.id = DEFAULT_COPILOT_CLI_ID;
     item.iconPath = new vscode.ThemeIcon('terminal');
-    item.description = terminalCount > 0
-      ? `${terminalCount} session${terminalCount === 1 ? '' : 's'}`
-      : 'Generic Copilot agent';
+
+    const descParts: string[] = [];
+    if (terminalCount > 0) {
+      descParts.push(`${terminalCount} session${terminalCount === 1 ? '' : 's'}`);
+    }
+    if (orphanCount > 0) {
+      descParts.push(`${orphanCount} resumable`);
+    }
+    item.description = descParts.length > 0 ? descParts.join(' · ') : 'Generic Copilot agent';
+
     item.tooltip = new vscode.MarkdownString(
       '**Copilot CLI**\n\nLaunch the generic Copilot CLI without a specific agent.',
     );
@@ -294,11 +308,17 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       ? this.terminalManager.getTerminalsForSquad(cfg.id).length
       : 0;
 
+    const orphanCount = this.terminalManager
+      ? this.terminalManager.getOrphanedSessions()
+          .filter(o => o.squadId === cfg.id && !!o.agentSessionId)
+          .length
+      : 0;
+
     const item = new EditlessTreeItem(
       `${cfg.icon} ${displayName}`,
       'squad',
       isStandalone
-        ? (terminalCount > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None)
+        ? ((terminalCount > 0 || orphanCount > 0) ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None)
         : vscode.TreeItemCollapsibleState.Collapsed,
       cfg.id,
     );
@@ -311,6 +331,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const cached = this._cache.get(cfg.id);
     if (terminalCount > 0) {
       descParts.push(`${terminalCount} session${terminalCount === 1 ? '' : 's'}`);
+    }
+
+    if (orphanCount > 0) {
+      descParts.push(`${orphanCount} resumable`);
     }
 
     item.description = descParts.join(' · ');
@@ -448,8 +472,9 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   private getDiscoveredChildren(parentItem: EditlessTreeItem): EditlessTreeItem[] {
     const visibleItems = this._discoveredItems.filter(i => !this._visibility?.isHidden(i.id));
     const unifiedIds = new Set(visibleItems.map(i => i.id));
+    const registeredIds = new Set(this.registry.loadSquads().map(s => s.id));
     const legacyAgents = this._discoveredAgents
-      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id));
+      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id) && !registeredIds.has(a.id));
 
     const children: EditlessTreeItem[] = [];
 
