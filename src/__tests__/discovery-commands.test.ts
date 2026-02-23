@@ -59,7 +59,7 @@ function makeSquad(overrides: Partial<AgentTeamConfig> = {}): AgentTeamConfig {
     icon: '🔷',
     universe: 'test',
     description: 'The alpha team.',
-    launchCommand: 'copilot --agent squad',
+    agentFlag: 'squad',
     ...overrides,
   };
 }

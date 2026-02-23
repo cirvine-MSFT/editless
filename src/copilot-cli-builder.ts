@@ -82,17 +82,35 @@ export function buildCopilotCommand(options: CopilotCommandOptions = {}): string
 }
 
 /**
+ * Build a launch command from structured config fields.
+ * Merges per-config additionalArgs with global `editless.cli.additionalArgs`.
+ */
+export function buildLaunchCommandForConfig(config: { agentFlag?: string; model?: string; additionalArgs?: string }): string {
+  const globalAdditional = vscode.workspace
+    .getConfiguration('editless.cli')
+    .get<string>('additionalArgs', '');
+
+  const allExtra = [config.additionalArgs, globalAdditional]
+    .filter(Boolean)
+    .join(' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  const modelArgs = config.model ? ['--model', config.model] : [];
+  const extraArgs = [...modelArgs, ...allExtra];
+
+  return buildCopilotCommand({
+    agent: config.agentFlag,
+    extraArgs: extraArgs.length ? extraArgs : undefined,
+  });
+}
+
+/**
+ * @deprecated Use `buildLaunchCommandForConfig()` instead.
  * Build a default launch command with hardcoded agent type "squad".
  * Reads `editless.cli.additionalArgs` and appends them as extraArgs.
  */
 export function buildDefaultLaunchCommand(): string {
-  const additionalArgs = vscode.workspace
-    .getConfiguration('editless.cli')
-    .get<string>('additionalArgs', '');
-
-  const extraArgs = additionalArgs.trim()
-    ? additionalArgs.trim().split(/\s+/)
-    : undefined;
-
-  return buildCopilotCommand({ agent: 'squad', extraArgs });
+  return buildLaunchCommandForConfig({ agentFlag: 'squad' });
 }

@@ -28,7 +28,7 @@ import { fetchLinkedPRs } from './github-client';
 import { getEdition } from './vscode-compat';
 import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
 import { fetchAdoWorkItems, fetchAdoPRs, fetchAdoMe } from './ado-client';
-import { buildDefaultLaunchCommand, buildCopilotCommand, getCliCommand } from './copilot-cli-builder';
+
 import { launchAndLabel } from './launch-utils';
 
 const execFileAsync = promisify(execFile);
@@ -150,7 +150,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               icon: '🔷',
               universe: parsed.universe ?? 'unknown',
               description: parsed.description,
-              launchCommand: buildDefaultLaunchCommand(),
+              agentFlag: 'squad',
             }]);
           } catch {
             // team.md may not be readable yet; fall through to discovery
@@ -264,9 +264,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     vscode.commands.registerCommand('editless.changeModel', async (item?: EditlessTreeItem) => {
       if (!item?.squadId) return;
       const config = registry.getSquad(item.squadId);
-      if (!config?.launchCommand) return;
+      if (!config) return;
 
-      const currentModel = config.launchCommand.match(/--model\s+(\S+)/)?.[1];
+      const currentModel = config.model;
       const picks = modelChoices.map(m => ({
         ...m,
         description: m.label === currentModel ? `${m.description} ✓ current` : m.description,
@@ -277,11 +277,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       });
       if (!pick || pick.label === currentModel) return;
 
-      const newCmd = currentModel
-        ? config.launchCommand.replace(`--model ${currentModel}`, `--model ${pick.label}`)
-        : `${config.launchCommand} --model ${pick.label}`;
-
-      registry.updateSquad(item.squadId, { launchCommand: newCmd });
+      registry.updateSquad(item.squadId, { model: pick.label });
       treeProvider.refresh();
       vscode.window.showInformationMessage(`${config.icon} ${config.name} model → ${pick.label}`);
     }),
@@ -310,7 +306,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
           path: cwd ?? '',
           icon: '🤖',
           universe: 'standalone',
-          launchCommand: getCliCommand(),
         };
         terminalManager.launchTerminal(defaultCfg);
         return;
@@ -503,8 +498,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const disc = discoveredItems.find(d => d.id === itemId);
       if (disc) {
         const config: AgentTeamConfig = disc.type === 'squad'
-          ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description, launchCommand: buildDefaultLaunchCommand() }
-          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description, launchCommand: buildCopilotCommand({ agent: disc.id }) };
+          ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description, agentFlag: 'squad' }
+          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description, agentFlag: disc.id };
         registry.addSquads([config]);
         refreshDiscovery();
         treeProvider.refresh();
@@ -522,7 +517,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         icon: '🤖',
         universe: 'standalone',
         description: agent.description,
-        launchCommand: buildDefaultLaunchCommand(),
+        agentFlag: 'squad',
       };
 
       registry.addSquads([config]);
@@ -1219,7 +1214,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         path: agentsDir,
         icon: '🤖',
         universe: 'standalone',
-        launchCommand: buildCopilotCommand({ agent: agentId }),
+        agentFlag: agentId,
       }]);
       refreshDiscovery();
       treeProvider.refresh();
@@ -1266,7 +1261,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               path: dirPath,
               icon: '🔷',
               universe: 'unknown',
-              launchCommand: buildDefaultLaunchCommand(),
+              agentFlag: 'squad',
             }]);
             treeProvider.refresh();
           }
@@ -1302,7 +1297,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               path: dirPath,
               icon: '🔷',
               universe: 'unknown',
-              launchCommand: buildDefaultLaunchCommand(),
+              agentFlag: 'squad',
             }]);
             treeProvider.refresh();
           }

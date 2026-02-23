@@ -16,7 +16,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { buildCopilotCommand, buildDefaultLaunchCommand, getCliCommand } from '../copilot-cli-builder';
+import { buildCopilotCommand, buildDefaultLaunchCommand, buildLaunchCommandForConfig, getCliCommand } from '../copilot-cli-builder';
 import type { CopilotCommandOptions } from '../copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
@@ -165,6 +165,44 @@ describe('copilot-cli-builder', () => {
       const cmd = buildDefaultLaunchCommand();
       expect(cmd).not.toContain('$(');
       expect(cmd).not.toContain('${');
+    });
+  });
+
+  describe('buildLaunchCommandForConfig', () => {
+    it('builds command with agentFlag', () => {
+      expect(buildLaunchCommandForConfig({ agentFlag: 'squad' })).toBe('copilot --agent squad');
+    });
+
+    it('builds bare command when agentFlag is undefined', () => {
+      expect(buildLaunchCommandForConfig({})).toBe('copilot');
+    });
+
+    it('includes --model when model is set', () => {
+      expect(buildLaunchCommandForConfig({ agentFlag: 'squad', model: 'gpt-5' }))
+        .toBe('copilot --agent squad --model gpt-5');
+    });
+
+    it('includes per-config additionalArgs', () => {
+      expect(buildLaunchCommandForConfig({ agentFlag: 'squad', additionalArgs: '--yolo' }))
+        .toBe('copilot --agent squad --yolo');
+    });
+
+    it('merges per-config and global additionalArgs', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'additionalArgs') return '--verbose';
+        return def;
+      });
+      expect(buildLaunchCommandForConfig({ agentFlag: 'squad', additionalArgs: '--yolo' }))
+        .toBe('copilot --agent squad --yolo --verbose');
+    });
+
+    it('includes model before additionalArgs', () => {
+      expect(buildLaunchCommandForConfig({ agentFlag: 'my-agent', model: 'gpt-5', additionalArgs: '--yolo' }))
+        .toBe('copilot --agent my-agent --model gpt-5 --yolo');
+    });
+
+    it('handles all undefined fields', () => {
+      expect(buildLaunchCommandForConfig({})).toBe('copilot');
     });
   });
 

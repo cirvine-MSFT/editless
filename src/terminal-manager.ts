@@ -2,8 +2,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
-import { getLaunchCommand } from './cli-settings';
-import { buildCopilotCommand } from './copilot-cli-builder';
+import { buildLaunchCommandForConfig } from './copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
@@ -146,12 +145,8 @@ export class TerminalManager implements vscode.Disposable {
     const uuid = crypto.randomUUID();
 
     // Build launch command with --resume UUID
-    let launchCmd: string;
-    if (config.launchCommand) {
-      launchCmd = `${config.launchCommand} --resume ${uuid}`;
-    } else {
-      launchCmd = buildCopilotCommand({ agent: 'squad', resume: uuid });
-    }
+    const baseCmd = buildLaunchCommandForConfig(config);
+    const launchCmd = `${baseCmd} --resume ${uuid}`;
 
     const terminal = vscode.window.createTerminal({
       name: displayName,
@@ -176,7 +171,7 @@ export class TerminalManager implements vscode.Disposable {
       index,
       createdAt: new Date(),
       agentSessionId: uuid,
-      launchCommand: config.launchCommand,
+      launchCommand: baseCmd,
       squadPath: config.path,
     };
 

@@ -1306,10 +1306,10 @@ describe('TerminalManager', () => {
   });
 
   describe('launch command persistence (#94)', () => {
-    it('should persist launchCommand from squad config', () => {
+    it('should persist launchCommand built from config', () => {
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig({ launchCommand: 'copilot --agent squad' });
+      const config = makeSquadConfig({ agentFlag: 'squad' });
 
       mgr.launchTerminal(config);
 
@@ -2053,17 +2053,17 @@ describe('TerminalManager', () => {
       );
     });
 
-    it('launchTerminal with custom config.launchCommand appends --resume UUID', () => {
+    it('launchTerminal with custom agentFlag appends --resume UUID', () => {
       const mockUuid = 'custom-cmd-uuid' as `${string}-${string}-${string}-${string}-${string}`;
       mockRandomUUID.mockReturnValue(mockUuid);
 
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig({ launchCommand: 'my-cli --agent custom' });
+      const config = makeSquadConfig({ agentFlag: 'custom' });
 
       const terminal = mgr.launchTerminal(config);
 
-      expect(terminal.sendText).toHaveBeenCalledWith('my-cli --agent custom --resume custom-cmd-uuid');
+      expect(terminal.sendText).toHaveBeenCalledWith('copilot --agent custom --resume custom-cmd-uuid');
     });
   });
 

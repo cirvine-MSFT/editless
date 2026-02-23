@@ -20,7 +20,7 @@ interface TestSquadConfig {
   path: string;
   icon: string;
   universe: string;
-  launchCommand?: string;
+  agentFlag?: string;
 }
 
 const STORAGE_KEY = 'editless.terminalSessions';
@@ -38,7 +38,7 @@ function makeSquadConfig(overrides: Partial<TestSquadConfig> = {}): TestSquadCon
     path: process.cwd(),
     icon: '🧪',
     universe: 'test',
-    launchCommand: 'echo integration-test',
+    agentFlag: 'squad',
     ...overrides,
   };
 }
