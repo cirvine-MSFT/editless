@@ -1141,7 +1141,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
       type LocationValue = 'personal' | 'workspace';
       const locationItems: { label: string; description: string; value: LocationValue }[] = [
-        { label: '$(account) Personal agent', description: '~/.config/copilot/agents/', value: 'personal' },
+        { label: '$(account) Personal agent', description: '~/.copilot/agents/', value: 'personal' },
         { label: '$(repo) Workspace agent', description: '.github/agents/ in current workspace', value: 'workspace' },
       ];
       const locationPick = await vscode.window.showQuickPick(locationItems, {
