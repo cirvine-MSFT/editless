@@ -460,7 +460,6 @@ function makeSquad(overrides: Record<string, unknown> = {}) {
     universe: 'test',
     path: '/squads/alpha',
     model: 'gpt-5',
-    agentFlag: 'squad',
     ...overrides,
   };
 }
@@ -1870,7 +1869,6 @@ describe('editless.promoteDiscoveredAgent', () => {
         icon: '🤖',
         universe: 'standalone',
         description: 'A test agent',
-        agentFlag: 'squad',
       }),
     ]);
   });
@@ -1970,7 +1968,6 @@ describe('editless.promoteDiscoveredAgent', () => {
         icon: '🔷',
         universe: 'acme-corp',
         description: 'A squad',
-        agentFlag: 'squad',
       }),
     ]);
   });

@@ -117,7 +117,6 @@ export function discoverAgentTeams(dirPath: string, existingSquads: AgentTeamCon
       path: folderPath,
       icon: '🔷',
       universe,
-      agentFlag: 'squad',
     });
   }
 
@@ -203,7 +202,6 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
         path: folderPath,
         icon: '🔷',
         universe,
-        agentFlag: 'squad',
       });
     } else if (resolveTeamDir(folderPath)) {
       // squad init creates .ai-team/ before the coordinator writes team.md
@@ -213,7 +211,6 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
         path: folderPath,
         icon: '🔷',
         universe: readUniverseFromRegistry(folderPath) ?? 'unknown',
-        agentFlag: 'squad',
       });
     }
   }

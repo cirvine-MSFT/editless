@@ -20,8 +20,6 @@ export interface AgentTeamConfig {
   terminalProfileGuid?: string;
   /** Windows Terminal profile name for matching */
   terminalProfileName?: string;
-  /** Value for --agent flag. "squad" for squad entries, agent ID for standalone agents, undefined for default CLI. */
-  agentFlag?: string;
   /** Value for --model flag, if set */
   model?: string;
   /** Per-squad extra CLI flags (e.g., "--yolo") */

@@ -169,21 +169,21 @@ describe('copilot-cli-builder', () => {
   });
 
   describe('buildLaunchCommandForConfig', () => {
-    it('builds command with agentFlag', () => {
-      expect(buildLaunchCommandForConfig({ agentFlag: 'squad' })).toBe('copilot --agent squad');
+    it('builds command with squad agent flag derived from universe', () => {
+      expect(buildLaunchCommandForConfig({ id: 'my-squad', universe: 'rick-and-morty' })).toBe('copilot --agent squad');
     });
 
-    it('builds bare command when agentFlag is undefined', () => {
-      expect(buildLaunchCommandForConfig({})).toBe('copilot');
+    it('builds bare command when id is builtin:copilot-cli', () => {
+      expect(buildLaunchCommandForConfig({ id: 'builtin:copilot-cli', universe: 'unknown' })).toBe('copilot');
     });
 
     it('includes --model when model is set', () => {
-      expect(buildLaunchCommandForConfig({ agentFlag: 'squad', model: 'gpt-5' }))
+      expect(buildLaunchCommandForConfig({ id: 'my-squad', universe: 'rick-and-morty', model: 'gpt-5' }))
         .toBe('copilot --agent squad --model gpt-5');
     });
 
     it('includes per-config additionalArgs', () => {
-      expect(buildLaunchCommandForConfig({ agentFlag: 'squad', additionalArgs: '--yolo' }))
+      expect(buildLaunchCommandForConfig({ id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--yolo' }))
         .toBe('copilot --agent squad --yolo');
     });
 
@@ -192,17 +192,17 @@ describe('copilot-cli-builder', () => {
         if (key === 'additionalArgs') return '--verbose';
         return def;
       });
-      expect(buildLaunchCommandForConfig({ agentFlag: 'squad', additionalArgs: '--yolo' }))
+      expect(buildLaunchCommandForConfig({ id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--yolo' }))
         .toBe('copilot --agent squad --yolo --verbose');
     });
 
     it('includes model before additionalArgs', () => {
-      expect(buildLaunchCommandForConfig({ agentFlag: 'my-agent', model: 'gpt-5', additionalArgs: '--yolo' }))
+      expect(buildLaunchCommandForConfig({ id: 'my-agent', universe: 'standalone', model: 'gpt-5', additionalArgs: '--yolo' }))
         .toBe('copilot --agent my-agent --model gpt-5 --yolo');
     });
 
-    it('handles all undefined fields', () => {
-      expect(buildLaunchCommandForConfig({})).toBe('copilot');
+    it('handles all undefined fields except id/universe', () => {
+      expect(buildLaunchCommandForConfig({ id: 'builtin:copilot-cli', universe: 'unknown' })).toBe('copilot');
     });
   });
 

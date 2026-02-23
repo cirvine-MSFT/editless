@@ -150,7 +150,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               icon: '🔷',
               universe: parsed.universe ?? 'unknown',
               description: parsed.description,
-              agentFlag: 'squad',
             }]);
           } catch {
             // team.md may not be readable yet; fall through to discovery
@@ -498,8 +497,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const disc = discoveredItems.find(d => d.id === itemId);
       if (disc) {
         const config: AgentTeamConfig = disc.type === 'squad'
-          ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description, agentFlag: 'squad' }
-          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description, agentFlag: disc.id };
+          ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description }
+          : { id: disc.id, name: disc.name, path: path.dirname(disc.path), icon: '🤖', universe: 'standalone', description: disc.description };
         registry.addSquads([config]);
         refreshDiscovery();
         treeProvider.refresh();
@@ -517,7 +516,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         icon: '🤖',
         universe: 'standalone',
         description: agent.description,
-        agentFlag: 'squad',
       };
 
       registry.addSquads([config]);
@@ -1154,7 +1152,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       let agentsDir: string;
 
       if (locationPick.value === 'personal') {
-        agentsDir = path.join(os.homedir(), '.config', 'copilot', 'agents');
+        agentsDir = path.join(os.homedir(), '.copilot', 'agents');
       } else {
         const folders = vscode.workspace.workspaceFolders;
         if (!folders || folders.length === 0) {
@@ -1214,7 +1212,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         path: agentsDir,
         icon: '🤖',
         universe: 'standalone',
-        agentFlag: agentId,
       }]);
       refreshDiscovery();
       treeProvider.refresh();
@@ -1261,7 +1258,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               path: dirPath,
               icon: '🔷',
               universe: 'unknown',
-              agentFlag: 'squad',
             }]);
             treeProvider.refresh();
           }
@@ -1297,7 +1293,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               path: dirPath,
               icon: '🔷',
               universe: 'unknown',
-              agentFlag: 'squad',
             }]);
             treeProvider.refresh();
           }

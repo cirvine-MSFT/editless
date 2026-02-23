@@ -225,7 +225,7 @@ describe('discoverAgentTeams', () => {
     expect(result[0].name).toBe('fallback-squad');
   });
 
-  it('sets agentFlag for discovered agent teams', () => {
+  it('sets universe for discovered agent teams', () => {
     writeFixture('squad/.ai-team/team.md', `# Squad
 > Squad desc.
 **Universe:** test
@@ -233,7 +233,7 @@ describe('discoverAgentTeams', () => {
 
     const result = discoverAgentTeams(tmpDir, []);
     
-    expect(result[0].agentFlag).toBe('squad');
+    expect(result[0].universe).toBe('test');
   });
 
   describe('edge cases', () => {

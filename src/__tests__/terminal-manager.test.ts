@@ -1309,7 +1309,7 @@ describe('TerminalManager', () => {
     it('should persist launchCommand built from config', () => {
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig({ agentFlag: 'squad' });
+      const config = makeSquadConfig();
 
       mgr.launchTerminal(config);
 
@@ -2053,13 +2053,13 @@ describe('TerminalManager', () => {
       );
     });
 
-    it('launchTerminal with custom agentFlag appends --resume UUID', () => {
+    it('launchTerminal with standalone agent appends --resume UUID', () => {
       const mockUuid = 'custom-cmd-uuid' as `${string}-${string}-${string}-${string}-${string}`;
       mockRandomUUID.mockReturnValue(mockUuid);
 
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
-      const config = makeSquadConfig({ agentFlag: 'custom' });
+      const config = makeSquadConfig({ id: 'custom', universe: 'standalone' });
 
       const terminal = mgr.launchTerminal(config);
 
