@@ -54,6 +54,22 @@ export function stripEmoji(str: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// CWD resolution for personal agents (#403)
+// ---------------------------------------------------------------------------
+
+/**
+ * Determines the correct CWD for a terminal.
+ * Personal agents (located under ~/.copilot/agents/) should use the workspace
+ * root instead of the agent directory.
+ */
+export function resolveTerminalCwd(agentPath: string | undefined): string | undefined {
+  if (agentPath && /\.copilot[\\/]agents/.test(agentPath)) {
+    return vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? agentPath;
+  }
+  return agentPath;
+}
+
+// ---------------------------------------------------------------------------
 // TerminalManager
 // ---------------------------------------------------------------------------
 
@@ -150,7 +166,7 @@ export class TerminalManager implements vscode.Disposable {
 
     const terminal = vscode.window.createTerminal({
       name: displayName,
-      cwd: config.path,
+      cwd: resolveTerminalCwd(config.path),
       isTransient: true,
       iconPath: new vscode.ThemeIcon('terminal'),
       env: {
@@ -356,7 +372,7 @@ export class TerminalManager implements vscode.Disposable {
 
     const terminal = vscode.window.createTerminal({
       name: entry.displayName,
-      cwd: entry.squadPath,
+      cwd: resolveTerminalCwd(entry.squadPath),
       isTransient: true,
       iconPath: new vscode.ThemeIcon('terminal'),
       env: {
