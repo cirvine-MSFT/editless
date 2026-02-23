@@ -86,20 +86,49 @@ describe('discoverAll', () => {
     expect(agent!.name).toBe('Test Agent');
   });
 
-  it('discovers squads from workspace parent directories', () => {
-    // Create a workspace folder inside a parent that contains sibling squads
+  it('discovers squad at workspace folder root', () => {
+    // Workspace folder itself IS a squad (has .squad/team.md at root)
+    const workspaceDir = path.join(tmpDir, 'my-squad');
+    writeFixture('my-squad/.squad/team.md', '# My Squad\n> A squad at the root.\n**Universe:** dev\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(workspaceDir)], registry);
+
+    const squad = result.find(i => i.id === 'my-squad');
+    expect(squad).toBeDefined();
+    expect(squad!.type).toBe('squad');
+    expect(squad!.source).toBe('workspace');
+    expect(squad!.universe).toBe('dev');
+    expect(squad!.path).toBe(workspaceDir);
+  });
+
+  it('discovers squads from immediate children of workspace folders', () => {
+    // Workspace folder contains a child directory that is a squad
+    const workspaceDir = path.join(tmpDir, 'projects');
+    fs.mkdirSync(workspaceDir, { recursive: true });
+    writeFixture('projects/child-squad/.squad/team.md', '# Child Squad\n> A child squad.\n**Universe:** test\n');
+    const registry = makeRegistry();
+
+    const result = discoverAll([wsFolder(workspaceDir)], registry);
+
+    const squad = result.find(i => i.id === 'child-squad');
+    expect(squad).toBeDefined();
+    expect(squad!.type).toBe('squad');
+    expect(squad!.source).toBe('workspace');
+    expect(squad!.universe).toBe('test');
+  });
+
+  it('does NOT discover squads from sibling directories (parent-dir scan)', () => {
+    // Workspace is my-project; sibling-squad is a sibling — should NOT be found
     const workspaceDir = path.join(tmpDir, 'projects', 'my-project');
     fs.mkdirSync(workspaceDir, { recursive: true });
-    writeFixture('projects/sibling-squad/.squad/team.md', '# Sibling Squad\n> A sibling squad.\n**Universe:** test\n');
+    writeFixture('projects/sibling-squad/.squad/team.md', '# Sibling Squad\n> A sibling.\n**Universe:** test\n');
     const registry = makeRegistry();
 
     const result = discoverAll([wsFolder(workspaceDir)], registry);
 
     const squad = result.find(i => i.id === 'sibling-squad');
-    expect(squad).toBeDefined();
-    expect(squad!.type).toBe('squad');
-    expect(squad!.source).toBe('workspace');
-    expect(squad!.universe).toBe('test');
+    expect(squad).toBeUndefined();
   });
 
   it('excludes already-registered items by id', () => {
@@ -116,7 +145,7 @@ describe('discoverAll', () => {
   });
 
   it('excludes already-registered squads by path', () => {
-    const workspaceDir = path.join(tmpDir, 'projects', 'my-project');
+    const workspaceDir = path.join(tmpDir, 'projects');
     fs.mkdirSync(workspaceDir, { recursive: true });
     const squadPath = path.resolve(tmpDir, 'projects', 'existing-squad');
     writeFixture('projects/existing-squad/.squad/team.md', '# Existing\n> Already registered.\n**Universe:** prod\n');
@@ -148,7 +177,7 @@ describe('discoverAll', () => {
   });
 
   it('returns both agents and squads in a single result', () => {
-    const workspaceDir = path.join(tmpDir, 'projects', 'my-project');
+    const workspaceDir = path.join(tmpDir, 'projects');
     fs.mkdirSync(path.join(workspaceDir, '.github', 'agents'), { recursive: true });
     fs.writeFileSync(path.join(workspaceDir, '.github', 'agents', 'helper.agent.md'), '# Helper\n> Helps.\n');
     writeFixture('projects/team-squad/.squad/team.md', '# Team Squad\n> A team.\n**Universe:** dev\n');
@@ -260,7 +289,7 @@ describe('discoverAll', () => {
   });
 
   it('sets correct DiscoveredItem fields for squads', () => {
-    const workspaceDir = path.join(tmpDir, 'projects', 'my-project');
+    const workspaceDir = path.join(tmpDir, 'projects');
     fs.mkdirSync(workspaceDir, { recursive: true });
     writeFixture('projects/my-squad/.squad/team.md', '# My Squad\n> Squad description.\n**Universe:** staging\n');
     const registry = makeRegistry();
@@ -335,7 +364,7 @@ describe('discoverAll', () => {
   });
 
   it('excludes registered squad by path with different casing', () => {
-    const workspaceDir = path.join(tmpDir, 'projects', 'my-project');
+    const workspaceDir = path.join(tmpDir, 'projects');
     fs.mkdirSync(workspaceDir, { recursive: true });
     const squadDir = path.resolve(tmpDir, 'projects', 'CasedSquad');
     writeFixture('projects/CasedSquad/.squad/team.md', '# Cased Squad\n> desc.\n**Universe:** test\n');
@@ -349,7 +378,7 @@ describe('discoverAll', () => {
 
     const result = discoverAll([wsFolder(workspaceDir)], registry);
 
-    // Should be excluded because path matches case-insensitively (line 78/101)
+    // Should be excluded because path matches case-insensitively
     expect(result.find(i => i.name === 'Cased Squad')).toBeUndefined();
   });
 });
