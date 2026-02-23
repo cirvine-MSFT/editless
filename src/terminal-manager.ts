@@ -8,7 +8,7 @@ import { buildLaunchCommandForConfig } from './copilot-cli-builder';
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------
 
-export type SessionState = 'launching' | 'active' | 'inactive' | 'orphaned';
+export type SessionState = 'launching' | 'active' | 'inactive' | 'attention' | 'orphaned';
 
 export interface TerminalInfo {
   id: string;
@@ -520,6 +520,7 @@ export class TerminalManager implements vscode.Disposable {
     // the actual copilot agent state rather than the outer shell process.
     const lastEvent = this._lastSessionEvent.get(terminal);
     if (lastEvent) {
+      if (isAttentionEvent(lastEvent.type)) return 'attention';
       return isWorkingEvent(lastEvent.type) ? 'active' : 'inactive';
     }
 
@@ -732,6 +733,17 @@ export class TerminalManager implements vscode.Disposable {
 
 // -- Exported helpers for tree view and testability -------------------------
 
+/** Returns true if the event type indicates the agent is waiting for user input. */
+function isAttentionEvent(eventType: string): boolean {
+  switch (eventType) {
+    case 'assistant.ask_user':
+    case 'user.ask':
+      return true;
+    default:
+      return false;
+  }
+}
+
 /** Returns true if the event type indicates the agent is actively working. */
 function isWorkingEvent(eventType: string): boolean {
   switch (eventType) {
@@ -755,6 +767,8 @@ export function getStateIcon(state: SessionState, resumable = false): vscode.The
     case 'launching':
     case 'active':
       return new vscode.ThemeIcon('loading~spin');
+    case 'attention':
+      return new vscode.ThemeIcon('comment-discussion');
     case 'inactive':
       return new vscode.ThemeIcon('circle-outline');
     case 'orphaned':
@@ -770,6 +784,8 @@ export function getStateDescription(state: SessionState, lastActivityAt?: number
   switch (state) {
     case 'launching':
       return 'launching…';
+    case 'attention':
+      return 'waiting for input';
     case 'orphaned':
       return resumable ? 'previous session — resume' : 'session ended';
     case 'active':
