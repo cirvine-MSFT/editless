@@ -690,6 +690,178 @@ describe('readUniverseFromRegistry', () => {
 
     expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-pn5'))).toBe('Top Level');
   });
+
+  // ---------------------------------------------------------------------------
+  // Schema 1 edge cases (top-level universe)
+  // ---------------------------------------------------------------------------
+
+  it('falls through when top-level universe is empty string', () => {
+    writeFixture('schema1-empty/.squad/casting/registry.json', JSON.stringify({
+      universe: '',
+      agents: {
+        rick: { universe: 'fallback', status: 'active' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'schema1-empty'))).toBe('fallback');
+  });
+
+  it('falls through when top-level universe is null', () => {
+    writeFixture('schema1-null/.squad/casting/registry.json', JSON.stringify({
+      universe: null,
+      agents: {
+        rick: { universe: 'fallback', status: 'active' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'schema1-null'))).toBe('fallback');
+  });
+
+  it('top-level universe wins when all three schema fields are present', () => {
+    writeFixture('schema-priority/.squad/casting/registry.json', JSON.stringify({
+      universe: 'top-level-wins',
+      persistent_names: [
+        { persistent_name: 'Dutch', universe: 'persistent-names', status: 'active' },
+      ],
+      agents: {
+        rick: { universe: 'agents-record', status: 'active' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'schema-priority'))).toBe('top-level-wins');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Schema 2 edge cases (persistent_names array)
+  // ---------------------------------------------------------------------------
+
+  it('returns first active universe when persistent_names have different universes', () => {
+    writeFixture('pn-mixed-uni/.squad/casting/registry.json', JSON.stringify({
+      persistent_names: [
+        { persistent_name: 'Dutch', universe: 'predator', status: 'active' },
+        { persistent_name: 'Ripley', universe: 'alien', status: 'active' },
+      ],
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'pn-mixed-uni'))).toBe('predator');
+  });
+
+  it('falls through when persistent_names entries lack universe field', () => {
+    writeFixture('pn-no-uni/.squad/casting/registry.json', JSON.stringify({
+      persistent_names: [
+        { persistent_name: 'Dutch', status: 'active' },
+      ],
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'pn-no-uni'))).toBeUndefined();
+  });
+
+  it('falls through when persistent_names array is empty', () => {
+    writeFixture('pn-empty/.squad/casting/registry.json', JSON.stringify({
+      persistent_names: [],
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'pn-empty'))).toBeUndefined();
+  });
+
+  it('does not crash when persistent_names is not an array', () => {
+    writeFixture('pn-malformed/.squad/casting/registry.json', JSON.stringify({
+      persistent_names: 'not-an-array',
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'pn-malformed'))).toBeUndefined();
+  });
+
+  it('prefers persistent_names over agents Record', () => {
+    writeFixture('pn-over-agents/.squad/casting/registry.json', JSON.stringify({
+      persistent_names: [
+        { persistent_name: 'Dutch', universe: 'predator', status: 'active' },
+      ],
+      agents: {
+        rick: { universe: 'agents-record', status: 'active' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'pn-over-agents'))).toBe('predator');
+  });
+
+  it('falls through persistent_names to agents when no active persistent_names have universe', () => {
+    writeFixture('pn-fallthrough/.squad/casting/registry.json', JSON.stringify({
+      persistent_names: [
+        { persistent_name: 'Dutch', status: 'inactive', universe: 'predator' },
+      ],
+      agents: {
+        rick: { universe: 'agents-fallback', status: 'active' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'pn-fallthrough'))).toBe('agents-fallback');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Schema 3 edge cases (agents Record)
+  // ---------------------------------------------------------------------------
+
+  it('returns undefined when agents record is empty', () => {
+    writeFixture('agents-empty/.squad/casting/registry.json', JSON.stringify({
+      agents: {},
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'agents-empty'))).toBeUndefined();
+  });
+
+  it('returns undefined when agents have no universe field', () => {
+    writeFixture('agents-no-uni/.squad/casting/registry.json', JSON.stringify({
+      agents: {
+        rick: { status: 'active' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'agents-no-uni'))).toBeUndefined();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Cross-cutting edge cases
+  // ---------------------------------------------------------------------------
+
+  it('returns undefined for completely empty object', () => {
+    writeFixture('empty-obj/.squad/casting/registry.json', JSON.stringify({}));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'empty-obj'))).toBeUndefined();
+  });
+
+  it('returns undefined when file has unrelated fields only', () => {
+    writeFixture('unrelated/.squad/casting/registry.json', JSON.stringify({
+      version: 1,
+      created_at: '2026-01-01',
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'unrelated'))).toBeUndefined();
+  });
+
+  it('does not crash when JSON parses to null', () => {
+    writeFixture('null-data/.squad/casting/registry.json', 'null');
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'null-data'))).toBeUndefined();
+  });
+
+  it('does not crash when JSON parses to a string', () => {
+    writeFixture('string-data/.squad/casting/registry.json', JSON.stringify('just a string'));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'string-data'))).toBeUndefined();
+  });
+
+  it('does not crash when JSON parses to a number', () => {
+    writeFixture('number-data/.squad/casting/registry.json', '42');
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'number-data'))).toBeUndefined();
+  });
+
+  it('does not crash when JSON parses to an array', () => {
+    writeFixture('array-data/.squad/casting/registry.json', JSON.stringify([1, 2, 3]));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'array-data'))).toBeUndefined();
+  });
 });
 
 describe('discoverAgentTeams universe fallback',() => {
