@@ -612,9 +612,34 @@ describe('readUniverseFromRegistry', () => {
 
     expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-f'))).toBeUndefined();
   });
+
+  it('reads top-level universe field (members-array schema)', () => {
+    writeFixture('squad-g/.squad/casting/registry.json', JSON.stringify({
+      version: 1,
+      universe: 'Futurama',
+      created_at: '2026-02-22T02:52:58Z',
+      members: [
+        { persistent_name: 'Leela', folder: 'leela', role: 'Lead' },
+        { persistent_name: 'Bender', folder: 'bender', role: 'Backend' },
+      ],
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-g'))).toBe('Futurama');
+  });
+
+  it('prefers top-level universe over per-agent universe', () => {
+    writeFixture('squad-h/.squad/casting/registry.json', JSON.stringify({
+      universe: 'Top Level',
+      agents: {
+        rick: { persistent_name: 'Rick', universe: 'Per Agent', status: 'active' },
+      },
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-h'))).toBe('Top Level');
+  });
 });
 
-describe('discoverAgentTeams universe fallback', () => {
+describe('discoverAgentTeams universe fallback',() => {
   it('auto-detects universe from registry.json when team.md lacks Universe marker', () => {
     writeFixture('squad-a/.squad/team.md', '# Alpha Squad\n> The alpha team.\n');
     writeFixture('squad-a/.squad/casting/registry.json', JSON.stringify({
