@@ -60,12 +60,23 @@ export function readUniverseFromRegistry(squadPath: string): string | undefined 
       const raw = fs.readFileSync(registryPath, 'utf-8');
       const data = JSON.parse(raw) as {
         universe?: string;
+        persistent_names?: Array<{ persistent_name?: string; status?: string; universe?: string }>;
         agents?: Record<string, { status?: string; universe?: string }>;
       };
 
       // Top-level universe field (casting registry with members array)
       if (data?.universe) {
         return data.universe;
+      }
+
+      // persistent_names array (Squad casting system)
+      if (Array.isArray(data?.persistent_names)) {
+        const active = data.persistent_names.find(
+          a => a.universe && (!a.status || a.status === 'active'),
+        );
+        if (active?.universe) {
+          return active.universe;
+        }
       }
 
       // Per-agent universe (editless internal format)

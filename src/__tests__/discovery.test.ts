@@ -637,6 +637,59 @@ describe('readUniverseFromRegistry', () => {
 
     expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-h'))).toBe('Top Level');
   });
+
+  it('reads universe from persistent_names array', () => {
+    writeFixture('squad-pn1/.squad/casting/registry.json', JSON.stringify({
+      persistent_names: [
+        { persistent_name: 'Dutch', universe: 'predator', role: 'Lead', status: 'active' },
+        { persistent_name: 'Poncho', universe: 'predator', role: 'Frontend Dev', status: 'active' },
+      ],
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-pn1'))).toBe('predator');
+  });
+
+  it('skips inactive agents in persistent_names array', () => {
+    writeFixture('squad-pn2/.squad/casting/registry.json', JSON.stringify({
+      persistent_names: [
+        { persistent_name: 'Dutch', universe: 'retired-universe', status: 'inactive' },
+        { persistent_name: 'Poncho', universe: 'predator', status: 'active' },
+      ],
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-pn2'))).toBe('predator');
+  });
+
+  it('reads universe from persistent_names when status is absent', () => {
+    writeFixture('squad-pn3/.squad/casting/registry.json', JSON.stringify({
+      persistent_names: [
+        { persistent_name: 'Dutch', universe: 'predator', role: 'Lead' },
+      ],
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-pn3'))).toBe('predator');
+  });
+
+  it('returns undefined when all persistent_names agents are inactive', () => {
+    writeFixture('squad-pn4/.squad/casting/registry.json', JSON.stringify({
+      persistent_names: [
+        { persistent_name: 'Dutch', universe: 'predator', status: 'inactive' },
+      ],
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-pn4'))).toBeUndefined();
+  });
+
+  it('prefers top-level universe over persistent_names', () => {
+    writeFixture('squad-pn5/.squad/casting/registry.json', JSON.stringify({
+      universe: 'Top Level',
+      persistent_names: [
+        { persistent_name: 'Dutch', universe: 'predator', status: 'active' },
+      ],
+    }));
+
+    expect(readUniverseFromRegistry(path.join(tmpDir, 'squad-pn5'))).toBe('Top Level');
+  });
 });
 
 describe('discoverAgentTeams universe fallback',() => {
