@@ -147,6 +147,15 @@ export function createRegistry(context: vscode.ExtensionContext): EditlessRegist
     }
   }
 
+  // Auto-create empty registry for resilience (#406)
+  if (!fs.existsSync(registryPath)) {
+    const dir = path.dirname(registryPath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(registryPath, JSON.stringify({ version: '1.0', squads: [] }, null, 2), 'utf-8');
+  }
+
   return new EditlessRegistry(registryPath);
 }
 
