@@ -23,54 +23,19 @@ export class EditlessRegistry {
         seen.add(s.id);
         return true;
       });
-      // Migrate legacy launchCommand entries to structured fields
-      let needsPersist = false;
+      // Run in-memory migrations and re-detection; track if anything changed
+      let registryDirty = false;
       for (const squad of this._squads) {
-        const raw = squad as AgentTeamConfig & { launchCommand?: string };
-        if (raw.launchCommand) {
-          const modelMatch = raw.launchCommand.match(/--model\s+(\S+)/);
-          if (modelMatch) { squad.model = modelMatch[1]; }
-          // Extract remaining flags (strip copilot binary, --agent, --model)
-          const remaining = raw.launchCommand
-            .replace(/^\S+/, '')            // strip binary name
-            .replace(/--agent\s+\S+/g, '')
-            .replace(/--model\s+\S+/g, '')
-            .trim();
-          if (remaining) { squad.additionalArgs = remaining; }
-          delete raw.launchCommand;
-          needsPersist = true;
-        }
+        if (this.migrateLegacyLaunchCommand(squad)) { registryDirty = true; }
       }
-      // Re-detect universe for 'unknown' entries (#401) — only once per session
       if (!this._detectionDone) {
         this._detectionDone = true;
         for (const squad of this._squads) {
-          if (squad.universe === 'unknown' && squad.path) {
-            let detected: string | undefined;
-            try {
-              const teamMdPath = resolveTeamMd(squad.path);
-              if (teamMdPath) {
-                const content = fs.readFileSync(teamMdPath, 'utf-8');
-                const parsed = parseTeamMd(content, path.basename(squad.path));
-                if (parsed.universe !== 'unknown') {
-                  detected = parsed.universe;
-                }
-              }
-            } catch { /* team.md read/parse failure — continue to next source */ }
-            if (!detected) {
-              try {
-                detected = readUniverseFromRegistry(squad.path);
-              } catch { /* casting/registry.json failure — skip */ }
-            }
-            if (detected) {
-              squad.universe = detected;
-              needsPersist = true;
-            }
-          }
+          if (this.redetectUnknownUniverse(squad)) { registryDirty = true; }
         }
       }
       // Persist migration and re-detection changes to disk
-      if (needsPersist) {
+      if (registryDirty) {
         try {
           const existing = JSON.parse(fs.readFileSync(this.registryPath, 'utf-8'));
           existing.squads = this._squads;
@@ -86,6 +51,49 @@ export class EditlessRegistry {
       this._squads = [];
     }
     return this._squads;
+  }
+
+  /** Migrate a legacy `launchCommand` string to structured fields. Returns true if changes were made. */
+  private migrateLegacyLaunchCommand(squad: AgentTeamConfig): boolean {
+    const raw = squad as AgentTeamConfig & { launchCommand?: string };
+    if (!raw.launchCommand) { return false; }
+    const modelMatch = raw.launchCommand.match(/--model\s+(\S+)/);
+    if (modelMatch) { squad.model = modelMatch[1]; }
+    // Extract remaining flags (strip copilot binary, --agent, --model)
+    const remaining = raw.launchCommand
+      .replace(/^\S+/, '')            // strip binary name
+      .replace(/--agent\s+\S+/g, '')
+      .replace(/--model\s+\S+/g, '')
+      .trim();
+    if (remaining) { squad.additionalArgs = remaining; }
+    delete raw.launchCommand;
+    return true;
+  }
+
+  /** Re-detect universe for a squad with 'unknown' universe. Returns true if updated. */
+  private redetectUnknownUniverse(squad: AgentTeamConfig): boolean {
+    if (squad.universe !== 'unknown' || !squad.path) { return false; }
+    let detected: string | undefined;
+    try {
+      const teamMdPath = resolveTeamMd(squad.path);
+      if (teamMdPath) {
+        const content = fs.readFileSync(teamMdPath, 'utf-8');
+        const parsed = parseTeamMd(content, path.basename(squad.path));
+        if (parsed.universe !== 'unknown') {
+          detected = parsed.universe;
+        }
+      }
+    } catch { /* team.md read/parse failure — continue to next source */ }
+    if (!detected) {
+      try {
+        detected = readUniverseFromRegistry(squad.path);
+      } catch { /* casting/registry.json failure — skip */ }
+    }
+    if (detected) {
+      squad.universe = detected;
+      return true;
+    }
+    return false;
   }
 
   getSquad(id: string): AgentTeamConfig | undefined {
