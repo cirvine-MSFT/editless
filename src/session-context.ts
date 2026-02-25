@@ -183,12 +183,20 @@ export class SessionContextResolver {
         }
 
         if (lastParsed) {
+          // Turn-boundary events mean all tools in the previous turn completed.
+          // Don't trust stale open-start tracking from outside the tail window.
+          const turnBoundary = lastParsed.type === 'assistant.turn_end'
+            || lastParsed.type === 'user.message'
+            || lastParsed.type === 'session.idle'
+            || lastParsed.type === 'session.start'
+            || lastParsed.type === 'session.resume';
+
           event = {
             type: lastParsed.type,
             timestamp: lastParsed.timestamp,
             toolName: lastParsed.data?.toolName,
             toolCallId: lastParsed.data?.toolCallId,
-            hasOpenAskUser: openAskUserIds.size > 0,
+            hasOpenAskUser: !turnBoundary && openAskUserIds.size > 0,
           };
         }
       } finally {
@@ -252,12 +260,18 @@ export class SessionContextResolver {
           }
 
           if (lastParsed) {
+            const turnBoundary = lastParsed.type === 'assistant.turn_end'
+              || lastParsed.type === 'user.message'
+              || lastParsed.type === 'session.idle'
+              || lastParsed.type === 'session.start'
+              || lastParsed.type === 'session.resume';
+
             callback({
               type: lastParsed.type,
               timestamp: lastParsed.timestamp,
               toolName: lastParsed.data?.toolName,
               toolCallId: lastParsed.data?.toolCallId,
-              hasOpenAskUser: openAskUserIds.size > 0,
+              hasOpenAskUser: !turnBoundary && openAskUserIds.size > 0,
             });
           }
         } finally {
