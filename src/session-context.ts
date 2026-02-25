@@ -27,6 +27,12 @@ function normalizePath(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
+/**
+ * Simplified session event used internally.  The `type` field aligns with
+ * the official `CopilotEventType` from `github/copilot-sdk` (see
+ * `src/copilot-sdk-types.ts`), but we keep it as `string` so unknown
+ * future events don't break parsing.
+ */
 export interface SessionEvent {
   type: string;
   timestamp: string;

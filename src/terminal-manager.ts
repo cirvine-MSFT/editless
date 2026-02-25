@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
+import { CopilotEvents } from './copilot-sdk-types';
 import { buildLaunchCommandForConfig } from './copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
@@ -784,29 +785,22 @@ export class TerminalManager implements vscode.Disposable {
 
 /** Returns true if the event indicates the agent is waiting for user input. */
 function isAttentionEvent(event: SessionEvent): boolean {
-  switch (event.type) {
-    case 'assistant.ask_user':
-    case 'user.ask':
-      return true;
-    case 'tool.execution_start':
-      return event.toolName === 'ask_user';
-    default:
-      return false;
+  if (event.type === CopilotEvents.ToolExecutionStart) {
+    return event.toolName === 'ask_user';
   }
+  return false;
 }
 
 /** Returns true if the event type indicates the agent is actively working. */
 function isWorkingEvent(eventType: string): boolean {
   switch (eventType) {
-    case 'assistant.turn_start':
-    case 'assistant.message':
-    case 'assistant.thinking':
-    case 'assistant.code_edit':
-    case 'tool.execution_start':
-    case 'tool.execution_complete':
-    case 'tool.result':
-    case 'user.message':
-    case 'session.resume':
+    case CopilotEvents.AssistantTurnStart:
+    case CopilotEvents.AssistantMessage:
+    case CopilotEvents.AssistantThinking:
+    case CopilotEvents.ToolExecutionStart:
+    case CopilotEvents.ToolExecutionComplete:
+    case CopilotEvents.UserMessage:
+    case CopilotEvents.SessionResume:
       return true;
     default:
       return false;

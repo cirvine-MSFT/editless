@@ -1103,7 +1103,7 @@ describe('TerminalManager', () => {
         expect(state).toBe('active');
       });
 
-      it('should return attention when last event is user.ask', () => {
+      it('should return active when last event is user.message (official schema)', () => {
         let capturedCallback: ((event: any) => void) | undefined;
         const mockResolver = {
           resolveAll: vi.fn().mockReturnValue(new Map()),
@@ -1126,11 +1126,11 @@ describe('TerminalManager', () => {
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
-        // Simulate a user.ask event via the watcher callback
-        capturedCallback!({ type: 'user.ask', timestamp: Date.now() });
+        // Simulate a user.message event via the watcher callback
+        capturedCallback!({ type: 'user.message', timestamp: Date.now() });
 
         const state = mgr.getSessionState(terminal);
-        expect(state).toBe('attention');
+        expect(state).toBe('active');
       });
 
       it('should transition from attention back to active on working event', () => {
