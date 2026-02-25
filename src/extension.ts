@@ -19,7 +19,7 @@ import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
 import { SessionContextResolver } from './session-context';
-import { scanSquad } from './scanner';
+
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
 import { resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
 import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState, type LevelFilter } from './work-items-tree';
@@ -185,10 +185,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
 
   // --- Squad file watcher — live .squad/ (or .ai-team/) updates ----------
   const squadWatcher = new SquadWatcher(registry.loadSquads(), (squadId) => {
-    const config = registry.getSquad(squadId);
-    if (config) {
-      scanSquad(config);
-    }
     treeProvider.invalidate(squadId);
     treeProvider.refresh();
     statusBar.update();
@@ -196,10 +192,11 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(squadWatcher);
 
   // --- Registry file watcher — refresh tree on changes -------------------
-  const registryWatcher = watchRegistry(registry, () => {
+  // Refresh tree immediately; defer watcher rebuild so the UI updates first (#399)
+  const registryWatcher = watchRegistry(registry, (squads) => {
     treeProvider.refresh();
-    squadWatcher.updateSquads(registry.loadSquads());
     statusBar.update();
+    setTimeout(() => squadWatcher.updateSquads(squads), 0);
   });
   context.subscriptions.push(registryWatcher);
 

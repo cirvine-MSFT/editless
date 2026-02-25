@@ -169,12 +169,12 @@ export function createRegistry(context: vscode.ExtensionContext): EditlessRegist
 
 export function watchRegistry(
   registry: EditlessRegistry,
-  onChange: () => void,
+  onChange: (squads: AgentTeamConfig[]) => void,
 ): vscode.Disposable {
   const watcher = vscode.workspace.createFileSystemWatcher(registry.registryPath);
   const handler = () => {
-    registry.loadSquads();
-    onChange();
+    const squads = registry.loadSquads();
+    onChange(squads);
   };
   watcher.onDidChange(handler);
   watcher.onDidCreate(handler);
