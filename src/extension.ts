@@ -37,6 +37,22 @@ function getCreateCommand(): string {
   return '';
 }
 
+/**
+ * Returns all available agents for the picker, including the built-in Copilot CLI agent.
+ * The built-in agent is always available even when no squads are registered.
+ */
+function getAllAgentsForPicker(squads: AgentTeamConfig[]): AgentTeamConfig[] {
+  const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+  const builtinAgent: AgentTeamConfig = {
+    id: DEFAULT_COPILOT_CLI_ID,
+    name: 'Copilot CLI',
+    path: cwd ?? '',
+    icon: '🤖',
+    universe: 'standalone',
+  };
+  return [builtinAgent, ...squads];
+}
+
 /** For a discovered agent file path, derive the project root.
  *  e.g. C:\project\.github\agents\foo.agent.md → C:\project
  *  Falls back to dirname if not inside .github/agents/. */
@@ -323,24 +339,23 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       }
 
       const squads = registry.loadSquads();
-      if (squads.length === 0) {
-        vscode.window.showWarningMessage('No agents registered yet.');
-        return;
-      }
+      const allAgents = getAllAgentsForPicker(squads);
 
       let chosen: string | undefined = typeof squadIdOrItem === 'string'
         ? squadIdOrItem
         : squadIdOrItem?.squadId;
       if (!chosen) {
         const pick = await vscode.window.showQuickPick(
-          squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, id: s.id })),
+          allAgents.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, id: s.id })),
           { placeHolder: 'Select an agent to launch' },
         );
         chosen = pick?.id;
       }
 
       if (chosen) {
-        const cfg = registry.getSquad(chosen);
+        const cfg = chosen === DEFAULT_COPILOT_CLI_ID
+          ? allAgents.find(a => a.id === DEFAULT_COPILOT_CLI_ID)
+          : registry.getSquad(chosen);
         if (cfg) {
           terminalManager.launchTerminal(cfg);
         }
@@ -964,17 +979,14 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!issue && !adoItem) return;
 
       const squads = registry.loadSquads();
-      if (squads.length === 0) {
-        vscode.window.showWarningMessage('No agents registered.');
-        return;
-      }
+      const allAgents = getAllAgentsForPicker(squads);
 
       const number = issue?.number ?? adoItem?.id;
       const title = issue?.title ?? adoItem?.title ?? '';
       const url = issue?.url ?? adoItem?.url ?? '';
 
       const pick = await vscode.window.showQuickPick(
-        squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, squad: s })),
+        allAgents.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, squad: s })),
         { placeHolder: `Launch agent for #${number} ${title}` },
       );
       if (!pick) return;
@@ -1046,17 +1058,14 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       if (!pr && !adoPR) return;
 
       const squads = registry.loadSquads();
-      if (squads.length === 0) {
-        vscode.window.showWarningMessage('No agents registered.');
-        return;
-      }
+      const allAgents = getAllAgentsForPicker(squads);
 
       const number = pr?.number ?? adoPR?.id;
       const title = pr?.title ?? adoPR?.title ?? '';
       const url = pr?.url ?? adoPR?.url ?? '';
 
       const pick = await vscode.window.showQuickPick(
-        squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, squad: s })),
+        allAgents.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, squad: s })),
         { placeHolder: `Launch agent for PR #${number} ${title}` },
       );
       if (!pick) return;

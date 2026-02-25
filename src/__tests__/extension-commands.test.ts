@@ -489,10 +489,16 @@ describe('extension command handlers', () => {
   // --- editless.launchSession -----------------------------------------------
 
   describe('editless.launchSession', () => {
-    it('should show warning when registry is empty', async () => {
+    it('should show QuickPick with built-in agent when registry is empty', async () => {
       mockLoadSquads.mockReturnValue([]);
+      mockShowQuickPick.mockResolvedValue(undefined); // user dismisses
       await getHandler('editless.launchSession')();
-      expect(mockShowWarningMessage).toHaveBeenCalledWith('No agents registered yet.');
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ label: '🤖 Copilot CLI', description: 'standalone' }),
+        ]),
+        expect.objectContaining({ placeHolder: 'Select an agent to launch' }),
+      );
       expect(mockLaunchTerminal).not.toHaveBeenCalled();
     });
 
@@ -1367,11 +1373,17 @@ describe('extension command handlers', () => {
   // --- editless.launchFromWorkItem -------------------------------------------
 
   describe('editless.launchFromWorkItem', () => {
-    it('should show warning when no squads registered', async () => {
+    it('should show QuickPick with built-in agent when no squads registered', async () => {
       const item = { issue: { number: 42, title: 'Fix bug', url: 'https://example.com/42' } };
       mockLoadSquads.mockReturnValue([]);
+      mockShowQuickPick.mockResolvedValue(undefined); // user dismisses
       await getHandler('editless.launchFromWorkItem')(item);
-      expect(mockShowWarningMessage).toHaveBeenCalledWith('No agents registered.');
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ label: '🤖 Copilot CLI', description: 'standalone' }),
+        ]),
+        expect.objectContaining({ placeHolder: 'Launch agent for #42 Fix bug' }),
+      );
     });
 
     it('should show QuickPick and launch terminal for selected squad', async () => {
@@ -1979,11 +1991,17 @@ describe('editless.promoteDiscoveredAgent', () => {
   // --- editless.launchFromPR -------------------------------------------------
 
   describe('editless.launchFromPR', () => {
-    it('should show warning when no squads registered', async () => {
+    it('should show QuickPick with built-in agent when no squads registered', async () => {
       const item = { pr: { number: 100, title: 'Add feature', url: 'https://github.com/owner/repo/pull/100' } };
       mockLoadSquads.mockReturnValue([]);
+      mockShowQuickPick.mockResolvedValue(undefined); // user dismisses
       await getHandler('editless.launchFromPR')(item);
-      expect(mockShowWarningMessage).toHaveBeenCalledWith('No agents registered.');
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ label: '🤖 Copilot CLI', description: 'standalone' }),
+        ]),
+        expect.objectContaining({ placeHolder: 'Launch agent for PR #100 Add feature' }),
+      );
     });
 
     it('should show QuickPick and launch terminal for GitHub PR', async () => {
