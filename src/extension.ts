@@ -19,6 +19,7 @@ import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
 import { SessionContextResolver } from './session-context';
+import { buildCopilotCommand } from './copilot-cli-builder';
 import { scanSquad } from './scanner';
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
 import { resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
@@ -1121,6 +1122,123 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.relaunchAllOrphans', () => {
       terminalManager.relaunchAllOrphans();
+    }),
+  );
+
+  // Resume External Session — pick from ~/.copilot/session-state/ (#415)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.resumeExternalSession', async () => {
+      const allSessions = sessionContextResolver.getAllSessions();
+      if (allSessions.length === 0) {
+        vscode.window.showInformationMessage('No Copilot CLI sessions found in ~/.copilot/session-state/.');
+        return;
+      }
+
+      // Filter out sessions already tracked by EditLess
+      const trackedIds = new Set(
+        terminalManager.getAllTerminals()
+          .map(({ info }) => info.agentSessionId)
+          .filter((id): id is string => !!id),
+      );
+      // Also exclude orphaned sessions already shown in the tree
+      for (const orphan of terminalManager.getOrphanedSessions()) {
+        if (orphan.agentSessionId) trackedIds.add(orphan.agentSessionId);
+      }
+
+      const external = allSessions.filter(s => !trackedIds.has(s.sessionId));
+      if (external.length === 0) {
+        vscode.window.showInformationMessage('All sessions are already active in EditLess.');
+        return;
+      }
+
+      // Sort CWD-matched sessions to top
+      const workspaceCwds = (vscode.workspace.workspaceFolders ?? []).map(f =>
+        f.uri.fsPath.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase(),
+      );
+      const cwdMatch = (cwd: string): boolean => {
+        const norm = cwd.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+        return workspaceCwds.some(w => norm === w || norm.startsWith(w + '/'));
+      };
+
+      const sorted = [...external].sort((a, b) => {
+        const aMatch = cwdMatch(a.cwd) ? 0 : 1;
+        const bMatch = cwdMatch(b.cwd) ? 0 : 1;
+        if (aMatch !== bMatch) return aMatch - bMatch;
+        // Within same group, sort by updatedAt descending
+        return b.updatedAt.localeCompare(a.updatedAt);
+      });
+
+      type SessionPickItem = vscode.QuickPickItem & { sessionId?: string };
+      const items: SessionPickItem[] = sorted.map(s => {
+        const parts: string[] = [];
+        if (s.branch) parts.push(s.branch);
+        if (s.cwd) parts.push(s.cwd);
+        const match = cwdMatch(s.cwd);
+        return {
+          label: `${match ? '$(folder) ' : ''}${s.summary || s.sessionId.slice(0, 8)}`,
+          description: parts.join(' · '),
+          detail: `${s.sessionId}  ·  ${s.updatedAt || s.createdAt}`,
+          sessionId: s.sessionId,
+        };
+      });
+
+      // Add "Paste GUID directly" fallback
+      items.push({
+        label: '$(edit) Paste session ID directly…',
+        description: 'Enter a UUID to resume',
+        sessionId: undefined,
+      });
+
+      const pick = await vscode.window.showQuickPick(items, {
+        placeHolder: 'Select a session to resume (search by summary, branch, or ID)',
+        matchOnDescription: true,
+        matchOnDetail: true,
+      });
+      if (!pick) return;
+
+      let sessionId = pick.sessionId;
+      if (!sessionId) {
+        const input = await vscode.window.showInputBox({
+          prompt: 'Enter session ID (UUID)',
+          placeHolder: 'e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+          validateInput: v => /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+            ? null : 'Enter a valid UUID',
+        });
+        if (!input) return;
+        sessionId = input;
+      }
+
+      // Validate resumability
+      const check = sessionContextResolver.isSessionResumable(sessionId);
+      if (!check.resumable) {
+        vscode.window.showErrorMessage(`Cannot resume session: ${check.reason}`);
+        return;
+      }
+      if (check.stale) {
+        const proceed = await vscode.window.showWarningMessage(
+          `This session hasn't been updated in over ${SessionContextResolver.STALE_SESSION_DAYS} days. Resume anyway?`,
+          'Resume', 'Cancel',
+        );
+        if (proceed !== 'Resume') return;
+      }
+
+      // Find the session's CWD to use as terminal working directory
+      const session = allSessions.find(s => s.sessionId === sessionId);
+      const cwd = session?.cwd || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
+
+      const launchCmd = buildCopilotCommand({ resume: sessionId });
+      const displayName = session?.summary
+        ? `↩ ${session.summary}`.slice(0, 50)
+        : `↩ ${sessionId.slice(0, 8)}`;
+
+      const terminal = vscode.window.createTerminal({
+        name: displayName,
+        cwd,
+        isTransient: true,
+        iconPath: new vscode.ThemeIcon('history'),
+      });
+      terminal.sendText(launchCmd);
+      terminal.show(false);
     }),
   );
 

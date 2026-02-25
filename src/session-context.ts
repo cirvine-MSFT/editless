@@ -49,7 +49,7 @@ interface EventCacheEntry {
 }
 
 /** Lightweight record stored in the CWD index — no plan.md parsing. */
-interface CwdIndexEntry {
+export interface CwdIndexEntry {
   sessionId: string;
   cwd: string;
   summary: string;
@@ -411,6 +411,19 @@ export class SessionContextResolver {
     this._cwdIndex = index;
     this._indexedDirCount = dirEntries.length;
     return index;
+  }
+
+  /**
+   * Return every session in ~/.copilot/session-state/ as a flat array.
+   * Lightweight — reads workspace.yaml only, skips plan.md.
+   */
+  getAllSessions(): CwdIndexEntry[] {
+    const index = this._ensureIndex();
+    const all: CwdIndexEntry[] = [];
+    for (const entries of index.values()) {
+      all.push(...entries);
+    }
+    return all;
   }
 
   private _scan(squadPaths: string[]): Map<string, SessionContext> {

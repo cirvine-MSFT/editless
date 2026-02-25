@@ -299,6 +299,12 @@
         "icon": "$(debug-restart)"
       },
       {
+        "command": "editless.resumeExternalSession",
+        "title": "Resume External Session...",
+        "category": "EditLess",
+        "icon": "$(history)"
+      },
+      {
         "command": "editless.filterLevel",
         "title": "Filter...",
         "category": "EditLess",
@@ -408,6 +414,11 @@
           "command": "editless.launchSession",
           "when": "view == editlessTree && viewItem =~ /^squad|^agent|^default-agent$/",
           "group": "session@0"
+        },
+        {
+          "command": "editless.resumeExternalSession",
+          "when": "view == editlessTree && viewItem =~ /^squad|^agent|^default-agent$/",
+          "group": "session@1"
         },
         {
           "command": "editless.renameSquad",
