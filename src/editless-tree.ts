@@ -505,6 +505,8 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     }
     item.description = agent.role;
     item.iconPath = new vscode.ThemeIcon('person');
+    // Override contextValue — roster agents are informational, not launchable
+    item.contextValue = 'roster-agent';
     return item;
   }
 
