@@ -597,6 +597,29 @@ summary: Modified`,
         expect(event?.hasOpenAskUser).toBe(true);
       });
 
+      it('preserves open ask_user when last event is mid-tool session.plan_changed', () => {
+        writeEvents('mid-tool-plan', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'ACTIVE' } },
+          { type: 'session.plan_changed', timestamp: '2026-01-01T00:00:01Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('mid-tool-plan');
+        expect(event?.type).toBe('session.plan_changed');
+        expect(event?.hasOpenAskUser).toBe(true);
+      });
+
+      it('clears all open ask_user when tool.execution_complete lacks toolCallId', () => {
+        writeEvents('missing-callid', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'A1' } },
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:01Z', data: { toolName: 'ask_user', toolCallId: 'A2' } },
+          { type: 'tool.execution_complete', timestamp: '2026-01-01T00:00:02Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('missing-callid');
+        expect(event?.type).toBe('tool.execution_complete');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
       it('hasOpenAskUser is false at turn boundary even without prior ask_user', () => {
         writeEvents('clean-turn-end', [
           { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'powershell', toolCallId: 'CMD' } },

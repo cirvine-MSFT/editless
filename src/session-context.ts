@@ -176,8 +176,12 @@ export class SessionContextResolver {
             lastParsed = parsed;
             if (parsed.type === 'tool.execution_start' && parsed.data?.toolName === 'ask_user' && parsed.data?.toolCallId) {
               openAskUserIds.add(parsed.data.toolCallId);
-            } else if (parsed.type === 'tool.execution_complete' && parsed.data?.toolCallId) {
-              openAskUserIds.delete(parsed.data.toolCallId);
+            } else if (parsed.type === 'tool.execution_complete') {
+              if (parsed.data?.toolCallId) {
+                openAskUserIds.delete(parsed.data.toolCallId);
+              } else {
+                openAskUserIds.clear();
+              }
             }
           } catch { /* skip malformed lines */ }
         }
@@ -255,8 +259,12 @@ export class SessionContextResolver {
               lastParsed = parsed;
               if (parsed.type === 'tool.execution_start' && parsed.data?.toolName === 'ask_user' && parsed.data?.toolCallId) {
                 openAskUserIds.add(parsed.data.toolCallId);
-              } else if (parsed.type === 'tool.execution_complete' && parsed.data?.toolCallId) {
-                openAskUserIds.delete(parsed.data.toolCallId);
+              } else if (parsed.type === 'tool.execution_complete') {
+                if (parsed.data?.toolCallId) {
+                  openAskUserIds.delete(parsed.data.toolCallId);
+                } else {
+                  openAskUserIds.clear();
+                }
               }
             } catch { /* skip malformed lines */ }
           }
