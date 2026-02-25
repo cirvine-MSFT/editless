@@ -514,7 +514,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const item = new EditlessTreeItem(agent.name, 'discovered-agent');
     item.id = `discovered:${agent.id}`;
     item.description = agent.description ?? agent.source;
-    item.iconPath = new vscode.ThemeIcon('hubot');
+    item.iconPath = new vscode.ThemeIcon('compass');
     item.tooltip = new vscode.MarkdownString(
       [`**🤖 ${agent.name}**`, `Source: ${agent.source}`, `File: \`${agent.filePath}\``].join('\n\n'),
     );
@@ -539,7 +539,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const item = new EditlessTreeItem(disc.name, 'discovered-agent');
     item.id = `discovered:${disc.id}`;
     item.description = disc.description ?? disc.source;
-    item.iconPath = new vscode.ThemeIcon('hubot');
+    item.iconPath = new vscode.ThemeIcon('compass');
     item.tooltip = new vscode.MarkdownString(
       [`**🤖 ${disc.name}**`, `Source: ${disc.source}`, `File: \`${disc.path}\``].join('\n\n'),
     );
@@ -564,7 +564,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const item = new EditlessTreeItem(disc.name, 'discovered-squad');
     item.id = `discovered:${disc.id}`;
     item.description = disc.universe ?? disc.source;
-    item.iconPath = new vscode.ThemeIcon('organization');
+    item.iconPath = new vscode.ThemeIcon('compass');
     item.tooltip = new vscode.MarkdownString(
       [`**🔷 ${disc.name}**`, `Source: ${disc.source}`, `Path: \`${disc.path}\``, disc.universe ? `Universe: ${disc.universe}` : ''].filter(Boolean).join('\n\n'),
     );

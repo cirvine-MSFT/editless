@@ -63,9 +63,9 @@
     "commands": [
       {
         "command": "editless.launchSession",
-        "title": "Launch Session",
+        "title": "New Session",
         "category": "EditLess",
-        "icon": "$(add)"
+        "icon": "$(play)"
       },
       {
         "command": "editless.focusSession",
@@ -134,7 +134,8 @@
       },
       {
         "command": "editless.hideAgent",
-        "title": "Hide"
+        "title": "Hide",
+        "icon": "$(eye-closed)"
       },
       {
         "command": "editless.showHiddenAgents",
