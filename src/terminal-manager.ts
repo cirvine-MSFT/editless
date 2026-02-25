@@ -569,7 +569,7 @@ export class TerminalManager implements vscode.Disposable {
     // the actual copilot agent state rather than the outer shell process.
     const lastEvent = this._lastSessionEvent.get(terminal);
     if (lastEvent) {
-      if (isAttentionEvent(lastEvent.type)) return 'attention';
+      if (isAttentionEvent(lastEvent)) return 'attention';
       return isWorkingEvent(lastEvent.type) ? 'active' : 'inactive';
     }
 
@@ -782,12 +782,14 @@ export class TerminalManager implements vscode.Disposable {
 
 // -- Exported helpers for tree view and testability -------------------------
 
-/** Returns true if the event type indicates the agent is waiting for user input. */
-function isAttentionEvent(eventType: string): boolean {
-  switch (eventType) {
+/** Returns true if the event indicates the agent is waiting for user input. */
+function isAttentionEvent(event: SessionEvent): boolean {
+  switch (event.type) {
     case 'assistant.ask_user':
     case 'user.ask':
       return true;
+    case 'tool.execution_start':
+      return event.toolName === 'ask_user';
     default:
       return false;
   }

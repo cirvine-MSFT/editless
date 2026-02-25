@@ -30,6 +30,7 @@ function normalizePath(p: string): string {
 export interface SessionEvent {
   type: string;
   timestamp: string;
+  toolName?: string;
 }
 
 export interface SessionResumability {
@@ -157,7 +158,7 @@ export class SessionContextResolver {
         const lastLine = lines[lines.length - 1];
         if (lastLine) {
           const parsed = JSON.parse(lastLine);
-          event = { type: parsed.type, timestamp: parsed.timestamp };
+          event = { type: parsed.type, timestamp: parsed.timestamp, toolName: parsed.data?.toolName };
         }
       } finally {
         fs.closeSync(fd);
@@ -204,7 +205,7 @@ export class SessionContextResolver {
           const lastLine = lines[lines.length - 1];
           if (lastLine) {
             const parsed = JSON.parse(lastLine);
-            callback({ type: parsed.type, timestamp: parsed.timestamp });
+            callback({ type: parsed.type, timestamp: parsed.timestamp, toolName: parsed.data?.toolName });
           }
         } finally {
           fs.closeSync(fd);

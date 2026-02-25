@@ -1043,7 +1043,7 @@ describe('TerminalManager', () => {
         expect(state).toBe('inactive');
       });
 
-      it('should return attention when last event is assistant.ask_user', () => {
+      it('should return attention when last event is tool.execution_start with toolName ask_user', () => {
         let capturedCallback: ((event: any) => void) | undefined;
         const mockResolver = {
           resolveAll: vi.fn().mockReturnValue(new Map()),
@@ -1066,11 +1066,41 @@ describe('TerminalManager', () => {
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
-        // Simulate an ask_user event via the watcher callback
-        capturedCallback!({ type: 'assistant.ask_user', timestamp: Date.now() });
+        // Simulate an ask_user tool execution event via the watcher callback
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'ask_user', timestamp: Date.now() });
 
         const state = mgr.getSessionState(terminal);
         expect(state).toBe('attention');
+      });
+
+      it('should stay active for non-ask_user tool.execution_start events', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate a non-ask_user tool execution — should remain active
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'powershell', timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('active');
       });
 
       it('should return attention when last event is user.ask', () => {
@@ -1127,7 +1157,7 @@ describe('TerminalManager', () => {
         const terminal = mgr.launchTerminal(config);
 
         // First: enter attention state
-        capturedCallback!({ type: 'assistant.ask_user', timestamp: Date.now() });
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'ask_user', timestamp: Date.now() });
         expect(mgr.getSessionState(terminal)).toBe('attention');
 
         // Then: transition back to active on a working event
