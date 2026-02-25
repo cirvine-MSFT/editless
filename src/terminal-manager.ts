@@ -2,13 +2,14 @@ import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
+import { CopilotEvents } from './copilot-sdk-types';
 import { buildLaunchCommandForConfig } from './copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------
 
-export type SessionState = 'launching' | 'active' | 'inactive' | 'orphaned';
+export type SessionState = 'launching' | 'active' | 'inactive' | 'attention' | 'orphaned';
 
 export interface TerminalInfo {
   id: string;
@@ -569,6 +570,7 @@ export class TerminalManager implements vscode.Disposable {
     // the actual copilot agent state rather than the outer shell process.
     const lastEvent = this._lastSessionEvent.get(terminal);
     if (lastEvent) {
+      if (isAttentionEvent(lastEvent)) return 'attention';
       return isWorkingEvent(lastEvent.type) ? 'active' : 'inactive';
     }
 
@@ -781,18 +783,21 @@ export class TerminalManager implements vscode.Disposable {
 
 // -- Exported helpers for tree view and testability -------------------------
 
+/** Returns true if the event indicates the agent is waiting for user input. */
+function isAttentionEvent(event: SessionEvent): boolean {
+  return event.hasOpenAskUser === true;
+}
+
 /** Returns true if the event type indicates the agent is actively working. */
 function isWorkingEvent(eventType: string): boolean {
   switch (eventType) {
-    case 'assistant.turn_start':
-    case 'assistant.message':
-    case 'assistant.thinking':
-    case 'assistant.code_edit':
-    case 'tool.execution_start':
-    case 'tool.execution_complete':
-    case 'tool.result':
-    case 'user.message':
-    case 'session.resume':
+    case CopilotEvents.AssistantTurnStart:
+    case CopilotEvents.AssistantMessage:
+    case CopilotEvents.AssistantThinking:
+    case CopilotEvents.ToolExecutionStart:
+    case CopilotEvents.ToolExecutionComplete:
+    case CopilotEvents.UserMessage:
+    case CopilotEvents.SessionResume:
       return true;
     default:
       return false;
@@ -804,6 +809,8 @@ export function getStateIcon(state: SessionState, resumable = false): vscode.The
     case 'launching':
     case 'active':
       return new vscode.ThemeIcon('loading~spin');
+    case 'attention':
+      return new vscode.ThemeIcon('comment-discussion');
     case 'inactive':
       return new vscode.ThemeIcon('circle-outline');
     case 'orphaned':
@@ -819,6 +826,8 @@ export function getStateDescription(state: SessionState, lastActivityAt?: number
   switch (state) {
     case 'launching':
       return 'launching…';
+    case 'attention':
+      return 'waiting for input';
     case 'orphaned':
       return resumable ? 'previous session — resume' : 'session ended';
     case 'active':

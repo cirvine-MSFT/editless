@@ -399,7 +399,7 @@ summary: Modified`,
       resolver._sessionStateDir = tmpSessionDir;
     });
 
-    function writeEvents(sessionId: string, events: Array<{ type: string; timestamp: string }>): void {
+    function writeEvents(sessionId: string, events: Array<Record<string, any>>): void {
       const sessionDir = path.join(tmpSessionDir, sessionId);
       fs.mkdirSync(sessionDir, { recursive: true });
       const lines = events.map(e => JSON.stringify(e)).join('\n') + '\n';
@@ -414,7 +414,13 @@ summary: Modified`,
       ]);
 
       const event = resolver.getLastEvent('session-1');
-      expect(event).toEqual({ type: 'assistant.turn_end', timestamp: '2026-01-01T00:02:00Z' });
+      expect(event).toEqual({
+        type: 'assistant.turn_end',
+        timestamp: '2026-01-01T00:02:00Z',
+        toolName: undefined,
+        toolCallId: undefined,
+        hasOpenAskUser: false,
+      });
     });
 
     it('returns null for non-existent session', () => {
@@ -465,6 +471,166 @@ summary: Modified`,
 
       const event = resolver.getLastEvent('working-session');
       expect(event?.type).toBe('tool.execution_start');
+    });
+
+    it('detects open ask_user when parallel tool calls mask it', () => {
+      writeEvents('parallel-ask', [
+        { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'report_intent', toolCallId: 'AAA' } },
+        { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:01Z', data: { toolName: 'ask_user', toolCallId: 'BBB' } },
+        { type: 'tool.execution_complete', timestamp: '2026-01-01T00:00:02Z', data: { toolCallId: 'AAA' } },
+      ]);
+
+      const event = resolver.getLastEvent('parallel-ask');
+      expect(event?.type).toBe('tool.execution_complete');
+      expect(event?.hasOpenAskUser).toBe(true);
+    });
+
+    it('hasOpenAskUser is false when ask_user completes in tail', () => {
+      writeEvents('ask-completed', [
+        { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'BBB' } },
+        { type: 'tool.execution_complete', timestamp: '2026-01-01T00:00:01Z', data: { toolCallId: 'BBB' } },
+      ]);
+
+      const event = resolver.getLastEvent('ask-completed');
+      expect(event?.type).toBe('tool.execution_complete');
+      expect(event?.hasOpenAskUser).toBe(false);
+    });
+
+    it('hasOpenAskUser is false when no ask_user events present', () => {
+      writeEvents('no-ask', [
+        { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'powershell', toolCallId: 'CCC' } },
+        { type: 'tool.execution_complete', timestamp: '2026-01-01T00:00:01Z', data: { toolCallId: 'CCC' } },
+      ]);
+
+      const event = resolver.getLastEvent('no-ask');
+      expect(event?.hasOpenAskUser).toBe(false);
+    });
+
+    describe('turn-boundary guard on hasOpenAskUser', () => {
+      it('clears stale ask_user when last event is assistant.turn_end', () => {
+        writeEvents('stale-turn-end', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'STALE' } },
+          { type: 'assistant.turn_end', timestamp: '2026-01-01T00:01:00Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('stale-turn-end');
+        expect(event?.type).toBe('assistant.turn_end');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
+      it('clears stale ask_user when last event is user.message', () => {
+        writeEvents('stale-user-msg', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'STALE' } },
+          { type: 'user.message', timestamp: '2026-01-01T00:01:00Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('stale-user-msg');
+        expect(event?.type).toBe('user.message');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
+      it('clears stale ask_user when last event is session.idle', () => {
+        writeEvents('stale-idle', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'STALE' } },
+          { type: 'session.idle', timestamp: '2026-01-01T00:01:00Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('stale-idle');
+        expect(event?.type).toBe('session.idle');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
+      it('clears stale ask_user when last event is session.start', () => {
+        writeEvents('stale-start', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'STALE' } },
+          { type: 'session.start', timestamp: '2026-01-01T00:01:00Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('stale-start');
+        expect(event?.type).toBe('session.start');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
+      it('clears stale ask_user when last event is session.resume', () => {
+        writeEvents('stale-resume', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'STALE' } },
+          { type: 'session.resume', timestamp: '2026-01-01T00:01:00Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('stale-resume');
+        expect(event?.type).toBe('session.resume');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
+      it('clears stale ask_user when last event is session.info (real bug: session 630a96da)', () => {
+        writeEvents('stale-info', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'STALE' } },
+          { type: 'session.resume', timestamp: '2026-01-01T00:01:00Z', data: {} },
+          { type: 'session.info', timestamp: '2026-01-01T00:01:01Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('stale-info');
+        expect(event?.type).toBe('session.info');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
+      it('clears stale ask_user when last event is session.shutdown', () => {
+        writeEvents('stale-shutdown', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'STALE' } },
+          { type: 'session.shutdown', timestamp: '2026-01-01T00:01:00Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('stale-shutdown');
+        expect(event?.type).toBe('session.shutdown');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
+      it('preserves open ask_user when last event is NOT a turn boundary', () => {
+        writeEvents('active-ask', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'ACTIVE' } },
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:01Z', data: { toolName: 'report_intent', toolCallId: 'INTENT' } },
+          { type: 'tool.execution_complete', timestamp: '2026-01-01T00:00:02Z', data: { toolCallId: 'INTENT' } },
+        ]);
+
+        const event = resolver.getLastEvent('active-ask');
+        expect(event?.type).toBe('tool.execution_complete');
+        expect(event?.hasOpenAskUser).toBe(true);
+      });
+
+      it('preserves open ask_user when last event is mid-tool session.plan_changed', () => {
+        writeEvents('mid-tool-plan', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'ACTIVE' } },
+          { type: 'session.plan_changed', timestamp: '2026-01-01T00:00:01Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('mid-tool-plan');
+        expect(event?.type).toBe('session.plan_changed');
+        expect(event?.hasOpenAskUser).toBe(true);
+      });
+
+      it('clears all open ask_user when tool.execution_complete lacks toolCallId', () => {
+        writeEvents('missing-callid', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'A1' } },
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:01Z', data: { toolName: 'ask_user', toolCallId: 'A2' } },
+          { type: 'tool.execution_complete', timestamp: '2026-01-01T00:00:02Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('missing-callid');
+        expect(event?.type).toBe('tool.execution_complete');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
+      it('hasOpenAskUser is false at turn boundary even without prior ask_user', () => {
+        writeEvents('clean-turn-end', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'powershell', toolCallId: 'CMD' } },
+          { type: 'tool.execution_complete', timestamp: '2026-01-01T00:00:01Z', data: { toolCallId: 'CMD' } },
+          { type: 'assistant.turn_end', timestamp: '2026-01-01T00:01:00Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('clean-turn-end');
+        expect(event?.type).toBe('assistant.turn_end');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
     });
   });
 
@@ -701,10 +867,45 @@ summary: Modified`,
       // May or may not fire depending on watcher behavior — just verify no crash
       disposable.dispose();
     });
+
+    it('watcher callback respects turn-boundary guard on hasOpenAskUser', async () => {
+      const module = await import('../session-context');
+      const resolver: any = new module.SessionContextResolver();
+      resolver._sessionStateDir = tmpSessionDir;
+
+      const sessionId = 'watcher-turn-boundary';
+      const sessionDir = path.join(tmpSessionDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+
+      const eventsPath = path.join(sessionDir, 'events.jsonl');
+      // Start with an open ask_user
+      fs.writeFileSync(eventsPath, '{"type":"tool.execution_start","timestamp":"2026-01-01T00:00:00Z","data":{"toolName":"ask_user","toolCallId":"ACTIVE"}}\n', 'utf-8');
+
+      const callback = vi.fn();
+      const disposable = resolver.watchSession(sessionId, callback);
+
+      // Wait for initial callback
+      await new Promise(resolve => setTimeout(resolve, 200));
+      callback.mockClear();
+
+      // Append a turn boundary event (assistant.turn_end)
+      fs.appendFileSync(eventsPath, '{"type":"assistant.turn_end","timestamp":"2026-01-01T00:01:00Z","data":{}}\n', 'utf-8');
+
+      // Wait for watcher to fire
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      expect(callback).toHaveBeenCalled();
+      expect(callback.mock.calls[0][0]).toEqual(expect.objectContaining({
+        type: 'assistant.turn_end',
+        hasOpenAskUser: false,
+      }));
+
+      disposable.dispose();
+    });
   });
 
   describe('watchSession malformed JSON', () => {
-    it('should not call callback when events.jsonl has corrupt last line', async () => {
+    it('should still call callback with last valid line when events.jsonl has corrupt last line', async () => {
       const module = await import('../session-context');
       const resolver: any = new module.SessionContextResolver();
       resolver._sessionStateDir = tmpSessionDir;
@@ -730,8 +931,10 @@ summary: Modified`,
       // Wait for watcher to fire
       await new Promise(resolve => setTimeout(resolve, 300));
 
-      // Callback should NOT have been called with the corrupt line
-      expect(callback).not.toHaveBeenCalled();
+      // Callback IS called — multi-line parsing skips corrupt lines and uses last valid parsed line
+      if (callback.mock.calls.length > 0) {
+        expect(callback.mock.calls[0][0].type).toBe('session.start');
+      }
 
       disposable.dispose();
     });

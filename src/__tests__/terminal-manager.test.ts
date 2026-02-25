@@ -934,9 +934,10 @@ describe('TerminalManager', () => {
           'launching',
           'active',
           'inactive',
+          'attention',
           'orphaned',
         ];
-        expect(validStates).toHaveLength(4);
+        expect(validStates).toHaveLength(5);
       });
     });
 
@@ -1042,6 +1043,220 @@ describe('TerminalManager', () => {
         expect(state).toBe('inactive');
       });
 
+      it('should return attention when event has hasOpenAskUser flag', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate an ask_user event with the computed hasOpenAskUser flag
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'ask_user', hasOpenAskUser: true, timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('attention');
+      });
+
+      it('should stay active for non-ask_user tool.execution_start events', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate a non-ask_user tool execution — should remain active
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'powershell', timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('active');
+      });
+
+      it('should return active when last event is user.message (official schema)', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate a user.message event via the watcher callback
+        capturedCallback!({ type: 'user.message', timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('active');
+      });
+
+      it('should transition from attention back to active on working event', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // First: enter attention state
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'ask_user', hasOpenAskUser: true, timestamp: Date.now() });
+        expect(mgr.getSessionState(terminal)).toBe('attention');
+
+        // Then: transition back to active on a working event
+        capturedCallback!({ type: 'assistant.turn_start', timestamp: Date.now() });
+        expect(mgr.getSessionState(terminal)).toBe('active');
+      });
+
+      it('should return attention when parallel tool calls mask ask_user (last event is report_intent complete)', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate the parallel scenario: last event is tool.execution_complete for report_intent,
+        // but hasOpenAskUser is true because ask_user started but hasn't completed
+        capturedCallback!({ type: 'tool.execution_complete', toolName: 'report_intent', hasOpenAskUser: true, timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('attention');
+      });
+
+      it('should not be attention when ask_user has completed (hasOpenAskUser false)', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // ask_user started and completed in the same tail — hasOpenAskUser should be false
+        capturedCallback!({ type: 'tool.execution_complete', toolName: 'ask_user', hasOpenAskUser: false, timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).not.toBe('attention');
+        expect(state).toBe('active'); // tool.execution_complete is a working event
+      });
+
+      it('should return inactive for unknown event types', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate an unknown future event type
+        capturedCallback!({ type: 'unknown.future.event', timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('inactive');
+      });
+
       it('should return orphaned for persisted session with no live terminal', () => {
         const orphanEntry = makePersistedEntry({
           id: 'orphaned-1',
@@ -1120,6 +1335,10 @@ describe('TerminalManager', () => {
         expect(inactiveIcon).toBeDefined();
         expect(inactiveIcon.id).toBe('circle-outline');
 
+        const attentionIcon = mgr.getStateIcon('attention');
+        expect(attentionIcon).toBeDefined();
+        expect(attentionIcon.id).toBe('comment-discussion');
+
         const nonResumableInfo = makePersistedEntry();
         const orphanedIcon = mgr.getStateIcon('orphaned', nonResumableInfo);
         expect(orphanedIcon).toBeDefined();
@@ -1138,6 +1357,10 @@ describe('TerminalManager', () => {
         const activeIcon = mgr.getStateIcon('active').id;
         const inactiveIcon = mgr.getStateIcon('inactive').id;
         expect(activeIcon).not.toBe(inactiveIcon);
+        // attention should have a distinct icon
+        const attentionIcon = mgr.getStateIcon('attention').id;
+        expect(attentionIcon).not.toBe(activeIcon);
+        expect(attentionIcon).not.toBe(inactiveIcon);
         // resumable orphan should have a distinct icon
         const resumableInfo = makePersistedEntry({ agentSessionId: 'session-123' });
         const orphanedIcon = mgr.getStateIcon('orphaned', resumableInfo).id;
@@ -1158,6 +1381,9 @@ describe('TerminalManager', () => {
 
         const inactiveDesc = mgr.getStateDescription('inactive', info);
         expect(inactiveDesc.length).toBeGreaterThan(0);
+
+        const attentionDesc = mgr.getStateDescription('attention', info);
+        expect(attentionDesc).toContain('waiting for input');
 
         const orphanedDesc = mgr.getStateDescription('orphaned', info);
         expect(orphanedDesc).toContain('session ended');

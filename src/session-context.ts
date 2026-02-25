@@ -27,9 +27,19 @@ function normalizePath(p: string): string {
   return p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 }
 
+/**
+ * Simplified session event used internally.  The `type` field aligns with
+ * the official `CopilotEventType` from `github/copilot-sdk` (see
+ * `src/copilot-sdk-types.ts`), but we keep it as `string` so unknown
+ * future events don't break parsing.
+ */
 export interface SessionEvent {
   type: string;
   timestamp: string;
+  toolName?: string;
+  toolCallId?: string;
+  /** Computed from tail analysis — true when an ask_user tool started but hasn't completed. */
+  hasOpenAskUser?: boolean;
 }
 
 export interface SessionResumability {
@@ -154,10 +164,46 @@ export class SessionContextResolver {
         fs.readSync(fd, buffer, 0, readSize, stats.size - readSize);
         const chunk = buffer.toString('utf-8');
         const lines = chunk.split('\n').filter(l => l.trim());
-        const lastLine = lines[lines.length - 1];
-        if (lastLine) {
-          const parsed = JSON.parse(lastLine);
-          event = { type: parsed.type, timestamp: parsed.timestamp };
+        if (lines.length === 0) { fs.closeSync(fd); return null; }
+
+        // Track open ask_user tool calls across all tail lines
+        const openAskUserIds = new Set<string>();
+        let lastParsed: any = null;
+
+        for (const line of lines) {
+          try {
+            const parsed = JSON.parse(line);
+            lastParsed = parsed;
+            if (parsed.type === 'tool.execution_start' && parsed.data?.toolName === 'ask_user' && parsed.data?.toolCallId) {
+              openAskUserIds.add(parsed.data.toolCallId);
+            } else if (parsed.type === 'tool.execution_complete') {
+              if (parsed.data?.toolCallId) {
+                openAskUserIds.delete(parsed.data.toolCallId);
+              } else {
+                openAskUserIds.clear();
+              }
+            }
+          } catch { /* skip malformed lines */ }
+        }
+
+        if (lastParsed) {
+          // Turn-boundary events mean all tools in the previous turn completed.
+          // Only include events that CANNOT fire mid-tool-execution.
+          const turnBoundary = lastParsed.type === 'assistant.turn_end'
+            || lastParsed.type === 'user.message'
+            || lastParsed.type === 'session.idle'
+            || lastParsed.type === 'session.start'
+            || lastParsed.type === 'session.resume'
+            || lastParsed.type === 'session.info'
+            || lastParsed.type === 'session.shutdown';
+
+          event = {
+            type: lastParsed.type,
+            timestamp: lastParsed.timestamp,
+            toolName: lastParsed.data?.toolName,
+            toolCallId: lastParsed.data?.toolCallId,
+            hasOpenAskUser: !turnBoundary && openAskUserIds.size > 0,
+          };
         }
       } finally {
         fs.closeSync(fd);
@@ -201,10 +247,44 @@ export class SessionContextResolver {
           fs.readSync(fd, buffer, 0, readSize, stats.size - readSize);
           const chunk = buffer.toString('utf-8');
           const lines = chunk.split('\n').filter(l => l.trim());
-          const lastLine = lines[lines.length - 1];
-          if (lastLine) {
-            const parsed = JSON.parse(lastLine);
-            callback({ type: parsed.type, timestamp: parsed.timestamp });
+          if (lines.length === 0) return;
+
+          // Track open ask_user tool calls across all tail lines
+          const openAskUserIds = new Set<string>();
+          let lastParsed: any = null;
+
+          for (const line of lines) {
+            try {
+              const parsed = JSON.parse(line);
+              lastParsed = parsed;
+              if (parsed.type === 'tool.execution_start' && parsed.data?.toolName === 'ask_user' && parsed.data?.toolCallId) {
+                openAskUserIds.add(parsed.data.toolCallId);
+              } else if (parsed.type === 'tool.execution_complete') {
+                if (parsed.data?.toolCallId) {
+                  openAskUserIds.delete(parsed.data.toolCallId);
+                } else {
+                  openAskUserIds.clear();
+                }
+              }
+            } catch { /* skip malformed lines */ }
+          }
+
+          if (lastParsed) {
+            const turnBoundary = lastParsed.type === 'assistant.turn_end'
+              || lastParsed.type === 'user.message'
+              || lastParsed.type === 'session.idle'
+              || lastParsed.type === 'session.start'
+              || lastParsed.type === 'session.resume'
+              || lastParsed.type === 'session.info'
+              || lastParsed.type === 'session.shutdown';
+
+            callback({
+              type: lastParsed.type,
+              timestamp: lastParsed.timestamp,
+              toolName: lastParsed.data?.toolName,
+              toolCallId: lastParsed.data?.toolCallId,
+              hasOpenAskUser: !turnBoundary && openAskUserIds.size > 0,
+            });
           }
         } finally {
           fs.closeSync(fd);
