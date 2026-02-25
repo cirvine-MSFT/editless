@@ -1043,7 +1043,7 @@ describe('TerminalManager', () => {
         expect(state).toBe('inactive');
       });
 
-      it('should return attention when last event is tool.execution_start with toolName ask_user', () => {
+      it('should return attention when event has hasOpenAskUser flag', () => {
         let capturedCallback: ((event: any) => void) | undefined;
         const mockResolver = {
           resolveAll: vi.fn().mockReturnValue(new Map()),
@@ -1066,8 +1066,8 @@ describe('TerminalManager', () => {
         const config = makeSquadConfig();
         const terminal = mgr.launchTerminal(config);
 
-        // Simulate an ask_user tool execution event via the watcher callback
-        capturedCallback!({ type: 'tool.execution_start', toolName: 'ask_user', timestamp: Date.now() });
+        // Simulate an ask_user event with the computed hasOpenAskUser flag
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'ask_user', hasOpenAskUser: true, timestamp: Date.now() });
 
         const state = mgr.getSessionState(terminal);
         expect(state).toBe('attention');
@@ -1157,12 +1157,74 @@ describe('TerminalManager', () => {
         const terminal = mgr.launchTerminal(config);
 
         // First: enter attention state
-        capturedCallback!({ type: 'tool.execution_start', toolName: 'ask_user', timestamp: Date.now() });
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'ask_user', hasOpenAskUser: true, timestamp: Date.now() });
         expect(mgr.getSessionState(terminal)).toBe('attention');
 
         // Then: transition back to active on a working event
         capturedCallback!({ type: 'assistant.turn_start', timestamp: Date.now() });
         expect(mgr.getSessionState(terminal)).toBe('active');
+      });
+
+      it('should return attention when parallel tool calls mask ask_user (last event is report_intent complete)', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate the parallel scenario: last event is tool.execution_complete for report_intent,
+        // but hasOpenAskUser is true because ask_user started but hasn't completed
+        capturedCallback!({ type: 'tool.execution_complete', toolName: 'report_intent', hasOpenAskUser: true, timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('attention');
+      });
+
+      it('should not be attention when ask_user has completed (hasOpenAskUser false)', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // ask_user started and completed in the same tail — hasOpenAskUser should be false
+        capturedCallback!({ type: 'tool.execution_complete', toolName: 'ask_user', hasOpenAskUser: false, timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).not.toBe('attention');
+        expect(state).toBe('active'); // tool.execution_complete is a working event
       });
 
       it('should return inactive for unknown event types', () => {

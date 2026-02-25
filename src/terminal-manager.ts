@@ -785,10 +785,7 @@ export class TerminalManager implements vscode.Disposable {
 
 /** Returns true if the event indicates the agent is waiting for user input. */
 function isAttentionEvent(event: SessionEvent): boolean {
-  if (event.type === CopilotEvents.ToolExecutionStart) {
-    return event.toolName === 'ask_user';
-  }
-  return false;
+  return event.hasOpenAskUser === true;
 }
 
 /** Returns true if the event type indicates the agent is actively working. */
