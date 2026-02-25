@@ -184,12 +184,14 @@ export class SessionContextResolver {
 
         if (lastParsed) {
           // Turn-boundary events mean all tools in the previous turn completed.
-          // Don't trust stale open-start tracking from outside the tail window.
+          // Only include events that CANNOT fire mid-tool-execution.
           const turnBoundary = lastParsed.type === 'assistant.turn_end'
             || lastParsed.type === 'user.message'
             || lastParsed.type === 'session.idle'
             || lastParsed.type === 'session.start'
-            || lastParsed.type === 'session.resume';
+            || lastParsed.type === 'session.resume'
+            || lastParsed.type === 'session.info'
+            || lastParsed.type === 'session.shutdown';
 
           event = {
             type: lastParsed.type,
@@ -264,7 +266,9 @@ export class SessionContextResolver {
               || lastParsed.type === 'user.message'
               || lastParsed.type === 'session.idle'
               || lastParsed.type === 'session.start'
-              || lastParsed.type === 'session.resume';
+              || lastParsed.type === 'session.resume'
+              || lastParsed.type === 'session.info'
+              || lastParsed.type === 'session.shutdown';
 
             callback({
               type: lastParsed.type,

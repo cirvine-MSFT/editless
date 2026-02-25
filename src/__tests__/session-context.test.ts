@@ -562,6 +562,29 @@ summary: Modified`,
         expect(event?.hasOpenAskUser).toBe(false);
       });
 
+      it('clears stale ask_user when last event is session.info (real bug: session 630a96da)', () => {
+        writeEvents('stale-info', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'STALE' } },
+          { type: 'session.resume', timestamp: '2026-01-01T00:01:00Z', data: {} },
+          { type: 'session.info', timestamp: '2026-01-01T00:01:01Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('stale-info');
+        expect(event?.type).toBe('session.info');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
+      it('clears stale ask_user when last event is session.shutdown', () => {
+        writeEvents('stale-shutdown', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'STALE' } },
+          { type: 'session.shutdown', timestamp: '2026-01-01T00:01:00Z', data: {} },
+        ]);
+
+        const event = resolver.getLastEvent('stale-shutdown');
+        expect(event?.type).toBe('session.shutdown');
+        expect(event?.hasOpenAskUser).toBe(false);
+      });
+
       it('preserves open ask_user when last event is NOT a turn boundary', () => {
         writeEvents('active-ask', [
           { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'ACTIVE' } },
