@@ -214,3 +214,16 @@ Implemented four features on branch `squad/370-acp-spike`:
 - Fix: Added `return undefined` after the error message, changed return type to `vscode.Terminal | undefined`, and added `.filter()` in `relaunchAllOrphans()` to handle the new undefined possibility.
 - Lesson: Always guard control flow after validation error paths — showing an error message is not the same as aborting the operation.
 
+## Research: microsoft/DebugMCP Integration (2026-02-25)
+
+Investigated DebugMCP (v1.0.7, beta) as a potential companion extension for EditLess. Key findings:
+
+- **What it is:** VS Code extension that exposes the Debug Adapter Protocol as 14 MCP tools (start/stop debugging, breakpoints, step over/into/out, variable inspection, expression evaluation) via a local HTTP server (StreamableHTTP on port 3001).
+- **Transport:** StreamableHTTP (POST `/mcp`), stateless per-request. Recently migrated from SSE. Uses `@modelcontextprotocol/sdk` v1.26+.
+- **Integration path:** Zero EditLess code changes needed. Users install DebugMCP → it auto-configures in VS Code mcp.json → Copilot CLI agents gain debugging tools via standard MCP config chain.
+- **Copilot CLI flag:** `--additional-mcp-config` or `.copilot/mcp-config.json` would pick up DebugMCP's streamableHttp endpoint.
+- **Concerns:** Beta quality, session desync bugs during long operations (#29), single debug session limitation (#25), requires VS Code ^1.104.0.
+- **Verdict:** Recommend as optional companion extension. Backlog item (docs mention + MCP config example), not v0.1.3 scope. No EditLess code changes needed or recommended yet.
+
+Full analysis: `.squad/decisions/inbox/jaguar-debugmcp-research.md`
+
