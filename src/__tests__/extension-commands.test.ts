@@ -1729,7 +1729,7 @@ describe('extension command handlers', () => {
       expect(mockAddSquads).toHaveBeenCalledWith([discoveredSquad]);
     });
 
-    it('should refresh tree after auto-registering squad on terminal close', async () => {
+    it('should not manually refresh tree after auto-registering squad on terminal close (watcher handles it)', async () => {
       const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
       mockCreateTerminal.mockReturnValue(mockTerminal);
 
@@ -1741,7 +1741,8 @@ describe('extension command handlers', () => {
       mockTreeRefresh.mockClear();
       getLastCloseCallback()(mockTerminal);
 
-      expect(mockTreeRefresh).toHaveBeenCalled();
+      expect(mockAddSquads).toHaveBeenCalledWith([discoveredSquad]);
+      expect(mockTreeRefresh).not.toHaveBeenCalled();
     });
 
     it('should not register squad when discovery finds nothing (init failed)', async () => {

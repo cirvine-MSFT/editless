@@ -1245,7 +1245,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         universe: 'standalone',
       }]);
       refreshDiscovery();
-      treeProvider.refresh();
     }),
   );
 
@@ -1277,7 +1276,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         const match = discovered.filter(s => s.path.toLowerCase() === dirPath.toLowerCase());
         if (match.length > 0) {
           registry.addSquads(match);
-          treeProvider.refresh();
         } else {
           const existing = registry.loadSquads();
           const alreadyRegistered = existing.some(s => s.path.toLowerCase() === dirPath.toLowerCase());
@@ -1290,7 +1288,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               icon: '🔷',
               universe: 'unknown',
             }]);
-            treeProvider.refresh();
           }
         }
         return;
@@ -1312,7 +1309,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         const match = discovered.filter(s => s.path.toLowerCase() === dirPath.toLowerCase());
         if (match.length > 0) {
           registry.addSquads(match);
-          treeProvider.refresh();
         } else if (resolveTeamDir(dirPath)) {
           const existing = registry.loadSquads();
           const alreadyRegistered = existing.some(s => s.path.toLowerCase() === dirPath.toLowerCase());
@@ -1325,7 +1321,6 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
               icon: '🔷',
               universe: 'unknown',
             }]);
-            treeProvider.refresh();
           }
         }
       });
