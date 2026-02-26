@@ -175,6 +175,7 @@ vi.mock('vscode', async () => {
       showInputBox: mockShowInputBox,
       showWarningMessage: mockShowWarningMessage,
       showInformationMessage: mockShowInformationMessage,
+      showErrorMessage: vi.fn(),
       createOutputChannel: () => ({ appendLine: vi.fn(), dispose: vi.fn() }),
       createTreeView: () => ({ reveal: vi.fn(), dispose: vi.fn(), description: undefined }),
       registerTreeDataProvider: () => ({ dispose: vi.fn() }),
