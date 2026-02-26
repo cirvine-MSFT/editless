@@ -44,14 +44,11 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- Agent settings (replaces registry + visibility) --------------------
   const agentSettings = createAgentSettings(context);
 
-  // Migrate from old agent-registry.json if it exists
+  // Migrate from old agent-registry.json if it exists (one-time, idempotent)
   const oldRegistryDir = context.globalStorageUri?.fsPath ?? context.extensionPath;
   const oldRegistryPath = path.resolve(oldRegistryDir, 'agent-registry.json');
   if (fs.existsSync(oldRegistryPath)) {
     migrateFromRegistry(oldRegistryPath, agentSettings);
-    try {
-      fs.renameSync(oldRegistryPath, oldRegistryPath + '.bak');
-    } catch { /* ignore rename failures */ }
   }
 
   // --- Terminal manager --------------------------------------------------
