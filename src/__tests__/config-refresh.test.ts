@@ -235,35 +235,50 @@ describe('integration config refresh (#417)', () => {
   });
 
   it('should re-init ADO integration when ado.organization changes', () => {
+    vi.useFakeTimers();
     const handlers = findConfigHandlers('editless.ado.organization');
     expect(handlers.length).toBeGreaterThanOrEqual(1);
 
     handlers.forEach(h => h({ affectsConfiguration: (k: string) => k === 'editless.ado.organization' }));
 
+    // Advance time to trigger debounced handler
+    vi.advanceTimersByTime(500);
+
     // initAdoIntegration calls setAdoConfig on both providers
     expect(mockWorkItemsSetAdoConfig).toHaveBeenCalled();
     expect(mockPRsSetAdoConfig).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('should re-init ADO integration when ado.project changes', () => {
+    vi.useFakeTimers();
     const handlers = findConfigHandlers('editless.ado.project');
     expect(handlers.length).toBeGreaterThanOrEqual(1);
 
     handlers.forEach(h => h({ affectsConfiguration: (k: string) => k === 'editless.ado.project' }));
 
+    // Advance time to trigger debounced handler
+    vi.advanceTimersByTime(500);
+
     expect(mockWorkItemsSetAdoConfig).toHaveBeenCalled();
     expect(mockPRsSetAdoConfig).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('should re-init GitHub integration when github.repos changes', () => {
+    vi.useFakeTimers();
     const handlers = findConfigHandlers('editless.github.repos');
     expect(handlers.length).toBeGreaterThanOrEqual(1);
 
     handlers.forEach(h => h({ affectsConfiguration: (k: string) => k === 'editless.github.repos' }));
 
+    // Advance time to trigger debounced handler
+    vi.advanceTimersByTime(500);
+
     // initGitHubIntegration calls setRepos on both providers
     expect(mockWorkItemsSetRepos).toHaveBeenCalled();
     expect(mockPRsSetRepos).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('should ignore config changes unrelated to ADO or GitHub integrations', () => {
@@ -279,5 +294,91 @@ describe('integration config refresh (#417)', () => {
     expect(mockPRsSetRepos).not.toHaveBeenCalled();
     expect(mockWorkItemsSetAdoConfig).not.toHaveBeenCalled();
     expect(mockPRsSetAdoConfig).not.toHaveBeenCalled();
+  });
+
+  it('should re-init ADO integration when organization is cleared/empty', () => {
+    vi.useFakeTimers();
+    const handlers = findConfigHandlers('editless.ado.organization');
+    expect(handlers.length).toBeGreaterThanOrEqual(1);
+
+    handlers.forEach(h => h({ affectsConfiguration: (k: string) => k === 'editless.ado.organization' }));
+
+    // Advance time to trigger debounced handler
+    vi.advanceTimersByTime(500);
+
+    // initAdoIntegration should be called even for empty values (it handles them internally)
+    expect(mockWorkItemsSetAdoConfig).toHaveBeenCalled();
+    expect(mockPRsSetAdoConfig).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('should re-init GitHub integration when repos is cleared/empty array', () => {
+    vi.useFakeTimers();
+    const handlers = findConfigHandlers('editless.github.repos');
+    expect(handlers.length).toBeGreaterThanOrEqual(1);
+
+    handlers.forEach(h => h({ affectsConfiguration: (k: string) => k === 'editless.github.repos' }));
+
+    // Advance time to trigger debounced handler
+    vi.advanceTimersByTime(500);
+
+    // initGitHubIntegration should be called even for empty arrays (it handles them internally)
+    expect(mockWorkItemsSetRepos).toHaveBeenCalled();
+    expect(mockPRsSetRepos).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it('should debounce rapid config changes (ADO)', () => {
+    vi.useFakeTimers();
+
+    const handlers = findConfigHandlers('editless.ado.organization');
+    expect(handlers.length).toBeGreaterThanOrEqual(1);
+
+    // Simulate rapid-fire config changes (like typing character-by-character)
+    handlers.forEach(h => {
+      h({ affectsConfiguration: (k: string) => k === 'editless.ado.organization' });
+      h({ affectsConfiguration: (k: string) => k === 'editless.ado.organization' });
+      h({ affectsConfiguration: (k: string) => k === 'editless.ado.organization' });
+    });
+
+    // Should not have been called yet due to debounce
+    expect(mockWorkItemsSetAdoConfig).not.toHaveBeenCalled();
+    expect(mockPRsSetAdoConfig).not.toHaveBeenCalled();
+
+    // Advance time by 500ms (debounce delay)
+    vi.advanceTimersByTime(500);
+
+    // Now should have been called exactly once
+    expect(mockWorkItemsSetAdoConfig).toHaveBeenCalledTimes(1);
+    expect(mockPRsSetAdoConfig).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
+  });
+
+  it('should debounce rapid config changes (GitHub)', () => {
+    vi.useFakeTimers();
+
+    const handlers = findConfigHandlers('editless.github.repos');
+    expect(handlers.length).toBeGreaterThanOrEqual(1);
+
+    // Simulate rapid-fire config changes
+    handlers.forEach(h => {
+      h({ affectsConfiguration: (k: string) => k === 'editless.github.repos' });
+      h({ affectsConfiguration: (k: string) => k === 'editless.github.repos' });
+      h({ affectsConfiguration: (k: string) => k === 'editless.github.repos' });
+    });
+
+    // Should not have been called yet due to debounce
+    expect(mockWorkItemsSetRepos).not.toHaveBeenCalled();
+    expect(mockPRsSetRepos).not.toHaveBeenCalled();
+
+    // Advance time by 500ms (debounce delay)
+    vi.advanceTimersByTime(500);
+
+    // Now should have been called exactly once
+    expect(mockWorkItemsSetRepos).toHaveBeenCalledTimes(1);
+    expect(mockPRsSetRepos).toHaveBeenCalledTimes(1);
+
+    vi.useRealTimers();
   });
 });
