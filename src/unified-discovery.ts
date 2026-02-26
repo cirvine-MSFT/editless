@@ -3,7 +3,6 @@ import * as path from 'path';
 import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir } from './agent-discovery';
 import { discoverAgentTeams, parseTeamMd, toKebabCase, readUniverseFromRegistry } from './discovery';
 import { resolveTeamMd } from './team-dir';
-import type { EditlessRegistry } from './registry';
 import type { AgentTeamConfig } from './types';
 
 /** A single discovered item — either a standalone agent or a squad. */
@@ -25,16 +24,11 @@ interface WorkspaceFolder {
 /**
  * Unified discovery — scans workspace folders for both agents AND squads,
  * plus ~/.config/copilot/agents/ (and ~/.copilot/agents/) for personal agent library.
- * Returns DiscoveredItem[] minus already-registered items.
+ * Returns ALL discovered items (deduped by ID within results).
  */
 export function discoverAll(
   workspaceFolders: readonly WorkspaceFolder[],
-  registry: EditlessRegistry,
 ): DiscoveredItem[] {
-  const registered = registry.loadSquads();
-  const registeredIds = new Set(registered.map(s => s.id));
-  const registeredPaths = new Set(registered.map(s => s.path.toLowerCase()));
-
   const items: DiscoveredItem[] = [];
   const seenIds = new Set<string>();
 
@@ -44,7 +38,7 @@ export function discoverAll(
 
   // Workspace agents first (win on dedup)
   for (const agent of wsAgents) {
-    if (registeredIds.has(agent.id) || seenIds.has(agent.id)) { continue; }
+    if (seenIds.has(agent.id)) { continue; }
     seenIds.add(agent.id);
     items.push({
       id: agent.id,
@@ -56,7 +50,7 @@ export function discoverAll(
     });
   }
   for (const agent of copilotAgents) {
-    if (registeredIds.has(agent.id) || seenIds.has(agent.id)) { continue; }
+    if (seenIds.has(agent.id)) { continue; }
     seenIds.add(agent.id);
     items.push({
       id: agent.id,
@@ -75,7 +69,7 @@ export function discoverAll(
     if (teamMdPath) {
       const folderName = path.basename(folderPath);
       const id = toKebabCase(folderName);
-      if (!registeredIds.has(id) && !seenIds.has(id) && !registeredPaths.has(folderPath.toLowerCase())) {
+      if (!seenIds.has(id)) {
         const content = fs.readFileSync(teamMdPath, 'utf-8');
         const parsed = parseTeamMd(content, folderName);
         const universe = parsed.universe === 'unknown'
@@ -98,10 +92,9 @@ export function discoverAll(
   // --- Squad discovery (scan workspace folders recursively) ---
   for (const folder of workspaceFolders) {
     const folderPath = folder.uri.fsPath;
-    const discovered = discoverAgentTeams(folderPath, registered);
+    const discovered = discoverAgentTeams(folderPath, []);
     for (const squad of discovered) {
-      if (registeredIds.has(squad.id) || seenIds.has(squad.id)) { continue; }
-      if (registeredPaths.has(squad.path.toLowerCase())) { continue; }
+      if (seenIds.has(squad.id)) { continue; }
       seenIds.add(squad.id);
       items.push(squadConfigToItem(squad));
     }

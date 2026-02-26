@@ -4,24 +4,22 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { createRegistry, watchRegistry } from './registry';
+import { createAgentSettings, migrateFromRegistry } from './agent-settings';
+import type { AgentSettingsManager } from './agent-settings';
 import { EditlessTreeProvider, EditlessTreeItem, DEFAULT_COPILOT_CLI_ID } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager, promptClearLabel } from './session-labels';
 
 
-import { discoverAgentTeams, parseTeamMd, toKebabCase } from './discovery';
-import { discoverAllAgents } from './agent-discovery';
 import { discoverAll } from './unified-discovery';
 import type { DiscoveredItem } from './unified-discovery';
 import type { AgentTeamConfig } from './types';
-import { AgentVisibilityManager } from './visibility';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
 import { SessionContextResolver } from './session-context';
 
 import { initSquadUiContext, openSquadUiDashboard } from './squad-ui-integration';
-import { resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
+import { TEAM_DIR_NAMES } from './team-dir';
 import { WorkItemsTreeProvider, WorkItemsTreeItem, type UnifiedState, type LevelFilter } from './work-items-tree';
 import { PRsTreeProvider, PRsTreeItem, type PRsFilter, type PRLevelFilter } from './prs-tree';
 import { fetchLinkedPRs } from './github-client';
@@ -37,18 +35,6 @@ function getCreateCommand(): string {
   return '';
 }
 
-/** For a discovered agent file path, derive the project root.
- *  e.g. C:\project\.github\agents\foo.agent.md → C:\project
- *  Falls back to dirname if not inside .github/agents/. */
-function deriveProjectRoot(agentFilePath: string): string {
-  const dir = path.dirname(agentFilePath);
-  const normalized = dir.replace(/\\/g, '/').toLowerCase();
-  if (normalized.endsWith('/.github/agents') || normalized.endsWith('/.github/agents/')) {
-    return path.resolve(dir, '..', '..');
-  }
-  return dir;
-}
-
 export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {
   const output = vscode.window.createOutputChannel('EditLess');
   context.subscriptions.push(output);
@@ -57,9 +43,18 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- Squad UI integration (#38) ------------------------------------------
   initSquadUiContext(context);
 
-  // --- Registry ----------------------------------------------------------
-  const registry = createRegistry(context);
-  registry.loadSquads();
+  // --- Agent settings (replaces registry + visibility) --------------------
+  const agentSettings = createAgentSettings(context);
+
+  // Migrate from old agent-registry.json if it exists
+  const oldRegistryDir = context.globalStorageUri?.fsPath ?? context.extensionPath;
+  const oldRegistryPath = path.resolve(oldRegistryDir, 'agent-registry.json');
+  if (fs.existsSync(oldRegistryPath)) {
+    migrateFromRegistry(oldRegistryPath, agentSettings);
+    try {
+      fs.renameSync(oldRegistryPath, oldRegistryPath + '.bak');
+    } catch { /* ignore rename failures */ }
+  }
 
   // --- Terminal manager --------------------------------------------------
   const terminalManager = new TerminalManager(context);
@@ -75,11 +70,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Wire session resolver into terminal manager for session ID auto-detection
   terminalManager.setSessionResolver(sessionContextResolver);
 
-  // --- Visibility manager ------------------------------------------------
-  const visibilityManager = new AgentVisibilityManager(context);
-
   // --- Tree view ---------------------------------------------------------
-  const treeProvider = new EditlessTreeProvider(registry, terminalManager, labelManager, sessionContextResolver, visibilityManager);
+  const treeProvider = new EditlessTreeProvider(agentSettings, terminalManager, labelManager, sessionContextResolver);
   const treeView = vscode.window.createTreeView('editlessTree', { treeDataProvider: treeProvider });
   context.subscriptions.push(treeView);
   context.subscriptions.push(treeProvider);
@@ -118,18 +110,29 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   );
 
   // --- Unified discovery — agents + squads in one pass (#317, #318) ----------
-  let discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
-  treeProvider.setDiscoveredAgents(discoveredAgents);
-
-  let discoveredItems = discoverAll(vscode.workspace.workspaceFolders ?? [], registry);
+  let discoveredItems = discoverAll(vscode.workspace.workspaceFolders ?? []);
   treeProvider.setDiscoveredItems(discoveredItems);
 
   /** Re-run unified discovery and update tree. */
   function refreshDiscovery(): void {
-    discoveredAgents = discoverAllAgents(vscode.workspace.workspaceFolders ?? []);
-    treeProvider.setDiscoveredAgents(discoveredAgents);
-    discoveredItems = discoverAll(vscode.workspace.workspaceFolders ?? [], registry);
+    discoveredItems = discoverAll(vscode.workspace.workspaceFolders ?? []);
     treeProvider.setDiscoveredItems(discoveredItems);
+    statusBar.setDiscoveredItems(discoveredItems);
+    // Update squad watcher with new discovery results
+    const newSquadConfigs = discoveredItems.filter(d => d.type === 'squad').map(d => ({
+      id: d.id,
+      name: d.name,
+      path: d.path,
+      icon: '🔷',
+      universe: d.universe ?? 'unknown',
+    }) as AgentTeamConfig);
+    squadWatcher.updateSquads(newSquadConfigs);
+  }
+
+  let discoveryTimer: NodeJS.Timeout | undefined;
+  function debouncedRefreshDiscovery(): void {
+    clearTimeout(discoveryTimer);
+    discoveryTimer = setTimeout(() => refreshDiscovery(), 300);
   }
 
   /** Add a folder to the VS Code workspace if not already present. */
@@ -141,9 +144,32 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }
   }
 
+  // --- Status bar ----------------------------------------------------------
+  const statusBar = new EditlessStatusBar(agentSettings, terminalManager);
+  context.subscriptions.push(statusBar);
+  statusBar.setDiscoveredItems(discoveredItems);
+  statusBar.update();
+
+  terminalManager.onDidChange(() => statusBar.updateSessionsOnly());
+
+  // --- Squad file watcher — live .squad/ (or .ai-team/) updates ----------
+  const squadConfigs = discoveredItems.filter(d => d.type === 'squad').map(d => ({
+    id: d.id,
+    name: d.name,
+    path: d.path,
+    icon: '🔷',
+    universe: d.universe ?? 'unknown',
+  }) as AgentTeamConfig);
+  const squadWatcher = new SquadWatcher(squadConfigs, (squadId) => {
+    treeProvider.invalidate(squadId);
+    treeProvider.refresh();
+    statusBar.update();
+  });
+  context.subscriptions.push(squadWatcher);
+
   context.subscriptions.push(
     vscode.workspace.onDidChangeWorkspaceFolders(() => {
-      refreshDiscovery();
+      debouncedRefreshDiscovery();
     }),
   );
 
@@ -154,60 +180,18 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const pattern = new vscode.RelativePattern(folder, `${dirName}/team.md`);
       const teamMdWatcher = vscode.workspace.createFileSystemWatcher(pattern);
       teamMdWatcher.onDidCreate(() => {
-        // Auto-register workspace folder squads when team.md is created via + button
-        const folderPath = folder.uri.fsPath;
-        const existing = registry.loadSquads();
-        const alreadyRegistered = existing.some(s => s.path.toLowerCase() === folderPath.toLowerCase());
-        if (!alreadyRegistered) {
-          const teamMdPath = path.join(folderPath, dirName, 'team.md');
-          try {
-            const content = fs.readFileSync(teamMdPath, 'utf-8');
-            const parsed = parseTeamMd(content, path.basename(folderPath));
-            const id = toKebabCase(path.basename(folderPath));
-            registry.addSquads([{
-              id,
-              name: parsed.name,
-              path: folderPath,
-              icon: '🔷',
-              universe: parsed.universe ?? 'unknown',
-              description: parsed.description,
-            }]);
-          } catch {
-            // team.md may not be readable yet; fall through to discovery
-          }
-        }
-        refreshDiscovery();
+        debouncedRefreshDiscovery();
         treeProvider.refresh();
-        squadWatcher.updateSquads(registry.loadSquads());
         statusBar.update();
       });
       context.subscriptions.push(teamMdWatcher);
     }
   }
 
-  // --- Status bar ----------------------------------------------------------
-  const statusBar = new EditlessStatusBar(registry, terminalManager);
-  context.subscriptions.push(statusBar);
-  statusBar.update();
-
-  terminalManager.onDidChange(() => statusBar.updateSessionsOnly());
-
-  // --- Squad file watcher — live .squad/ (or .ai-team/) updates ----------
-  const squadWatcher = new SquadWatcher(registry.loadSquads(), (squadId) => {
-    treeProvider.invalidate(squadId);
-    treeProvider.refresh();
-    statusBar.update();
-  });
-  context.subscriptions.push(squadWatcher);
-
-  // --- Registry file watcher — refresh tree on changes -------------------
-  // Refresh tree immediately; defer watcher rebuild so the UI updates first (#399)
-  const registryWatcher = watchRegistry(registry, (squads) => {
-    treeProvider.refresh();
-    statusBar.update();
-    setTimeout(() => squadWatcher.updateSquads(squads), 0);
-  });
-  context.subscriptions.push(registryWatcher);
+  // --- Settings file watcher for cross-window sync -------------------------
+  const settingsWatcher = vscode.workspace.createFileSystemWatcher(agentSettings.settingsPath);
+  settingsWatcher.onDidChange(() => { agentSettings.reload(); treeProvider.refresh(); statusBar.update(); });
+  context.subscriptions.push(settingsWatcher);
 
   // --- Commands ----------------------------------------------------------
 
@@ -224,31 +208,32 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.renameSquad', async (item?: EditlessTreeItem) => {
       if (!item?.squadId) return;
-      const config = registry.getSquad(item.squadId);
-      if (!config) return;
+      const disc = discoveredItems.find(d => d.id === item.squadId);
+      const settings = agentSettings.get(item.squadId);
+      const currentName = settings?.name ?? disc?.name ?? item.squadId;
 
       const newName = await vscode.window.showInputBox({
-        prompt: `Rename "${config.name}"`,
-        value: config.name,
+        prompt: `Rename "${currentName}"`,
+        value: currentName,
         validateInput: v => v.trim() ? undefined : 'Name cannot be empty',
       });
-      if (newName && newName !== config.name) {
-        registry.updateSquad(item.squadId, { name: newName });
+      if (newName && newName !== currentName) {
+        agentSettings.update(item.squadId, { name: newName });
         treeProvider.refresh();
       }
     }),
   );
 
-  // Go to squad settings in registry JSON (context menu)
+  // Go to squad settings in agent-settings.json (context menu)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.goToSquadSettings', async (item?: EditlessTreeItem) => {
       if (!item?.squadId) return;
 
-      const doc = await vscode.workspace.openTextDocument(registry.registryPath);
+      const doc = await vscode.workspace.openTextDocument(agentSettings.settingsPath);
       const editor = await vscode.window.showTextDocument(doc);
 
       const text = doc.getText();
-      const needle = `"id": "${item.squadId}"`;
+      const needle = `"${item.squadId}"`;
       const offset = text.indexOf(needle);
       if (offset !== -1) {
         const pos = doc.positionAt(offset);
@@ -280,23 +265,25 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.changeModel', async (item?: EditlessTreeItem) => {
       if (!item?.squadId) return;
-      const config = registry.getSquad(item.squadId);
-      if (!config) return;
+      const disc = discoveredItems.find(d => d.id === item.squadId);
+      const settings = agentSettings.get(item.squadId);
+      if (!disc && !settings) return;
 
-      const currentModel = config.model;
+      const currentModel = settings?.model;
+      const displayName = settings?.name ?? disc?.name ?? item.squadId;
       const picks = modelChoices.map(m => ({
         ...m,
         description: m.label === currentModel ? `${m.description} ✓ current` : m.description,
       }));
 
       const pick = await vscode.window.showQuickPick(picks, {
-        placeHolder: `Model for ${config.name} (current: ${currentModel ?? 'unknown'})`,
+        placeHolder: `Model for ${displayName} (current: ${currentModel ?? 'unknown'})`,
       });
       if (!pick || pick.label === currentModel) return;
 
-      registry.updateSquad(item.squadId, { model: pick.label });
+      agentSettings.update(item.squadId, { model: pick.label });
       treeProvider.refresh();
-      vscode.window.showInformationMessage(`${config.icon} ${config.name} model → ${pick.label}`);
+      vscode.window.showInformationMessage(`${displayName} model → ${pick.label}`);
     }),
   );
 
@@ -328,9 +315,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         return;
       }
 
-      const squads = registry.loadSquads();
-      if (squads.length === 0) {
-        vscode.window.showWarningMessage('No agents registered yet.');
+      const allItems = treeProvider.getDiscoveredItems();
+      if (allItems.length === 0) {
+        vscode.window.showWarningMessage('No agents discovered yet.');
         return;
       }
 
@@ -339,15 +326,30 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         : squadIdOrItem?.squadId;
       if (!chosen) {
         const pick = await vscode.window.showQuickPick(
-          squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, id: s.id })),
+          allItems.filter(d => !agentSettings.isHidden(d.id)).map(d => ({
+            label: `${d.type === 'squad' ? '🔷' : '🤖'} ${d.name}`,
+            description: d.universe ?? d.source,
+            id: d.id,
+          })),
           { placeHolder: 'Select an agent to launch' },
         );
         chosen = pick?.id;
       }
 
       if (chosen) {
-        const cfg = registry.getSquad(chosen);
-        if (cfg) {
+        const disc = allItems.find(d => d.id === chosen);
+        if (disc) {
+          const settings = agentSettings.get(disc.id);
+          const cfg: AgentTeamConfig = {
+            id: disc.id,
+            name: settings?.name ?? disc.name,
+            path: disc.path,
+            icon: settings?.icon ?? (disc.type === 'squad' ? '🔷' : '🤖'),
+            universe: disc.universe ?? 'standalone',
+            description: disc.description,
+            model: settings?.model,
+            additionalArgs: settings?.additionalArgs,
+          };
           terminalManager.launchTerminal(cfg);
         }
       }
@@ -483,61 +485,29 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
-  // Open squad registry file
-  context.subscriptions.push(
-    vscode.commands.registerCommand('editless.openRegistry', async () => {
-      const registryPath = registry.registryPath;
-      const doc = await vscode.workspace.openTextDocument(registryPath);
-      await vscode.window.showTextDocument(doc);
-    }),
-  );
-
-  // Hide agent (context menu)
+  // Hide/Show agent (context menu — toggles based on current state)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.hideAgent', (item?: EditlessTreeItem) => {
       if (!item) return;
       const rawId = item.squadId ?? item.id;
       if (!rawId) return;
-      // Discovered agents use 'discovered:{id}' as item.id but visibility checks raw id
       const id = rawId.replace(/^discovered:/, '');
-      visibilityManager.hide(id);
+      if (item.type === 'squad-hidden') {
+        agentSettings.show(id);
+      } else {
+        agentSettings.hide(id);
+      }
       treeProvider.refresh();
     }),
   );
 
-  // Promote discovered item to registry (#250, #317)
+  // Show a single hidden agent (context menu on squad-hidden items)
   context.subscriptions.push(
-    vscode.commands.registerCommand('editless.promoteDiscoveredAgent', (item?: EditlessTreeItem) => {
-      if (!item?.id) return;
-      const itemId = item.id.replace(/^discovered:/, '');
-
-      // Check unified discovered items first
-      const disc = discoveredItems.find(d => d.id === itemId);
-      if (disc) {
-        const config: AgentTeamConfig = disc.type === 'squad'
-          ? { id: disc.id, name: disc.name, path: disc.path, icon: '🔷', universe: disc.universe ?? 'unknown', description: disc.description }
-          : { id: disc.id, name: disc.name, path: deriveProjectRoot(disc.path), icon: '🤖', universe: 'standalone', description: disc.description };
-        registry.addSquads([config]);
-        refreshDiscovery();
-        treeProvider.refresh();
-        return;
-      }
-
-      // Fallback to legacy discovered agents
-      const agent = discoveredAgents.find(a => a.id === itemId);
-      if (!agent) return;
-
-      const config: AgentTeamConfig = {
-        id: agent.id,
-        name: agent.name,
-        path: path.dirname(agent.filePath),
-        icon: '🤖',
-        universe: 'standalone',
-        description: agent.description,
-      };
-
-      registry.addSquads([config]);
-      refreshDiscovery();
+    vscode.commands.registerCommand('editless.showAgent', (item?: EditlessTreeItem) => {
+      if (!item) return;
+      const rawId = item.squadId ?? item.id;
+      if (!rawId) return;
+      agentSettings.show(rawId);
       treeProvider.refresh();
     }),
   );
@@ -545,24 +515,16 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Show hidden agents (QuickPick)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.showHiddenAgents', async () => {
-      const hiddenIds = visibilityManager.getHiddenIds();
+      const hiddenIds = agentSettings.getHiddenIds();
       if (hiddenIds.length === 0) {
         vscode.window.showInformationMessage('No hidden agents.');
         return;
       }
 
       const picks = hiddenIds.map(id => {
-        const squad = registry.getSquad(id);
-        if (squad) {
-          return { label: `${squad.icon} ${squad.name}`, description: squad.universe, id };
-        }
         const disc = discoveredItems.find(d => d.id === id);
         if (disc) {
-          return { label: disc.type === 'squad' ? `🔷 ${disc.name}` : disc.name, description: disc.source, id };
-        }
-        const agent = discoveredAgents.find(a => a.id === id);
-        if (agent) {
-          return { label: agent.name, description: agent.source, id };
+          return { label: disc.type === 'squad' ? `🔷 ${disc.name}` : `🤖 ${disc.name}`, description: disc.source, id };
         }
         return { label: id, description: 'unknown', id };
       });
@@ -573,7 +535,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       });
       if (selected) {
         for (const pick of selected) {
-          visibilityManager.show(pick.id);
+          agentSettings.show(pick.id);
         }
         treeProvider.refresh();
       }
@@ -945,8 +907,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Open in Squad UI (context menu on squads — visible only when SquadUI is installed)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.openInSquadUi', (item?: EditlessTreeItem) => {
-      const config = item?.squadId ? registry.getSquad(item.squadId) : undefined;
-      return openSquadUiDashboard(config?.path);
+      const disc = item?.squadId ? discoveredItems.find(d => d.id === item.squadId) : undefined;
+      return openSquadUiDashboard(disc?.path);
     }),
   );
 
@@ -969,9 +931,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const adoItem = item?.adoWorkItem;
       if (!issue && !adoItem) return;
 
-      const squads = registry.loadSquads();
-      if (squads.length === 0) {
-        vscode.window.showWarningMessage('No agents registered.');
+      const visibleItems = discoveredItems.filter(d => !agentSettings.isHidden(d.id));
+      if (visibleItems.length === 0) {
+        vscode.window.showWarningMessage('No agents discovered.');
         return;
       }
 
@@ -980,12 +942,29 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const url = issue?.url ?? adoItem?.url ?? '';
 
       const pick = await vscode.window.showQuickPick(
-        squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, squad: s })),
+        visibleItems.map(d => {
+          const settings = agentSettings.get(d.id);
+          return {
+            label: `${d.type === 'squad' ? (settings?.icon ?? '🔷') : '🤖'} ${settings?.name ?? d.name}`,
+            description: d.universe ?? d.source,
+            disc: d,
+          };
+        }),
         { placeHolder: `Launch agent for #${number} ${title}` },
       );
       if (!pick) return;
 
-      const cfg = pick.squad;
+      const d = pick.disc;
+      const settings = agentSettings.get(d.id);
+      const cfg: AgentTeamConfig = {
+        id: d.id,
+        name: settings?.name ?? d.name,
+        path: d.path,
+        icon: settings?.icon ?? (d.type === 'squad' ? '🔷' : '🤖'),
+        universe: d.universe ?? 'standalone',
+        model: settings?.model,
+        additionalArgs: settings?.additionalArgs,
+      };
       const rawName = `#${number} ${title}`;
       launchAndLabel(terminalManager, labelManager, cfg, rawName);
 
@@ -1079,9 +1058,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const adoPR = item?.adoPR;
       if (!pr && !adoPR) return;
 
-      const squads = registry.loadSquads();
-      if (squads.length === 0) {
-        vscode.window.showWarningMessage('No agents registered.');
+      const visibleItems = discoveredItems.filter(d => !agentSettings.isHidden(d.id));
+      if (visibleItems.length === 0) {
+        vscode.window.showWarningMessage('No agents discovered.');
         return;
       }
 
@@ -1090,12 +1069,29 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const url = pr?.url ?? adoPR?.url ?? '';
 
       const pick = await vscode.window.showQuickPick(
-        squads.map(s => ({ label: `${s.icon} ${s.name}`, description: s.universe, squad: s })),
+        visibleItems.map(d => {
+          const settings = agentSettings.get(d.id);
+          return {
+            label: `${d.type === 'squad' ? (settings?.icon ?? '🔷') : '🤖'} ${settings?.name ?? d.name}`,
+            description: d.universe ?? d.source,
+            disc: d,
+          };
+        }),
         { placeHolder: `Launch agent for PR #${number} ${title}` },
       );
       if (!pick) return;
 
-      const cfg = pick.squad;
+      const d = pick.disc;
+      const settings = agentSettings.get(d.id);
+      const cfg: AgentTeamConfig = {
+        id: d.id,
+        name: settings?.name ?? d.name,
+        path: d.path,
+        icon: settings?.icon ?? (d.type === 'squad' ? '🔷' : '🤖'),
+        universe: d.universe ?? 'standalone',
+        model: settings?.model,
+        additionalArgs: settings?.additionalArgs,
+      };
       const rawName = `PR #${number} ${title}`;
       launchAndLabel(terminalManager, labelManager, cfg, rawName);
 
@@ -1117,7 +1113,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Show all agents
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.showAllAgents', () => {
-      visibilityManager.showAll();
+      agentSettings.showAll();
       treeProvider.refresh();
     }),
   );
@@ -1245,16 +1241,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const doc = await vscode.workspace.openTextDocument(filePath);
       await vscode.window.showTextDocument(doc);
 
-      const agentId = name.trim().replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase();
-      registry.addSquads([{
-        id: agentId,
-        name: name.trim(),
-        path: projectRoot ?? agentsDir,
-        icon: '🤖',
-        universe: 'standalone',
-      }]);
-      // Add workspace folder AFTER registry write so the onDidChangeWorkspaceFolders
-      // handler's refreshDiscovery() sees the agent in the registry for dedup (#399)
+      // Add workspace folder — triggers discovery via onDidChangeWorkspaceFolders
       if (projectRoot) {
         ensureWorkspaceFolder(projectRoot);
       }
@@ -1285,29 +1272,10 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       const dirPath = uris[0].fsPath;
 
       if (isSquadInitialized(dirPath)) {
-        // Already initialized — discover and register without running a terminal
-        const parentDir = path.dirname(dirPath);
-        const discovered = discoverAgentTeams(parentDir, registry.loadSquads());
-        const match = discovered.filter(s => s.path.toLowerCase() === dirPath.toLowerCase());
-        if (match.length > 0) {
-          registry.addSquads(match);
-          treeProvider.refresh();
-        } else {
-          const existing = registry.loadSquads();
-          const alreadyRegistered = existing.some(s => s.path.toLowerCase() === dirPath.toLowerCase());
-          if (!alreadyRegistered) {
-            const folderName = path.basename(dirPath);
-            registry.addSquads([{
-              id: folderName.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase(),
-              name: folderName,
-              path: dirPath,
-              icon: '🔷',
-              universe: 'unknown',
-            }]);
-            treeProvider.refresh();
-          }
-        }
+        // Already initialized — just add workspace folder, discovery handles the rest
         ensureWorkspaceFolder(dirPath);
+        refreshDiscovery();
+        treeProvider.refresh();
         return;
       }
 
@@ -1322,28 +1290,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         if (closedTerminal !== terminal) { return; }
         listener.dispose();
 
-        const parentDir = path.dirname(dirPath);
-        const discovered = discoverAgentTeams(parentDir, registry.loadSquads());
-        const match = discovered.filter(s => s.path.toLowerCase() === dirPath.toLowerCase());
-        if (match.length > 0) {
-          registry.addSquads(match);
-          treeProvider.refresh();
-        } else if (resolveTeamDir(dirPath)) {
-          const existing = registry.loadSquads();
-          const alreadyRegistered = existing.some(s => s.path.toLowerCase() === dirPath.toLowerCase());
-          if (!alreadyRegistered) {
-            const folderName = path.basename(dirPath);
-            registry.addSquads([{
-              id: folderName.replace(/([a-z])([A-Z])/g, '$1-$2').replace(/[\s_]+/g, '-').toLowerCase(),
-              name: folderName,
-              path: dirPath,
-              icon: '🔷',
-              universe: 'unknown',
-            }]);
-            treeProvider.refresh();
-          }
-        }
         ensureWorkspaceFolder(dirPath);
+        refreshDiscovery();
+        treeProvider.refresh();
       });
       context.subscriptions.push(listener);
     }),

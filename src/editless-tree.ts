@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
-import { EditlessRegistry } from './registry';
 import { scanSquad } from './scanner';
 import { getLocalSquadVersion } from './squad-utils';
 import { getStateIcon, getStateDescription } from './terminal-manager';
@@ -8,19 +7,18 @@ import type { TerminalManager, PersistedTerminalInfo, SessionState } from './ter
 import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
 import type { AgentTeamConfig, SquadState, AgentInfo, SessionContext } from './types';
-import type { DiscoveredAgent } from './agent-discovery';
 import type { DiscoveredItem } from './unified-discovery';
-import type { AgentVisibilityManager } from './visibility';
+import type { AgentSettingsManager } from './agent-settings';
 
 // ---------------------------------------------------------------------------
 // Tree item types
 // ---------------------------------------------------------------------------
 
-export type TreeItemType = 'squad' | 'category' | 'agent' | 'terminal' | 'discovered-agent' | 'discovered-squad' | 'orphanedSession' | 'default-agent';
+export type TreeItemType = 'squad' | 'squad-hidden' | 'category' | 'agent' | 'terminal' | 'orphanedSession' | 'default-agent';
 
 /** Sentinel ID for the built-in Copilot CLI entry. */
 export const DEFAULT_COPILOT_CLI_ID = 'builtin:copilot-cli';
-type CategoryKind = 'roster' | 'discovered' | 'hidden';
+type CategoryKind = 'roster' | 'hidden';
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
 function normalizeSquadDisplayName(name: string, fallback: string): string {
@@ -78,18 +76,16 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private _cache = new Map<string, SquadState>();
-  private _discoveredAgents: DiscoveredAgent[] = [];
   private _discoveredItems: DiscoveredItem[] = [];
 
   private readonly _terminalSub: vscode.Disposable | undefined;
   private readonly _labelSub: vscode.Disposable | undefined;
 
   constructor(
-    private readonly registry: EditlessRegistry,
+    private readonly agentSettings: AgentSettingsManager,
     private readonly terminalManager?: TerminalManager,
     private readonly labelManager?: SessionLabelManager,
     private readonly sessionContextResolver?: SessionContextResolver,
-    private readonly _visibility?: AgentVisibilityManager,
   ) {
     if (terminalManager) {
       this._terminalSub = terminalManager.onDidChange(() => this._onDidChangeTreeData.fire());
@@ -110,14 +106,13 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     this._onDidChangeTreeData.fire();
   }
 
-  setDiscoveredAgents(agents: DiscoveredAgent[]): void {
-    this._discoveredAgents = agents;
-    this._onDidChangeTreeData.fire();
-  }
-
   setDiscoveredItems(items: DiscoveredItem[]): void {
     this._discoveredItems = items;
     this._onDidChangeTreeData.fire();
+  }
+
+  getDiscoveredItems(): readonly DiscoveredItem[] {
+    return this._discoveredItems;
   }
 
   invalidate(squadId: string): void {
@@ -162,11 +157,8 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     if (element.type === 'default-agent' && element.squadId) {
       return this.getDefaultAgentChildren(element);
     }
-    if (element.type === 'squad' && element.squadId) {
+    if ((element.type === 'squad' || element.type === 'squad-hidden') && element.squadId) {
       return this.getSquadChildren(element.squadId, element);
-    }
-    if (element.type === 'category' && element.categoryKind === 'discovered') {
-      return this.getDiscoveredChildren(element);
     }
     if (element.type === 'category' && element.squadId && element.categoryKind) {
       return this.getCategoryChildren(element.squadId, element.categoryKind, element);
@@ -177,46 +169,25 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   // -- Root: one item per squad -------------------------------------------
 
   private getRootItems(): EditlessTreeItem[] {
-    const squads = this.registry.loadSquads();
     const items: EditlessTreeItem[] = [];
 
     // Built-in Copilot CLI — always present at top
     items.push(this.buildDefaultAgentItem());
 
-    for (const cfg of squads) {
-      if (!this._visibility?.isHidden(cfg.id)) {
-        items.push(this.buildSquadItem(cfg));
-      }
+    // All discovered items — visible ones first, hidden ones dimmed inline
+    const visible = this._discoveredItems.filter(i => !this.agentSettings.isHidden(i.id));
+    const hidden = this._discoveredItems.filter(i => this.agentSettings.isHidden(i.id));
+
+    for (const disc of visible) {
+      items.push(this.buildDiscoveredRootItem(disc, false));
     }
-
-    // Unified "Discovered" section — agents + squads from unified discovery
-    const visibleItems = this._discoveredItems.filter(i => !this._visibility?.isHidden(i.id));
-
-    // Fallback: also include legacy discovered agents not already in unified or registered items
-    const unifiedIds = new Set(visibleItems.map(i => i.id));
-    const registeredIds = new Set(squads.map(s => s.id));
-    const legacyAgents = this._discoveredAgents
-      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id) && !registeredIds.has(a.id));
-
-    const totalDiscovered = visibleItems.length + legacyAgents.length;
-
-    if (totalDiscovered > 0) {
-      const header = new EditlessTreeItem(
-        'Discovered',
-        'category',
-        vscode.TreeItemCollapsibleState.Expanded,
-        undefined,
-        'discovered',
-      );
-      header.id = 'discovered-header';
-      header.description = `${totalDiscovered} new`;
-      header.iconPath = new vscode.ThemeIcon('search');
-      items.push(header);
+    for (const disc of hidden) {
+      items.push(this.buildDiscoveredRootItem(disc, true));
     }
 
     if (items.length === 1) {
-      // Only the default Copilot CLI entry — no registered or discovered agents
-      const hasHiddenItems = (this._visibility?.getHiddenIds().length ?? 0) > 0;
+      // Only the default Copilot CLI entry — no discovered agents
+      const hasHiddenItems = this.agentSettings.getHiddenIds().length > 0;
       if (hasHiddenItems) {
         const msg = new EditlessTreeItem(
           'All agents hidden — use Show Hidden to restore',
@@ -229,6 +200,113 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     }
 
     return items;
+  }
+
+  private buildDiscoveredRootItem(disc: DiscoveredItem, isHidden: boolean): EditlessTreeItem {
+    const isSquad = disc.type === 'squad';
+    const isStandalone = isSquad && disc.universe === 'standalone';
+
+    // For squads with a path, build a full squad item from discovery + settings
+    if (isSquad) {
+      const settings = this.agentSettings.get(disc.id);
+      const displayName = normalizeSquadDisplayName(settings?.name ?? disc.name, disc.id);
+      const icon = settings?.icon ?? (isStandalone ? '🤖' : '🔷');
+
+      const terminalCount = this.terminalManager
+        ? this.terminalManager.getTerminalsForSquad(disc.id).length
+        : 0;
+      const orphanCount = this.terminalManager
+        ? this.terminalManager.getOrphanedSessions()
+            .filter(o => o.squadId === disc.id && !!o.agentSessionId)
+            .length
+        : 0;
+
+      const itemType: TreeItemType = isHidden ? 'squad-hidden' : 'squad';
+
+      const item = new EditlessTreeItem(
+        `${icon} ${displayName}`,
+        itemType,
+        isStandalone
+          ? ((terminalCount > 0 || orphanCount > 0) ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None)
+          : vscode.TreeItemCollapsibleState.Collapsed,
+        disc.id,
+      );
+
+      const descParts: string[] = [];
+      if (!isStandalone && disc.universe) {
+        descParts.push(disc.universe);
+      }
+      if (terminalCount > 0) {
+        descParts.push(`${terminalCount} session${terminalCount === 1 ? '' : 's'}`);
+      }
+      if (orphanCount > 0) {
+        descParts.push(`${orphanCount} resumable`);
+      }
+      if (isHidden) {
+        descParts.push('(hidden)');
+      }
+      item.description = descParts.join(' · ');
+
+      const originalIcon = isStandalone ? 'hubot' : 'organization';
+      item.iconPath = isHidden
+        ? new vscode.ThemeIcon(originalIcon, new vscode.ThemeColor('disabledForeground'))
+        : new vscode.ThemeIcon(originalIcon);
+
+      const tooltipLines = [
+        `**${icon} ${displayName}**`,
+        `Path: \`${disc.path}\``,
+      ];
+      if (disc.universe) tooltipLines.push(`Universe: ${disc.universe}`);
+      const localVersion = getLocalSquadVersion(disc.path);
+      if (localVersion) tooltipLines.push(`Squad Version: ${localVersion}`);
+      item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
+
+      return item;
+    }
+
+    // Standalone agent item
+    const settings = this.agentSettings.get(disc.id);
+    const displayName = settings?.name ?? disc.name;
+    const itemType: TreeItemType = isHidden ? 'squad-hidden' : 'squad';
+
+    const terminalCount = this.terminalManager
+      ? this.terminalManager.getTerminalsForSquad(disc.id).length
+      : 0;
+    const orphanCount = this.terminalManager
+      ? this.terminalManager.getOrphanedSessions()
+          .filter(o => o.squadId === disc.id && !!o.agentSessionId)
+          .length
+      : 0;
+
+    const item = new EditlessTreeItem(
+      displayName,
+      itemType,
+      (terminalCount > 0 || orphanCount > 0)
+        ? vscode.TreeItemCollapsibleState.Collapsed
+        : vscode.TreeItemCollapsibleState.None,
+      disc.id,
+    );
+
+    const descParts: string[] = [];
+    if (disc.description) descParts.push(disc.description);
+    else descParts.push(disc.source);
+    if (terminalCount > 0) {
+      descParts.push(`${terminalCount} session${terminalCount === 1 ? '' : 's'}`);
+    }
+    if (isHidden) {
+      descParts.push('(hidden)');
+    }
+    item.description = descParts.join(' · ');
+
+    item.iconPath = isHidden
+      ? new vscode.ThemeIcon('hubot', new vscode.ThemeColor('disabledForeground'))
+      : new vscode.ThemeIcon('hubot');
+
+    item.tooltip = new vscode.MarkdownString(
+      [`**🤖 ${displayName}**`, `Source: ${disc.source}`, `File: \`${disc.path}\``].join('\n\n'),
+    );
+
+    return item;
   }
 
   private buildDefaultAgentItem(): EditlessTreeItem {
@@ -302,71 +380,23 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     return children;
   }
 
-  private buildSquadItem(cfg: AgentTeamConfig): EditlessTreeItem {
-    const displayName = normalizeSquadDisplayName(cfg.name, cfg.id);
-    const isStandalone = cfg.universe === 'standalone';
-
-    const terminalCount = this.terminalManager
-      ? this.terminalManager.getTerminalsForSquad(cfg.id).length
-      : 0;
-
-    const orphanCount = this.terminalManager
-      ? this.terminalManager.getOrphanedSessions()
-          .filter(o => o.squadId === cfg.id && !!o.agentSessionId)
-          .length
-      : 0;
-
-    const item = new EditlessTreeItem(
-      `${cfg.icon} ${displayName}`,
-      'squad',
-      isStandalone
-        ? ((terminalCount > 0 || orphanCount > 0) ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None)
-        : vscode.TreeItemCollapsibleState.Collapsed,
-      cfg.id,
-    );
-
-    const descParts: string[] = [];
-    if (!isStandalone) {
-      descParts.push(cfg.universe);
-    }
-
-    const cached = this._cache.get(cfg.id);
-    if (terminalCount > 0) {
-      descParts.push(`${terminalCount} session${terminalCount === 1 ? '' : 's'}`);
-    }
-
-    if (orphanCount > 0) {
-      descParts.push(`${orphanCount} resumable`);
-    }
-
-    item.description = descParts.join(' · ');
-
-    const tooltipLines = [
-      `**${cfg.icon} ${displayName}**`,
-      `Path: \`${cfg.path}\``,
-      `Universe: ${cfg.universe}`,
-    ];
-
-    const localVersion = getLocalSquadVersion(cfg.path);
-    if (localVersion) {
-      tooltipLines.push(`Squad Version: ${localVersion}`);
-    }
-
-    if (cached?.lastActivity) {
-      tooltipLines.push(`Last activity: ${cached.lastActivity}`);
-    }
-    item.tooltip = new vscode.MarkdownString(tooltipLines.join('\n\n'));
-    item.iconPath = new vscode.ThemeIcon(isStandalone ? 'hubot' : 'organization');
-
-    return item;
-  }
-
   // -- Squad children: categories + terminal sessions ---------------------
 
   private getState(squadId: string): SquadState | undefined {
     if (!this._cache.has(squadId)) {
-      const cfg = this.registry.getSquad(squadId);
-      if (!cfg) return undefined;
+      const disc = this._discoveredItems.find(d => d.id === squadId);
+      if (!disc) return undefined;
+      const settings = this.agentSettings.get(squadId);
+      const cfg: AgentTeamConfig = {
+        id: disc.id,
+        name: settings?.name ?? disc.name,
+        path: disc.path,
+        icon: settings?.icon ?? (disc.type === 'squad' ? '🔷' : '🤖'),
+        universe: disc.universe ?? 'standalone',
+        description: disc.description,
+        model: settings?.model,
+        additionalArgs: settings?.additionalArgs,
+      };
       this._cache.set(squadId, scanSquad(cfg));
     }
     return this._cache.get(squadId);
@@ -473,33 +503,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     return children;
   }
 
-  private getDiscoveredChildren(parentItem: EditlessTreeItem): EditlessTreeItem[] {
-    const visibleItems = this._discoveredItems.filter(i => !this._visibility?.isHidden(i.id));
-    const unifiedIds = new Set(visibleItems.map(i => i.id));
-    const registeredIds = new Set(this.registry.loadSquads().map(s => s.id));
-    const legacyAgents = this._discoveredAgents
-      .filter(a => !this._visibility?.isHidden(a.id) && !unifiedIds.has(a.id) && !registeredIds.has(a.id));
-
-    const children: EditlessTreeItem[] = [];
-
-    // Squads first, then agents (per Summer's UX spec)
-    for (const squad of visibleItems.filter(i => i.type === 'squad')) {
-      children.push(this.buildDiscoveredSquadItem(squad));
-    }
-    for (const agent of visibleItems.filter(i => i.type === 'agent')) {
-      children.push(this.buildDiscoveredItemAgent(agent));
-    }
-    for (const agent of legacyAgents) {
-      children.push(this.buildDiscoveredAgentItem(agent));
-    }
-
-    for (const child of children) {
-      child.parent = parentItem;
-    }
-
-    return children;
-  }
-
   private buildAgentItem(agent: AgentInfo, squadId?: string): EditlessTreeItem {
     const item = new EditlessTreeItem(agent.name, 'agent', vscode.TreeItemCollapsibleState.None);
     if (squadId) {
@@ -509,67 +512,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     }
     item.description = agent.role;
     item.iconPath = new vscode.ThemeIcon('person');
-    return item;
-  }
-
-  private buildDiscoveredAgentItem(agent: DiscoveredAgent): EditlessTreeItem {
-    const item = new EditlessTreeItem(agent.name, 'discovered-agent');
-    item.id = `discovered:${agent.id}`;
-    item.description = agent.description ?? agent.source;
-    item.iconPath = new vscode.ThemeIcon('hubot');
-    item.tooltip = new vscode.MarkdownString(
-      [`**🤖 ${agent.name}**`, `Source: ${agent.source}`, `File: \`${agent.filePath}\``].join('\n\n'),
-    );
-    const uri = vscode.Uri.file(agent.filePath);
-    if (agent.filePath.endsWith('.md')) {
-      item.command = {
-        command: 'editless.openFilePreview',
-        title: 'Preview Agent File',
-        arguments: [uri],
-      };
-    } else {
-      item.command = {
-        command: 'vscode.open',
-        title: 'Open Agent File',
-        arguments: [uri],
-      };
-    }
-    return item;
-  }
-
-  private buildDiscoveredItemAgent(disc: DiscoveredItem): EditlessTreeItem {
-    const item = new EditlessTreeItem(disc.name, 'discovered-agent');
-    item.id = `discovered:${disc.id}`;
-    item.description = disc.description ?? disc.source;
-    item.iconPath = new vscode.ThemeIcon('hubot');
-    item.tooltip = new vscode.MarkdownString(
-      [`**🤖 ${disc.name}**`, `Source: ${disc.source}`, `File: \`${disc.path}\``].join('\n\n'),
-    );
-    const uri = vscode.Uri.file(disc.path);
-    if (disc.path.endsWith('.md')) {
-      item.command = {
-        command: 'editless.openFilePreview',
-        title: 'Preview Agent File',
-        arguments: [uri],
-      };
-    } else {
-      item.command = {
-        command: 'vscode.open',
-        title: 'Open Agent File',
-        arguments: [uri],
-      };
-    }
-    return item;
-  }
-
-  private buildDiscoveredSquadItem(disc: DiscoveredItem): EditlessTreeItem {
-    const item = new EditlessTreeItem(disc.name, 'discovered-squad');
-    item.id = `discovered:${disc.id}`;
-    item.description = disc.universe ?? disc.source;
-    item.iconPath = new vscode.ThemeIcon('organization');
-    item.tooltip = new vscode.MarkdownString(
-      [`**🔷 ${disc.name}**`, `Source: ${disc.source}`, `Path: \`${disc.path}\``, disc.universe ? `Universe: ${disc.universe}` : ''].filter(Boolean).join('\n\n'),
-    );
     return item;
   }
 

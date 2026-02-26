@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AgentTeamConfig } from './types';
-import { EditlessRegistry } from './registry';
 import { resolveTeamMd, resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
@@ -169,9 +168,17 @@ export function discoverAgentTeams(
 }
 
 
+/** @deprecated — kept for backward compatibility with existing tests. */
+interface RegistryLike {
+  addSquads(squads: AgentTeamConfig[]): void;
+  loadSquads(): AgentTeamConfig[];
+  updateSquad(id: string, updates: Partial<AgentTeamConfig>): boolean;
+}
+
+/** @deprecated — no longer called from extension code. */
 export async function promptAndAddSquads(
   discovered: AgentTeamConfig[],
-  registry: EditlessRegistry,
+  registry: RegistryLike,
 ): Promise<void> {
   if (discovered.length === 0) {
     vscode.window.showInformationMessage('No new agents found.');
@@ -200,11 +207,10 @@ export async function promptAndAddSquads(
 
 
 /**
+ * @deprecated — no longer called from extension code.
  * Auto-register squads found at workspace roots.
- * If a workspace folder contains .ai-team/ or .squad/ with a team.md,
- * silently add it to the registry so the tree view populates immediately.
  */
-export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
+export function autoRegisterWorkspaceSquads(registry: RegistryLike): void {
   const folders = vscode.workspace.workspaceFolders;
   if (!folders || folders.length === 0) { return; }
 
@@ -216,7 +222,6 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
   for (const folder of folders) {
     const folderPath = folder.uri.fsPath;
     if (existingPaths.has(folderPath.toLowerCase())) {
-      // When team.md appears for an already-registered "unknown" squad, update it
       const existingSquad = existing.find(s => s.path.toLowerCase() === folderPath.toLowerCase());
       if (existingSquad?.universe === 'unknown') {
         const teamMdPath = resolveTeamMd(folderPath);
@@ -249,7 +254,6 @@ export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
         universe,
       });
     } else if (resolveTeamDir(folderPath)) {
-      // squad init creates .ai-team/ before the coordinator writes team.md
       toAdd.push({
         id: toKebabCase(folder.name),
         name: folder.name,
