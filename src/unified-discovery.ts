@@ -3,7 +3,8 @@ import * as path from 'path';
 import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir } from './agent-discovery';
 import { discoverAgentTeams, parseTeamMd, toKebabCase, readUniverseFromRegistry } from './discovery';
 import { resolveTeamMd, resolveTeamDir } from './team-dir';
-import type { AgentTeamConfig } from './types';
+import type { AgentTeamConfig, WorkspaceFolderLike } from './types';
+import type { AgentSettings } from './agent-settings';
 
 /** A single discovered item — either a standalone agent or a squad. */
 export interface DiscoveredItem {
@@ -17,17 +18,13 @@ export interface DiscoveredItem {
   universe?: string;
 }
 
-interface WorkspaceFolder {
-  uri: { fsPath: string };
-}
-
 /**
  * Unified discovery — scans workspace folders for both agents AND squads,
  * plus ~/.config/copilot/agents/ (and ~/.copilot/agents/) for personal agent library.
  * Returns ALL discovered items (deduped by ID within results).
  */
 export function discoverAll(
-  workspaceFolders: readonly WorkspaceFolder[],
+  workspaceFolders: readonly WorkspaceFolderLike[],
 ): DiscoveredItem[] {
   const items: DiscoveredItem[] = [];
   const seenIds = new Set<string>();
@@ -147,5 +144,22 @@ function squadConfigToItem(cfg: AgentTeamConfig): DiscoveredItem {
     path: cfg.path,
     description: cfg.description,
     universe: cfg.universe,
+  };
+}
+
+/**
+ * Convert a DiscoveredItem + optional AgentSettings overrides into a full AgentTeamConfig.
+ * Centralises the 8-field mapping that was previously duplicated at 5 call sites.
+ */
+export function toAgentTeamConfig(disc: DiscoveredItem, settings?: AgentSettings): AgentTeamConfig {
+  return {
+    id: disc.id,
+    name: settings?.name ?? disc.name,
+    path: disc.path,
+    icon: settings?.icon ?? (disc.type === 'squad' ? '🔷' : '🤖'),
+    universe: disc.universe ?? 'standalone',
+    description: disc.description,
+    model: settings?.model,
+    additionalArgs: settings?.additionalArgs,
   };
 }

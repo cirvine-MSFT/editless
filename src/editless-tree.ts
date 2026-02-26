@@ -7,7 +7,8 @@ import type { TerminalManager, PersistedTerminalInfo, SessionState } from './ter
 import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
 import type { AgentTeamConfig, SquadState, AgentInfo, SessionContext } from './types';
-import type { DiscoveredItem } from './unified-discovery';
+import { type DiscoveredItem, toAgentTeamConfig } from './unified-discovery';
+import { normalizeSquadName } from './discovery';
 import type { AgentSettingsManager } from './agent-settings';
 
 // ---------------------------------------------------------------------------
@@ -19,25 +20,6 @@ export type TreeItemType = 'squad' | 'squad-hidden' | 'category' | 'agent' | 'te
 /** Sentinel ID for the built-in Copilot CLI entry. */
 export const DEFAULT_COPILOT_CLI_ID = 'builtin:copilot-cli';
 type CategoryKind = 'roster' | 'hidden';
-const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
-
-function normalizeSquadDisplayName(name: string, fallback: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) {
-    return fallback;
-  }
-
-  const prefixed = trimmed.match(TEAM_ROSTER_PREFIX);
-  if (prefixed?.[1]?.trim()) {
-    return prefixed[1].trim();
-  }
-
-  if (/^team\s+roster$/i.test(trimmed)) {
-    return fallback;
-  }
-
-  return trimmed;
-}
 
 function stableHash(input: string): string {
   return crypto.createHash('sha256').update(input).digest('hex').substring(0, 8);
@@ -216,7 +198,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     // For squads with a path, build a full squad item from discovery + settings
     if (isSquad) {
       const settings = this.agentSettings.get(disc.id);
-      const displayName = normalizeSquadDisplayName(settings?.name ?? disc.name, disc.id);
+      const displayName = normalizeSquadName(settings?.name ?? disc.name, disc.id);
       const icon = settings?.icon ?? (isStandalone ? '🤖' : '🔷');
 
       const terminalCount = this.terminalManager
@@ -393,16 +375,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       const disc = this._discoveredItems.find(d => d.id === squadId);
       if (!disc) return undefined;
       const settings = this.agentSettings.get(squadId);
-      const cfg: AgentTeamConfig = {
-        id: disc.id,
-        name: settings?.name ?? disc.name,
-        path: disc.path,
-        icon: settings?.icon ?? (disc.type === 'squad' ? '🔷' : '🤖'),
-        universe: disc.universe ?? 'standalone',
-        description: disc.description,
-        model: settings?.model,
-        additionalArgs: settings?.additionalArgs,
-      };
+      const cfg = toAgentTeamConfig(disc, settings);
       this._cache.set(squadId, scanSquad(cfg));
     }
     return this._cache.get(squadId);

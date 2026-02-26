@@ -310,9 +310,13 @@ vi.mock('../discovery', () => ({
   discoverAgentTeams: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock('../unified-discovery', () => ({
-  discoverAll: mockDiscoverAll,
-}));
+vi.mock('../unified-discovery', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../unified-discovery')>();
+  return {
+    ...actual,
+    discoverAll: mockDiscoverAll,
+  };
+});
 
 vi.mock('../watcher', () => ({
   SquadWatcher: vi.fn(function () {

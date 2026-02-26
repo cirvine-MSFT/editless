@@ -132,7 +132,10 @@ vi.mock('../terminal-manager', () => ({ TerminalManager: vi.fn(function () { ret
 vi.mock('../session-labels', () => ({ SessionLabelManager: vi.fn(function () { return { getLabel: vi.fn(), setLabel: vi.fn(), clearLabel: vi.fn(), onDidChange: vi.fn(() => ({ dispose: vi.fn() })) }; }), promptClearLabel: vi.fn(), promptRenameSession: vi.fn() }));
 vi.mock('../squad-utils', () => ({ checkNpxAvailable: vi.fn().mockResolvedValue(true), promptInstallNode: vi.fn(), isSquadInitialized: vi.fn() }));
 vi.mock('../discovery', () => ({ ensureWorkspaceFolder: vi.fn() }));
-vi.mock('../unified-discovery', () => ({ discoverAll: vi.fn().mockReturnValue([]) }));
+vi.mock('../unified-discovery', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../unified-discovery')>();
+  return { ...actual, discoverAll: vi.fn().mockReturnValue([]) };
+});
 vi.mock('../watcher', () => ({ SquadWatcher: vi.fn(function () { return { dispose: vi.fn(), updateSquads: vi.fn() }; }) }));
 vi.mock('../status-bar', () => ({ EditlessStatusBar: vi.fn(function () { return { update: vi.fn(), updateSessionsOnly: vi.fn(), setDiscoveredItems: vi.fn(), dispose: vi.fn() }; }) }));
 vi.mock('../session-context', () => ({ SessionContextResolver: vi.fn(function () { return {}; }) }));
