@@ -254,6 +254,8 @@ vi.mock('../agent-settings', () => ({
     isHidden: mockAgentSettingsIsHidden,
     reload: mockAgentSettingsReload,
     settingsPath: '/mock/agent-settings.json',
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+    dispose: vi.fn(),
   })),
   migrateFromRegistry: vi.fn(),
 }));

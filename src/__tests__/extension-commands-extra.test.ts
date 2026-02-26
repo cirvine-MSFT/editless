@@ -13,6 +13,8 @@ const { mockCommands, mockShowInformationMessage, mockAgentSettings, mockTreePro
     getHiddenIds: vi.fn(() => []),
     settingsPath: '/mock/settings.json',
     reload: vi.fn(),
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+    dispose: vi.fn(),
   },
   mockTreeProvider: {
     setDiscoveredItems: vi.fn(),
@@ -156,5 +158,13 @@ describe('Extra Extension Commands', () => {
     handler({});
     expect(mockAgentSettings.show).not.toHaveBeenCalled();
     expect(mockAgentSettings.hide).not.toHaveBeenCalled();
+  });
+
+  it('editless.hideAgent strips discovered: prefix from ID', () => {
+    const handler = mockCommands['editless.hideAgent'];
+    const item = { squadId: 'discovered:my-agent', type: 'squad' };
+    handler(item);
+
+    expect(mockAgentSettings.hide).toHaveBeenCalledWith('my-agent');
   });
 });

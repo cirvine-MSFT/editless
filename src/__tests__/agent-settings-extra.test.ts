@@ -1,7 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { AgentSettingsManager } from '../agent-settings';
+
+vi.mock('vscode', () => ({
+  EventEmitter: class { event = vi.fn(); fire = vi.fn(); dispose = vi.fn(); },
+  Uri: { file: (s: string) => ({ fsPath: s }) },
+  RelativePattern: class { constructor(public base: unknown, public pattern: string) {} },
+  workspace: {
+    createFileSystemWatcher: () => ({
+      onDidChange: vi.fn(),
+      onDidCreate: vi.fn(),
+      onDidDelete: vi.fn(),
+      dispose: vi.fn(),
+    }),
+  },
+}));
+
+import { AgentSettingsManager, migrateFromRegistry } from '../agent-settings';
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
@@ -56,5 +71,69 @@ describe('AgentSettingsManager — Error Handling', () => {
     vi.mocked(fs.readFileSync).mockReturnValueOnce('{ invalid json');
     mgr.reload();
     expect(mgr.getAll()).toEqual({});
+  });
+
+  it('treats missing agents field as empty on reload', () => {
+    vi.mocked(fs.readFileSync).mockReturnValueOnce(JSON.stringify({ version: 1 }));
+    const mgr = new AgentSettingsManager(settingsPath);
+    expect(mgr.getAll()).toEqual({});
+  });
+
+  it('creates settings directory with recursive option on first write', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { name: 'Alpha' });
+
+    expect(vi.mocked(fs.mkdirSync)).toHaveBeenCalledWith(
+      path.dirname(settingsPath),
+      { recursive: true },
+    );
+  });
+});
+
+describe('migrateFromRegistry — edge cases', () => {
+  const settingsPath = '/mock/settings.json';
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ agents: {} }));
+  });
+
+  it('returns false for corrupted old registry JSON', () => {
+    vi.mocked(fs.readFileSync).mockImplementation((filePath: any) => {
+      if (String(filePath).includes('old-registry')) return '{ corrupted!!!';
+      return JSON.stringify({ agents: {} });
+    });
+
+    const mgr = new AgentSettingsManager(settingsPath);
+    expect(migrateFromRegistry('/mock/old-registry.json', mgr)).toBe(false);
+  });
+
+  it('last duplicate ID wins when old registry has repeated entries', () => {
+    const oldData = JSON.stringify({
+      squads: [
+        { id: 'squad-1', name: 'First', icon: '🔴' },
+        { id: 'squad-1', name: 'Second', icon: '🟢' },
+      ],
+    });
+    vi.mocked(fs.readFileSync).mockImplementation((filePath: any) => {
+      if (String(filePath).includes('old-registry')) return oldData;
+      return JSON.stringify({ agents: {} });
+    });
+
+    const mgr = new AgentSettingsManager(settingsPath);
+    migrateFromRegistry('/mock/old-registry.json', mgr);
+
+    expect(mgr.get('squad-1')?.name).toBe('Second');
+    expect(mgr.get('squad-1')?.icon).toBe('🟢');
+  });
+
+  it('handles non-array squads field gracefully', () => {
+    vi.mocked(fs.readFileSync).mockImplementation((filePath: any) => {
+      if (String(filePath).includes('old-registry')) return JSON.stringify({ squads: 'not-an-array' });
+      return JSON.stringify({ agents: {} });
+    });
+
+    const mgr = new AgentSettingsManager(settingsPath);
+    expect(migrateFromRegistry('/mock/old-registry.json', mgr)).toBe(false);
   });
 });

@@ -189,13 +189,12 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   }
 
   // --- Settings file watcher for cross-window sync -------------------------
-  // Use RelativePattern with Uri base so the watcher works for files outside workspace
-  const settingsDir = path.dirname(agentSettings.settingsPath);
-  const settingsWatcher = vscode.workspace.createFileSystemWatcher(
-    new vscode.RelativePattern(vscode.Uri.file(settingsDir), 'agent-settings.json'),
-  );
-  settingsWatcher.onDidChange(() => { agentSettings.reload(); treeProvider.refresh(); statusBar.update(); });
-  context.subscriptions.push(settingsWatcher);
+  // AgentSettingsManager handles the file watching and reloading internally.
+  context.subscriptions.push(agentSettings);
+  agentSettings.onDidChange(() => {
+    treeProvider.refresh();
+    statusBar.update();
+  });
 
   // --- Commands ----------------------------------------------------------
 

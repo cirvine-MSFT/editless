@@ -14,11 +14,31 @@ export interface AgentSettingsFile {
   agents: Record<string, AgentSettings>;
 }
 
-export class AgentSettingsManager {
+export class AgentSettingsManager implements vscode.Disposable {
   private _cache: AgentSettingsFile = { agents: {} };
+
+  private _watcher?: vscode.FileSystemWatcher;
+  private _onDidChange = new vscode.EventEmitter<void>();
+  public readonly onDidChange = this._onDidChange.event;
 
   constructor(public readonly settingsPath: string) {
     this.reload();
+    // Use RelativePattern with Uri base — raw absolute paths on Windows have
+    // backslashes misinterpreted as glob escapes (#399 round-1 fix).
+    const dir = path.dirname(settingsPath);
+    const file = path.basename(settingsPath);
+    this._watcher = vscode.workspace.createFileSystemWatcher(
+      new vscode.RelativePattern(vscode.Uri.file(dir), file),
+    );
+    const onFileEvent = (): void => { this.reload(); this._onDidChange.fire(); };
+    this._watcher.onDidChange(onFileEvent);
+    this._watcher.onDidCreate(onFileEvent);
+    this._watcher.onDidDelete(onFileEvent);
+  }
+
+  dispose() {
+    this._watcher?.dispose();
+    this._onDidChange.dispose();
   }
 
   get(id: string): AgentSettings | undefined {

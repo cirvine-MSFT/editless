@@ -1,7 +1,22 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
+
+vi.mock('vscode', () => ({
+  EventEmitter: class { event = vi.fn(); fire = vi.fn(); dispose = vi.fn(); },
+  Uri: { file: (s: string) => ({ fsPath: s }) },
+  RelativePattern: class { constructor(public base: unknown, public pattern: string) {} },
+  workspace: {
+    createFileSystemWatcher: () => ({
+      onDidChange: vi.fn(),
+      onDidCreate: vi.fn(),
+      onDidDelete: vi.fn(),
+      dispose: vi.fn(),
+    }),
+  },
+}));
+
 import { AgentSettingsManager, migrateFromRegistry } from '../agent-settings';
 
 let tmpDir: string;

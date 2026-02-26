@@ -123,6 +123,8 @@ vi.mock('../agent-settings', () => ({
     isHidden: vi.fn().mockReturnValue(false),
     reload: vi.fn(),
     settingsPath: '/mock/agent-settings.json',
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+    dispose: vi.fn(),
   })),
   migrateFromRegistry: vi.fn(),
 }));
