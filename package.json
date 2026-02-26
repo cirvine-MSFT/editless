@@ -331,14 +331,9 @@
           "group": "navigation@1"
         },
         {
-          "command": "editless.showHiddenAgents",
-          "when": "view == editlessTree",
-          "group": "navigation@2"
-        },
-        {
           "command": "editless.addNew",
           "when": "view == editlessTree",
-          "group": "navigation@3"
+          "group": "navigation@2"
         },
         {
           "command": "editless.refreshWorkItems",

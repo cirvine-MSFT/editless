@@ -50,7 +50,7 @@ describe('EditlessTreeProvider — Extra Visibility Tests', () => {
     provider = new EditlessTreeProvider(mockAgentSettings as never);
   });
 
-  it('renders hidden agents with dimmed icon and (hidden) description', () => {
+  it('renders hidden agents with dimmed icon and (hidden) description inside group', () => {
     const hiddenId = 'squad-hidden';
     mockAgentSettings.isHidden.mockImplementation((id: string) => id === hiddenId);
     
@@ -59,7 +59,12 @@ describe('EditlessTreeProvider — Extra Visibility Tests', () => {
     ]);
 
     const roots = provider.getChildren();
-    const hiddenItem = roots.find(r => r.squadId === hiddenId);
+    // Hidden agents are inside a collapsible "Hidden" group
+    const hiddenGroup = roots.find(r => r.type === 'category' && r.categoryKind === 'hidden');
+    expect(hiddenGroup).toBeDefined();
+
+    const hiddenChildren = provider.getChildren(hiddenGroup!);
+    const hiddenItem = hiddenChildren.find(r => r.squadId === hiddenId);
 
     expect(hiddenItem).toBeDefined();
     expect(hiddenItem!.contextValue).toBe('squad-hidden');
@@ -72,7 +77,7 @@ describe('EditlessTreeProvider — Extra Visibility Tests', () => {
     expect((icon.color as ThemeColor).id).toBe('disabledForeground');
   });
 
-  it('does NOT render "All agents hidden" placeholder when hidden agents are shown inline', () => {
+  it('shows collapsible Hidden group instead of placeholder when all agents hidden', () => {
     mockAgentSettings.isHidden.mockReturnValue(true);
     mockAgentSettings.getHiddenIds.mockReturnValue(['squad-1']);
 
@@ -82,11 +87,11 @@ describe('EditlessTreeProvider — Extra Visibility Tests', () => {
 
     const roots = provider.getChildren();
     const placeholder = roots.find(r => typeof r.label === 'string' && r.label.includes('All agents hidden'));
-    // Since hidden agents are shown dimmed, we don't show the placeholder
     expect(placeholder).toBeUndefined();
 
-    const hiddenItem = roots.find(r => r.squadId === 'squad-1');
-    expect(hiddenItem).toBeDefined();
-    expect(hiddenItem!.contextValue).toBe('squad-hidden');
+    // Should have a collapsible "Hidden" group instead
+    const hiddenGroup = roots.find(r => r.type === 'category' && r.categoryKind === 'hidden');
+    expect(hiddenGroup).toBeDefined();
+    expect(hiddenGroup!.label).toBe('Hidden (1)');
   });
 });

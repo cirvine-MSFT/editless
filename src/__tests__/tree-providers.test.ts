@@ -653,7 +653,7 @@ describe('EditlessTreeProvider — visibility filtering', () => {
     }));
   }
 
-  it('hidden squads appear with type squad-hidden', () => {
+  it('hidden squads appear under collapsible Hidden group', () => {
     const squads = [
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
       { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
@@ -664,15 +664,20 @@ describe('EditlessTreeProvider — visibility filtering', () => {
 
     const roots = provider.getChildren();
     const visibleSquads = roots.filter(r => r.type === 'squad');
-    const hiddenSquads = roots.filter(r => r.type === 'squad-hidden');
-
     expect(visibleSquads).toHaveLength(1);
     expect(visibleSquads[0].squadId).toBe('squad-b');
-    expect(hiddenSquads).toHaveLength(1);
-    expect(hiddenSquads[0].squadId).toBe('squad-a');
+
+    // Hidden agents live inside a collapsible "Hidden" group
+    const hiddenGroup = roots.find(r => r.type === 'category' && r.categoryKind === 'hidden');
+    expect(hiddenGroup).toBeDefined();
+    expect(hiddenGroup!.label).toBe('Hidden (1)');
+    const hiddenChildren = provider.getChildren(hiddenGroup!);
+    expect(hiddenChildren).toHaveLength(1);
+    expect(hiddenChildren[0].squadId).toBe('squad-a');
+    expect(hiddenChildren[0].contextValue).toBe('squad-hidden');
   });
 
-  it('"All agents hidden" placeholder when everything hidden', () => {
+  it('"Hidden" group shown when everything hidden', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
     const agentSettings = createMockAgentSettings(squads, { isHidden: () => true, getHiddenIds: () => ['squad-a'] });
     const provider = new EditlessTreeProvider(agentSettings as never);
@@ -680,11 +685,12 @@ describe('EditlessTreeProvider — visibility filtering', () => {
 
     const roots = provider.getChildren();
 
-    // First item is always the built-in Copilot CLI, then hidden squad, then the "all hidden" message
+    // First item is always the built-in Copilot CLI
     expect(roots[0].type).toBe('default-agent');
-    // Hidden squad appears inline as squad-hidden
-    const hiddenSquads = roots.filter(r => r.type === 'squad-hidden');
-    expect(hiddenSquads).toHaveLength(1);
+    // Hidden agents are in a collapsible group, not inline
+    const hiddenGroup = roots.find(r => r.type === 'category' && r.categoryKind === 'hidden');
+    expect(hiddenGroup).toBeDefined();
+    expect(hiddenGroup!.label).toBe('Hidden (1)');
   });
 
   it('shows default Copilot CLI agent when no squads registered', () => {
@@ -838,7 +844,7 @@ describe('EditlessTreeProvider — discovered agents', () => {
     expect(agentItems).toHaveLength(2);
   });
 
-  it('hidden discovered agents appear with type squad-hidden', () => {
+  it('hidden discovered agents appear under collapsible Hidden group', () => {
     const agentSettings = createMockAgentSettings([], { isHidden: (id: string) => id === 'a1' });
     const provider = new EditlessTreeProvider(agentSettings as never);
     provider.setDiscoveredItems([
@@ -848,11 +854,16 @@ describe('EditlessTreeProvider — discovered agents', () => {
 
     const roots = provider.getChildren();
     const visibleItems = roots.filter(r => r.type === 'squad');
-    const hiddenItems = roots.filter(r => r.type === 'squad-hidden');
     expect(visibleItems).toHaveLength(1);
     expect(visibleItems[0].label).toBe('Bot Two');
-    expect(hiddenItems).toHaveLength(1);
-    expect(hiddenItems[0].label).toBe('Bot One');
+
+    // Hidden agents are inside the collapsible group
+    const hiddenGroup = roots.find(r => r.type === 'category' && r.categoryKind === 'hidden');
+    expect(hiddenGroup).toBeDefined();
+    const hiddenChildren = provider.getChildren(hiddenGroup!);
+    expect(hiddenChildren).toHaveLength(1);
+    expect(hiddenChildren[0].label).toBe('Bot One');
+    expect(hiddenChildren[0].contextValue).toBe('squad-hidden');
   });
 });
 

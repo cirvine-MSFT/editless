@@ -126,9 +126,18 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
     // Build the parent squad item so getParent() can traverse back to root
     const rootItems = this.getRootItems();
-    const parentItem = rootItems.find(item =>
+    let parentItem: EditlessTreeItem | undefined = rootItems.find(item =>
       (item.type === 'squad' || item.type === 'default-agent') && item.squadId === info.squadId,
     );
+
+    // Also search inside the hidden group
+    if (!parentItem) {
+      const hiddenGroup = rootItems.find(item => item.type === 'category' && item.categoryKind === 'hidden');
+      if (hiddenGroup) {
+        parentItem = this.getHiddenGroupChildren(hiddenGroup)
+          .find(item => item.squadId === info.squadId);
+      }
+    }
     if (!parentItem) return undefined;
 
     if (parentItem.type === 'default-agent') {
@@ -160,6 +169,9 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     if ((element.type === 'squad' || element.type === 'squad-hidden') && element.squadId) {
       return this.getSquadChildren(element.squadId, element);
     }
+    if (element.type === 'category' && element.categoryKind === 'hidden') {
+      return this.getHiddenGroupChildren(element);
+    }
     if (element.type === 'category' && element.squadId && element.categoryKind) {
       return this.getCategoryChildren(element.squadId, element.categoryKind, element);
     }
@@ -174,29 +186,24 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     // Built-in Copilot CLI — always present at top
     items.push(this.buildDefaultAgentItem());
 
-    // All discovered items — visible ones first, hidden ones dimmed inline
+    // Visible agents at top level, hidden agents in collapsible group
     const visible = this._discoveredItems.filter(i => !this.agentSettings.isHidden(i.id));
     const hidden = this._discoveredItems.filter(i => this.agentSettings.isHidden(i.id));
 
     for (const disc of visible) {
       items.push(this.buildDiscoveredRootItem(disc, false));
     }
-    for (const disc of hidden) {
-      items.push(this.buildDiscoveredRootItem(disc, true));
-    }
 
-    if (items.length === 1) {
-      // Only the default Copilot CLI entry — no discovered agents
-      const hasHiddenItems = this.agentSettings.getHiddenIds().length > 0;
-      if (hasHiddenItems) {
-        const msg = new EditlessTreeItem(
-          'All agents hidden — use Show Hidden to restore',
-          'category',
-          vscode.TreeItemCollapsibleState.None,
-        );
-        msg.iconPath = new vscode.ThemeIcon('eye-closed');
-        items.push(msg);
-      }
+    if (hidden.length > 0) {
+      const hiddenGroup = new EditlessTreeItem(
+        `Hidden (${hidden.length})`,
+        'category',
+        vscode.TreeItemCollapsibleState.Collapsed,
+        'hidden-agents-group',
+        'hidden',
+      );
+      hiddenGroup.iconPath = new vscode.ThemeIcon('eye-closed');
+      items.push(hiddenGroup);
     }
 
     return items;
@@ -474,6 +481,17 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       }
     }
 
+    return children;
+  }
+
+  // -- Hidden group children ------------------------------------------------
+
+  private getHiddenGroupChildren(parentItem: EditlessTreeItem): EditlessTreeItem[] {
+    const hidden = this._discoveredItems.filter(i => this.agentSettings.isHidden(i.id));
+    const children = hidden.map(disc => this.buildDiscoveredRootItem(disc, true));
+    for (const child of children) {
+      child.parent = parentItem;
+    }
     return children;
   }
 
