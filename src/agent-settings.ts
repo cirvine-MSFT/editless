@@ -82,9 +82,14 @@ export class AgentSettingsManager {
   }
 
   private _writeToDisk(): void {
-    const dir = path.dirname(this.settingsPath);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(this.settingsPath, JSON.stringify(this._cache, null, 2), 'utf-8');
+    try {
+      const dir = path.dirname(this.settingsPath);
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(this.settingsPath, JSON.stringify(this._cache, null, 2), 'utf-8');
+    } catch {
+      // Write failed (disk full, permissions) — cache remains authoritative for this session.
+      // Next reload() will reconcile from whatever is on disk.
+    }
   }
 }
 

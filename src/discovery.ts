@@ -1,8 +1,7 @@
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AgentTeamConfig } from './types';
-import { resolveTeamMd, resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
+import { resolveTeamMd, TEAM_DIR_NAMES } from './team-dir';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
@@ -165,108 +164,6 @@ export function discoverAgentTeams(
 
   scan(dirPath, 0);
   return discovered;
-}
-
-
-/** @deprecated — kept for backward compatibility with existing tests. */
-interface RegistryLike {
-  addSquads(squads: AgentTeamConfig[]): void;
-  loadSquads(): AgentTeamConfig[];
-  updateSquad(id: string, updates: Partial<AgentTeamConfig>): boolean;
-}
-
-/** @deprecated — no longer called from extension code. */
-export async function promptAndAddSquads(
-  discovered: AgentTeamConfig[],
-  registry: RegistryLike,
-): Promise<void> {
-  if (discovered.length === 0) {
-    vscode.window.showInformationMessage('No new agents found.');
-    return;
-  }
-
-  const items: (vscode.QuickPickItem & { squad: AgentTeamConfig })[] = discovered.map(s => ({
-    label: `${s.icon} ${s.name}`,
-    description: s.path,
-    detail: `Universe: ${s.universe}`,
-    picked: true,
-    squad: s,
-  }));
-
-  const selected = await vscode.window.showQuickPick(items, {
-    canPickMany: true,
-    placeHolder: 'Select agents to add to registry',
-  });
-
-  if (!selected || selected.length === 0) { return; }
-
-  registry.addSquads(selected.map(i => i.squad));
-  vscode.window.showInformationMessage(`Added ${selected.length} agent(s) to registry.`);
-}
-
-
-
-/**
- * @deprecated — no longer called from extension code.
- * Auto-register squads found at workspace roots.
- */
-export function autoRegisterWorkspaceSquads(registry: RegistryLike): void {
-  const folders = vscode.workspace.workspaceFolders;
-  if (!folders || folders.length === 0) { return; }
-
-  const existing = registry.loadSquads();
-  const existingPaths = new Set(existing.map(s => s.path.toLowerCase()));
-
-  const toAdd: AgentTeamConfig[] = [];
-
-  for (const folder of folders) {
-    const folderPath = folder.uri.fsPath;
-    if (existingPaths.has(folderPath.toLowerCase())) {
-      const existingSquad = existing.find(s => s.path.toLowerCase() === folderPath.toLowerCase());
-      if (existingSquad?.universe === 'unknown') {
-        const teamMdPath = resolveTeamMd(folderPath);
-        if (teamMdPath) {
-          const content = fs.readFileSync(teamMdPath, 'utf-8');
-          const parsed = parseTeamMd(content, folder.name);
-          const universe = parsed.universe === 'unknown'
-            ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
-            : parsed.universe;
-          registry.updateSquad(existingSquad.id, { ...parsed, universe });
-        }
-      }
-      continue;
-    }
-
-    const teamMdPath = resolveTeamMd(folderPath);
-    if (teamMdPath) {
-      const content = fs.readFileSync(teamMdPath, 'utf-8');
-      const parsed = parseTeamMd(content, folder.name);
-      const universe = parsed.universe === 'unknown'
-        ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
-        : parsed.universe;
-
-      toAdd.push({
-        id: toKebabCase(folder.name),
-        name: parsed.name,
-        description: parsed.description,
-        path: folderPath,
-        icon: '🔷',
-        universe,
-      });
-    } else if (resolveTeamDir(folderPath)) {
-      toAdd.push({
-        id: toKebabCase(folder.name),
-        name: folder.name,
-        path: folderPath,
-        icon: '🔷',
-        universe: readUniverseFromRegistry(folderPath) ?? 'unknown',
-      });
-    }
-  }
-
-  if (toAdd.length > 0) {
-    registry.addSquads(toAdd);
-  }
 }
 
 

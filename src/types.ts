@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
-// Agent Team Registry
+// Agent Team Configuration
 // ---------------------------------------------------------------------------
 
-/** A single entry in the agent team registry. */
+/** A single entry in the agent team configuration. */
 export interface AgentTeamConfig {
   /** Kebab-case slug, e.g. "my-squad" */
   id: string;
@@ -83,7 +83,7 @@ export interface SquadState {
   error?: string;
   /** Squad roster parsed from .squad/team.md (or .ai-team/team.md) */
   roster: AgentInfo[];
-  /** Squad charter/description (from agent-registry.json or team.md header) */
+  /** Squad charter/description (from team.md header) */
   charter: string;
 }
 
