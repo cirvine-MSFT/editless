@@ -11,6 +11,28 @@
 
 ## Learnings
 
+### 2026-02-26: Auto-Discover Refactor Architecture Review (#399)
+
+**Reviewed:** `agent-settings.ts`, `editless-tree.ts`, `extension.ts`, `unified-discovery.ts`, `discovery.ts`, `status-bar.ts`, `package.json`
+
+**Verdict:** Architecture is sound. AgentSettingsManager is clean, well-encapsulated, and the right abstraction. The auto-discover pattern eliminates registry friction correctly. Found and fixed 6 issues:
+
+1. **`_writeToDisk()` had no error handling** — disk full or permission errors would crash the extension mid-operation. Added try/catch so cache remains authoritative; next `reload()` reconciles from disk.
+2. **100+ lines of dead code in `discovery.ts`** — `RegistryLike`, `promptAndAddSquads`, `autoRegisterWorkspaceSquads` marked `@deprecated` but still present. Removed along with unused `vscode` and `resolveTeamDir` imports.
+3. **`status-bar.test.ts` used old registry mock shape** — `makeRegistry()` returned `{ loadSquads }` but `EditlessStatusBar` now takes `AgentSettingsManager` with `isHidden()`. Tests passed by accident (empty `_discoveredItems`). Fixed to use proper `AgentSettingsManager` mock with `setDiscoveredItems()`.
+4. **`auto-refresh.test.ts` mocked deleted modules** — `../registry` and `../visibility` mocks referenced non-existent files. Removed.
+5. **`types.ts` stale comments** — references to "Agent Team Registry" and "agent-registry.json". Updated.
+6. **`agent-settings-extra.test.ts` tested old behavior** — expected `_writeToDisk` to propagate errors, now expects graceful swallow. Fixed.
+
+**Pre-existing issue noted (not fixed — not mine):** `extension-commands-extra.test.ts` fails due to `config.get('github.repos', [])` returning `undefined` in mock. Separate bug on this branch.
+
+**Key architectural observations:**
+- Settings watcher fires on self-writes (update → writeToDisk → watcher → reload). Redundant I/O but not a bug. Could optimize with a dirty flag if it becomes a problem.
+- Cross-window sync via file watcher is correct pattern for globalStorageUri.
+- 300ms debounce is appropriate for filesystem discovery. No race conditions found.
+
+---
+
 ### 2026-02-26: PR #424 Config Refresh Pattern — 3x Review Cycle
 
 **Session:** 3x Review + Fix cycle for PR #424 (squad/417-ado-config-refresh)  
