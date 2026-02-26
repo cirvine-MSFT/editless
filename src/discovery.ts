@@ -5,7 +5,7 @@ import { resolveTeamMd, TEAM_DIR_NAMES } from './team-dir';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
-function normalizeSquadName(name: string, fallback: string): string {
+export function normalizeSquadName(name: string, fallback: string): string {
   const trimmed = name.trim();
   if (!trimmed) {
     return fallback;
