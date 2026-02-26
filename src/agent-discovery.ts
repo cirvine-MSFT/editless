@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import type { WorkspaceFolderLike } from './types';
 
 /** A discovered standalone agent (not part of a squad). */
 export interface DiscoveredAgent {
@@ -14,10 +15,6 @@ export interface DiscoveredAgent {
   source: 'workspace' | 'copilot-dir';
   /** Brief description parsed from the agent file */
   description?: string;
-}
-
-interface WorkspaceFolder {
-  uri: { fsPath: string };
 }
 
 function toKebabId(filename: string): string {
@@ -71,7 +68,7 @@ function readAndPushAgent(
 }
 
 /** Scan workspace folders for agent files. Returns discovered agents. */
-export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFolder[]): DiscoveredAgent[] {
+export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFolderLike[]): DiscoveredAgent[] {
   const agents: DiscoveredAgent[] = [];
   const seen = new Set<string>();
 
@@ -110,7 +107,7 @@ export function discoverAgentsInCopilotDir(): DiscoveredAgent[] {
 }
 
 /** Combined discovery — runs all discovery sources. */
-export function discoverAllAgents(workspaceFolders: readonly WorkspaceFolder[]): DiscoveredAgent[] {
+export function discoverAllAgents(workspaceFolders: readonly WorkspaceFolderLike[]): DiscoveredAgent[] {
   const workspace = discoverAgentsInWorkspace(workspaceFolders);
   const copilot = discoverAgentsInCopilotDir();
 

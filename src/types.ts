@@ -87,4 +87,13 @@ export interface SquadState {
   charter: string;
 }
 
+// ---------------------------------------------------------------------------
+// Shared Utility Interfaces
+// ---------------------------------------------------------------------------
+
+/** Minimal VS Code workspace folder shape used by discovery modules. */
+export interface WorkspaceFolderLike {
+  uri: { fsPath: string };
+}
+
 
