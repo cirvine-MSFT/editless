@@ -45,8 +45,6 @@ vi.mock('../team-dir', () => ({
 import {
   promptAndAddSquads,
 } from '../discovery';
-import type { EditlessRegistry } from '../registry';
-
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -63,14 +61,14 @@ function makeSquad(overrides: Partial<AgentTeamConfig> = {}): AgentTeamConfig {
   };
 }
 
-function makeRegistry(squads: AgentTeamConfig[] = []): EditlessRegistry {
+function makeRegistry(squads: AgentTeamConfig[] = []) {
   return {
     loadSquads: vi.fn().mockReturnValue(squads),
     addSquads: vi.fn(),
     getSquad: vi.fn(),
     updateSquad: vi.fn(),
     registryPath: '/mock/registry.json',
-  } as unknown as EditlessRegistry;
+  };
 }
 
 beforeEach(() => {
