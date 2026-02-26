@@ -996,6 +996,34 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- ADO integration ---
   initAdoIntegration(context, workItemsProvider, prsProvider);
 
+  // Re-initialize ADO when organization or project settings change (#417)
+  // Debounced to avoid concurrent API calls from rapid keystroke changes
+  let adoDebounceTimer: NodeJS.Timeout | undefined;
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('editless.ado.organization') || e.affectsConfiguration('editless.ado.project')) {
+        if (adoDebounceTimer) clearTimeout(adoDebounceTimer);
+        adoDebounceTimer = setTimeout(() => {
+          initAdoIntegration(context, workItemsProvider, prsProvider);
+        }, 500);
+      }
+    }),
+  );
+
+  // Re-initialize GitHub when repo list changes (#417)
+  // Debounced to avoid concurrent API calls from rapid changes
+  let githubDebounceTimer: NodeJS.Timeout | undefined;
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('editless.github.repos')) {
+        if (githubDebounceTimer) clearTimeout(githubDebounceTimer);
+        githubDebounceTimer = setTimeout(() => {
+          initGitHubIntegration(workItemsProvider, prsProvider);
+        }, 500);
+      }
+    }),
+  );
+
   // --- Auto-refresh for Work Items & PRs ---
   const autoRefresh = initAutoRefresh(workItemsProvider, prsProvider);
   context.subscriptions.push(autoRefresh);
