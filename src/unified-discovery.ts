@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir } from './agent-discovery';
 import { discoverAgentTeams, parseTeamMd, toKebabCase, readUniverseFromRegistry } from './discovery';
-import { resolveTeamMd } from './team-dir';
+import { resolveTeamMd, resolveTeamDir } from './team-dir';
 import type { AgentTeamConfig } from './types';
 
 /** A single discovered item — either a standalone agent or a squad. */
@@ -86,6 +86,21 @@ export function discoverAll(
           universe,
         });
       }
+    } else if (resolveTeamDir(folderPath)) {
+      // .squad/ or .ai-team/ exists but team.md is missing — still a squad
+      const folderName = path.basename(folderPath);
+      const id = toKebabCase(folderName);
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        items.push({
+          id,
+          name: folderName,
+          type: 'squad',
+          source: 'workspace',
+          path: folderPath,
+          universe: readUniverseFromRegistry(folderPath) ?? 'unknown',
+        });
+      }
     }
   }
 
@@ -118,7 +133,8 @@ export function discoverAll(
     const root = isInGithubAgents 
       ? path.dirname(parentOfItemDir)  // {root}/.github/agents/squad.agent.md
       : itemDir;                        // {root}/squad.agent.md
-    return !squadRoots.has(root.toLowerCase());
+    // Filter if root is a discovered squad OR has a squad directory on disk
+    return !squadRoots.has(root.toLowerCase()) && !resolveTeamDir(root);
   });
 }
 

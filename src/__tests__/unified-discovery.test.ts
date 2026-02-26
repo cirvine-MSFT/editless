@@ -452,4 +452,74 @@ describe('discoverAll', () => {
     // Discovery returns everything — no registry exclusion
     expect(result.find(i => i.name === 'Cased Squad')).toBeDefined();
   });
+
+  // --- Regression tests: squad.agent.md discovery bug ---
+
+  it('filters squad.agent.md when .squad/ exists but team.md is missing', () => {
+    const ws = path.join(tmpDir, 'my-project');
+    // .squad directory exists but NO team.md inside it
+    fs.mkdirSync(path.join(ws, '.squad'), { recursive: true });
+    writeFixture('my-project/.github/agents/squad.agent.md', '# Squad Coordinator\n> Untriaged issues.\n');
+    writeFixture('my-project/.github/agents/helper.agent.md', '# Helper\n> Should survive.\n');
+
+    const result = discoverAll([wsFolder(ws)]);
+
+    // squad.agent.md should be filtered — .squad/ signals it's a squad project
+    expect(result.find(i => i.id === 'squad' && i.type === 'agent')).toBeUndefined();
+    // A squad item should be discovered from the .squad/ directory
+    expect(result.find(i => i.type === 'squad')).toBeDefined();
+    expect(result.find(i => i.type === 'squad')!.name).toBe('my-project');
+    // Other agents should survive
+    expect(result.find(i => i.id === 'helper')).toBeDefined();
+  });
+
+  it('filters squad.agent.md when .ai-team/ exists but team.md is missing', () => {
+    const ws = path.join(tmpDir, 'legacy-project');
+    // .ai-team directory exists but NO team.md inside it
+    fs.mkdirSync(path.join(ws, '.ai-team'), { recursive: true });
+    writeFixture('legacy-project/.github/agents/squad.agent.md', '# Squad\n> Legacy governance.\n');
+
+    const result = discoverAll([wsFolder(ws)]);
+
+    expect(result.find(i => i.id === 'squad' && i.type === 'agent')).toBeUndefined();
+    expect(result.find(i => i.type === 'squad')).toBeDefined();
+  });
+
+  it('discovers squad with folder name when team.md is missing', () => {
+    const ws = path.join(tmpDir, 'MySquadProject');
+    fs.mkdirSync(path.join(ws, '.squad'), { recursive: true });
+
+    const result = discoverAll([wsFolder(ws)]);
+
+    const squad = result.find(i => i.type === 'squad');
+    expect(squad).toBeDefined();
+    expect(squad!.id).toBe('my-squad-project');
+    expect(squad!.name).toBe('MySquadProject');
+    expect(squad!.universe).toBe('unknown');
+  });
+
+  it('prefers team.md metadata over fallback when both exist', () => {
+    const ws = path.join(tmpDir, 'my-squad');
+    writeFixture('my-squad/.squad/team.md', '# Named Squad\n> Has description.\n**Universe:** prod\n');
+    writeFixture('my-squad/.github/agents/squad.agent.md', '# Squad\n> Governance.\n');
+
+    const result = discoverAll([wsFolder(ws)]);
+
+    const squad = result.find(i => i.type === 'squad');
+    expect(squad).toBeDefined();
+    expect(squad!.name).toBe('Named Squad');
+    expect(squad!.description).toBe('Has description.');
+    expect(squad!.universe).toBe('prod');
+    // Agent still filtered
+    expect(result.find(i => i.id === 'squad' && i.type === 'agent')).toBeUndefined();
+  });
+
+  it('keeps squad.agent.md when root has no .squad/ or .ai-team/ directory', () => {
+    // No squad directory at all — squad.agent.md is a legitimate standalone agent
+    writeFixture('plain/.github/agents/squad.agent.md', '# Squad Agent\n> Standalone.\n');
+
+    const result = discoverAll([wsFolder(path.join(tmpDir, 'plain'))]);
+
+    expect(result.find(i => i.id === 'squad' && i.type === 'agent')).toBeDefined();
+  });
 });
