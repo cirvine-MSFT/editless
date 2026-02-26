@@ -11,6 +11,34 @@
 
 ## Learnings
 
+### 2026-02-26: PR #424 Config Refresh Pattern — 3x Review Cycle
+
+**Session:** 3x Review + Fix cycle for PR #424 (squad/417-ado-config-refresh)  
+**Participants:** Rick (architecture), Meeseeks (tests), Unity (integration), Morty (implementation)  
+**Outcome:** All reviews APPROVED ✅
+
+**Rick's architecture review (APPROVED):**
+- Validated config refresh pattern as canonical for integration re-initialization
+- Pattern: handlers in `activate()` call full idempotent init functions
+- No circular dependencies, clean architecture
+- Decision documented and ready for team-wide use
+
+**Key takeaways:**
+1. **Handler placement matters:** Placing listeners inside init functions creates circular dependencies. Move all handlers to `activate()` after setup complete.
+2. **Idempotency is critical:** Init functions must be safe to call multiple times. No subscriptions, allocations, or state accumulation during re-init.
+3. **Separate listeners per scope:** One integration = one listener. Combines SRP with performance (negligible cost).
+4. **Pattern is now canonical:** Future integrations should follow this pattern. Documented with examples and anti-patterns.
+
+**Architecture principles affirmed:**
+- VS Code extension lifecycle matters (subscriptions must be in `activate()`)
+- Config handlers are re-initialization triggers, not setup handlers
+- Idempotency enables safe config-driven re-init
+
+**Decision merged:** `.squad/decisions.md` — Config Refresh Pattern  
+**Related decisions:** Config Handler Debounce Pattern, DebugMCP Integration Research
+
+---
+
 ### 2026-02-22: v0.1.1 Release Planning — Viability Fixes & Scope Prioritization
 
 Analyzed 9 issues across 3 domains to define v0.1.1 as a **viability release**. EditLess shipped in v0.1 functionally but with UX gaps and performance issues that made it unreliable for terminal sessions and work item management.
