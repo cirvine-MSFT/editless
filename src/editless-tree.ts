@@ -352,7 +352,6 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const children: EditlessTreeItem[] = [];
     for (const { terminal, info } of this.terminalManager.getTerminalsForSquad(DEFAULT_COPILOT_CLI_ID)) {
       const sessionState = this.terminalManager.getSessionState(terminal) ?? 'inactive';
-      const lastActivityAt = this.terminalManager.getLastActivityAt(terminal);
 
       const elapsed = Date.now() - info.createdAt.getTime();
       const mins = Math.floor(elapsed / 60_000);

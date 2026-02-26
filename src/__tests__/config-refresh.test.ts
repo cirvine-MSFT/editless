@@ -33,6 +33,7 @@ vi.mock('vscode', async () => {
     ThemeIcon,
     MarkdownString,
     EventEmitter,
+    RelativePattern: class { constructor(public base: unknown, public pattern: string) {} },
     Uri: {
       parse: (s: string) => ({ toString: () => s, fsPath: s }),
       file: (p: string) => ({ fsPath: p, toString: () => p }),
