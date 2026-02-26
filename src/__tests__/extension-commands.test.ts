@@ -198,6 +198,7 @@ vi.mock('vscode', async () => {
       onDidChangeWorkspaceFolders: vi.fn(() => ({ dispose: vi.fn() })),
       onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
       workspaceFolders: [],
+      updateWorkspaceFolders: vi.fn(() => true),
       openTextDocument: vi.fn().mockResolvedValue({ getText: () => '', positionAt: () => ({}) }),
       fs: { createDirectory: vi.fn(), copy: mockWorkspaceFsCopy },
     },
@@ -1729,7 +1730,7 @@ describe('extension command handlers', () => {
       expect(mockAddSquads).toHaveBeenCalledWith([discoveredSquad]);
     });
 
-    it('should not manually refresh tree after auto-registering squad on terminal close (watcher handles it)', async () => {
+    it('should refresh tree after auto-registering squad on terminal close', async () => {
       const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
       mockCreateTerminal.mockReturnValue(mockTerminal);
 
@@ -1742,7 +1743,7 @@ describe('extension command handlers', () => {
       getLastCloseCallback()(mockTerminal);
 
       expect(mockAddSquads).toHaveBeenCalledWith([discoveredSquad]);
-      expect(mockTreeRefresh).not.toHaveBeenCalled();
+      expect(mockTreeRefresh).toHaveBeenCalled();
     });
 
     it('should not register squad when discovery finds nothing (init failed)', async () => {
