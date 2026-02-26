@@ -154,12 +154,12 @@ function squadConfigToItem(cfg: AgentTeamConfig): DiscoveredItem {
 export function toAgentTeamConfig(disc: DiscoveredItem, settings?: AgentSettings): AgentTeamConfig {
   return {
     id: disc.id,
-    name: settings?.name ?? disc.name,
+    name: settings?.name || disc.name,
     path: disc.path,
-    icon: settings?.icon ?? (disc.type === 'squad' ? '🔷' : '🤖'),
+    icon: settings?.icon || (disc.type === 'squad' ? '🔷' : '🤖'),
     universe: disc.universe ?? 'standalone',
     description: disc.description,
-    model: settings?.model,
-    additionalArgs: settings?.additionalArgs,
+    model: settings?.model || undefined,
+    additionalArgs: settings?.additionalArgs || undefined,
   };
 }

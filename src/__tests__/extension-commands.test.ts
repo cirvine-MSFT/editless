@@ -254,6 +254,7 @@ vi.mock('../agent-settings', () => ({
     getHiddenIds: mockAgentSettingsGetHiddenIds,
     isHidden: mockAgentSettingsIsHidden,
     reload: mockAgentSettingsReload,
+    hydrateFromDiscovery: vi.fn(),
     settingsPath: '/mock/agent-settings.json',
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     dispose: vi.fn(),

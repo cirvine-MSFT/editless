@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
 import type * as vscode from 'vscode';
 import type { AgentTeamConfig } from '../types';
 
@@ -2954,6 +2957,33 @@ describe('TerminalManager', () => {
 
     it('resolveTerminalCwd returns empty string for empty string input', () => {
       expect(resolveTerminalCwd('')).toBe('');
+    });
+
+    // -- Squad directories use their own path as CWD (#399) -------------------
+    it('resolveTerminalCwd uses squad directory path (not workspace root) when path is a real directory', () => {
+      // Create a real temp dir to simulate a squad directory inside a workspace
+      const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'editless-cwd-'));
+      const squadDir = path.join(parentDir, 'my-squad');
+      fs.mkdirSync(squadDir);
+
+      mockWorkspaceFolders.value = [{ uri: { fsPath: parentDir } }];
+      expect(resolveTerminalCwd(squadDir)).toBe(squadDir);
+
+      // Cleanup
+      fs.rmSync(parentDir, { recursive: true, force: true });
+    });
+
+    it('resolveTerminalCwd falls back to workspace root when path is a file inside workspace', () => {
+      // Create a real temp file to simulate an agent file
+      const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'editless-cwd-'));
+      const agentFile = path.join(parentDir, 'my-agent.agent.md');
+      fs.writeFileSync(agentFile, '# Agent');
+
+      mockWorkspaceFolders.value = [{ uri: { fsPath: parentDir } }];
+      expect(resolveTerminalCwd(agentFile)).toBe(parentDir);
+
+      // Cleanup
+      fs.rmSync(parentDir, { recursive: true, force: true });
     });
   });
 });

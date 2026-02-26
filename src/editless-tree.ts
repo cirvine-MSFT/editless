@@ -198,8 +198,8 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     // For squads with a path, build a full squad item from discovery + settings
     if (isSquad) {
       const settings = this.agentSettings.get(disc.id);
-      const displayName = normalizeSquadName(settings?.name ?? disc.name, disc.id);
-      const icon = settings?.icon ?? (isStandalone ? '🤖' : '🔷');
+      const displayName = normalizeSquadName(settings?.name || disc.name, disc.id);
+      const icon = settings?.icon || (isStandalone ? '🤖' : '🔷');
 
       const terminalCount = this.terminalManager
         ? this.terminalManager.getTerminalsForSquad(disc.id).length
@@ -255,7 +255,8 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
     // Standalone agent item
     const settings = this.agentSettings.get(disc.id);
-    const displayName = settings?.name ?? disc.name;
+    const displayName = settings?.name || disc.name;
+    const icon = settings?.icon || '🤖';
     const itemType: TreeItemType = isHidden ? 'squad-hidden' : 'squad';
 
     const terminalCount = this.terminalManager
@@ -268,7 +269,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       : 0;
 
     const item = new EditlessTreeItem(
-      displayName,
+      `${icon} ${displayName}`,
       itemType,
       (terminalCount > 0 || orphanCount > 0)
         ? vscode.TreeItemCollapsibleState.Collapsed
@@ -292,7 +293,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       : new vscode.ThemeIcon('hubot');
 
     item.tooltip = new vscode.MarkdownString(
-      [`**🤖 ${displayName}**`, `Source: ${disc.source}`, `File: \`${disc.path}\``].join('\n\n'),
+      [`**${icon} ${displayName}**`, `Source: ${disc.source}`, `File: \`${disc.path}\``].join('\n\n'),
     );
 
     return item;

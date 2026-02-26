@@ -523,3 +523,46 @@ describe('discoverAll', () => {
     expect(result.find(i => i.id === 'squad' && i.type === 'agent')).toBeDefined();
   });
 });
+
+// toAgentTeamConfig — empty string handling
+// ---------------------------------------------------------------------------
+
+import { toAgentTeamConfig } from '../unified-discovery';
+
+describe('toAgentTeamConfig', () => {
+  const baseDisc: DiscoveredItem = {
+    id: 'test-agent',
+    name: 'Test Agent',
+    type: 'agent',
+    source: 'workspace',
+    path: '/path/to/agent.md',
+  };
+
+  it('falls back to discovery name when settings name is empty string', () => {
+    const cfg = toAgentTeamConfig(baseDisc, { name: '' });
+    expect(cfg.name).toBe('Test Agent');
+  });
+
+  it('falls back to default icon when settings icon is empty string', () => {
+    const cfg = toAgentTeamConfig(baseDisc, { icon: '' });
+    expect(cfg.icon).toBe('🤖');
+  });
+
+  it('treats empty string model as undefined', () => {
+    const cfg = toAgentTeamConfig(baseDisc, { model: '' });
+    expect(cfg.model).toBeUndefined();
+  });
+
+  it('treats empty string additionalArgs as undefined', () => {
+    const cfg = toAgentTeamConfig(baseDisc, { additionalArgs: '' });
+    expect(cfg.additionalArgs).toBeUndefined();
+  });
+
+  it('uses settings values when non-empty', () => {
+    const cfg = toAgentTeamConfig(baseDisc, { name: 'Custom', icon: '⚡', model: 'o4-mini', additionalArgs: '--yolo' });
+    expect(cfg.name).toBe('Custom');
+    expect(cfg.icon).toBe('⚡');
+    expect(cfg.model).toBe('o4-mini');
+    expect(cfg.additionalArgs).toBe('--yolo');
+  });
+});

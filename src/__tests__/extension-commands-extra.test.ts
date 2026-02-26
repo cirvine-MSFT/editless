@@ -11,6 +11,7 @@ const { mockCommands, mockShowInformationMessage, mockAgentSettings, mockTreePro
     get: vi.fn(),
     update: vi.fn(),
     getHiddenIds: vi.fn(() => []),
+    hydrateFromDiscovery: vi.fn(),
     settingsPath: '/mock/settings.json',
     reload: vi.fn(),
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),

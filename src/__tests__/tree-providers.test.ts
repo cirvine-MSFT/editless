@@ -599,7 +599,7 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
     const roots = provider.getChildren();
     const agentItems = roots.filter(r => r.type === 'squad');
     expect(agentItems).toHaveLength(1);
-    expect(agentItems[0].label).toBe('Agent One');
+    expect(agentItems[0].label).toBe('🤖 Agent One');
   });
 
   it('invalidate clears specific cache entry and fires event', () => {
@@ -855,14 +855,14 @@ describe('EditlessTreeProvider — discovered agents', () => {
     const roots = provider.getChildren();
     const visibleItems = roots.filter(r => r.type === 'squad');
     expect(visibleItems).toHaveLength(1);
-    expect(visibleItems[0].label).toBe('Bot Two');
+    expect(visibleItems[0].label).toBe('🤖 Bot Two');
 
     // Hidden agents are inside the collapsible group
     const hiddenGroup = roots.find(r => r.type === 'category' && r.categoryKind === 'hidden');
     expect(hiddenGroup).toBeDefined();
     const hiddenChildren = provider.getChildren(hiddenGroup!);
     expect(hiddenChildren).toHaveLength(1);
-    expect(hiddenChildren[0].label).toBe('Bot One');
+    expect(hiddenChildren[0].label).toBe('🤖 Bot One');
     expect(hiddenChildren[0].contextValue).toBe('squad-hidden');
   });
 });
@@ -908,7 +908,7 @@ describe('EditlessTreeProvider — setDiscoveredItems', () => {
     expect(squadItems).toHaveLength(2);
     // Both appear as root items with type 'squad'
     const labels = squadItems.map(r => r.label);
-    expect(labels).toContain('Solo Agent');
+    expect(labels).toContain('🤖 Solo Agent');
   });
 });
 

@@ -3,13 +3,13 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { createAgentSettings, migrateFromRegistry } from './agent-settings';
+import { createAgentSettings, migrateFromRegistry, type AgentSettings } from './agent-settings';
 import { EditlessTreeProvider } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager } from './session-labels';
 
 
-import { discoverAll } from './unified-discovery';
+import { discoverAll, type DiscoveredItem } from './unified-discovery';
 import type { AgentTeamConfig } from './types';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
@@ -31,6 +31,21 @@ const execFileAsync = promisify(execFile);
 
 function getCreateCommand(): string {
   return '';
+}
+
+/** Compute default AgentSettings for each discovered item and hydrate the settings file. */
+function hydrateSettings(items: DiscoveredItem[], settings: import('./agent-settings').AgentSettingsManager): void {
+  const entries = items.map(item => ({
+    id: item.id,
+    defaults: {
+      name: item.name,
+      icon: item.type === 'squad' ? '🔷' : '🤖',
+      hidden: false,
+      model: '',
+      additionalArgs: '',
+    } satisfies AgentSettings,
+  }));
+  settings.hydrateFromDiscovery(entries);
 }
 
 export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {
@@ -107,12 +122,14 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- Unified discovery — agents + squads in one pass (#317, #318) ----------
   let discoveredItems = discoverAll(vscode.workspace.workspaceFolders ?? []);
   treeProvider.setDiscoveredItems(discoveredItems);
+  hydrateSettings(discoveredItems, agentSettings);
 
   /** Re-run unified discovery and update tree. */
   function refreshDiscovery(): void {
     discoveredItems = discoverAll(vscode.workspace.workspaceFolders ?? []);
     treeProvider.setDiscoveredItems(discoveredItems);
     statusBar.setDiscoveredItems(discoveredItems);
+    hydrateSettings(discoveredItems, agentSettings);
     // Update squad watcher with new discovery results
     const newSquadConfigs = discoveredItems.filter(d => d.type === 'squad').map(d => ({
       id: d.id,

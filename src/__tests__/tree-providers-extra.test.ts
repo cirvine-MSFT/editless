@@ -14,6 +14,7 @@ const mockAgentSettings = {
   show: vi.fn(),
   showAll: vi.fn(),
   reload: vi.fn(),
+  hydrateFromDiscovery: vi.fn(),
   settingsPath: '/mock/settings.json',
 };
 

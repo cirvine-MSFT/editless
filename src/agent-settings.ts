@@ -89,6 +89,33 @@ export class AgentSettingsManager implements vscode.Disposable {
     this._writeToDisk();
   }
 
+  /**
+   * Ensure every discovered agent has an entry with all fields populated.
+   * User-customized values are never overwritten — only missing fields get defaults.
+   * Writes to disk once if any changes were made.
+   */
+  hydrateFromDiscovery(entries: { id: string; defaults: AgentSettings }[]): void {
+    let changed = false;
+    for (const { id, defaults } of entries) {
+      const existing = this._cache.agents[id];
+      if (!existing) {
+        this._cache.agents[id] = { ...defaults };
+        changed = true;
+        continue;
+      }
+      // Fill in missing fields only
+      for (const [key, value] of Object.entries(defaults)) {
+        if (!(key in existing)) {
+          (existing as Record<string, unknown>)[key] = value;
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      this._writeToDisk();
+    }
+  }
+
   reload(): void {
     try {
       const raw = fs.readFileSync(this.settingsPath, 'utf-8');
@@ -132,9 +159,9 @@ export function migrateFromRegistry(oldRegistryPath: string, settings: AgentSett
       if (squad.model) partial.model = squad.model;
       if (squad.additionalArgs) partial.additionalArgs = squad.additionalArgs;
       if (squad.name) partial.name = squad.name;
-      if (Object.keys(partial).length > 0) {
-        settings.update(squad.id, partial);
-      }
+      // Always create an entry so the agent is visible in settings,
+      // even if it has no custom overrides (just id+path in old registry).
+      settings.update(squad.id, partial);
     }
     return true;
   } catch {
