@@ -1005,6 +1005,15 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     }),
   );
 
+  // Re-initialize GitHub when repo list changes (#417)
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('editless.github.repos')) {
+        initGitHubIntegration(workItemsProvider, prsProvider);
+      }
+    }),
+  );
+
   // --- Auto-refresh for Work Items & PRs ---
   const autoRefresh = initAutoRefresh(workItemsProvider, prsProvider);
   context.subscriptions.push(autoRefresh);
