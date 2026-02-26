@@ -78,6 +78,12 @@ vi.mock('vscode', async () => {
       workspaceFolders: [],
       openTextDocument: vi.fn().mockResolvedValue({ getText: () => '', positionAt: () => ({}) }),
       fs: { createDirectory: vi.fn(), copy: vi.fn() },
+      createFileSystemWatcher: vi.fn(() => ({
+        onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidCreate: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidDelete: vi.fn(() => ({ dispose: vi.fn() })),
+        dispose: vi.fn(),
+      })),
     },
     env: {
       openExternal: vi.fn(),
@@ -98,21 +104,34 @@ vi.mock('vscode', async () => {
 
 vi.mock('../editless-tree', () => ({
   EditlessTreeProvider: vi.fn(function () {
-    return { refresh: vi.fn(), setDiscoveredAgents: vi.fn(), setDiscoveredItems: vi.fn(), invalidate: vi.fn(), findTerminalItem: vi.fn() };
+    return { refresh: vi.fn(), setDiscoveredItems: vi.fn(), getDiscoveredItems: vi.fn().mockReturnValue([]), invalidate: vi.fn(), findTerminalItem: vi.fn() };
   }),
   EditlessTreeItem: class {},
   DEFAULT_COPILOT_CLI_ID: 'builtin:copilot-cli',
 }));
-vi.mock('../registry', () => ({ createRegistry: vi.fn(() => ({ loadSquads: vi.fn().mockReturnValue([]), getSquad: vi.fn(), updateSquad: vi.fn(), addSquads: vi.fn(), registryPath: '/mock/registry.json' })), watchRegistry: vi.fn(() => ({ dispose: vi.fn() })) }));
+vi.mock('../agent-settings', () => ({
+  createAgentSettings: vi.fn(() => ({
+    get: vi.fn(),
+    getAll: vi.fn().mockReturnValue({}),
+    update: vi.fn(),
+    remove: vi.fn(),
+    hide: vi.fn(),
+    show: vi.fn(),
+    showAll: vi.fn(),
+    getHiddenIds: vi.fn().mockReturnValue([]),
+    isHidden: vi.fn().mockReturnValue(false),
+    reload: vi.fn(),
+    settingsPath: '/mock/agent-settings.json',
+  })),
+  migrateFromRegistry: vi.fn(),
+}));
 vi.mock('../terminal-manager', () => ({ TerminalManager: vi.fn(function () { return { persist: vi.fn(), reconcile: vi.fn(), waitForReconciliation: vi.fn().mockResolvedValue(undefined), setSessionResolver: vi.fn(), setAgentSessionId: vi.fn(), getOrphanedSessions: vi.fn().mockReturnValue([]), onDidChange: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn(), getAllTerminals: vi.fn().mockReturnValue([]), launchTerminal: vi.fn(), closeTerminal: vi.fn(), focusTerminal: vi.fn(), getTerminalInfo: vi.fn(), getLabelKey: vi.fn().mockReturnValue('key'), getDisplayName: vi.fn().mockReturnValue('display'), renameSession: vi.fn(), relaunchSession: vi.fn(), dismissOrphan: vi.fn(), relaunchAllOrphans: vi.fn() }; }), getStateIcon: vi.fn(), getStateDescription: vi.fn() }));
-vi.mock('../session-labels', () => ({ SessionLabelManager: vi.fn(function () { return { getLabel: vi.fn(), setLabel: vi.fn(), clearLabel: vi.fn() }; }), promptClearLabel: vi.fn(), promptRenameSession: vi.fn() }));
-vi.mock('../visibility', () => ({ AgentVisibilityManager: vi.fn(function () { return { hide: vi.fn(), show: vi.fn(), showAll: vi.fn(), getHiddenIds: vi.fn().mockReturnValue([]), isHidden: vi.fn() }; }) }));
+vi.mock('../session-labels', () => ({ SessionLabelManager: vi.fn(function () { return { getLabel: vi.fn(), setLabel: vi.fn(), clearLabel: vi.fn(), onDidChange: vi.fn(() => ({ dispose: vi.fn() })) }; }), promptClearLabel: vi.fn(), promptRenameSession: vi.fn() }));
 vi.mock('../squad-utils', () => ({ checkNpxAvailable: vi.fn().mockResolvedValue(true), promptInstallNode: vi.fn(), isSquadInitialized: vi.fn() }));
-vi.mock('../discovery', () => ({ autoRegisterWorkspaceSquads: vi.fn(), discoverAgentTeams: vi.fn().mockReturnValue([]) }));
-vi.mock('../agent-discovery', () => ({ discoverAllAgents: vi.fn(() => []) }));
+vi.mock('../discovery', () => ({ ensureWorkspaceFolder: vi.fn() }));
 vi.mock('../unified-discovery', () => ({ discoverAll: vi.fn().mockReturnValue([]) }));
 vi.mock('../watcher', () => ({ SquadWatcher: vi.fn(function () { return { dispose: vi.fn(), updateSquads: vi.fn() }; }) }));
-vi.mock('../status-bar', () => ({ EditlessStatusBar: vi.fn(function () { return { update: vi.fn(), updateSessionsOnly: vi.fn(), dispose: vi.fn() }; }) }));
+vi.mock('../status-bar', () => ({ EditlessStatusBar: vi.fn(function () { return { update: vi.fn(), updateSessionsOnly: vi.fn(), setDiscoveredItems: vi.fn(), dispose: vi.fn() }; }) }));
 vi.mock('../session-context', () => ({ SessionContextResolver: vi.fn(function () { return {}; }) }));
 vi.mock('../scanner', () => ({ scanSquad: vi.fn() }));
 vi.mock('../work-items-tree', () => ({
@@ -170,6 +189,18 @@ vi.mock('../ado-auth', () => ({ getAdoToken: vi.fn(), promptAdoSignIn: vi.fn(), 
 vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn(), fetchAdoMe: vi.fn() }));
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn(), openSquadUiDashboard: vi.fn() }));
 vi.mock('../team-dir', () => ({ resolveTeamDir: vi.fn(), resolveTeamMd: vi.fn(), TEAM_DIR_NAMES: ['.squad', '.ai-team'] }));
+vi.mock('../launch-utils', () => ({ launchAndLabel: vi.fn() }));
+
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    existsSync: vi.fn((p: string) => {
+      if (typeof p === 'string' && p.includes('agent-registry.json')) return false;
+      return actual.existsSync(p);
+    }),
+  };
+});
 
 import { activate } from '../extension';
 
@@ -184,6 +215,8 @@ function makeContext(): vscode.ExtensionContext {
   const secretStore = new Map<string, string>();
   return {
     subscriptions: [],
+    globalStorageUri: { fsPath: '/mock/global-storage' },
+    extensionPath: '/mock/extension',
     workspaceState: {
       get: vi.fn((key: string, defaultValue?: unknown) => store.get(key) ?? defaultValue),
       update: vi.fn((key: string, value: unknown) => { store.set(key, value); return Promise.resolve(); }),
