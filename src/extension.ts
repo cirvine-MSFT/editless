@@ -1253,11 +1253,13 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
         icon: '🤖',
         universe: 'standalone',
       }]);
-      refreshDiscovery();
-      treeProvider.refresh();
+      // Add workspace folder AFTER registry write so the onDidChangeWorkspaceFolders
+      // handler's refreshDiscovery() sees the agent in the registry for dedup (#399)
       if (projectRoot) {
         ensureWorkspaceFolder(projectRoot);
       }
+      refreshDiscovery();
+      treeProvider.refresh();
     }),
   );
 

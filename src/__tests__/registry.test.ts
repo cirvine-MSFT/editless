@@ -225,6 +225,28 @@ describe('EditlessRegistry', () => {
       expect(written.version).toBe('1.0');
       expect(written.squads.length).toBeGreaterThanOrEqual(1);
     });
+
+    it('logs warning and does not throw when writeFileSync fails (#399)', () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ version: '1.0', squads: [] }));
+      vi.mocked(fs.writeFileSync).mockImplementation(() => { throw new Error('EACCES: permission denied'); });
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(() => registry.addSquads([makeSquad({ id: 'squad-fail' })])).not.toThrow();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to write registry'));
+
+      warnSpy.mockRestore();
+    });
+
+    it('still updates in-memory squads even when writeFileSync fails (#399)', () => {
+      vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ version: '1.0', squads: [] }));
+      vi.mocked(fs.writeFileSync).mockImplementation(() => { throw new Error('EACCES'); });
+      vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      registry.addSquads([makeSquad({ id: 'in-memory-agent' })]);
+      expect(registry.getSquad('in-memory-agent')).toBeDefined();
+
+      vi.mocked(console.warn).mockRestore?.();
+    });
   });
 
   // -------------------------------------------------------------------------

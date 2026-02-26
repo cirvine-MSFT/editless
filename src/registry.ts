@@ -131,7 +131,11 @@ export class EditlessRegistry {
       }
     })();
     existing.squads = this._squads;
-    fs.writeFileSync(this.registryPath, JSON.stringify(existing, null, 2), 'utf-8');
+    try {
+      fs.writeFileSync(this.registryPath, JSON.stringify(existing, null, 2), 'utf-8');
+    } catch (err: unknown) {
+      console.warn(`[EditlessRegistry] Failed to write registry at ${this.registryPath}: ${err instanceof Error ? err.message : err}`);
+    }
   }
 }
 

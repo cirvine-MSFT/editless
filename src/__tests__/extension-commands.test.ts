@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as path from 'path';
 import type * as vscode from 'vscode';
 import { MockEditlessTreeItem } from './mocks/vscode-mocks';
 
@@ -1201,6 +1202,111 @@ describe('extension command handlers', () => {
       mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
       try { await getHandler('editless.addAgent')(); } catch { /* fs write expected to fail */ }
       expect(mockShowOpenDialog).toHaveBeenCalled();
+    });
+
+    it('should register project agent in registry with correct config', async () => {
+      const os = await import('os');
+      const fsMod = await import('fs');
+      const projectDir = path.join(os.tmpdir(), `editless-test-${Date.now()}`);
+      const agentsDir = path.join(projectDir, '.github', 'agents');
+      fsMod.mkdirSync(agentsDir, { recursive: true });
+      try {
+        mockShowInputBox.mockResolvedValueOnce('my-test-agent');
+        mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+        mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
+        await getHandler('editless.addAgent')();
+        expect(mockAddSquads).toHaveBeenCalledWith([{
+          id: 'my-test-agent',
+          name: 'my-test-agent',
+          path: projectDir,
+          icon: '🤖',
+          universe: 'standalone',
+        }]);
+      } finally {
+        fsMod.rmSync(projectDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should call updateWorkspaceFolders for project agent', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const fsMod = await import('fs');
+      const projectDir = path.join(os.tmpdir(), `editless-test-${Date.now()}`);
+      const agentsDir = path.join(projectDir, '.github', 'agents');
+      fsMod.mkdirSync(agentsDir, { recursive: true });
+      try {
+        mockShowInputBox.mockResolvedValueOnce('ws-agent');
+        mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+        mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
+        await getHandler('editless.addAgent')();
+        expect(vscodeModule.workspace.updateWorkspaceFolders).toHaveBeenCalledWith(
+          0, 0, expect.objectContaining({ uri: expect.objectContaining({ fsPath: projectDir }) }),
+        );
+      } finally {
+        fsMod.rmSync(projectDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should call addSquads before updateWorkspaceFolders for project agent (#399)', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const fsMod = await import('fs');
+      const projectDir = path.join(os.tmpdir(), `editless-test-${Date.now()}`);
+      const agentsDir = path.join(projectDir, '.github', 'agents');
+      fsMod.mkdirSync(agentsDir, { recursive: true });
+      const callOrder: string[] = [];
+      mockAddSquads.mockImplementation(() => { callOrder.push('addSquads'); });
+      (vscodeModule.workspace.updateWorkspaceFolders as ReturnType<typeof vi.fn>).mockImplementation(
+        () => { callOrder.push('updateWorkspaceFolders'); return true; },
+      );
+      try {
+        mockShowInputBox.mockResolvedValueOnce('order-agent');
+        mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+        mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
+        await getHandler('editless.addAgent')();
+        expect(callOrder.indexOf('addSquads')).toBeLessThan(callOrder.indexOf('updateWorkspaceFolders'));
+      } finally {
+        fsMod.rmSync(projectDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should refresh tree after adding project agent', async () => {
+      const os = await import('os');
+      const fsMod = await import('fs');
+      const projectDir = path.join(os.tmpdir(), `editless-test-${Date.now()}`);
+      const agentsDir = path.join(projectDir, '.github', 'agents');
+      fsMod.mkdirSync(agentsDir, { recursive: true });
+      try {
+        mockShowInputBox.mockResolvedValueOnce('refresh-agent');
+        mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+        mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
+        await getHandler('editless.addAgent')();
+        expect(mockTreeRefresh).toHaveBeenCalled();
+        expect(mockDiscoverAll).toHaveBeenCalled();
+      } finally {
+        fsMod.rmSync(projectDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should not call updateWorkspaceFolders for personal agent', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const fsMod = await import('fs');
+      // Personal agent path: ~/.copilot/agents/
+      const copilotAgentsDir = path.join(os.homedir(), '.copilot', 'agents');
+      const agentFile = path.join(copilotAgentsDir, 'personal-agent.agent.md');
+      const fileExisted = fsMod.existsSync(agentFile);
+      try {
+        mockShowInputBox.mockResolvedValueOnce('personal-agent');
+        mockShowQuickPick.mockResolvedValueOnce({ value: 'personal' });
+        await getHandler('editless.addAgent')();
+        expect(vscodeModule.workspace.updateWorkspaceFolders).not.toHaveBeenCalled();
+      } finally {
+        // Clean up if we created the file
+        if (!fileExisted && fsMod.existsSync(agentFile)) {
+          fsMod.unlinkSync(agentFile);
+        }
+      }
     });
   });
 
