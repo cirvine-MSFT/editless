@@ -25,7 +25,7 @@ vi.mock('../team-dir', () => ({
 }));
 
 import * as vscode from 'vscode';
-import { EditlessRegistry, createRegistry } from '../registry';
+import { EditlessRegistry, createRegistry, watchRegistry } from '../registry';
 import { parseTeamMd, readUniverseFromRegistry } from '../discovery';
 import { resolveTeamMd } from '../team-dir';
 
@@ -405,6 +405,38 @@ describe('EditlessRegistry', () => {
       const written = JSON.parse(vi.mocked(fs.writeFileSync).mock.calls[0][1] as string);
       expect(written.squads[0].model).toBe('gpt-4');
     });
+  });
+});
+
+// -------------------------------------------------------------------------
+// watchRegistry
+// -------------------------------------------------------------------------
+
+describe('watchRegistry', () => {
+  it('calls loadSquads and passes result to onChange callback', () => {
+    const squads = [makeSquad(), makeSquad({ id: 'squad-b', name: 'Squad B' })];
+    const registry = new EditlessRegistry(REGISTRY_PATH);
+    vi.mocked(fs.readFileSync).mockReturnValue(JSON.stringify({ version: '1.0', squads }));
+
+    const handlers: Record<string, Function> = {};
+    vi.mocked(vscode.workspace.createFileSystemWatcher).mockReturnValue({
+      onDidChange: vi.fn((h: Function) => { handlers.change = h; }),
+      onDidCreate: vi.fn((h: Function) => { handlers.create = h; }),
+      onDidDelete: vi.fn((h: Function) => { handlers.delete = h; }),
+      dispose: vi.fn(),
+    } as any);
+
+    const onChange = vi.fn();
+    watchRegistry(registry, onChange);
+
+    // Simulate a file-change event
+    handlers.change();
+
+    expect(onChange).toHaveBeenCalledOnce();
+    expect(onChange).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ id: 'squad-a' }),
+      expect.objectContaining({ id: 'squad-b' }),
+    ]));
   });
 });
 

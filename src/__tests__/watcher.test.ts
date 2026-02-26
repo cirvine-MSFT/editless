@@ -124,7 +124,7 @@ describe('SquadWatcher — debounce', () => {
     // Before debounce elapses — nothing yet
     expect(callback).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(500);
+    vi.advanceTimersByTime(300);
 
     expect(callback).toHaveBeenCalledOnce();
     expect(callback).toHaveBeenCalledWith('a');
