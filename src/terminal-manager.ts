@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
 import { CopilotEvents } from './copilot-sdk-types';
@@ -89,7 +90,14 @@ export function resolveTerminalCwd(agentPath: string | undefined): string | unde
     for (const folder of folders) {
       const folderPath = normSep(folder.uri.fsPath);
       if (norm.startsWith(folderPath + '/') || norm === folderPath) {
-        // Agent is inside this workspace folder → use its root
+        // Squad directories should use their own path as CWD so the
+        // Copilot CLI can discover .squad/ or squad.agent.md at the root.
+        // Agent files use the workspace folder root.
+        try {
+          if (fs.statSync(agentPath).isDirectory()) {
+            return agentPath;
+          }
+        } catch { /* path doesn't exist — fall through to workspace root */ }
         return folder.uri.fsPath;
       }
     }

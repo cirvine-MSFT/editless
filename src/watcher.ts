@@ -52,7 +52,7 @@ export class SquadWatcher implements vscode.Disposable {
 
     const debounceMs = vscode.workspace
       .getConfiguration('editless')
-      .get<number>('scanDebounceMs', 500);
+      .get<number>('scanDebounceMs', 300);
 
     this._timers.set(
       squadId,

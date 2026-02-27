@@ -2,27 +2,16 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { discoverAgentTeams, autoRegisterWorkspaceSquads, readUniverseFromRegistry } from '../discovery';
+import { discoverAgentTeams, readUniverseFromRegistry } from '../discovery';
 import type { AgentTeamConfig } from '../types';
 
-// Mock vscode module
-const mockWorkspaceFolders: Array<{ name: string; uri: { fsPath: string } }> = [];
+// vscode mock (discovery.ts no longer imports vscode directly, but vitest
+// requires the mock to be present so transitive imports don't break)
 vi.mock('vscode', () => ({
   workspace: {
     getConfiguration: () => ({
-      get: (key: string, defaultValue?: unknown) => {
-        if (key === 'additionalArgs') return '';
-        return defaultValue;
-      },
+      get: (_key: string, defaultValue?: unknown) => defaultValue,
     }),
-    get workspaceFolders() { return mockWorkspaceFolders.length > 0 ? mockWorkspaceFolders : undefined; },
-  },
-  window: {
-    showInformationMessage: async () => undefined,
-    showQuickPick: async () => undefined,
-  },
-  commands: {
-    registerCommand: () => ({ dispose: () => {} }),
   },
 }));
 
@@ -429,135 +418,6 @@ describe('discoverAgentTeams', () => {
 });
 
 // ---------------------------------------------------------------------------
-// autoRegisterWorkspaceSquads
-// ---------------------------------------------------------------------------
-
-describe('autoRegisterWorkspaceSquads', () => {
-  beforeEach(() => {
-    mockWorkspaceFolders.length = 0;
-  });
-
-  it('auto-registers a workspace folder containing .ai-team/team.md', () => {
-    writeFixture('project-a/.ai-team/team.md', '# Team Roster\n> A cool squad.');
-    mockWorkspaceFolders.push({ name: 'project-a', uri: { fsPath: path.join(tmpDir, 'project-a') } });
-
-    const added: AgentTeamConfig[] = [];
-    const registry = {
-      loadSquads: () => [] as AgentTeamConfig[],
-      addSquads: (squads: AgentTeamConfig[]) => { added.push(...squads); },
-    };
-    autoRegisterWorkspaceSquads(registry as never);
-
-    expect(added).toHaveLength(1);
-    expect(added[0].path).toBe(path.join(tmpDir, 'project-a'));
-    expect(added[0].name).toBe('project-a');
-  });
-
-  it('skips workspace folders already in the registry', () => {
-    writeFixture('project-a/.ai-team/team.md', '# Team Roster');
-    const folderPath = path.join(tmpDir, 'project-a');
-    mockWorkspaceFolders.push({ name: 'project-a', uri: { fsPath: folderPath } });
-
-    const added: AgentTeamConfig[] = [];
-    const existing: AgentTeamConfig = {
-      id: 'project-a', name: 'Project A', path: folderPath,
-      icon: '🔷', universe: 'production',
-    };
-    const registry = {
-      loadSquads: () => [existing],
-      addSquads: (squads: AgentTeamConfig[]) => { added.push(...squads); },
-      updateSquad: () => true,
-    };
-    autoRegisterWorkspaceSquads(registry as never);
-
-    expect(added).toHaveLength(0);
-  });
-
-  it('skips workspace folders without .ai-team or .squad', () => {
-    fs.mkdirSync(path.join(tmpDir, 'plain-project'), { recursive: true });
-    mockWorkspaceFolders.push({ name: 'plain-project', uri: { fsPath: path.join(tmpDir, 'plain-project') } });
-
-    const added: AgentTeamConfig[] = [];
-    const registry = {
-      loadSquads: () => [] as AgentTeamConfig[],
-      addSquads: (squads: AgentTeamConfig[]) => { added.push(...squads); },
-    };
-    autoRegisterWorkspaceSquads(registry as never);
-
-    expect(added).toHaveLength(0);
-  });
-
-  it('updates an existing unknown squad when team.md appears', () => {
-    writeFixture('project-a/.ai-team/team.md', `# Real Squad Name
-> The real description.
-**Universe:** production
-`);
-    const folderPath = path.join(tmpDir, 'project-a');
-    mockWorkspaceFolders.push({ name: 'project-a', uri: { fsPath: folderPath } });
-
-    const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
-    const existing: AgentTeamConfig = {
-      id: 'project-a', name: 'project-a', path: folderPath,
-      icon: '🔷', universe: 'unknown',
-    };
-    const registry = {
-      loadSquads: () => [existing],
-      addSquads: () => {},
-      updateSquad: (id: string, data: Record<string, unknown>) => {
-        updates.push({ id, data });
-        return true;
-      },
-    };
-    autoRegisterWorkspaceSquads(registry as never);
-
-    expect(updates).toHaveLength(1);
-    expect(updates[0].id).toBe('project-a');
-    expect(updates[0].data).toEqual({
-      name: 'Real Squad Name',
-      description: 'The real description.',
-      universe: 'production',
-    });
-  });
-
-  it('does not update an existing squad with known universe', () => {
-    writeFixture('project-a/.ai-team/team.md', `# Updated Name
-> Updated description.
-**Universe:** staging
-`);
-    const folderPath = path.join(tmpDir, 'project-a');
-    mockWorkspaceFolders.push({ name: 'project-a', uri: { fsPath: folderPath } });
-
-    const updates: Array<{ id: string; data: Record<string, unknown> }> = [];
-    const existing: AgentTeamConfig = {
-      id: 'project-a', name: 'Project A', path: folderPath,
-      icon: '🔷', universe: 'production',
-    };
-    const registry = {
-      loadSquads: () => [existing],
-      addSquads: () => {},
-      updateSquad: (id: string, data: Record<string, unknown>) => {
-        updates.push({ id, data });
-        return true;
-      },
-    };
-    autoRegisterWorkspaceSquads(registry as never);
-
-    expect(updates).toHaveLength(0);
-  });
-
-  it('does nothing when no workspace folders exist', () => {
-    const added: AgentTeamConfig[] = [];
-    const registry = {
-      loadSquads: () => [] as AgentTeamConfig[],
-      addSquads: (squads: AgentTeamConfig[]) => { added.push(...squads); },
-    };
-    autoRegisterWorkspaceSquads(registry as never);
-
-    expect(added).toHaveLength(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // Universe auto-detection from registry.json
 // ---------------------------------------------------------------------------
 
@@ -891,6 +751,15 @@ describe('discoverAgentTeams universe fallback',() => {
 
     expect(result).toHaveLength(1);
     expect(result[0].universe).toBe('Explicit Universe');
+  });
+
+  it('team.md Casting Universe marker is recognized', () => {
+    writeFixture('squad-a/.squad/team.md', '# Alpha Squad\n> The alpha team.\n- **Casting Universe:** Greek Mythology\n');
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].universe).toBe('Greek Mythology');
   });
 
   it('falls back to unknown when registry.json is malformed', () => {

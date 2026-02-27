@@ -239,20 +239,42 @@ describe('PRsTreeProvider', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — getParent', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
   }
 
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
+  }
+
   it('should return undefined for root-level items', () => {
-    const registry = createMockRegistry([
+    const squads = [
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
-    ]);
-    const provider = new EditlessTreeProvider(registry as never);
+    ];
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
 
     expect(roots.length).toBeGreaterThan(0);
@@ -262,10 +284,12 @@ describe('EditlessTreeProvider — getParent', () => {
   });
 
   it('should return squad item as parent of category children', () => {
-    const registry = createMockRegistry([
+    const squads = [
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
-    ]);
-    const provider = new EditlessTreeProvider(registry as never);
+    ];
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad');
     expect(squadItem).toBeDefined();
@@ -278,10 +302,12 @@ describe('EditlessTreeProvider — getParent', () => {
   });
 
   it('should return category item as parent of roster children', () => {
-    const registry = createMockRegistry([
+    const squads = [
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
-    ]);
-    const provider = new EditlessTreeProvider(registry as never);
+    ];
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
     const squadChildren = provider.getChildren(squadItem);
@@ -302,19 +328,40 @@ describe('EditlessTreeProvider — getParent', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — getChildren(squad)', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
+  }
+
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
   }
 
   it('returns terminal sessions + roster category', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
 
@@ -325,8 +372,8 @@ describe('EditlessTreeProvider — getChildren(squad)', () => {
   });
 
   it('returns empty array for unknown squad id', () => {
-    const registry = createMockRegistry([]);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings([]);
+    const provider = new EditlessTreeProvider(agentSettings as never);
     const fakeSquadItem = new EditlessTreeItem('Fake', 'squad', 1, 'nonexistent');
 
     const children = provider.getChildren(fakeSquadItem);
@@ -340,20 +387,41 @@ describe('EditlessTreeProvider — getChildren(squad)', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — getChildren(category)', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
+  }
+
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
   }
 
   const testSquads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
 
   it('returns roster agents for roster category', () => {
-    const registry = createMockRegistry(testSquads);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings(testSquads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(testSquads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
     const squadChildren = provider.getChildren(squadItem);
@@ -368,8 +436,8 @@ describe('EditlessTreeProvider — getChildren(category)', () => {
   });
 
   it('returns empty for non-squad non-category element', () => {
-    const registry = createMockRegistry(testSquads);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings(testSquads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
     const item = new EditlessTreeItem('Random', 'agent');
 
     const children = provider.getChildren(item);
@@ -383,18 +451,38 @@ describe('EditlessTreeProvider — getChildren(category)', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — findTerminalItem', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
   }
 
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
+  }
+
   it('returns undefined when no terminal manager', () => {
-    const registry = createMockRegistry([]);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings([]);
+    const provider = new EditlessTreeProvider(agentSettings as never);
     const mockTerminal = { name: 'test' } as never;
 
     expect(provider.findTerminalItem(mockTerminal)).toBeUndefined();
@@ -402,7 +490,7 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
 
   it('returns undefined for untracked terminal', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
+    const agentSettings = createMockAgentSettings(squads);
     const mockTerminalMgr = {
       getTerminalInfo: vi.fn().mockReturnValue(undefined),
       getTerminalsForSquad: vi.fn().mockReturnValue([]),
@@ -412,7 +500,8 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
-    const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
+    const provider = new EditlessTreeProvider(agentSettings as never, mockTerminalMgr as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
     const mockTerminal = { name: 'untracked' } as never;
 
     expect(provider.findTerminalItem(mockTerminal)).toBeUndefined();
@@ -420,7 +509,7 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
 
   it('returns matching item for tracked terminal', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
+    const agentSettings = createMockAgentSettings(squads);
     const mockTerminal = { name: 'test-session' } as never;
 
     const mockTerminalMgr = {
@@ -432,7 +521,8 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
-    const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
+    const provider = new EditlessTreeProvider(agentSettings as never, mockTerminalMgr as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
     const found = provider.findTerminalItem(mockTerminal);
 
     expect(found).toBeDefined();
@@ -442,23 +532,44 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
 });
 
 // ---------------------------------------------------------------------------
-// EditlessTreeProvider — refresh, setDiscoveredAgents, invalidate
+// EditlessTreeProvider — refresh, setDiscoveredItems, invalidate
 // ---------------------------------------------------------------------------
 
-describe('EditlessTreeProvider — refresh / setDiscoveredAgents / invalidate', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', () => {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
+  }
+
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
   }
 
   it('refresh clears cache and fires onDidChangeTreeData', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
 
@@ -472,27 +583,23 @@ describe('EditlessTreeProvider — refresh / setDiscoveredAgents / invalidate', 
     expect(listener).toHaveBeenCalled();
   });
 
-  it('setDiscoveredAgents updates list and fires event', () => {
-    const registry = createMockRegistry([]);
-    const provider = new EditlessTreeProvider(registry as never);
+  it('setDiscoveredItems updates list and fires event', () => {
+    const agentSettings = createMockAgentSettings([]);
+    const provider = new EditlessTreeProvider(agentSettings as never);
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
 
-    const agents = [
-      { id: 'agent-1', name: 'Agent One', filePath: '/agents/one.md', source: 'workspace' as const },
+    const items = [
+      { id: 'agent-1', name: 'Agent One', type: 'agent' as const, source: 'workspace' as const, path: '/agents/one.md' },
     ];
-    provider.setDiscoveredAgents(agents);
+    provider.setDiscoveredItems(items);
 
     expect(listener).toHaveBeenCalled();
 
     const roots = provider.getChildren();
-    const header = roots.find(r => r.label === 'Discovered');
-    expect(header).toBeDefined();
-
-    const children = provider.getChildren(header!);
-    const discoveredItems = children.filter(r => r.type === 'discovered-agent');
-    expect(discoveredItems).toHaveLength(1);
-    expect(discoveredItems[0].label).toBe('Agent One');
+    const agentItems = roots.filter(r => r.type === 'squad');
+    expect(agentItems).toHaveLength(1);
+    expect(agentItems[0].label).toBe('🤖 Agent One');
   });
 
   it('invalidate clears specific cache entry and fires event', () => {
@@ -500,8 +607,9 @@ describe('EditlessTreeProvider — refresh / setDiscoveredAgents / invalidate', 
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
       { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
     ];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
 
@@ -516,49 +624,78 @@ describe('EditlessTreeProvider — refresh / setDiscoveredAgents / invalidate', 
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — visibility filtering', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
   }
 
-  it('hidden squads are excluded from root items', () => {
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
+  }
+
+  it('hidden squads appear under collapsible Hidden group', () => {
     const squads = [
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
       { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
     ];
-    const registry = createMockRegistry(squads);
-    const visibility = { isHidden: (id: string) => id === 'squad-a' };
-    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
+    const agentSettings = createMockAgentSettings(squads, { isHidden: (id: string) => id === 'squad-a' });
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
-    const squadItems = roots.filter(r => r.type === 'squad');
+    const visibleSquads = roots.filter(r => r.type === 'squad');
+    expect(visibleSquads).toHaveLength(1);
+    expect(visibleSquads[0].squadId).toBe('squad-b');
 
-    expect(squadItems).toHaveLength(1);
-    expect(squadItems[0].squadId).toBe('squad-b');
+    // Hidden agents live inside a collapsible "Hidden" group
+    const hiddenGroup = roots.find(r => r.type === 'category' && r.categoryKind === 'hidden');
+    expect(hiddenGroup).toBeDefined();
+    expect(hiddenGroup!.label).toBe('Hidden (1)');
+    const hiddenChildren = provider.getChildren(hiddenGroup!);
+    expect(hiddenChildren).toHaveLength(1);
+    expect(hiddenChildren[0].squadId).toBe('squad-a');
+    expect(hiddenChildren[0].contextValue).toBe('squad-hidden');
   });
 
-  it('"All agents hidden" placeholder when everything hidden', () => {
+  it('"Hidden" group shown when everything hidden', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
-    const visibility = { isHidden: () => true, getHiddenIds: () => ['squad-a'] };
-    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
+    const agentSettings = createMockAgentSettings(squads, { isHidden: () => true, getHiddenIds: () => ['squad-a'] });
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
 
-    // First item is always the built-in Copilot CLI, then the "all hidden" message
-    expect(roots).toHaveLength(2);
+    // First item is always the built-in Copilot CLI
     expect(roots[0].type).toBe('default-agent');
-    expect(roots[1].label).toContain('All agents hidden');
+    // Hidden agents are in a collapsible group, not inline
+    const hiddenGroup = roots.find(r => r.type === 'category' && r.categoryKind === 'hidden');
+    expect(hiddenGroup).toBeDefined();
+    expect(hiddenGroup!.label).toBe('Hidden (1)');
   });
 
   it('shows default Copilot CLI agent when no squads registered', () => {
-    const registry = createMockRegistry([]);
-    const visibility = { isHidden: () => false, getHiddenIds: () => [] };
-    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
+    const agentSettings = createMockAgentSettings([], { isHidden: () => false, getHiddenIds: () => [] });
+    const provider = new EditlessTreeProvider(agentSettings as never);
 
     const roots = provider.getChildren();
 
@@ -573,21 +710,42 @@ describe('EditlessTreeProvider — visibility filtering', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — default Copilot CLI agent', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
+  }
+
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
   }
 
   it('always appears as the first root item', () => {
     const squads = [
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
     ];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
 
@@ -601,8 +759,9 @@ describe('EditlessTreeProvider — default Copilot CLI agent', () => {
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
       { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
     ];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
 
@@ -613,8 +772,8 @@ describe('EditlessTreeProvider — default Copilot CLI agent', () => {
   });
 
   it('has contextValue "default-agent" for menu targeting', () => {
-    const registry = createMockRegistry([]);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings([]);
+    const provider = new EditlessTreeProvider(agentSettings as never);
 
     const roots = provider.getChildren();
     const defaultItem = roots.find(r => r.type === 'default-agent');
@@ -623,10 +782,9 @@ describe('EditlessTreeProvider — default Copilot CLI agent', () => {
     expect(defaultItem!.contextValue).toBe('default-agent');
   });
 
-  it('is not affected by visibility manager', () => {
-    const registry = createMockRegistry([]);
-    const visibility = { isHidden: () => true, getHiddenIds: () => [] };
-    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
+  it('is not affected by agentSettings isHidden', () => {
+    const agentSettings = createMockAgentSettings([], { isHidden: () => true, getHiddenIds: () => [] });
+    const provider = new EditlessTreeProvider(agentSettings as never);
 
     const roots = provider.getChildren();
     const defaultItem = roots.find(r => r.type === 'default-agent');
@@ -636,8 +794,8 @@ describe('EditlessTreeProvider — default Copilot CLI agent', () => {
   });
 
   it('shows "Generic Copilot agent" description when no sessions', () => {
-    const registry = createMockRegistry([]);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings([]);
+    const provider = new EditlessTreeProvider(agentSettings as never);
 
     const roots = provider.getChildren();
     const defaultItem = roots.find(r => r.type === 'default-agent');
@@ -651,49 +809,61 @@ describe('EditlessTreeProvider — default Copilot CLI agent', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — discovered agents', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
   }
 
-  it('shows discovered agents header and items in root', () => {
-    const registry = createMockRegistry([]);
-    const provider = new EditlessTreeProvider(registry as never);
-    provider.setDiscoveredAgents([
-      { id: 'a1', name: 'Bot One', filePath: '/bots/one.md', source: 'workspace' },
-      { id: 'a2', name: 'Bot Two', filePath: '/bots/two.agent.md', source: 'copilot-dir' },
+  it('shows discovered agents as root items', () => {
+    const agentSettings = createMockAgentSettings([]);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems([
+      { id: 'a1', name: 'Bot One', type: 'agent' as const, source: 'workspace' as const, path: '/bots/one.md' },
+      { id: 'a2', name: 'Bot Two', type: 'agent' as const, source: 'copilot-dir' as const, path: '/bots/two.agent.md' },
     ]);
 
     const roots = provider.getChildren();
-    const header = roots.find(r => r.label === 'Discovered');
-    expect(header).toBeDefined();
-
-    const children = provider.getChildren(header!);
-    const agentItems = children.filter(r => r.type === 'discovered-agent');
+    const agentItems = roots.filter(r => r.type === 'squad');
     expect(agentItems).toHaveLength(2);
   });
 
-  it('hidden discovered agents are excluded', () => {
-    const registry = createMockRegistry([]);
-    const visibility = { isHidden: (id: string) => id === 'a1' };
-    const provider = new EditlessTreeProvider(registry as never, undefined, undefined, undefined, visibility as never);
-    provider.setDiscoveredAgents([
-      { id: 'a1', name: 'Bot One', filePath: '/bots/one.md', source: 'workspace' },
-      { id: 'a2', name: 'Bot Two', filePath: '/bots/two.md', source: 'workspace' },
+  it('hidden discovered agents appear under collapsible Hidden group', () => {
+    const agentSettings = createMockAgentSettings([], { isHidden: (id: string) => id === 'a1' });
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems([
+      { id: 'a1', name: 'Bot One', type: 'agent' as const, source: 'workspace' as const, path: '/bots/one.md' },
+      { id: 'a2', name: 'Bot Two', type: 'agent' as const, source: 'workspace' as const, path: '/bots/two.md' },
     ]);
 
     const roots = provider.getChildren();
-    const header = roots.find(r => r.label === 'Discovered');
-    expect(header).toBeDefined();
+    const visibleItems = roots.filter(r => r.type === 'squad');
+    expect(visibleItems).toHaveLength(1);
+    expect(visibleItems[0].label).toBe('🤖 Bot Two');
 
-    const children = provider.getChildren(header!);
-    const agentItems = children.filter(r => r.type === 'discovered-agent');
-    expect(agentItems).toHaveLength(1);
-    expect(agentItems[0].label).toBe('Bot Two');
+    // Hidden agents are inside the collapsible group
+    const hiddenGroup = roots.find(r => r.type === 'category' && r.categoryKind === 'hidden');
+    expect(hiddenGroup).toBeDefined();
+    const hiddenChildren = provider.getChildren(hiddenGroup!);
+    expect(hiddenChildren).toHaveLength(1);
+    expect(hiddenChildren[0].label).toBe('🤖 Bot One');
+    expect(hiddenChildren[0].contextValue).toBe('squad-hidden');
   });
 });
 
@@ -702,18 +872,31 @@ describe('EditlessTreeProvider — discovered agents', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — setDiscoveredItems', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
   }
 
-  it('shows both agents and squads from unified discovery, squads first', () => {
-    const registry = createMockRegistry([]);
-    const provider = new EditlessTreeProvider(registry as never);
+  it('shows both agents and squads from unified discovery as root items', () => {
+    const agentSettings = createMockAgentSettings([]);
+    const provider = new EditlessTreeProvider(agentSettings as never);
     provider.setDiscoveredItems([
       { id: 'agent-1', name: 'Solo Agent', type: 'agent' as const, source: 'workspace' as const, path: '/agents/solo.agent.md', description: 'An agent' },
       { id: 'squad-1', name: 'Team Alpha', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', description: 'A squad', universe: 'acme' },
@@ -721,21 +904,11 @@ describe('EditlessTreeProvider — setDiscoveredItems', () => {
 
     const roots = provider.getChildren();
 
-    const header = roots.find(r => r.label === 'Discovered');
-    expect(header).toBeDefined();
-
-    const children = provider.getChildren(header!);
-    const squadItems = children.filter(r => r.type === 'discovered-squad');
-    const agentItems = children.filter(r => r.type === 'discovered-agent');
-    expect(squadItems).toHaveLength(1);
-    expect(agentItems).toHaveLength(1);
-    expect(squadItems[0].label).toBe('Team Alpha');
-    expect(agentItems[0].label).toBe('Solo Agent');
-
-    // Squads render before agents in the discovered section
-    const discoveredChildren = children.filter(r => r.type === 'discovered-squad' || r.type === 'discovered-agent');
-    expect(discoveredChildren[0].type).toBe('discovered-squad');
-    expect(discoveredChildren[1].type).toBe('discovered-agent');
+    const squadItems = roots.filter(r => r.type === 'squad');
+    expect(squadItems).toHaveLength(2);
+    // Both appear as root items with type 'squad'
+    const labels = squadItems.map(r => r.label);
+    expect(labels).toContain('🤖 Solo Agent');
   });
 });
 
@@ -744,18 +917,38 @@ describe('EditlessTreeProvider — setDiscoveredItems', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — squad item description', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
+  }
+
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
   }
 
   it('includes session count in description when terminal manager has sessions', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
+    const agentSettings = createMockAgentSettings(squads);
     const mockTerminalMgr = {
       getTerminalsForSquad: vi.fn().mockReturnValue([
         { terminal: {}, info: {} },
@@ -767,7 +960,8 @@ describe('EditlessTreeProvider — squad item description', () => {
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
-    const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
+    const provider = new EditlessTreeProvider(agentSettings as never, mockTerminalMgr as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
 
@@ -776,7 +970,7 @@ describe('EditlessTreeProvider — squad item description', () => {
 
   it('includes singular session count', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
-    const registry = createMockRegistry(squads);
+    const agentSettings = createMockAgentSettings(squads);
     const mockTerminalMgr = {
       getTerminalsForSquad: vi.fn().mockReturnValue([{ terminal: {}, info: {} }]),
       getOrphanedSessions: vi.fn().mockReturnValue([]),
@@ -785,7 +979,8 @@ describe('EditlessTreeProvider — squad item description', () => {
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
-    const provider = new EditlessTreeProvider(registry as never, mockTerminalMgr as never);
+    const provider = new EditlessTreeProvider(agentSettings as never, mockTerminalMgr as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
 
@@ -799,13 +994,33 @@ describe('EditlessTreeProvider — squad item description', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
+  }
+
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
   }
 
   it('agents with same name in different squads have different IDs', () => {
@@ -813,8 +1028,9 @@ describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
       { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
       { id: 'squad-b', name: 'Squad B', path: '/projects/beta', icon: '🚀', universe: 'test' },
     ];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
     const squadAItem = roots.find(r => r.squadId === 'squad-a')!;
@@ -840,8 +1056,9 @@ describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
     const squads = [
       { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
     ];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
 
     const getRosterIds = () => {
       const roots = provider.getChildren();
@@ -864,8 +1081,9 @@ describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
       { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
       { id: 'squad-b', name: 'Squad B', path: '/projects/beta', icon: '🚀', universe: 'test' },
     ];
-    const registry = createMockRegistry(squads);
-    const provider = new EditlessTreeProvider(registry as never);
+    const agentSettings = createMockAgentSettings(squads);
+    const provider = new EditlessTreeProvider(agentSettings as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
 
     const collectAllIds = (item?: EditlessTreeItem): string[] => {
       const children = provider.getChildren(item);
@@ -889,13 +1107,33 @@ describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — orphan item resumability', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
+  }
+
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
   }
 
   function makeTerminalManager(orphans: Array<Record<string, unknown>>) {
@@ -929,9 +1167,10 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
       agentSessionId: 'session-abc',
     };
 
-    const registry = createMockRegistry(squads);
+    const agentSettings = createMockAgentSettings(squads);
     const tm = makeTerminalManager([orphan]);
-    const provider = new EditlessTreeProvider(registry as never, tm as never);
+    const provider = new EditlessTreeProvider(agentSettings as never, tm as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
@@ -959,9 +1198,10 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
       // no agentSessionId
     };
 
-    const registry = createMockRegistry(squads);
+    const agentSettings = createMockAgentSettings(squads);
     const tm = makeTerminalManager([orphan]);
-    const provider = new EditlessTreeProvider(registry as never, tm as never);
+    const provider = new EditlessTreeProvider(agentSettings as never, tm as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
@@ -985,9 +1225,10 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
       terminalName: 'Test2', lastSeenAt: Date.now(), rebootCount: 0,
     };
 
-    const registry = createMockRegistry(squads);
+    const agentSettings = createMockAgentSettings(squads);
     const tm = makeTerminalManager([resumableOrphan, nonResumableOrphan]);
-    const provider = new EditlessTreeProvider(registry as never, tm as never);
+    const provider = new EditlessTreeProvider(agentSettings as never, tm as never);
+    provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
@@ -1008,13 +1249,33 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
 // ---------------------------------------------------------------------------
 
 describe('EditlessTreeProvider — resumable session count at tree level', () => {
-  function createMockRegistry(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+  function createMockAgentSettings(
+    squads: { id: string; name: string; path: string; icon: string; universe: string }[],
+    opts: { isHidden?: (id: string) => boolean; getHiddenIds?: () => string[] } = {},
+  ) {
     return {
-      loadSquads: () => squads,
-      getSquad: (id: string) => squads.find(s => s.id === id),
-      registryPath: '/tmp/registry.json',
-      updateSquad: vi.fn(),
+      get: (id: string) => {
+        const s = squads.find(s => s.id === id);
+        return s ? { name: s.name, icon: s.icon } : undefined;
+      },
+      getAll: () => Object.fromEntries(squads.map(s => [s.id, { name: s.name, icon: s.icon }])),
+      isHidden: opts.isHidden ?? (() => false),
+      getHiddenIds: opts.getHiddenIds ?? (() => []),
+      update: vi.fn(),
+      remove: vi.fn(),
+      hide: vi.fn(),
+      show: vi.fn(),
+      showAll: vi.fn(),
+      reload: vi.fn(),
+      settingsPath: '/mock/settings.json',
     };
+  }
+
+  function toDiscovered(squads: { id: string; name: string; path: string; icon: string; universe: string }[]) {
+    return squads.map(s => ({
+      id: s.id, name: s.name, type: 'squad' as const,
+      source: 'workspace' as const, path: s.path, universe: s.universe,
+    }));
   }
 
   function makeTerminalManager(
@@ -1038,7 +1299,8 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
       { id: 'o2', squadId: 'squad-a', agentSessionId: 'sess-2', displayName: 'Test2', labelKey: 'k2', squadName: 'A', squadIcon: '🤖', index: 2, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T2', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
-    const provider = new EditlessTreeProvider(createMockRegistry(standaloneSquad) as never, tm as never);
+    const provider = new EditlessTreeProvider(createMockAgentSettings(standaloneSquad) as never, tm as never);
+    provider.setDiscoveredItems(toDiscovered(standaloneSquad));
 
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
@@ -1050,7 +1312,8 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
       { id: 'o1', squadId: 'squad-a', agentSessionId: 'sess-1', displayName: 'Test', labelKey: 'k', squadName: 'A', squadIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
-    const provider = new EditlessTreeProvider(createMockRegistry(standaloneSquad) as never, tm as never);
+    const provider = new EditlessTreeProvider(createMockAgentSettings(standaloneSquad) as never, tm as never);
+    provider.setDiscoveredItems(toDiscovered(standaloneSquad));
 
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
@@ -1063,7 +1326,7 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
       { id: 'o1', squadId: 'builtin:copilot-cli', agentSessionId: 'sess-1', displayName: 'CLI', labelKey: 'k', squadName: 'CLI', squadIcon: '', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'CLI', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
-    const provider = new EditlessTreeProvider(createMockRegistry([]) as never, tm as never);
+    const provider = new EditlessTreeProvider(createMockAgentSettings([]) as never, tm as never);
 
     const roots = provider.getChildren();
     const defaultItem = roots.find(r => r.type === 'default-agent')!;
@@ -1074,7 +1337,8 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
 
   it('description has no resumable text when no orphans exist', () => {
     const tm = makeTerminalManager([], []);
-    const provider = new EditlessTreeProvider(createMockRegistry(standaloneSquad) as never, tm as never);
+    const provider = new EditlessTreeProvider(createMockAgentSettings(standaloneSquad) as never, tm as never);
+    provider.setDiscoveredItems(toDiscovered(standaloneSquad));
 
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;

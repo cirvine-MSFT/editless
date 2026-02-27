@@ -31,12 +31,10 @@ vi.mock('../editless-tree', () => ({
   }),
   EditlessTreeItem: class {},
 }));
-vi.mock('../registry', () => ({ createRegistry: vi.fn(() => ({ loadSquads: vi.fn().mockReturnValue([]) })), watchRegistry: vi.fn(() => ({ dispose: vi.fn() })) }));
 vi.mock('../terminal-manager', () => ({ TerminalManager: vi.fn(function () { return { persist: vi.fn(), reconcile: vi.fn(), waitForReconciliation: vi.fn().mockResolvedValue(undefined), setSessionResolver: vi.fn(), setAgentSessionId: vi.fn(), getOrphanedSessions: vi.fn().mockReturnValue([]), onDidChange: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn(), getAllTerminals: vi.fn().mockReturnValue([]) }; }), getStateIcon: vi.fn(), getStateDescription: vi.fn() }));
 vi.mock('../session-labels', () => ({ SessionLabelManager: vi.fn(function () { return { getLabel: vi.fn(), setLabel: vi.fn(), clearLabel: vi.fn() }; }), promptClearLabel: vi.fn(), promptRenameSession: vi.fn() }));
-vi.mock('../visibility', () => ({ AgentVisibilityManager: vi.fn(function () { return { hide: vi.fn(), show: vi.fn(), showAll: vi.fn(), getHiddenIds: vi.fn().mockReturnValue([]), isHidden: vi.fn() }; }) }));
 vi.mock('../squad-utils', () => ({ checkNpxAvailable: vi.fn().mockResolvedValue(true), promptInstallNode: vi.fn(), isSquadInitialized: vi.fn() }));
-vi.mock('../discovery', () => ({ autoRegisterWorkspaceSquads: vi.fn() }));
+vi.mock('../discovery', () => ({ discoverAgentTeams: vi.fn().mockReturnValue([]) }));
 vi.mock('../agent-discovery', () => ({ discoverAllAgents: vi.fn(() => []) }));
 vi.mock('../watcher', () => ({ SquadWatcher: vi.fn(function () { return { dispose: vi.fn(), updateSquads: vi.fn() }; }) }));
 vi.mock('../status-bar', () => ({ EditlessStatusBar: vi.fn(function () { return { update: vi.fn(), updateSessionsOnly: vi.fn(), dispose: vi.fn() }; }) }));
