@@ -38,7 +38,7 @@ export function parseTeamMd(content: string, folderName: string): Pick<AgentTeam
     description = blockquoteMatch[1].trim();
   }
 
-  const universeMatch = content.match(/\*\*Universe:\*\*\s*(.+)$/m);
+  const universeMatch = content.match(/\*\*(?:Casting\s+)?Universe:\*\*\s*(.+)$/m);
   if (universeMatch) {
     universe = universeMatch[1].trim();
   }

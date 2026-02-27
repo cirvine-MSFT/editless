@@ -90,6 +90,17 @@ describe('discoverAll', () => {
     expect(squad!.path).toBe(workspaceDir);
   });
 
+  it('parses Casting Universe variant from team.md', () => {
+    const workspaceDir = path.join(tmpDir, 'cast-squad');
+    writeFixture('cast-squad/.squad/team.md', '# Cast Squad\n> A squad.\n- **Casting Universe:** Greek Mythology\n');
+
+    const result = discoverAll([wsFolder(workspaceDir)]);
+
+    const squad = result.find(i => i.id === 'cast-squad');
+    expect(squad).toBeDefined();
+    expect(squad!.universe).toBe('Greek Mythology');
+  });
+
   it('discovers .ai-team squad at workspace folder root', () => {
     // Workspace folder itself IS a squad (has .ai-team/team.md at root — legacy format)
     const workspaceDir = path.join(tmpDir, 'legacy-squad');

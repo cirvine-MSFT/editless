@@ -753,6 +753,15 @@ describe('discoverAgentTeams universe fallback',() => {
     expect(result[0].universe).toBe('Explicit Universe');
   });
 
+  it('team.md Casting Universe marker is recognized', () => {
+    writeFixture('squad-a/.squad/team.md', '# Alpha Squad\n> The alpha team.\n- **Casting Universe:** Greek Mythology\n');
+
+    const result = discoverAgentTeams(tmpDir, []);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].universe).toBe('Greek Mythology');
+  });
+
   it('falls back to unknown when registry.json is malformed', () => {
     writeFixture('squad-a/.squad/team.md', '# Alpha Squad\n> The alpha team.\n');
     writeFixture('squad-a/.squad/casting/registry.json', 'not valid json');

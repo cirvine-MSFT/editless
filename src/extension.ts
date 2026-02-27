@@ -152,6 +152,11 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     const folders = vscode.workspace.workspaceFolders ?? [];
     const alreadyPresent = folders.some(f => f.uri.fsPath.toLowerCase() === dirPath.toLowerCase());
     if (!alreadyPresent) {
+      // Persist terminal state before adding the folder — transitioning from
+      // single-folder to multi-root workspace restarts the extension host,
+      // which kills our in-memory state. Fresh persisted data lets reconcile()
+      // re-match terminals on restart.
+      terminalManager.persist();
       vscode.workspace.updateWorkspaceFolders(folders.length, 0, { uri: vscode.Uri.file(dirPath) });
     }
   }
