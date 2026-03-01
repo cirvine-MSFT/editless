@@ -237,7 +237,7 @@
         "command": "editless.launchFromWorkItem",
         "title": "Launch with Agent",
         "category": "EditLess",
-        "icon": "$(add)"
+        "icon": "$(terminal)"
       },
       {
         "command": "editless.openFilePreview",
@@ -260,7 +260,7 @@
         "command": "editless.launchFromPR",
         "title": "Launch with Agent",
         "category": "EditLess",
-        "icon": "$(add)"
+        "icon": "$(terminal)"
       },
       {
         "command": "editless.goToPRInBrowser",
