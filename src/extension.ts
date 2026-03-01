@@ -104,20 +104,28 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   terminalManager.reconcile();
 
   // Sync tree selection when switching terminals via tab bar
+  let revealTimer: ReturnType<typeof setTimeout> | undefined;
   context.subscriptions.push(
     vscode.window.onDidChangeActiveTerminal(terminal => {
-      if (!terminal) return;
-      const info = terminalManager.getTerminalInfo(terminal);
-      if (!info) return;
-      const matchingItem = treeProvider.findTerminalItem(terminal);
-      if (matchingItem) {
-        try {
-          treeView.reveal(matchingItem, { select: true, focus: false });
-        } catch {
-          // reveal() may fail if tree is not visible or item is stale
-        }
+      if (revealTimer !== undefined) {
+        clearTimeout(revealTimer);
       }
+      if (!terminal) return;
+      revealTimer = setTimeout(() => {
+        revealTimer = undefined;
+        const info = terminalManager.getTerminalInfo(terminal);
+        if (!info) return;
+        const matchingItem = treeProvider.findTerminalItem(terminal);
+        if (matchingItem) {
+          try {
+            treeView.reveal(matchingItem, { select: true, focus: false });
+          } catch {
+            // reveal() may fail if tree is not visible or item is stale
+          }
+        }
+      }, 100);
     }),
+    { dispose() { if (revealTimer !== undefined) clearTimeout(revealTimer); } },
   );
 
   // --- Unified discovery — agents + squads in one pass (#317, #318) ----------
