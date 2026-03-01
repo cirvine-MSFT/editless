@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as os from 'os';
+import * as fs from 'fs';
+import * as path from 'path';
 import type * as vscode from 'vscode';
 import type { AgentTeamConfig } from '../types';
 
@@ -17,6 +20,7 @@ const {
   mockOnDidEndTerminalShellExecution,
   mockTerminals,
   mockRandomUUID,
+  mockWorkspaceFolders,
 } = vi.hoisted(() => ({
   mockCreateTerminal: vi.fn(),
   mockOnDidCloseTerminal: vi.fn(),
@@ -25,6 +29,7 @@ const {
   mockOnDidEndTerminalShellExecution: vi.fn(),
   mockTerminals: [] as vscode.Terminal[],
   mockRandomUUID: vi.fn<() => `${string}-${string}-${string}-${string}-${string}`>(),
+  mockWorkspaceFolders: { value: undefined as { uri: { fsPath: string } }[] | undefined },
 }));
 
 vi.mock('crypto', async (importOriginal) => {
@@ -50,6 +55,7 @@ vi.mock('vscode', () => ({
         return defaultValue;
       },
     }),
+    get workspaceFolders() { return mockWorkspaceFolders.value; },
   },
   EventEmitter: class {
     private listeners: Function[] = [];
@@ -67,7 +73,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { TerminalManager, type PersistedTerminalInfo, type SessionState, stripEmoji } from '../terminal-manager';
+import { TerminalManager, type PersistedTerminalInfo, type SessionState, stripEmoji, resolveTerminalCwd } from '../terminal-manager';
 import * as vscodeModule from 'vscode';
 
 function makeMockTerminal(name: string): vscode.Terminal {
@@ -151,6 +157,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockTerminals.length = 0;
   capturedOpenListener = undefined;
+  mockWorkspaceFolders.value = undefined;
 
   mockOnDidCloseTerminal.mockImplementation((listener: CloseListener) => {
     capturedCloseListener = listener;
@@ -930,9 +937,10 @@ describe('TerminalManager', () => {
           'launching',
           'active',
           'inactive',
+          'attention',
           'orphaned',
         ];
-        expect(validStates).toHaveLength(4);
+        expect(validStates).toHaveLength(5);
       });
     });
 
@@ -1038,6 +1046,220 @@ describe('TerminalManager', () => {
         expect(state).toBe('inactive');
       });
 
+      it('should return attention when event has hasOpenAskUser flag', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate an ask_user event with the computed hasOpenAskUser flag
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'ask_user', hasOpenAskUser: true, timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('attention');
+      });
+
+      it('should stay active for non-ask_user tool.execution_start events', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate a non-ask_user tool execution — should remain active
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'powershell', timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('active');
+      });
+
+      it('should return active when last event is user.message (official schema)', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate a user.message event via the watcher callback
+        capturedCallback!({ type: 'user.message', timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('active');
+      });
+
+      it('should transition from attention back to active on working event', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // First: enter attention state
+        capturedCallback!({ type: 'tool.execution_start', toolName: 'ask_user', hasOpenAskUser: true, timestamp: Date.now() });
+        expect(mgr.getSessionState(terminal)).toBe('attention');
+
+        // Then: transition back to active on a working event
+        capturedCallback!({ type: 'assistant.turn_start', timestamp: Date.now() });
+        expect(mgr.getSessionState(terminal)).toBe('active');
+      });
+
+      it('should return attention when parallel tool calls mask ask_user (last event is report_intent complete)', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate the parallel scenario: last event is tool.execution_complete for report_intent,
+        // but hasOpenAskUser is true because ask_user started but hasn't completed
+        capturedCallback!({ type: 'tool.execution_complete', toolName: 'report_intent', hasOpenAskUser: true, timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('attention');
+      });
+
+      it('should not be attention when ask_user has completed (hasOpenAskUser false)', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // ask_user started and completed in the same tail — hasOpenAskUser should be false
+        capturedCallback!({ type: 'tool.execution_complete', toolName: 'ask_user', hasOpenAskUser: false, timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).not.toBe('attention');
+        expect(state).toBe('active'); // tool.execution_complete is a working event
+      });
+
+      it('should return inactive for unknown event types', () => {
+        let capturedCallback: ((event: any) => void) | undefined;
+        const mockResolver = {
+          resolveAll: vi.fn().mockReturnValue(new Map()),
+          resolveForSquad: vi.fn(),
+          clearCache: vi.fn(),
+          getLastEvent: vi.fn(),
+          isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+          watchSession: vi.fn().mockImplementation((_id: string, cb: (event: any) => void) => {
+            capturedCallback = cb;
+            return { dispose: vi.fn() };
+          }),
+          watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+          _sessionStateDir: '/tmp/sessions',
+        };
+
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        mgr.setSessionResolver(mockResolver as any);
+
+        const config = makeSquadConfig();
+        const terminal = mgr.launchTerminal(config);
+
+        // Simulate an unknown future event type
+        capturedCallback!({ type: 'unknown.future.event', timestamp: Date.now() });
+
+        const state = mgr.getSessionState(terminal);
+        expect(state).toBe('inactive');
+      });
+
       it('should return orphaned for persisted session with no live terminal', () => {
         const orphanEntry = makePersistedEntry({
           id: 'orphaned-1',
@@ -1116,6 +1338,10 @@ describe('TerminalManager', () => {
         expect(inactiveIcon).toBeDefined();
         expect(inactiveIcon.id).toBe('circle-outline');
 
+        const attentionIcon = mgr.getStateIcon('attention');
+        expect(attentionIcon).toBeDefined();
+        expect(attentionIcon.id).toBe('comment-discussion');
+
         const nonResumableInfo = makePersistedEntry();
         const orphanedIcon = mgr.getStateIcon('orphaned', nonResumableInfo);
         expect(orphanedIcon).toBeDefined();
@@ -1134,6 +1360,10 @@ describe('TerminalManager', () => {
         const activeIcon = mgr.getStateIcon('active').id;
         const inactiveIcon = mgr.getStateIcon('inactive').id;
         expect(activeIcon).not.toBe(inactiveIcon);
+        // attention should have a distinct icon
+        const attentionIcon = mgr.getStateIcon('attention').id;
+        expect(attentionIcon).not.toBe(activeIcon);
+        expect(attentionIcon).not.toBe(inactiveIcon);
         // resumable orphan should have a distinct icon
         const resumableInfo = makePersistedEntry({ agentSessionId: 'session-123' });
         const orphanedIcon = mgr.getStateIcon('orphaned', resumableInfo).id;
@@ -1154,6 +1384,9 @@ describe('TerminalManager', () => {
 
         const inactiveDesc = mgr.getStateDescription('inactive', info);
         expect(inactiveDesc.length).toBeGreaterThan(0);
+
+        const attentionDesc = mgr.getStateDescription('attention', info);
+        expect(attentionDesc).toContain('waiting for input');
 
         const orphanedDesc = mgr.getStateDescription('orphaned', info);
         expect(orphanedDesc).toContain('session ended');
@@ -2599,6 +2832,158 @@ describe('TerminalManager', () => {
       expect(mgr.getOrphanedSessions().find(e => e.id === 'dead-session-1')).toBeUndefined();
 
       vi.useRealTimers();
+    });
+  });
+
+  describe('agent CWD resolution (#403)', () => {
+    // -- Personal agents (outside workspace, under ~/.copilot/agents) -------
+    it('resolveTerminalCwd returns workspace root for personal agent path', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/.copilot/agents/my-agent')).toBe('/home/user/project');
+    });
+
+    it('resolveTerminalCwd returns agent path when no workspace folder is open', () => {
+      mockWorkspaceFolders.value = undefined;
+      expect(resolveTerminalCwd('/home/user/.copilot/agents/my-agent')).toBe('/home/user/.copilot/agents/my-agent');
+    });
+
+    it('resolveTerminalCwd handles backslash paths on Windows for personal agents', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: 'C:\\Users\\user\\project' } }];
+      expect(resolveTerminalCwd('C:\\Users\\user\\.copilot\\agents\\my-agent')).toBe('C:\\Users\\user\\project');
+    });
+
+    // -- Repo agents (inside workspace under .github/agents or .copilot/agents) --
+    it('resolveTerminalCwd returns workspace root for .github/agents repo agent', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/project/.github/agents/my-agent')).toBe('/home/user/project');
+    });
+
+    it('resolveTerminalCwd returns workspace root for .copilot/agents repo agent', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/project/.copilot/agents/my-agent')).toBe('/home/user/project');
+    });
+
+    it('resolveTerminalCwd returns workspace root for repo agent on Windows', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: 'C:\\Users\\user\\project' } }];
+      expect(resolveTerminalCwd('C:\\Users\\user\\project\\.github\\agents\\my-agent')).toBe('C:\\Users\\user\\project');
+    });
+
+    // -- Workspace-dir agents (inside workspace but not under known agent dirs) --
+    it('resolveTerminalCwd returns workspace root for agent inside workspace folder', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/project/tools/my-agent')).toBe('/home/user/project');
+    });
+
+    it('resolveTerminalCwd returns correct workspace root in multi-root workspace', () => {
+      mockWorkspaceFolders.value = [
+        { uri: { fsPath: '/home/user/project-a' } },
+        { uri: { fsPath: '/home/user/project-b' } },
+      ];
+      expect(resolveTerminalCwd('/home/user/project-b/.github/agents/bot')).toBe('/home/user/project-b');
+    });
+
+    it('resolveTerminalCwd returns workspace root for workspace-dir agent on Windows', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: 'C:\\Users\\user\\project' } }];
+      expect(resolveTerminalCwd('C:\\Users\\user\\project\\tools\\agent')).toBe('C:\\Users\\user\\project');
+    });
+
+    // -- Fallback: non-matching path returns as-is ----------------------------
+    it('resolveTerminalCwd returns original path for non-personal agent outside workspace', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/tmp/test-squad')).toBe('/tmp/test-squad');
+    });
+
+    // -- Integration: launchTerminal and relaunchSession ----------------------
+    it('launchTerminal uses workspace root for personal agent config', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ path: '/home/user/.copilot/agents/my-agent' });
+
+      mgr.launchTerminal(config);
+
+      expect(mockCreateTerminal).toHaveBeenCalledWith(
+        expect.objectContaining({ cwd: '/home/user/project' }),
+      );
+    });
+
+    it('launchTerminal uses workspace root for repo agent config', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ path: '/home/user/project/.github/agents/my-agent' });
+
+      mgr.launchTerminal(config);
+
+      expect(mockCreateTerminal).toHaveBeenCalledWith(
+        expect.objectContaining({ cwd: '/home/user/project' }),
+      );
+    });
+
+    it('launchTerminal uses squad path for normal agent config', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const config = makeSquadConfig({ path: '/tmp/test-squad' });
+
+      mgr.launchTerminal(config);
+
+      expect(mockCreateTerminal).toHaveBeenCalledWith(
+        expect.objectContaining({ cwd: '/tmp/test-squad' }),
+      );
+    });
+
+    it('relaunchSession uses workspace root for personal agent squadPath', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const entry = makePersistedEntry({
+        squadPath: '/home/user/.copilot/agents/my-agent',
+        launchCommand: 'copilot --agent my-agent',
+        agentSessionId: 'session-123',
+      });
+
+      mgr.relaunchSession(entry);
+
+      expect(mockCreateTerminal).toHaveBeenCalledWith(
+        expect.objectContaining({ cwd: '/home/user/project' }),
+      );
+    });
+
+    // -- Edge cases -----------------------------------------------------------
+    it('resolveTerminalCwd returns undefined for undefined input', () => {
+      expect(resolveTerminalCwd(undefined)).toBeUndefined();
+    });
+
+    it('resolveTerminalCwd returns empty string for empty string input', () => {
+      expect(resolveTerminalCwd('')).toBe('');
+    });
+
+    // -- Squad directories use their own path as CWD (#399) -------------------
+    it('resolveTerminalCwd uses squad directory path (not workspace root) when path is a real directory', () => {
+      // Create a real temp dir to simulate a squad directory inside a workspace
+      const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'editless-cwd-'));
+      const squadDir = path.join(parentDir, 'my-squad');
+      fs.mkdirSync(squadDir);
+
+      mockWorkspaceFolders.value = [{ uri: { fsPath: parentDir } }];
+      expect(resolveTerminalCwd(squadDir)).toBe(squadDir);
+
+      // Cleanup
+      fs.rmSync(parentDir, { recursive: true, force: true });
+    });
+
+    it('resolveTerminalCwd falls back to workspace root when path is a file inside workspace', () => {
+      // Create a real temp file to simulate an agent file
+      const parentDir = fs.mkdtempSync(path.join(os.tmpdir(), 'editless-cwd-'));
+      const agentFile = path.join(parentDir, 'my-agent.agent.md');
+      fs.writeFileSync(agentFile, '# Agent');
+
+      mockWorkspaceFolders.value = [{ uri: { fsPath: parentDir } }];
+      expect(resolveTerminalCwd(agentFile)).toBe(parentDir);
+
+      // Cleanup
+      fs.rmSync(parentDir, { recursive: true, force: true });
     });
   });
 });

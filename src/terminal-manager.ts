@@ -1,14 +1,16 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
+import { CopilotEvents } from './copilot-sdk-types';
 import { buildLaunchCommandForConfig } from './copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------
 
-export type SessionState = 'launching' | 'active' | 'inactive' | 'orphaned';
+export type SessionState = 'launching' | 'active' | 'inactive' | 'attention' | 'orphaned';
 
 export interface TerminalInfo {
   id: string;
@@ -51,6 +53,62 @@ export function stripEmoji(str: string): string {
   return str
     .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]\uFE0F?(\u200D[\p{Emoji_Presentation}\p{Extended_Pictographic}]\uFE0F?)*/gu, '')
     .trim();
+}
+
+// ---------------------------------------------------------------------------
+// CWD resolution for agents (#403)
+// ---------------------------------------------------------------------------
+
+/** Normalise path separators to forward-slash for comparison. */
+function normSep(p: string): string {
+  return p.replace(/\\/g, '/');
+}
+
+/**
+ * Determines the correct CWD for a terminal based on the agent type:
+ *
+ * 1. **Personal agents** (`~/.copilot/agents/`) → first workspace folder
+ * 2. **Repo agents** (path inside a workspace folder under `.github/agents/`
+ *    or `.copilot/agents/`) → that workspace folder root (≈ repo root)
+ * 3. **Workspace-dir agents** (path inside any workspace folder) → that
+ *    workspace folder root
+ * 4. Otherwise → return the original path unchanged.
+ */
+export function resolveTerminalCwd(agentPath: string | undefined): string | undefined {
+  if (!agentPath) return agentPath;
+
+  const norm = normSep(agentPath);
+
+  // 1. Personal agent — path under user home .copilot/agents
+  //    These live outside any workspace folder (e.g. ~/.copilot/agents/foo).
+  //    Match only when the .copilot segment is NOT inside a workspace folder,
+  //    which we detect by checking workspace folders first.
+  const folders = vscode.workspace.workspaceFolders;
+
+  // 2 & 3: Check if agentPath is inside a workspace folder
+  if (folders) {
+    for (const folder of folders) {
+      const folderPath = normSep(folder.uri.fsPath);
+      if (norm.startsWith(folderPath + '/') || norm === folderPath) {
+        // Squad directories should use their own path as CWD so the
+        // Copilot CLI can discover .squad/ or squad.agent.md at the root.
+        // Agent files use the workspace folder root.
+        try {
+          if (fs.statSync(agentPath).isDirectory()) {
+            return agentPath;
+          }
+        } catch { /* path doesn't exist — fall through to workspace root */ }
+        return folder.uri.fsPath;
+      }
+    }
+  }
+
+  // 1. Personal agent fallback — .copilot/agents outside any workspace folder
+  if (/\.copilot[\\/]agents/.test(agentPath)) {
+    return folders?.[0]?.uri.fsPath ?? agentPath;
+  }
+
+  return agentPath;
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +208,7 @@ export class TerminalManager implements vscode.Disposable {
 
     const terminal = vscode.window.createTerminal({
       name: displayName,
-      cwd: config.path,
+      cwd: resolveTerminalCwd(config.path),
       isTransient: true,
       iconPath: new vscode.ThemeIcon('terminal'),
       env: {
@@ -356,7 +414,7 @@ export class TerminalManager implements vscode.Disposable {
 
     const terminal = vscode.window.createTerminal({
       name: entry.displayName,
-      cwd: entry.squadPath,
+      cwd: resolveTerminalCwd(entry.squadPath),
       isTransient: true,
       iconPath: new vscode.ThemeIcon('terminal'),
       env: {
@@ -520,6 +578,7 @@ export class TerminalManager implements vscode.Disposable {
     // the actual copilot agent state rather than the outer shell process.
     const lastEvent = this._lastSessionEvent.get(terminal);
     if (lastEvent) {
+      if (isAttentionEvent(lastEvent)) return 'attention';
       return isWorkingEvent(lastEvent.type) ? 'active' : 'inactive';
     }
 
@@ -732,18 +791,21 @@ export class TerminalManager implements vscode.Disposable {
 
 // -- Exported helpers for tree view and testability -------------------------
 
+/** Returns true if the event indicates the agent is waiting for user input. */
+function isAttentionEvent(event: SessionEvent): boolean {
+  return event.hasOpenAskUser === true;
+}
+
 /** Returns true if the event type indicates the agent is actively working. */
 function isWorkingEvent(eventType: string): boolean {
   switch (eventType) {
-    case 'assistant.turn_start':
-    case 'assistant.message':
-    case 'assistant.thinking':
-    case 'assistant.code_edit':
-    case 'tool.execution_start':
-    case 'tool.execution_complete':
-    case 'tool.result':
-    case 'user.message':
-    case 'session.resume':
+    case CopilotEvents.AssistantTurnStart:
+    case CopilotEvents.AssistantMessage:
+    case CopilotEvents.AssistantThinking:
+    case CopilotEvents.ToolExecutionStart:
+    case CopilotEvents.ToolExecutionComplete:
+    case CopilotEvents.UserMessage:
+    case CopilotEvents.SessionResume:
       return true;
     default:
       return false;
@@ -755,6 +817,8 @@ export function getStateIcon(state: SessionState, resumable = false): vscode.The
     case 'launching':
     case 'active':
       return new vscode.ThemeIcon('loading~spin');
+    case 'attention':
+      return new vscode.ThemeIcon('comment-discussion');
     case 'inactive':
       return new vscode.ThemeIcon('circle-outline');
     case 'orphaned':
@@ -770,6 +834,8 @@ export function getStateDescription(state: SessionState, lastActivityAt?: number
   switch (state) {
     case 'launching':
       return 'launching…';
+    case 'attention':
+      return 'waiting for input';
     case 'orphaned':
       return resumable ? 'previous session — resume' : 'session ended';
     case 'active':

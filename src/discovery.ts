@@ -1,13 +1,11 @@
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { AgentTeamConfig } from './types';
-import { EditlessRegistry } from './registry';
-import { resolveTeamMd, resolveTeamDir, TEAM_DIR_NAMES } from './team-dir';
+import { resolveTeamMd, TEAM_DIR_NAMES } from './team-dir';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
-function normalizeSquadName(name: string, fallback: string): string {
+export function normalizeSquadName(name: string, fallback: string): string {
   const trimmed = name.trim();
   if (!trimmed) {
     return fallback;
@@ -40,7 +38,7 @@ export function parseTeamMd(content: string, folderName: string): Pick<AgentTeam
     description = blockquoteMatch[1].trim();
   }
 
-  const universeMatch = content.match(/\*\*Universe:\*\*\s*(.+)$/m);
+  const universeMatch = content.match(/\*\*(?:Casting\s+)?Universe:\*\*\s*(.+)$/m);
   if (universeMatch) {
     universe = universeMatch[1].trim();
   }
@@ -58,7 +56,28 @@ export function readUniverseFromRegistry(squadPath: string): string | undefined 
     const registryPath = path.join(squadPath, dirName, 'casting', 'registry.json');
     try {
       const raw = fs.readFileSync(registryPath, 'utf-8');
-      const data = JSON.parse(raw) as { agents?: Record<string, { status?: string; universe?: string }> };
+      const data = JSON.parse(raw) as {
+        universe?: string;
+        persistent_names?: Array<{ persistent_name?: string; status?: string; universe?: string }>;
+        agents?: Record<string, { status?: string; universe?: string }>;
+      };
+
+      // Top-level universe field (casting registry with members array)
+      if (data?.universe) {
+        return data.universe;
+      }
+
+      // persistent_names array (Squad casting system)
+      if (Array.isArray(data?.persistent_names)) {
+        const active = data.persistent_names.find(
+          a => a.universe && (!a.status || a.status === 'active'),
+        );
+        if (active?.universe) {
+          return active.universe;
+        }
+      }
+
+      // Per-agent universe (editless internal format)
       if (data?.agents) {
         for (const agent of Object.values(data.agents)) {
           if (agent.status === 'active' && agent.universe) {
@@ -145,103 +164,6 @@ export function discoverAgentTeams(
 
   scan(dirPath, 0);
   return discovered;
-}
-
-
-export async function promptAndAddSquads(
-  discovered: AgentTeamConfig[],
-  registry: EditlessRegistry,
-): Promise<void> {
-  if (discovered.length === 0) {
-    vscode.window.showInformationMessage('No new agents found.');
-    return;
-  }
-
-  const items: (vscode.QuickPickItem & { squad: AgentTeamConfig })[] = discovered.map(s => ({
-    label: `${s.icon} ${s.name}`,
-    description: s.path,
-    detail: `Universe: ${s.universe}`,
-    picked: true,
-    squad: s,
-  }));
-
-  const selected = await vscode.window.showQuickPick(items, {
-    canPickMany: true,
-    placeHolder: 'Select agents to add to registry',
-  });
-
-  if (!selected || selected.length === 0) { return; }
-
-  registry.addSquads(selected.map(i => i.squad));
-  vscode.window.showInformationMessage(`Added ${selected.length} agent(s) to registry.`);
-}
-
-
-
-/**
- * Auto-register squads found at workspace roots.
- * If a workspace folder contains .ai-team/ or .squad/ with a team.md,
- * silently add it to the registry so the tree view populates immediately.
- */
-export function autoRegisterWorkspaceSquads(registry: EditlessRegistry): void {
-  const folders = vscode.workspace.workspaceFolders;
-  if (!folders || folders.length === 0) { return; }
-
-  const existing = registry.loadSquads();
-  const existingPaths = new Set(existing.map(s => s.path.toLowerCase()));
-
-  const toAdd: AgentTeamConfig[] = [];
-
-  for (const folder of folders) {
-    const folderPath = folder.uri.fsPath;
-    if (existingPaths.has(folderPath.toLowerCase())) {
-      // When team.md appears for an already-registered "unknown" squad, update it
-      const existingSquad = existing.find(s => s.path.toLowerCase() === folderPath.toLowerCase());
-      if (existingSquad?.universe === 'unknown') {
-        const teamMdPath = resolveTeamMd(folderPath);
-        if (teamMdPath) {
-          const content = fs.readFileSync(teamMdPath, 'utf-8');
-          const parsed = parseTeamMd(content, folder.name);
-          const universe = parsed.universe === 'unknown'
-            ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
-            : parsed.universe;
-          registry.updateSquad(existingSquad.id, { ...parsed, universe });
-        }
-      }
-      continue;
-    }
-
-    const teamMdPath = resolveTeamMd(folderPath);
-    if (teamMdPath) {
-      const content = fs.readFileSync(teamMdPath, 'utf-8');
-      const parsed = parseTeamMd(content, folder.name);
-      const universe = parsed.universe === 'unknown'
-        ? (readUniverseFromRegistry(folderPath) ?? 'unknown')
-        : parsed.universe;
-
-      toAdd.push({
-        id: toKebabCase(folder.name),
-        name: parsed.name,
-        description: parsed.description,
-        path: folderPath,
-        icon: '🔷',
-        universe,
-      });
-    } else if (resolveTeamDir(folderPath)) {
-      // squad init creates .ai-team/ before the coordinator writes team.md
-      toAdd.push({
-        id: toKebabCase(folder.name),
-        name: folder.name,
-        path: folderPath,
-        icon: '🔷',
-        universe: readUniverseFromRegistry(folderPath) ?? 'unknown',
-      });
-    }
-  }
-
-  if (toAdd.length > 0) {
-    registry.addSquads(toAdd);
-  }
 }
 
 

@@ -450,3 +450,51 @@ Comprehensive edge case analysis of VS Code settings and agent-registry.json int
 
 Existing issues confirmed: #403, #404. New issues needed: 2 critical, 5 medium.
 Decision document: .squad/decisions/inbox/rick-settings-edge-cases.md
+
+---
+
+### 2026-02-24: v0.1.3 PR Reviews — 3x Code Review of 5 Draft PRs
+
+Performed thorough code review of all 5 v0.1.3 draft PRs (#423, #424, #425, #426, #427) at Casey's request. All approved.
+
+**Review patterns observed:**
+
+1. **Branch overlap pattern:** PRs #423, #425, and #426 share overlapping changes to extension.ts, editless-tree.ts, and tests. They appear branched from the same integration point. This creates a merge ordering dependency: #423 → #425 → #426. Future v0.1.x work should either use stacked PRs explicitly or avoid branching from shared points.
+
+2. **Synthetic agent pattern:** The built-in Copilot CLI agent (`builtin:copilot-cli`) is a synthetic entity that lives outside the registry. Any new picker or selection flow must use `getAllAgentsForPicker()` (introduced in #423) to include it. This is now a project convention — registry-only queries will miss the built-in agent.
+
+3. **Config watcher pattern:** PR #424 establishes the pattern for re-initializing integrations when VS Code settings change: `onDidChangeConfiguration` + `affectsConfiguration()` + call existing init function. If new config keys are added for other integrations, follow this same pattern.
+
+4. **setTimeout(0) for UI-first rendering:** PR #427 uses `setTimeout(() => ..., 0)` to yield the event loop after triggering tree refresh, ensuring VS Code renders the update before synchronous watcher rebuild blocks. Good pattern for any "refresh then rebuild" sequence.
+
+5. **Test coverage tradeoff:** Bug fix PRs included test updates. The new feature PR (#426 resume session) did not add tests for the command handler — acceptable for UI orchestration flows that compose existing tested components. Would not accept this for data transforms or algorithms.
+
+Decision document: .squad/decisions/inbox/rick-v013-pr-reviews.md
+
+---
+
+### 2026-02-24: PR #424 Follow-up Review — Config Refresh Architecture Deep Dive
+
+**Request:** Casey requested architecture/code quality review of PR #424 after the initial approval. Specifically: (1) Should config handlers be closer to init functions? (2) Two separate listeners vs. one combined? (3) Does calling full init functions risk side effects? (4) Any architectural concerns?
+
+**Analysis findings:**
+
+1. **Handler placement is correct.** Config listeners are registered in `activate()` immediately after the corresponding `init*()` calls (lines 999-1015). This mirrors the existing pattern for `refreshInterval` config (line 1370). Placing them inside the init functions would create a circular dependency (init → register listener → call init → register listener...). Current placement is standard VS Code extension practice.
+
+2. **Two separate listeners is the right choice.** The listeners watch different config scopes:
+   - ADO: `editless.ado.{organization,project}` (2 keys, 1 listener)
+   - GitHub: `editless.github.repos` (1 key, 1 listener)
+   
+   Combining them would create a single monolithic handler checking 3+ config keys on every config change event. Separate listeners follow Single Responsibility Principle and avoid unnecessary checks. The performance difference is negligible (VS Code fires the event once per config change regardless of listener count).
+
+3. **Calling full init functions is safe — no side effects.** Deep inspection of `initAdoIntegration()` and `initGitHubIntegration()` reveals they are idempotent:
+   - `initAdoIntegration()` calls: `setAdoConfig()` (simple assignment), `setAdoRefresh()` (simple callback assignment), `fetchAdoData()` (data fetch)
+   - `initGitHubIntegration()` calls: `setRepos()` (assignment + data fetch)
+   
+   No event subscriptions, no resource allocations, no state accumulation. Each call replaces the previous config/callback and re-fetches data. This is the correct approach for config refresh.
+
+4. **No architectural concerns.** The pattern is consistent with existing codebase conventions (see `refreshInterval` handler at line 1370). Test coverage is excellent (283 lines, 4 test cases including negative case). The implementation is minimal, focused, and follows VS Code extension best practices.
+
+**Verdict:** APPROVED (reconfirmed). Architecture is sound, pattern is correct, no changes needed.
+
+**Key learning:** Config change handlers should live in `activate()` after the initial setup they monitor, not inside the setup functions themselves. This avoids circular dependencies and follows VS Code extension conventions.

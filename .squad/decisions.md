@@ -1,3 +1,102 @@
+### 2026-02-26: Encapsulate Settings Persistence
+
+**Date:** 2026-02-26  
+**Author:** Copilot (as Rick)  
+**Status:** Implemented  
+**Commit:** 3b315c9
+
+## Context
+
+`AgentSettingsManager` was a passive data store, with `extension.ts` responsible for watching the underlying JSON file for changes. This leaked implementation details and led to scattered responsibility.
+
+## Decision
+
+`AgentSettingsManager` now:
+1. Watches its own `agent-settings.json` file
+2. Exposes an `onDidChange` event
+3. Reloads itself automatically on change
+
+`extension.ts` now subscribes to `agentSettings.onDidChange` to trigger UI refreshes, rather than watching the file system directly.
+
+## Consequences
+
+- Better encapsulation: `extension.ts` doesn't need to know about the file path or filesystem events
+- Consistent state: `AgentSettingsManager` is always up-to-date with disk
+- Implements `Disposable` for proper lifecycle management
+
+---
+
+### 2026-02-26: Eliminate agent-registry.json — Auto-Discover Refactor
+
+**Date:** 2026-02-26  
+**Author:** Morty  
+**Status:** Implemented  
+**Issue:** #399
+
+## Context
+
+The `agent-registry.json` file was a centralized registry that required explicit "Add to Registry" actions for discovered agents. This created friction — users had to manually promote items, and the registry was a single point of failure for the tree view.
+
+## Decision
+
+Replace `EditlessRegistry` + `AgentVisibilityManager` with a single `AgentSettingsManager` backed by `globalStorageUri/agent-settings.json`. All discovery results auto-show in a flat list. Settings file stores only overrides (hidden, model, name, icon, additionalArgs).
+
+### Key Design Choices
+
+1. **Persistence:** `globalStorageUri/agent-settings.json` — stable across workspace changes
+2. **Key strategy:** ID-only keys (kebab-case)
+3. **No "Discovered" section:** Everything auto-shows flat. No "Add to Registry" concept.
+4. **Hidden agents shown inline, dimmed:** Gray icon via `ThemeColor('disabledForeground')`, "(hidden)" in description, contextValue `squad-hidden` enables "Show" context menu
+5. **Reactivity:** Direct path for user actions (sync write + immediate refresh), 300ms debounced discovery for filesystem changes
+6. **Migration:** Old registry.json automatically migrated on first load, renamed to .bak
+
+## Impact
+
+- Deleted: `src/registry.ts`, `src/visibility.ts`
+- New: `src/agent-settings.ts`
+- Modified: `src/extension.ts`, `src/editless-tree.ts`, `src/unified-discovery.ts`, `src/status-bar.ts`, `src/discovery.ts`, `package.json`
+- 6 test files refactored (Meeseeks: 191 failures fixed)
+- `discoverAll()` signature changed — no longer takes registry param
+- `EditlessTreeProvider` constructor changed — takes `AgentSettingsManager` instead of `EditlessRegistry` + `AgentVisibilityManager`
+- `EditlessStatusBar` constructor changed — takes `AgentSettingsManager` instead of `EditlessRegistry`
+
+---
+
+### 2026-02-26: Settings key strategy — ID-only
+
+**Date:** 2026-02-26  
+**Author:** Casey Irvine (Squad analysis)  
+**Status:** Approved
+
+**What:** `agent-settings.json` uses ID-only keys (e.g., `"editless"`, `"my-agent"`). No path scoping in v1. Per-worktree overrides (layered `id@path` pattern) deferred to v2 when worktree feature ships. Squad IDs are folder-name-based (via `toKebabCase`), agent IDs are filename-based (via `toKebabId`).
+
+**Why:** Simplest approach, naturally supports worktree inheritance (same folder name = same ID = shared settings). Path-scoping is brittle (breaks on move/rename). Collision between two projects with same folder name is graceful (shared preferences, not data loss).
+
+---
+
+### 2026-02-26: No "Discovered" section — everything auto-shows
+
+**Date:** 2026-02-26  
+**Author:** Casey Irvine (Squad analysis)  
+**Status:** Approved
+
+**What:** Eliminate the "Discovered" section entirely. All agents/squads found on disk appear automatically in the flat tree. No "Add to Registry" / "promoteDiscoveredAgent" command. Users hide agents they don't want (right-click → Hide). Settings entries created lazily — only when user customizes (hide, model, icon, etc.). "Show Hidden Agents" command to bring hidden items back.
+
+**Why:** Simpler UX. Auto-discover means everything is shown by default. The old "discovered → register" two-step flow adds friction with no value when registry is gone.
+
+---
+
+### 2026-02-26: Hidden agents shown inline with dimmed styling
+
+**Date:** 2026-02-26  
+**Author:** Casey Irvine (Squad analysis)  
+**Status:** Approved
+
+**What:** Hidden agents remain visible in the tree but are visually dimmed — gray icon via `ThemeColor('disabledForeground')`, "(hidden)" in description, `contextValue` changes to show "Show" instead of "Hide" in right-click menu. No separate "Hidden" group. Existing "Show Hidden Agents" command stays as batch unhide path. Pattern already exists in codebase (orphaned sessions use same dimming, line 586 of editless-tree.ts).
+
+**Why:** Casey wants hidden agents to be discoverable and obvious. Complete removal from tree was confusing. Inline dimming is the smallest change that satisfies the requirement. Collapsible group was considered but adds complexity to an already large refactor.
+
+---
 
 ### 2026-02-23: Default Exclusion of Closed/Merged Items
 
@@ -6483,6 +6582,136 @@ These are **complementary signals**, not conflicts. A terminal can be "active" (
 
 ## Next Steps
 
+---
+
+### 2026-02-26T02:43:00Z: User Directive — Agents Naming Convention
+
+**By:** Casey Irvine (via Copilot)  
+**Status:** Pending Implementation
+
+## What
+
+Registry JSON `squads` array should be renamed to `agents`. Any code that handles both agents and squads should use "agents" as the term. Only squad-specific paths (e.g., squad init, squad directory watcher) should refer to "squads".
+
+## Why
+
+User request — the current naming is confusing because standalone agents are stored under a `squads` key, and code that handles both types uses squad terminology.
+
+## Impact
+
+- All registry schema references: `squads: Squad[]` → `agents: Agent[]`
+- Code comments and variable names handling both types should use "agents" terminology
+- Only retain "squads" terminology for: squad initialization, squad-specific watchers, squad module directories
+- Tests and mocks must be updated to reflect new terminology
+
+---
+
+### 2026-02-27: addAgent Command — Registry-Before-Workspace Ordering
+
+**Date:** 2026-02-27  
+**Author:** Morty  
+**Status:** Implemented  
+**Issue:** #399
+
+## Context
+
+The `editless.addAgent` command registers an agent in the registry then adds the project folder to the workspace. The `onDidChangeWorkspaceFolders` event fires `refreshDiscovery()`, which deduplicates discovered agents against registry entries. If the workspace folder is added before the registry write, the discovery handler finds the agent file but doesn't see it in the registry — so it appears under "Discovered" instead of "Registered."
+
+## Decision
+
+1. **Ordering:** Always call `registry.addSquads()` BEFORE `ensureWorkspaceFolder()`. The workspace folder change event's `refreshDiscovery()` then sees the registry entry and correctly deduplicates.
+2. **Error handling:** Wrap `addSquads` `writeFileSync` in try/catch. Log a warning on failure. In-memory state still updates so the current session works even if disk persistence fails.
+
+## Impact
+
+- Any future command that adds to the registry AND modifies workspace folders must follow this pattern: registry write → workspace change → explicit refresh.
+- `addSquads` no longer throws on write failures — callers should not rely on exceptions for flow control.
+
+---
+
+### 2026-02-26: Explicit Refresh over File-Watcher-Only for Programmatic Registry Changes
+
+**Author:** Morty  
+**Date:** 2026-02-26  
+**Status:** Implemented  
+**Issue:** #399
+
+## Decision
+
+Always call `treeProvider.refresh()` explicitly after programmatic `registry.addSquads()` calls. Do not rely solely on the file system watcher (`watchRegistry`) for tree updates triggered by in-process code.
+
+## Rationale
+
+`vscode.workspace.createFileSystemWatcher` does not reliably fire for files outside the current workspace folders. When the registry file lives in the extension directory (no workspace open) or when the path is external, the watcher never fires and the tree never updates. The watcher remains as a bonus for external edits (manual JSON editing, other processes), but explicit refresh is the reliable path for anything the extension does itself.
+
+## Also
+
+Added `ensureWorkspaceFolder(dirPath)` — when registering external squads/agents, auto-add the folder to the VS Code workspace so file watchers work and the folder appears in Explorer.
+
+---
+
+### 2026-02-26: UI Reactivity Analysis for Auto-Discover Refactor
+
+**Author:** Morty (Extension Dev)  
+**Date:** 2026-02-26  
+**Status:** Analysis Complete, Decisions Pending Implementation  
+**Epic:** #368 — Squad Auto-Discovery Optimization
+
+## Summary
+
+Comprehensive reactivity analysis for auto-discover refactor. Finding: Current system ALREADY 95% reactive (< 10ms tree updates for all user-initiated actions). No major redesign needed.
+
+## Key Findings
+
+1. **Registry-First Pattern is FAST** — `registry.addSquads()` → `registryWatcher` → `treeProvider.refresh()` = 5-25ms (imperceptible)
+2. **Hybrid Model Already Exists** — Direct add path (instant) + background discovery (async) separation is already working
+3. **No Redesign Needed** — Preserve current watchers and update patterns; optimize bottlenecks instead
+4. **Bottlenecks Identified:**
+   - `scanSquad()` called in SquadWatcher callback but result discarded (pure sync I/O waste)
+   - `squadWatcher.updateSquads()` recreates FS watchers synchronously, blocking event loop
+   - `watchRegistry` callback receives unloaded squads, causing redundant disk reads
+
+## Proposed Optimizations (Phase 1)
+
+1. **Add Debouncing** — 300ms debounce on `refreshDiscovery()` to prevent rapid-fire rescans when multiple workspace events fire
+2. **NEW Copilot Agent Directory Watcher** — Catch manual file drops in `~/.copilot/agents/*.agent.md`, trigger discovery rescan (300ms debounced)
+3. **Remove Redundant Calls** — Trust the watchers; eliminate manual `refreshDiscovery()` and `treeProvider.refresh()` calls in command handlers
+4. **Watchers Confirmed Fast:**
+   - Workspace Folder Watcher: Synchronous event
+   - Registry File Watcher: ~0ms in-process
+   - Squad File Watcher: ~0ms in-process
+   - Workspace team.md Watcher: ~0ms in-process
+
+## Event Flow (Post-Optimization)
+
+```
+┌─ USER-INITIATED (Instant)        ┌─ BACKGROUND (Auto-Discover)
+│ + Add Agent                       │ Workspace folder added
+│ + Add Squad (existing dir)        │ Extension activated
+│ Hide/Show                         │ Manual "Refresh" command
+│ Change model/args/icon            │ team.md created
+│ "Add" discovered item             │ File dropped in ~/.copilot/agents/
+└─ registry.addSquads()             └─ refreshDiscovery()
+   ↓ registryWatcher (0ms)             ↓ Scan workspace + copilot-dir
+   ↓ treeProvider.refresh()            ↓ setDiscoveredItems(items)
+   ✅ Tree updates < 10ms              ✅ "Discovered" updates (background)
+```
+
+## Testing Implications
+
+- **707 tests unaffected** (76%)
+- **~160 tests to rewrite** (17%) — Discovery/watcher logic
+- **~93 new tests needed** (10%) — Debounce patterns, Copilot watcher, new lifecycle
+- **Post-refactor total:** ~960 tests
+
+## Phase 2 Optimizations (Later)
+
+- Optimize `invalidate()` to subtree refresh (less redraw for large trees)
+- Cache discovery results (skip rescan if < 5 seconds old)
+- Dead code removal (47 functions identified in audit)
+
+---
+
 1. **Keep current integration as-is.** Context menu "Open in Squad UI" is the right pattern.
 2. **Add a `refreshTree` call** after `openDashboard` in `squad-ui-integration.ts` for external paths.
 3. **Document the two-status-model distinction** in user-facing docs.
@@ -8146,3 +8375,594 @@ The right-click menu complements the inline icons with labeled entries. Every in
 | PRs tree (leaf) | Launch with Agent | `$(add)` | Open in Browser | `$(link-external)` |
 
 All three views now use `$(add)` for "create a session." One icon vocabulary across the entire extension.
+
+
+---
+
+# v0.1.3 Triage Round 2: Issues #418 & #417
+
+# Rick's v0.1.3 Triage: Issues #418 & #417
+
+## Issue #418: "Feedback: Discover + Register flow is confusing not intuitive"
+**Type:** UX/Bug | **Reporter:** Russ  
+**Summary:** User didn't know what to do after discovering an agent/squad — wasn't clear he needed to register. The '+' button then becomes "new session" which is confusing.
+
+### Code Investigation
+- Discovered agents/squads appear in the "Discovered" category in `editless-tree.ts`
+- They currently only have **view/open actions** (preview for .md files, open for others)
+- No explicit "Register" button or action — users must infer they can right-click or drag-and-drop
+- The '+' button on discovered items is contextValue-driven, but discovered items have no contextValue that maps to "register"
+- The UX spec (Summer's design) handles "Squads first, then agents" display order but doesn't include registration affordance
+
+### Assessment
+- **Scope:** Medium-small — needs 2-3 new things:
+  1. Add a "Register" context menu action for discovered squads/agents
+  2. Wire it to the registry (auto-add to registry, similar to team.md watcher logic at line 174)
+  3. Toast notification or tree refresh feedback
+- **Risk:** Low — isolated to discovery flow, no impact on existing registration paths
+- **User Impact:** High — blocks the happy path for new users discovering squads
+
+### Recommendation: **INCLUDE in v0.1.3**
+This is a core UX blocker for the primary user journey (discover → register → launch). It's high-impact feedback from real usage and should be v0.1.3 quality bar.
+
+**Assign to:** Morty (Extension Dev)  
+**Priority:** P1 (before release)  
+**Notes:**
+- Add context menu command `editless.registerDiscoveredSquad` and `editless.registerDiscoveredAgent`
+- Both should call registry.addSquads() or registry.addAgents() 
+- Trigger tree refresh + toast "Registered [Name]"
+- Could also evaluate auto-register on double-click, but context menu is safer first pass
+
+---
+
+## Issue #417: "Work Item view in ADO needed close and re-open after configuring before work items showed up"
+**Type:** Bug | **Reporter:** Russ  
+**Summary:** After configuring ADO organization/project settings, work items didn't show up until the user closed and re-opened the window. Refresh button didn't work.
+
+### Code Investigation
+- ADO config is set via settings: `editless.ado.organization` and `editless.ado.project` (extension.ts:1404-1405)
+- Configuration is initialized once in `initAdoIntegration()` (line 1398)
+- ADO data is fetched once during startup (line 1459)
+- **The problem:** There is NO `onDidChangeConfiguration` handler that watches `ado.organization` or `ado.project`
+  - Only `refreshInterval` is watched (line 1362)
+  - When user changes ADO settings, `setAdoConfig()` is never called again
+  - The work items tree still has stale (or empty) ADO config
+- File watcher for team.md triggers refresh (line 207), but no equivalent for settings changes
+- The "Refresh" button likely just re-runs cached data, doesn't re-read config
+
+### Root Cause
+Extension pattern: Configuration changes → no re-initialization hook → stale state persists until window reload
+
+### Assessment
+- **Scope:** Small — add missing `onDidChangeConfiguration` handler watching `ado.organization` + `ado.project`
+- **Risk:** Very low — straightforward event handler, just re-initializes ADO integration
+- **User Impact:** High — affects anyone who wants to switch ADO projects or org without reloading
+- **Is it just a refresh issue?** No. Refresh would re-fetch, but the core issue is config never gets re-read. Even if user manually triggers refresh, `setAdoConfig()` hasn't been called with new org/project.
+
+### Recommendation: **INCLUDE in v0.1.3**
+This is a quality-of-life blocker for setup UX. Users expect settings changes to take effect without window reload. Small fix, big UX impact.
+
+**Assign to:** Morty (Extension Dev)  
+**Priority:** P1 (before release)  
+**Scope:** ~5 lines of code
+- Add to `onDidChangeConfiguration` in `initAutoRefresh` (or create a new subscription in activate)
+- Check `e.affectsConfiguration('editless.ado.organization') || e.affectsConfiguration('editless.ado.project')`
+- Call `initAdoIntegration(context, workItemsProvider, prsProvider)` to re-fetch and update tree
+
+**Alternative:** Wire it into `initGitHubIntegration` pattern too (currently no handler for repo config changes either — future bug?)
+
+---
+
+## v0.1.3 Scope Recommendation
+
+**Current v0.1.3 (4 issues):**
+- #420: Agent picker missing Copilot CLI (Jaguar, in progress)
+- #419: Roster '+' button confusing (Morty, in progress)  
+- #415: Resume session feature (Morty, sequenced, UX spec done)
+- #399: Squad refresh too slow (Morty)
+
+**Proposed additions:**
+- **#418:** Discovered agent registration UX (Morty) — P1, ~3-4 hour estimate
+- **#417:** ADO config change handler (Morty) — P1, ~1 hour estimate
+
+**Morty's v0.1.3 workload:** Already owns #419, #415, #399. Adding #417 and #418 keeps him focused on core UX issues. Both are small/quick wins. Feasible for Monday release target.
+
+---
+
+## Copilot Capability Assessment
+
+**#418 (Discover + Register flow):**  
+🟢 **Good fit** — Clear spec: add context menu action, wire to registry, refresh tree. Existing patterns to follow. Copilot can work autonomously.
+
+**#417 (ADO config change handler):**  
+🟢 **Good fit** — Straightforward event handler addition. No ambiguity. Copilot can work autonomously.
+
+Both are safe for auto-assignment to copilot if squad capacity is constrained. Morty can review PRs quickly since they're small/focused.
+
+---
+
+## Summary for Casey
+
+**Bring in both.** They're both core UX issues that block the happy path (discover/register, then switch ADO projects). Small scope, high impact. Fit comfortably into v0.1.3 timeline with Morty. Release quality is solid once fixed.
+
+
+---
+
+# v0.1.3 PR Reviews — Rick's 3x Review (All 5 PRs)
+
+# v0.1.3 PR Reviews — Rick's 3x Review
+
+**Date:** 2026-02-24
+**Reviewed by:** Rick (Lead)
+**Requested by:** Casey Irvine ("3x review" — thorough code review)
+
+---
+
+## Summary
+
+All 5 v0.1.3 draft PRs reviewed, approved, and marked ready for review. Code quality is solid across the board. One structural concern: PRs #423, #425, and #426 share overlapping changes and need sequential merge ordering.
+
+---
+
+## Verdicts
+
+### PR #423 — Agent picker includes Copilot CLI + roster hides launch button
+**✅ APPROVE** | Closes #420, #419 | Branch: `squad/420-agent-picker-copilot-cli`
+
+- `getAllAgentsForPicker()` helper correctly prepends synthetic built-in agent to squad list
+- All 3 pickers updated consistently (`launchSession`, `launchFromWorkItem`, `launchFromPR`)
+- `roster-agent` contextValue prevents launch button on non-launchable roster agents
+- 3 tests updated to verify new QuickPick behavior
+- **Merge first** — other PRs depend on these extension.ts changes
+
+### PR #424 — Re-init ADO integration when org/project settings change
+**✅ APPROVE** | Closes #417 | Branch: `squad/417-ado-config-refresh`
+
+- 9-line surgical fix using standard `onDidChangeConfiguration` API
+- `initAdoIntegration()` is idempotent — safe for repeated calls
+- No tests needed for this scope
+- **Independent** — no merge conflicts with other PRs
+
+### PR #425 — Clarify discover/register UX with distinct icons
+**✅ APPROVE** | Closes #418 | Branch: `squad/418-discover-register-ux`
+
+- Clean "one icon = one meaning" principle: `play`=launch, `compass`=discovered, `eye-closed`=hide
+- Fixed silent button drop where `hideAgent` was missing an icon
+- "Launch Session" → "New Session" title change
+- **Merge after #423** — shares overlapping extension.ts/test changes
+
+### PR #426 — Resume External Session command
+**✅ APPROVE** | Closes #415 | Branch: `squad/415-resume-external-session`
+
+- Comprehensive implementation following Summer's UX spec
+- Session filtering excludes both active terminals and orphaned sessions
+- CWD-matched sessions sorted to top, manual GUID fallback for power users
+- Validation via existing `isSessionResumable()` pattern
+- Stale session warning dialog with user choice
+- Minor: no new tests for the resume command, but acceptable for UI orchestration
+- **Merge after #425** — superset of #423 and #425 changes
+
+### PR #427 — Speed up squad refresh after registry changes
+**✅ APPROVE** | Closes #399 | Branch: `squad/399-squad-refresh-speed`
+
+- Removes wasted `scanSquad()` call (result was discarded)
+- Eliminates redundant disk read via callback parameter passthrough
+- `setTimeout(0)` yields event loop so tree renders before watcher rebuild
+- `scanDebounceMs` default: 500ms → 300ms
+- **Independent** — no merge conflicts with other PRs
+
+---
+
+## Merge Order
+
+Due to overlapping changes in extension.ts and editless-tree.ts:
+
+1. **PR #424** (independent)
+2. **PR #427** (independent)
+3. **PR #423** (base for #425 and #426)
+4. **PR #425** (builds on #423, needs rebase)
+5. **PR #426** (builds on #425, needs rebase)
+
+#424 and #427 can merge in any order. #423 → #425 → #426 must be sequential.
+
+---
+
+## Quality Observations
+
+- **Code consistency:** All PRs follow existing patterns (QuickPick for user selection, `context.subscriptions.push()` for disposables, `buildCopilotCommand()` for CLI invocations)
+- **Test discipline:** Bug fixes include test updates. New feature (#426) relies on existing tested components rather than adding redundant tests for UI orchestration — reasonable tradeoff
+- **PR hygiene:** All PRs have clear bodies, correct `Closes #N` references, and "Working as {member}" attribution
+- **Risk profile:** Low across all 5. No architectural changes, no new dependencies, no data model changes
+
+
+---
+
+# UX Spec: Discover → Register Flow Clarity
+
+# UX Spec: Discover → Register Flow Clarity
+
+**Issue:** #418 — "Feedback: Discover + Register flow is confusing not intuitive"
+**Author:** Summer (Product Designer)
+**Date:** 2026-02-25
+**Status:** Proposed
+**Depends on:** #419 (roster-agent contextValue fix — already merged)
+
+---
+
+## Problem
+
+Russ's dogfooding feedback: "He didn't immediately know what to do with a discovered agent/squad and wasn't clear he needed to register. Plus then the '+' button becomes new session which is confusing."
+
+### Root Causes
+
+1. **`$(add)` icon overload.** The `+` button means "Launch Session" on registered agents AND "Add to Registry" on discovered agents. Same icon, completely different actions. Users can't tell what `+` does without trying it.
+
+2. **Icon overlap across states.** Discovered agents use `$(hubot)` — the same icon as registered standalone agents. Discovered squads use `$(organization)` — the same icon as registered multi-agent squads. There's no visual signal that discovered items are in a different state.
+
+3. **No visual call-to-action for registration.** Nothing about a discovered item's appearance says "you need to do something with this before you can use it." It looks the same as a registered item, just in a different section.
+
+4. **Hide button is invisible.** `editless.hideAgent` has no icon defined, so its `group: "inline"` entries on discovered items are silently dropped by VS Code. Hide is only reachable via right-click — poor discoverability.
+
+---
+
+## Current State (What Exists Today)
+
+| Item Type | contextValue | Icon | Inline Button(s) | Notes |
+|---|---|---|---|---|
+| Copilot CLI | `default-agent` | `$(terminal)` | `$(add)` Launch Session | |
+| Registered squad (standalone) | `squad` | `$(hubot)` | `$(add)` Launch Session | ⚠️ Same icon as discovered agent |
+| Registered squad (multi-agent) | `squad` | `$(organization)` | `$(add)` Launch Session | ⚠️ Same icon as discovered squad |
+| Discovered agent | `discovered-agent` | `$(hubot)` | `$(add)` Register | ⚠️ Same icon+button as registered |
+| Discovered squad | `discovered-squad` | `$(organization)` | `$(add)` Register | ⚠️ Same icon+button as registered |
+| Roster agent | `roster-agent` | `$(person)` | (none) | ✅ Fixed by #419 |
+| Active session | `terminal` | state-based | `$(close)` Close | ✅ Fine |
+| Orphaned session | `orphanedSession` | `$(history)` | (none) | ✅ Fine |
+
+**The `$(add)` icon appears on 5 different item types and means 2 different things.**
+
+---
+
+## Proposed State
+
+### Design Principles
+1. **One icon = one meaning.** `$(play)` always means "start a session." `$(add)` always means "register this."
+2. **Visual category at a glance.** Each agent lifecycle state (registered, discovered, roster) gets a distinct icon.
+3. **Explicit registration, obvious affordance.** Don't auto-register — keep it intentional. But make the action unmissable.
+
+### Icon + Button Matrix
+
+| Item Type | contextValue | Icon | Inline Button(s) | Context Menu |
+|---|---|---|---|---|
+| Copilot CLI | `default-agent` | `$(terminal)` | `$(play)` New Session | New Session |
+| Registered squad (standalone) | `squad` | `$(hubot)` | `$(play)` New Session | New Session, Rename, Change Model, Settings, Squad UI, Hide |
+| Registered squad (multi-agent) | `squad` | `$(organization)` | `$(play)` New Session | (same as standalone) |
+| **Discovered agent** | `discovered-agent` | **`$(compass)`** | **`$(add)` Register** · `$(eye-closed)` Hide | Register, Hide |
+| **Discovered squad** | `discovered-squad` | **`$(compass)`** | **`$(add)` Register** · `$(eye-closed)` Hide | Register, Hide |
+| Roster agent | `roster-agent` | `$(person)` | (none) | (none) |
+| Active session | `terminal` | state-based | `$(close)` Close | Close, Rename, Clear Label |
+| Orphaned session | `orphanedSession` | `$(history)` | (none) | (click to resume) |
+
+### Visual Summary
+
+```
+REGISTERED (ready to use)          DISCOVERED (needs registration)      ROSTER (informational)
+──────────────────────────         ──────────────────────────           ──────────────
+$(hubot) My Agent    [▶]          $(compass) Found Agent    [+][👁]    $(person) Rick
+$(organization) Squad [▶]         $(compass) Found Squad    [+][👁]    $(person) Morty
+$(terminal) CLI      [▶]
+```
+
+Three visual lanes. No overlap. At a glance you know what's what.
+
+---
+
+## Changes Required
+
+### 1. package.json — Command Definitions
+
+**Change `launchSession` icon from `$(add)` to `$(play)`:**
+```jsonc
+// BEFORE:
+{ "command": "editless.launchSession", "title": "Launch Session", "icon": "$(add)" }
+// AFTER:
+{ "command": "editless.launchSession", "title": "New Session", "icon": "$(play)" }
+```
+> Rationale: `$(play)` is the universal "start/run" icon in VS Code (debug, test runner, tasks). "New Session" is clearer than "Launch Session" — it tells you what you get.
+
+**Add icon to `hideAgent`:**
+```jsonc
+// BEFORE:
+{ "command": "editless.hideAgent", "title": "Hide" }
+// AFTER:
+{ "command": "editless.hideAgent", "title": "Hide", "icon": "$(eye-closed)" }
+```
+> Rationale: Without an icon, the inline button entries for discovered items silently fail. `$(eye-closed)` is semantically correct and widely used in VS Code for visibility toggles.
+
+### 2. package.json — Menu When-Clauses
+
+No changes needed. The existing when-clauses are already correct:
+- `launchSession` inline: `viewItem =~ /^squad|^agent|^default-agent$/` — won't match `discovered-agent` or `roster-agent` ✅
+- `promoteDiscoveredAgent` inline: `viewItem == discovered-agent` / `viewItem == discovered-squad` ✅
+- `hideAgent` inline: `viewItem == discovered-agent` / `viewItem == discovered-squad` ✅
+
+### 3. src/editless-tree.ts — Icon Changes
+
+**Discovered agents — change `hubot` → `compass`:**
+```typescript
+// buildDiscoveredAgentItem() and buildDiscoveredItemAgent()
+// BEFORE:
+item.iconPath = new vscode.ThemeIcon('hubot');
+// AFTER:
+item.iconPath = new vscode.ThemeIcon('compass');
+```
+
+**Discovered squads — change `organization` → `compass`:**
+```typescript
+// buildDiscoveredSquadItem()
+// BEFORE:
+item.iconPath = new vscode.ThemeIcon('organization');
+// AFTER:
+item.iconPath = new vscode.ThemeIcon('compass');
+```
+
+### 4. No New Commands Needed
+
+All existing commands cover the required actions:
+- `editless.launchSession` — start a session (registered agents)
+- `editless.promoteDiscoveredAgent` — register a discovered item
+- `editless.hideAgent` — hide a discovered item
+- `editless.closeTerminal` — close a session
+
+### 5. No contextValue Changes Needed
+
+The current contextValues are well-structured:
+- `squad` — registered squads (standalone + multi-agent)
+- `default-agent` — Copilot CLI
+- `discovered-agent` — found agents, not yet registered
+- `discovered-squad` — found squads, not yet registered
+- `roster-agent` — team roster members (informational only)
+- `terminal` — active sessions
+- `orphanedSession` — resumable sessions
+
+These are correct and the when-clauses already depend on them properly.
+
+---
+
+## Design Decision: Explicit Registration (Not Auto-Register)
+
+**Recommendation: Keep registration explicit. Do NOT auto-register on click or double-click.**
+
+Reasons:
+1. **Single-click already has a purpose** — it opens the agent's `.md` file for preview. This is valuable: users should be able to evaluate an agent before committing to register it.
+2. **Auto-register pollutes the registry** — a curious click shouldn't permanently add an agent. Registration is a commitment ("I want to use this").
+3. **The confusion was never about the number of clicks** — it was about not knowing WHAT to click. Changing `+` to mean only one thing (Register) on discovered items, while registered items get `▶` (New Session), solves this.
+4. **The flow becomes self-documenting:**
+   - See `$(compass)` icon → "this is something I found"
+   - See `$(add)` button → "I can add it"
+   - After registration → item moves from Discovered to main tree, now has `$(play)` → "I can use it"
+
+---
+
+## Impact Summary
+
+| Change | File | Effort |
+|--------|------|--------|
+| `launchSession` icon: `$(add)` → `$(play)`, title: "Launch Session" → "New Session" | package.json | 1 line |
+| `hideAgent` add icon: `$(eye-closed)` | package.json | 1 line |
+| Discovered agent icon: `hubot` → `compass` (3 occurrences) | editless-tree.ts | 3 lines |
+| Discovered squad icon: `organization` → `compass` (1 occurrence) | editless-tree.ts | 1 line |
+
+**Total: 6 lines changed across 2 files.** No new commands, no new contextValues, no structural changes.
+
+---
+
+## Testing Checklist
+
+- [ ] Registered squad shows `$(play)` inline button (not `$(add)`)
+- [ ] Copilot CLI shows `$(play)` inline button
+- [ ] Discovered agents show `$(compass)` icon + `$(add)` and `$(eye-closed)` inline buttons
+- [ ] Discovered squads show `$(compass)` icon + `$(add)` and `$(eye-closed)` inline buttons
+- [ ] Roster agents show `$(person)` icon with NO inline buttons
+- [ ] Clicking `$(play)` on registered agent starts a new session
+- [ ] Clicking `$(add)` on discovered agent registers it (moves to main tree)
+- [ ] Clicking `$(eye-closed)` on discovered item hides it
+- [ ] Right-click context menus are unchanged for registered squads
+- [ ] Single-clicking a discovered agent still previews its file
+
+---
+
+## Config Refresh Pattern for Integration Re-initialization
+
+**Date:** 2026-02-24  
+**Author:** Rick (Lead)  
+**Context:** PR #424 architecture review — config refresh handlers for ADO and GitHub integrations  
+**Status:** ✅ APPROVED
+
+The config refresh pattern established in PR #424 is the **canonical pattern** for integration re-initialization when VS Code settings change.
+
+### Pattern Definition
+
+```typescript
+// In activate(), after initial integration setup:
+context.subscriptions.push(
+  vscode.workspace.onDidChangeConfiguration(e => {
+    if (e.affectsConfiguration('editless.integration.key')) {
+      initIntegration(/* params */);
+    }
+  }),
+);
+```
+
+### Key Principles
+
+1. **Handlers live in `activate()` after init calls** — not inside the init functions (avoids circular dependencies)
+2. **Separate listeners per integration scope** — don't combine unrelated config checks into one monolithic handler
+3. **Call full init functions** — if the init function is idempotent (no resource leaks), reuse it instead of duplicating logic
+4. **Idempotency requirement** — init functions must be safe to call multiple times (assignments only, no subscriptions/allocations)
+
+### Architecture Rationale
+
+**Why separate listeners?**
+- Single Responsibility Principle — each listener owns one integration's config scope
+- Avoids unnecessary config checks on every change event
+- Negligible performance cost (VS Code fires event once regardless of listener count)
+
+**Why call full init functions?**
+- Avoids code duplication between activation and refresh paths
+- Init functions already handle config reading, validation, provider updates, and data fetching
+- Safe if init functions are idempotent (confirmed for `initAdoIntegration()` and `initGitHubIntegration()`)
+
+**Why not place handlers inside init functions?**
+- Creates circular dependency: init → register listener → call init → register listener...
+- Violates VS Code extension lifecycle (subscriptions should be registered in `activate()`)
+
+### Testing Requirements
+
+Config refresh handlers must include:
+- Test that handler fires when each monitored config key changes
+- Test that handler does NOT fire for unrelated config keys
+- Test that the expected provider methods are called (e.g., `setAdoConfig`, `setRepos`)
+
+See `src/__tests__/config-refresh.test.ts` for reference implementation.
+
+---
+
+## Config Handler Debounce Pattern
+
+**Date:** 2026-02-25  
+**Author:** Morty (Extension Dev)  
+**Context:** PR #424 review feedback from Unity and Meeseeks — race condition fix
+
+**Decision:** `onDidChangeConfiguration` handlers that trigger expensive operations (API calls, data reloads) should use a simple `setTimeout`/`clearTimeout` debounce pattern with 500ms delay.
+
+**Rationale:**
+- Prevents concurrent API calls when users type config values character-by-character (e.g., ADO org name, GitHub repo list)
+- Out-of-order completion can show stale data if not debounced
+- No external dependencies needed — use native `setTimeout`/`clearTimeout`
+- Each handler maintains its own timer variable for isolation
+
+**Implementation Pattern:**
+```typescript
+let debounceTimer: NodeJS.Timeout | undefined;
+context.subscriptions.push(
+  vscode.workspace.onDidChangeConfiguration(e => {
+    if (e.affectsConfiguration('editless.some.setting')) {
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(() => {
+        expensiveOperation();
+      }, 500);
+    }
+  }),
+);
+```
+
+**Test Pattern:**
+- Use `vi.useFakeTimers()` + `vi.advanceTimersByTime(500)` in tests
+- Verify debounce works: rapid changes → single call after delay
+- All config handler tests must account for debounce delay
+
+**Applied in:** extension.ts ADO/GitHub config handlers (PR #424)
+
+---
+
+## DebugMCP Integration Research
+
+**Date:** 2026-02-25  
+**Author:** Jaguar (Copilot SDK Expert)  
+**Status:** Research Complete — Recommend as optional companion extension
+
+### What is DebugMCP?
+
+[microsoft/DebugMCP](https://github.com/microsoft/DebugMCP) is a VS Code extension (v1.0.7, beta) that exposes the VS Code Debug Adapter Protocol as an MCP server. Runs a local HTTP server (default port 3001) using `@modelcontextprotocol/sdk`.
+
+**Marketplace:** `ozzafar.debugmcpextension`  
+**Authors:** Oz Zafar, Ori Bar-Ilan (Microsoft). MIT licensed.  
+**Transport:** StreamableHTTP (POST `/mcp` on localhost:3001). Stateless per-request.
+
+### MCP Tools Exposed (14 tools)
+
+Key tools for agent debugging:
+- `start_debugging` — Launch a debug session for a file
+- `step_over`, `step_into`, `step_out` — Step through execution
+- `add_breakpoint`, `remove_breakpoint`, `list_breakpoints` — Manage breakpoints
+- `get_variables_values` — Inspect variables at current execution point
+- `evaluate_expression` — Evaluate expressions in debug context
+- `continue_execution`, `restart_debugging` — Control execution
+
+### Fit for EditLess
+
+**How It Enhances EditLess Workflow:**
+1. Copilot CLI agents get real debugging — set breakpoints, inspect variables, step through code via MCP
+2. Test-driven debugging — debug specific failing tests via `start_debugging` with `testName`
+3. Complements terminal management — debug session state visible in VS Code debug panel
+
+**For users (zero EditLess code changes needed):**
+1. User installs DebugMCP extension from Marketplace
+2. DebugMCP auto-registers in VS Code's `mcp.json`
+3. Copilot CLI picks it up via standard MCP config chain
+4. Agent now has debugging tools available
+
+**MCP config entry:**
+```json
+{
+  "servers": {
+    "debugmcp": {
+      "type": "streamableHttp",
+      "url": "http://localhost:3001/mcp"
+    }
+  }
+}
+```
+
+### Risks and Concerns
+
+🟡 **Beta Status** — Explicitly marked beta, maintained by 2 Microsoft engineers. Known issues: session desync (#29), C# debugging incomplete (#12), no concurrent sessions (#25).
+
+🟡 **Port Conflict Potential** — Default port 3001 hardcoded. Configurable via setting but agents need to know actual port.
+
+🟡 **VS Code 1.104+ Requirement** — EditLess targets `^1.100.0`. DebugMCP requires `^1.104.0`. Not a conflict (separate extension), but users on older VS Code can't use it.
+
+🟡 **Single Debug Session Limitation** — Only supports one debug session at a time.
+
+🟢 **No Conflict with EditLess** — Purely additive. Doesn't modify terminal behavior or EditLess APIs. No shared state.
+
+🟢 **Security** — Runs 100% locally, no external communication, no credentials needed.
+
+### Recommendation
+
+**Verdict: Recommend as optional companion extension. Backlog item, not v0.1.3.**
+
+**Rationale:**
+1. Zero code changes needed for basic integration
+2. Beta quality means don't depend on it (session desync, single-session limit)
+3. EditLess-specific UI integration is low priority
+4. Documentation is the right first step
+
+**Suggested Actions:**
+- Add DebugMCP to recommended extensions in docs (Low priority, Backlog)
+- Add `.copilot/mcp-config.json` example with DebugMCP (Low priority, Backlog)
+- Detect DebugMCP and show indicator in EditLess UI (Low priority, Future post-v0.2)
+
+**Not Recommended:**
+- Adding DebugMCP as a dependency or bundling
+- Building our own debugging MCP server
+- Making EditLess code changes for v0.1.3 related to this
+
+
+---
+
+## Remove deprecated registry code from discovery.ts
+
+**Date:** 2026-02-26  
+**Author:** Rick (Architecture)  
+**Status:** Implemented  
+**Issue:** #399
+
+**Decision:** Removed RegistryLike interface, promptAndAddSquads(), and utoRegisterWorkspaceSquads() from discovery.ts. These were marked @deprecated — no longer called from extension code but kept "for backward compatibility with existing tests."
+
+**Rationale:** Dead code is dead code. The deprecation note preserved 100 lines of registry-pattern code and its test file (discovery-commands.test.ts, already deleted) purely out of caution. With the auto-discover refactor merged, there's no backward compatibility concern — no production code calls these functions. Keeping them increases maintenance burden and confuses future contributors about which pattern is canonical.
+
+**Rule Going Forward:** When a function is deprecated as part of a refactor, remove it in the same PR. Don't defer cleanup to "later" — later never comes, and deprecated code accumulates. If tests exist solely for deprecated functions, remove those tests too.
+
+**Applies To:** All future refactoring cycles. Remove deprecated code during refactor, not after.
+

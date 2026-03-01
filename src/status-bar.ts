@@ -1,12 +1,14 @@
 import * as vscode from 'vscode';
-import type { EditlessRegistry } from './registry';
+import type { AgentSettingsManager } from './agent-settings';
 import type { TerminalManager } from './terminal-manager';
+import type { DiscoveredItem } from './unified-discovery';
 
 export class EditlessStatusBar implements vscode.Disposable {
   private readonly _item: vscode.StatusBarItem;
+  private _discoveredItems: readonly DiscoveredItem[] = [];
 
   constructor(
-    private readonly _registry: EditlessRegistry,
+    private readonly _agentSettings: AgentSettingsManager,
     private readonly _terminalManager: TerminalManager,
   ) {
     this._item = vscode.window.createStatusBarItem(
@@ -17,28 +19,26 @@ export class EditlessStatusBar implements vscode.Disposable {
     this._item.tooltip = 'EditLess — click to open';
   }
 
-  update(): void {
-    const squads = this._registry.loadSquads();
-    const squadCount = squads.length;
-    const sessionCount = this._terminalManager.getAllTerminals().length;
+  setDiscoveredItems(items: readonly DiscoveredItem[]): void {
+    this._discoveredItems = items;
+  }
 
-    this._render(squadCount, sessionCount);
+  update(): void {
+    const visibleCount = this._discoveredItems.filter(d => !this._agentSettings.isHidden(d.id)).length;
+    const sessionCount = this._terminalManager.getAllTerminals().length;
+    this._render(visibleCount, sessionCount);
   }
 
   updateSessionsOnly(): void {
-    const squads = this._registry.loadSquads();
-    const squadCount = squads.length;
-    const sessionCount = this._terminalManager.getAllTerminals().length;
-
-    this._render(squadCount, sessionCount);
+    this.update();
   }
 
   dispose(): void {
     this._item.dispose();
   }
 
-  private _render(squadCount: number, sessionCount: number): void {
-    const text = `$(terminal) ${squadCount} agents · ${sessionCount} sessions`;
+  private _render(agentCount: number, sessionCount: number): void {
+    const text = `$(terminal) ${agentCount} agents · ${sessionCount} sessions`;
     this._item.text = text;
     this._item.show();
   }

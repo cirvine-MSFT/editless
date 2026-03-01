@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import * as path from 'path';
 import type * as vscode from 'vscode';
 import { MockEditlessTreeItem } from './mocks/vscode-mocks';
 
@@ -11,9 +12,6 @@ const {
   mockShowWarningMessage,
   mockShowInformationMessage,
   mockActiveTerminalRef,
-  mockLoadSquads,
-  mockGetSquad,
-  mockUpdateSquad,
   mockLaunchTerminal,
   mockCloseTerminal,
   mockFocusTerminal,
@@ -28,13 +26,19 @@ const {
   mockGetLabel,
   mockSetLabel,
   mockPromptClearLabel,
-  mockHide,
-  mockShow,
-  mockShowAll,
-  mockGetHiddenIds,
+  mockAgentSettingsGet,
+  mockAgentSettingsGetAll,
+  mockAgentSettingsUpdate,
+  mockAgentSettingsRemove,
+  mockAgentSettingsHide,
+  mockAgentSettingsShow,
+  mockAgentSettingsShowAll,
+  mockAgentSettingsGetHiddenIds,
+  mockAgentSettingsIsHidden,
+  mockAgentSettingsReload,
   mockTreeRefresh,
-  mockTreeSetDiscoveredAgents,
   mockTreeSetDiscoveredItems,
+  mockTreeGetDiscoveredItems,
   mockWorkItemsRefresh,
   mockPRsRefresh,
   mockOpenExternal,
@@ -62,12 +66,10 @@ const {
   mockIsSquadInitialized,
   mockCreateTerminal,
   mockWorkspaceFsCopy,
-  mockAddSquads,
-  mockDiscoverAllAgents,
-  mockDiscoverAgentTeams,
   mockDiscoverAll,
   mockOnDidCloseTerminal,
   mockResolveTeamDir,
+  mockLaunchAndLabel,
 } = vi.hoisted(() => ({
   mockRegisterCommand: vi.fn(),
   mockExecuteCommand: vi.fn(),
@@ -76,9 +78,6 @@ const {
     mockShowWarningMessage: vi.fn(),
     mockShowInformationMessage: vi.fn(),
     mockActiveTerminalRef: { current: undefined as unknown },
-    mockLoadSquads: vi.fn().mockReturnValue([]),
-    mockGetSquad: vi.fn(),
-    mockUpdateSquad: vi.fn(),
     mockLaunchTerminal: vi.fn(),
     mockCloseTerminal: vi.fn(),
     mockFocusTerminal: vi.fn(),
@@ -93,13 +92,19 @@ const {
     mockGetLabel: vi.fn(),
     mockSetLabel: vi.fn(),
     mockPromptClearLabel: vi.fn(),
-    mockHide: vi.fn(),
-    mockShow: vi.fn(),
-    mockShowAll: vi.fn(),
-    mockGetHiddenIds: vi.fn().mockReturnValue([]),
+    mockAgentSettingsGet: vi.fn(),
+    mockAgentSettingsGetAll: vi.fn().mockReturnValue({}),
+    mockAgentSettingsUpdate: vi.fn(),
+    mockAgentSettingsRemove: vi.fn(),
+    mockAgentSettingsHide: vi.fn(),
+    mockAgentSettingsShow: vi.fn(),
+    mockAgentSettingsShowAll: vi.fn(),
+    mockAgentSettingsGetHiddenIds: vi.fn().mockReturnValue([]),
+    mockAgentSettingsIsHidden: vi.fn().mockReturnValue(false),
+    mockAgentSettingsReload: vi.fn(),
     mockTreeRefresh: vi.fn(),
-    mockTreeSetDiscoveredAgents: vi.fn(),
     mockTreeSetDiscoveredItems: vi.fn(),
+    mockTreeGetDiscoveredItems: vi.fn().mockReturnValue([]),
     mockWorkItemsRefresh: vi.fn(),
     mockPRsRefresh: vi.fn(),
     mockOpenExternal: vi.fn(),
@@ -127,12 +132,10 @@ const {
     mockIsSquadInitialized: vi.fn().mockReturnValue(false),
     mockCreateTerminal: vi.fn(() => ({ sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
     mockWorkspaceFsCopy: vi.fn(),
-    mockAddSquads: vi.fn(),
-    mockDiscoverAllAgents: vi.fn().mockReturnValue([]),
-    mockDiscoverAgentTeams: vi.fn().mockReturnValue([]),
     mockDiscoverAll: vi.fn().mockReturnValue([]),
     mockOnDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
     mockResolveTeamDir: vi.fn(),
+    mockLaunchAndLabel: vi.fn(),
   }),
 );
 
@@ -155,6 +158,7 @@ vi.mock('vscode', async () => {
     ThemeIcon,
     MarkdownString,
     EventEmitter,
+    RelativePattern: class { constructor(public base: unknown, public pattern: string) {} },
     Uri: {
       parse: (s: string) => ({ toString: () => s, fsPath: s }),
       file: (p: string) => ({ fsPath: p, toString: () => p }),
@@ -171,6 +175,7 @@ vi.mock('vscode', async () => {
       showInputBox: mockShowInputBox,
       showWarningMessage: mockShowWarningMessage,
       showInformationMessage: mockShowInformationMessage,
+      showErrorMessage: vi.fn(),
       createOutputChannel: () => ({ appendLine: vi.fn(), dispose: vi.fn() }),
       createTreeView: () => ({ reveal: vi.fn(), dispose: vi.fn(), description: undefined }),
       registerTreeDataProvider: () => ({ dispose: vi.fn() }),
@@ -198,8 +203,15 @@ vi.mock('vscode', async () => {
       onDidChangeWorkspaceFolders: vi.fn(() => ({ dispose: vi.fn() })),
       onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
       workspaceFolders: [],
+      updateWorkspaceFolders: vi.fn(() => true),
       openTextDocument: vi.fn().mockResolvedValue({ getText: () => '', positionAt: () => ({}) }),
       fs: { createDirectory: vi.fn(), copy: mockWorkspaceFsCopy },
+      createFileSystemWatcher: vi.fn(() => ({
+        onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidCreate: vi.fn(() => ({ dispose: vi.fn() })),
+        onDidDelete: vi.fn(() => ({ dispose: vi.fn() })),
+        dispose: vi.fn(),
+      })),
     },
     env: {
       openExternal: mockOpenExternal,
@@ -220,8 +232,8 @@ vi.mock('../editless-tree', () => ({
   EditlessTreeProvider: vi.fn(function () {
     return {
       refresh: mockTreeRefresh,
-      setDiscoveredAgents: mockTreeSetDiscoveredAgents,
       setDiscoveredItems: mockTreeSetDiscoveredItems,
+      getDiscoveredItems: mockTreeGetDiscoveredItems,
       invalidate: vi.fn(),
       findTerminalItem: vi.fn(),
     };
@@ -230,15 +242,24 @@ vi.mock('../editless-tree', () => ({
   DEFAULT_COPILOT_CLI_ID: 'builtin:copilot-cli',
 }));
 
-vi.mock('../registry', () => ({
-  createRegistry: vi.fn(() => ({
-    loadSquads: mockLoadSquads,
-    getSquad: mockGetSquad,
-    updateSquad: mockUpdateSquad,
-    addSquads: mockAddSquads,
-    registryPath: '/mock/registry.json',
+vi.mock('../agent-settings', () => ({
+  createAgentSettings: vi.fn(() => ({
+    get: mockAgentSettingsGet,
+    getAll: mockAgentSettingsGetAll,
+    update: mockAgentSettingsUpdate,
+    remove: mockAgentSettingsRemove,
+    hide: mockAgentSettingsHide,
+    show: mockAgentSettingsShow,
+    showAll: mockAgentSettingsShowAll,
+    getHiddenIds: mockAgentSettingsGetHiddenIds,
+    isHidden: mockAgentSettingsIsHidden,
+    reload: mockAgentSettingsReload,
+    hydrateFromDiscovery: vi.fn(),
+    settingsPath: '/mock/agent-settings.json',
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+    dispose: vi.fn(),
   })),
-  watchRegistry: vi.fn(() => ({ dispose: vi.fn() })),
+  migrateFromRegistry: vi.fn(),
 }));
 
 vi.mock('../terminal-manager', () => ({
@@ -281,18 +302,6 @@ vi.mock('../session-labels', () => ({
   promptRenameSession: vi.fn(),
 }));
 
-vi.mock('../visibility', () => ({
-  AgentVisibilityManager: vi.fn(function () {
-    return {
-      hide: mockHide,
-      show: mockShow,
-      showAll: mockShowAll,
-      getHiddenIds: mockGetHiddenIds,
-      isHidden: vi.fn(),
-    };
-  }),
-}));
-
 vi.mock('../squad-utils', () => ({
   checkNpxAvailable: mockCheckNpxAvailable,
   promptInstallNode: mockPromptInstallNode,
@@ -300,17 +309,16 @@ vi.mock('../squad-utils', () => ({
 }));
 
 vi.mock('../discovery', () => ({
-  autoRegisterWorkspaceSquads: vi.fn(),
-  discoverAgentTeams: mockDiscoverAgentTeams,
+  discoverAgentTeams: vi.fn().mockReturnValue([]),
 }));
 
-vi.mock('../agent-discovery', () => ({
-  discoverAllAgents: mockDiscoverAllAgents,
-}));
-
-vi.mock('../unified-discovery', () => ({
-  discoverAll: mockDiscoverAll,
-}));
+vi.mock('../unified-discovery', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../unified-discovery')>();
+  return {
+    ...actual,
+    discoverAll: mockDiscoverAll,
+  };
+});
 
 vi.mock('../watcher', () => ({
   SquadWatcher: vi.fn(function () {
@@ -320,7 +328,7 @@ vi.mock('../watcher', () => ({
 
 vi.mock('../status-bar', () => ({
   EditlessStatusBar: vi.fn(function () {
-    return { update: vi.fn(), updateSessionsOnly: vi.fn(), dispose: vi.fn() };
+    return { update: vi.fn(), updateSessionsOnly: vi.fn(), setDiscoveredItems: vi.fn(), dispose: vi.fn() };
   }),
 }));
 
@@ -332,6 +340,10 @@ vi.mock('../session-context', () => ({
 
 vi.mock('../scanner', () => ({
   scanSquad: vi.fn(),
+}));
+
+vi.mock('../launch-utils', () => ({
+  launchAndLabel: mockLaunchAndLabel,
 }));
 
 vi.mock('../work-items-tree', () => ({
@@ -423,6 +435,18 @@ vi.mock('../team-dir', () => ({
   TEAM_DIR_NAMES: ['.squad', '.ai-team'],
 }));
 
+vi.mock('fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('fs')>();
+  return {
+    ...actual,
+    existsSync: vi.fn((p: string) => {
+      // Prevent migration from triggering in tests
+      if (typeof p === 'string' && p.includes('agent-registry.json')) return false;
+      return actual.existsSync(p);
+    }),
+  };
+});
+
 import { activate } from '../extension';
 
 // ----- Helpers --------------------------------------------------------------
@@ -432,6 +456,8 @@ function makeContext(): vscode.ExtensionContext {
   const secretStore = new Map<string, string>();
   return {
     subscriptions: [],
+    globalStorageUri: { fsPath: '/mock/global-storage' },
+    extensionPath: '/mock/extension',
     workspaceState: {
       get: vi.fn((key: string, defaultValue?: unknown) => store.get(key) ?? defaultValue),
       update: vi.fn((key: string, value: unknown) => { store.set(key, value); return Promise.resolve(); }),
@@ -477,11 +503,13 @@ describe('extension command handlers', () => {
     vi.clearAllMocks();
     commandHandlers.clear();
     mockActiveTerminalRef.current = undefined;
-    mockLoadSquads.mockReturnValue([]);
-    mockGetSquad.mockReturnValue(undefined);
     mockGetAllTerminals.mockReturnValue([]);
-    mockGetHiddenIds.mockReturnValue([]);
+    mockAgentSettingsGetHiddenIds.mockReturnValue([]);
+    mockAgentSettingsIsHidden.mockReturnValue(false);
+    mockAgentSettingsGet.mockReturnValue(undefined);
     mockGetLabel.mockReturnValue(undefined);
+    mockDiscoverAll.mockReturnValue([]);
+    mockTreeGetDiscoveredItems.mockReturnValue([]);
 
     activate(makeContext());
   });
@@ -489,44 +517,45 @@ describe('extension command handlers', () => {
   // --- editless.launchSession -----------------------------------------------
 
   describe('editless.launchSession', () => {
-    it('should show QuickPick with built-in agent when registry is empty', async () => {
-      mockLoadSquads.mockReturnValue([]);
-      mockShowQuickPick.mockResolvedValue(undefined); // user dismisses
+    it('should always include built-in Copilot CLI in picker', async () => {
+      mockTreeGetDiscoveredItems.mockReturnValue([]);
+      mockShowQuickPick.mockResolvedValue(undefined);
       await getHandler('editless.launchSession')();
       expect(mockShowQuickPick).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({ label: '🤖 Copilot CLI', description: 'standalone' }),
-        ]),
-        expect.objectContaining({ placeHolder: 'Select an agent to launch' }),
+        [expect.objectContaining({ label: '$(terminal) Copilot CLI', id: 'builtin:copilot-cli' })],
+        expect.anything(),
       );
       expect(mockLaunchTerminal).not.toHaveBeenCalled();
     });
 
     it('should launch directly when squadId is provided', async () => {
-      const squad = makeSquad();
-      mockLoadSquads.mockReturnValue([squad]);
-      mockGetSquad.mockReturnValue(squad);
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockTreeGetDiscoveredItems.mockReturnValue([disc]);
+      mockDiscoverAll.mockReturnValue([disc]);
+      mockAgentSettingsGet.mockReturnValue({ icon: '🚀', model: 'gpt-5' });
 
-      await getHandler('editless.launchSession')(squad.id);
+      await getHandler('editless.launchSession')('squad-1');
 
       expect(mockShowQuickPick).not.toHaveBeenCalled();
-      expect(mockLaunchTerminal).toHaveBeenCalledWith(squad);
+      expect(mockLaunchTerminal).toHaveBeenCalledWith(expect.objectContaining({ id: 'squad-1' }));
     });
 
     it('should show QuickPick when no squadId provided', async () => {
-      const squad = makeSquad();
-      mockLoadSquads.mockReturnValue([squad]);
-      mockGetSquad.mockReturnValue(squad);
-      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', id: 'squad-1' });
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockTreeGetDiscoveredItems.mockReturnValue([disc]);
+      mockDiscoverAll.mockReturnValue([disc]);
+      mockShowQuickPick.mockResolvedValue({ label: '🔷 Alpha Squad', description: 'test', id: 'squad-1' });
 
       await getHandler('editless.launchSession')();
 
       expect(mockShowQuickPick).toHaveBeenCalled();
-      expect(mockLaunchTerminal).toHaveBeenCalledWith(squad);
+      expect(mockLaunchTerminal).toHaveBeenCalledWith(expect.objectContaining({ id: 'squad-1' }));
     });
 
     it('should not launch when user dismisses QuickPick', async () => {
-      mockLoadSquads.mockReturnValue([makeSquad()]);
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockTreeGetDiscoveredItems.mockReturnValue([disc]);
+      mockDiscoverAll.mockReturnValue([disc]);
       mockShowQuickPick.mockResolvedValue(undefined);
 
       await getHandler('editless.launchSession')();
@@ -534,9 +563,9 @@ describe('extension command handlers', () => {
       expect(mockLaunchTerminal).not.toHaveBeenCalled();
     });
 
-    it('should not launch when getSquad returns undefined', async () => {
-      mockLoadSquads.mockReturnValue([makeSquad()]);
-      mockGetSquad.mockReturnValue(undefined);
+    it('should not launch when chosen id is not found in discovered items', async () => {
+      mockTreeGetDiscoveredItems.mockReturnValue([]);
+      mockDiscoverAll.mockReturnValue([]);
 
       await getHandler('editless.launchSession')('nonexistent');
 
@@ -598,7 +627,7 @@ describe('extension command handlers', () => {
     it('should hide agent by squadId and refresh tree', () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
       getHandler('editless.hideAgent')(item);
-      expect(mockHide).toHaveBeenCalledWith('squad-1');
+      expect(mockAgentSettingsHide).toHaveBeenCalledWith('squad-1');
       expect(mockTreeRefresh).toHaveBeenCalled();
     });
 
@@ -606,19 +635,26 @@ describe('extension command handlers', () => {
       const item = new MockEditlessTreeItem('Bot', 'agent', 0);
       item.id = 'agent-42';
       getHandler('editless.hideAgent')(item);
-      expect(mockHide).toHaveBeenCalledWith('agent-42');
+      expect(mockAgentSettingsHide).toHaveBeenCalledWith('agent-42');
     });
 
     it('should strip discovered: prefix when hiding discovered agent', () => {
-      const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
+      const item = new MockEditlessTreeItem('My Agent', 'squad', 0);
       item.id = 'discovered:my-agent';
       getHandler('editless.hideAgent')(item);
-      expect(mockHide).toHaveBeenCalledWith('my-agent');
+      expect(mockAgentSettingsHide).toHaveBeenCalledWith('my-agent');
+    });
+
+    it('should show agent when item type is squad-hidden (toggle)', () => {
+      const item = new MockEditlessTreeItem('Alpha', 'squad-hidden', 0, 'squad-1');
+      getHandler('editless.hideAgent')(item);
+      expect(mockAgentSettingsShow).toHaveBeenCalledWith('squad-1');
+      expect(mockTreeRefresh).toHaveBeenCalled();
     });
 
     it('should no-op when item is undefined', () => {
       getHandler('editless.hideAgent')(undefined);
-      expect(mockHide).not.toHaveBeenCalled();
+      expect(mockAgentSettingsHide).not.toHaveBeenCalled();
     });
 
     it('should no-op when item has neither squadId nor id', () => {
@@ -626,7 +662,7 @@ describe('extension command handlers', () => {
       item.squadId = undefined;
       item.id = undefined;
       getHandler('editless.hideAgent')(item);
-      expect(mockHide).not.toHaveBeenCalled();
+      expect(mockAgentSettingsHide).not.toHaveBeenCalled();
     });
   });
 
@@ -634,53 +670,51 @@ describe('extension command handlers', () => {
 
   describe('editless.showHiddenAgents', () => {
     it('should show info message when no agents are hidden', async () => {
-      mockGetHiddenIds.mockReturnValue([]);
+      mockAgentSettingsGetHiddenIds.mockReturnValue([]);
       await getHandler('editless.showHiddenAgents')();
       expect(mockShowInformationMessage).toHaveBeenCalledWith('No hidden agents.');
       expect(mockShowQuickPick).not.toHaveBeenCalled();
     });
 
     it('should show QuickPick and unhide selected agents', async () => {
-      const squad = makeSquad();
-      mockGetHiddenIds.mockReturnValue(['squad-1']);
-      mockGetSquad.mockReturnValue(squad);
-      mockShowQuickPick.mockResolvedValue([{ label: '🚀 Alpha Squad', id: 'squad-1' }]);
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      // Re-activate to populate discoveredItems
+      commandHandlers.clear();
+      activate(makeContext());
+      mockAgentSettingsGetHiddenIds.mockReturnValue(['squad-1']);
+      mockShowQuickPick.mockResolvedValue([{ label: '🔷 Alpha Squad', id: 'squad-1' }]);
 
       await getHandler('editless.showHiddenAgents')();
 
       expect(mockShowQuickPick).toHaveBeenCalled();
-      expect(mockShow).toHaveBeenCalledWith('squad-1');
+      expect(mockAgentSettingsShow).toHaveBeenCalledWith('squad-1');
       expect(mockTreeRefresh).toHaveBeenCalled();
     });
 
     it('should unhide multiple agents when multi-selected', async () => {
-      mockGetHiddenIds.mockReturnValue(['squad-1', 'squad-2']);
-      mockGetSquad.mockImplementation((id: string) =>
-        id === 'squad-1' ? makeSquad() : makeSquad({ id: 'squad-2', name: 'Beta' }),
-      );
+      mockAgentSettingsGetHiddenIds.mockReturnValue(['squad-1', 'squad-2']);
       mockShowQuickPick.mockResolvedValue([
-        { label: '🚀 Alpha Squad', id: 'squad-1' },
-        { label: '🚀 Beta', id: 'squad-2' },
+        { label: 'squad-1', id: 'squad-1' },
+        { label: 'squad-2', id: 'squad-2' },
       ]);
 
       await getHandler('editless.showHiddenAgents')();
 
-      expect(mockShow).toHaveBeenCalledWith('squad-1');
-      expect(mockShow).toHaveBeenCalledWith('squad-2');
+      expect(mockAgentSettingsShow).toHaveBeenCalledWith('squad-1');
+      expect(mockAgentSettingsShow).toHaveBeenCalledWith('squad-2');
     });
 
     it('should no-op when user cancels QuickPick', async () => {
-      mockGetHiddenIds.mockReturnValue(['squad-1']);
-      mockGetSquad.mockReturnValue(makeSquad());
+      mockAgentSettingsGetHiddenIds.mockReturnValue(['squad-1']);
       mockShowQuickPick.mockResolvedValue(undefined);
 
       await getHandler('editless.showHiddenAgents')();
-      expect(mockShow).not.toHaveBeenCalled();
+      expect(mockAgentSettingsShow).not.toHaveBeenCalled();
     });
 
     it('should label unknown hidden IDs as "unknown"', async () => {
-      mockGetHiddenIds.mockReturnValue(['gone-agent']);
-      mockGetSquad.mockReturnValue(undefined);
+      mockAgentSettingsGetHiddenIds.mockReturnValue(['gone-agent']);
       mockShowQuickPick.mockResolvedValue(undefined);
 
       await getHandler('editless.showHiddenAgents')();
@@ -695,7 +729,7 @@ describe('extension command handlers', () => {
   describe('editless.showAllAgents', () => {
     it('should call showAll and refresh tree', () => {
       getHandler('editless.showAllAgents')();
-      expect(mockShowAll).toHaveBeenCalled();
+      expect(mockAgentSettingsShowAll).toHaveBeenCalled();
       expect(mockTreeRefresh).toHaveBeenCalled();
     });
   });
@@ -765,11 +799,11 @@ describe('extension command handlers', () => {
       expect(mockTreeRefresh).toHaveBeenCalled();
     });
 
-    it('should re-scan discovered agents on refresh', () => {
-      mockDiscoverAllAgents.mockClear();
+    it('should re-scan discovered items on refresh', () => {
+      mockDiscoverAll.mockClear();
       getHandler('editless.refresh')();
-      expect(mockDiscoverAllAgents).toHaveBeenCalled();
-      expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
+      expect(mockDiscoverAll).toHaveBeenCalled();
+      expect(mockTreeSetDiscoveredItems).toHaveBeenCalled();
     });
   });
 
@@ -980,44 +1014,49 @@ describe('extension command handlers', () => {
   describe('editless.renameSquad', () => {
     it('should rename squad and refresh tree', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad());
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+      mockAgentSettingsGet.mockReturnValue({ name: 'Alpha Squad' });
       mockShowInputBox.mockResolvedValue('Beta Squad');
 
       await getHandler('editless.renameSquad')(item);
 
-      expect(mockUpdateSquad).toHaveBeenCalledWith('squad-1', { name: 'Beta Squad' });
+      expect(mockAgentSettingsUpdate).toHaveBeenCalledWith('squad-1', { name: 'Beta Squad' });
       expect(mockTreeRefresh).toHaveBeenCalled();
     });
 
     it('should no-op when item has no squadId', async () => {
       const item = new MockEditlessTreeItem('No Squad', 'agent', 0);
       await getHandler('editless.renameSquad')(item);
-      expect(mockUpdateSquad).not.toHaveBeenCalled();
+      expect(mockAgentSettingsUpdate).not.toHaveBeenCalled();
     });
 
-    it('should no-op when squad not found in registry', async () => {
+    it('should show input even without settings (uses squad id as fallback)', async () => {
       const item = new MockEditlessTreeItem('Ghost', 'squad', 0, 'ghost');
-      mockGetSquad.mockReturnValue(undefined);
+      mockAgentSettingsGet.mockReturnValue(undefined);
+      mockShowInputBox.mockResolvedValue(undefined);
       await getHandler('editless.renameSquad')(item);
-      expect(mockShowInputBox).not.toHaveBeenCalled();
+      expect(mockShowInputBox).toHaveBeenCalled();
     });
 
     it('should no-op when user cancels input', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad());
+      mockAgentSettingsGet.mockReturnValue({ name: 'Alpha Squad' });
       mockShowInputBox.mockResolvedValue(undefined);
 
       await getHandler('editless.renameSquad')(item);
-      expect(mockUpdateSquad).not.toHaveBeenCalled();
+      expect(mockAgentSettingsUpdate).not.toHaveBeenCalled();
     });
 
     it('should no-op when name is unchanged', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad());
+      mockAgentSettingsGet.mockReturnValue({ name: 'Alpha Squad' });
       mockShowInputBox.mockResolvedValue('Alpha Squad');
 
       await getHandler('editless.renameSquad')(item);
-      expect(mockUpdateSquad).not.toHaveBeenCalled();
+      expect(mockAgentSettingsUpdate).not.toHaveBeenCalled();
     });
   });
 
@@ -1026,13 +1065,16 @@ describe('extension command handlers', () => {
   describe('editless.changeModel', () => {
     it('should update model field and refresh tree', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      const squad = makeSquad({ model: 'gpt-5' });
-      mockGetSquad.mockReturnValue(squad);
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+      mockAgentSettingsGet.mockReturnValue({ model: 'gpt-5' });
       mockShowQuickPick.mockResolvedValue({ label: 'claude-sonnet-4' });
 
       await getHandler('editless.changeModel')(item);
 
-      expect(mockUpdateSquad).toHaveBeenCalledWith('squad-1', {
+      expect(mockAgentSettingsUpdate).toHaveBeenCalledWith('squad-1', {
         model: 'claude-sonnet-4',
       });
       expect(mockTreeRefresh).toHaveBeenCalled();
@@ -1041,42 +1083,51 @@ describe('extension command handlers', () => {
     it('should no-op when item has no squadId', async () => {
       const item = new MockEditlessTreeItem('X', 'agent', 0);
       await getHandler('editless.changeModel')(item);
-      expect(mockUpdateSquad).not.toHaveBeenCalled();
+      expect(mockAgentSettingsUpdate).not.toHaveBeenCalled();
     });
 
-    it('should no-op when squad is not found', async () => {
+    it('should no-op when neither disc nor settings found', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(undefined);
+      mockAgentSettingsGet.mockReturnValue(undefined);
+      // No discovered item with this id
       await getHandler('editless.changeModel')(item);
       expect(mockShowQuickPick).not.toHaveBeenCalled();
     });
 
     it('should no-op when user cancels picker', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad());
+      mockAgentSettingsGet.mockReturnValue({ model: 'gpt-5' });
       mockShowQuickPick.mockResolvedValue(undefined);
 
       await getHandler('editless.changeModel')(item);
-      expect(mockUpdateSquad).not.toHaveBeenCalled();
+      expect(mockAgentSettingsUpdate).not.toHaveBeenCalled();
     });
 
     it('should no-op when selected model is same as current', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad({ model: 'gpt-5' }));
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+      mockAgentSettingsGet.mockReturnValue({ model: 'gpt-5' });
       mockShowQuickPick.mockResolvedValue({ label: 'gpt-5' });
 
       await getHandler('editless.changeModel')(item);
-      expect(mockUpdateSquad).not.toHaveBeenCalled();
+      expect(mockAgentSettingsUpdate).not.toHaveBeenCalled();
     });
 
-    it('should set model when config has no model yet', async () => {
+    it('should set model when settings has no model yet', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
-      mockGetSquad.mockReturnValue(makeSquad({ model: undefined }));
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+      mockAgentSettingsGet.mockReturnValue({});
       mockShowQuickPick.mockResolvedValue({ label: 'claude-sonnet-4' });
 
       await getHandler('editless.changeModel')(item);
 
-      expect(mockUpdateSquad).toHaveBeenCalledWith('squad-1', {
+      expect(mockAgentSettingsUpdate).toHaveBeenCalledWith('squad-1', {
         model: 'claude-sonnet-4',
       });
     });
@@ -1206,6 +1257,101 @@ describe('extension command handlers', () => {
       mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
       try { await getHandler('editless.addAgent')(); } catch { /* fs write expected to fail */ }
       expect(mockShowOpenDialog).toHaveBeenCalled();
+    });
+
+    it('should create project agent file in .github/agents/ under selected folder', async () => {
+      const os = await import('os');
+      const fsMod = await import('fs');
+      const projectDir = path.join(os.tmpdir(), `editless-test-${Date.now()}`);
+      const agentsDir = path.join(projectDir, '.github', 'agents');
+      fsMod.mkdirSync(agentsDir, { recursive: true });
+      try {
+        mockShowInputBox.mockResolvedValueOnce('my-test-agent');
+        mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+        mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
+        await getHandler('editless.addAgent')();
+        // File should have been created
+        expect(fsMod.existsSync(path.join(agentsDir, 'my-test-agent.agent.md'))).toBe(true);
+      } finally {
+        fsMod.rmSync(projectDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should call updateWorkspaceFolders for project agent', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const fsMod = await import('fs');
+      const projectDir = path.join(os.tmpdir(), `editless-test-${Date.now()}`);
+      const agentsDir = path.join(projectDir, '.github', 'agents');
+      fsMod.mkdirSync(agentsDir, { recursive: true });
+      try {
+        mockShowInputBox.mockResolvedValueOnce('ws-agent');
+        mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+        mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
+        await getHandler('editless.addAgent')();
+        expect(vscodeModule.workspace.updateWorkspaceFolders).toHaveBeenCalledWith(
+          0, 0, expect.objectContaining({ uri: expect.objectContaining({ fsPath: projectDir }) }),
+        );
+      } finally {
+        fsMod.rmSync(projectDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should call updateWorkspaceFolders after creating project agent file (#399)', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const fsMod = await import('fs');
+      const projectDir = path.join(os.tmpdir(), `editless-test-${Date.now()}`);
+      const agentsDir = path.join(projectDir, '.github', 'agents');
+      fsMod.mkdirSync(agentsDir, { recursive: true });
+      try {
+        mockShowInputBox.mockResolvedValueOnce('order-agent');
+        mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+        mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
+        await getHandler('editless.addAgent')();
+        expect(vscodeModule.workspace.updateWorkspaceFolders).toHaveBeenCalled();
+      } finally {
+        fsMod.rmSync(projectDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should refresh tree after adding project agent', async () => {
+      const os = await import('os');
+      const fsMod = await import('fs');
+      const projectDir = path.join(os.tmpdir(), `editless-test-${Date.now()}`);
+      const agentsDir = path.join(projectDir, '.github', 'agents');
+      fsMod.mkdirSync(agentsDir, { recursive: true });
+      try {
+        mockShowInputBox.mockResolvedValueOnce('refresh-agent');
+        mockShowQuickPick.mockResolvedValueOnce({ value: 'project' });
+        mockShowOpenDialog.mockResolvedValueOnce([{ fsPath: projectDir }]);
+        await getHandler('editless.addAgent')();
+        expect(mockTreeRefresh).toHaveBeenCalled();
+        expect(mockDiscoverAll).toHaveBeenCalled();
+      } finally {
+        fsMod.rmSync(projectDir, { recursive: true, force: true });
+      }
+    });
+
+    it('should not call updateWorkspaceFolders for personal agent', async () => {
+      const vscodeModule = await import('vscode');
+      const os = await import('os');
+      const fsMod = await import('fs');
+      // Personal agent path: ~/.copilot/agents/
+      const copilotAgentsDir = path.join(os.homedir(), '.copilot', 'agents');
+      const agentFile = path.join(copilotAgentsDir, 'personal-agent.agent.md');
+      const fileExisted = fsMod.existsSync(agentFile);
+      try {
+        mockShowInputBox.mockResolvedValueOnce('personal-agent');
+        mockShowQuickPick.mockResolvedValueOnce({ value: 'personal' });
+        await getHandler('editless.addAgent')();
+        expect(vscodeModule.workspace.updateWorkspaceFolders).not.toHaveBeenCalled();
+      } finally {
+        // Clean up if we created the file
+        if (!fileExisted && fsMod.existsSync(agentFile)) {
+          fsMod.unlinkSync(agentFile);
+        }
+      }
     });
   });
 
@@ -1373,62 +1519,51 @@ describe('extension command handlers', () => {
   // --- editless.launchFromWorkItem -------------------------------------------
 
   describe('editless.launchFromWorkItem', () => {
-    it('should show QuickPick with built-in agent when no squads registered', async () => {
+    it('should always include built-in Copilot CLI in work item picker', async () => {
       const item = { issue: { number: 42, title: 'Fix bug', url: 'https://example.com/42' } };
-      mockLoadSquads.mockReturnValue([]);
-      mockShowQuickPick.mockResolvedValue(undefined); // user dismisses
+      mockShowQuickPick.mockResolvedValue(undefined);
       await getHandler('editless.launchFromWorkItem')(item);
       expect(mockShowQuickPick).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({ label: '🤖 Copilot CLI', description: 'standalone' }),
-        ]),
-        expect.objectContaining({ placeHolder: 'Launch agent for #42 Fix bug' }),
+        [expect.objectContaining({ label: '$(terminal) Copilot CLI' })],
+        expect.anything(),
       );
+      expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
 
-    it('should show QuickPick and launch terminal for selected squad', async () => {
-      const squad = makeSquad();
+    it('should show QuickPick and launch terminal for selected agent', async () => {
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+
       const item = { issue: { number: 42, title: 'Fix bug', url: 'https://example.com/42', repository: 'owner/repo' } };
-      mockLoadSquads.mockReturnValue([squad]);
-      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', squad });
+      mockShowQuickPick.mockResolvedValue({ label: '🔷 Alpha Squad', description: 'test', disc });
 
       await getHandler('editless.launchFromWorkItem')(item);
 
-      expect(mockLaunchTerminal).toHaveBeenCalledWith(squad, '#42 Fix bug');
-    });
-
-    it('should persist terminal name as sticky label after launch', async () => {
-      const squad = makeSquad();
-      const item = { issue: { number: 42, title: 'Fix bug', url: 'https://example.com/42', repository: 'owner/repo' } };
-      const mockTerminal = { name: '#42 Fix bug' };
-      mockLoadSquads.mockReturnValue([squad]);
-      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', squad });
-      mockLaunchTerminal.mockReturnValue(mockTerminal);
-      mockGetLabelKey.mockReturnValue('terminal:squad-1-123-1');
-
-      await getHandler('editless.launchFromWorkItem')(item);
-
-      expect(mockGetLabelKey).toHaveBeenCalledWith(mockTerminal);
-      expect(mockSetLabel).toHaveBeenCalledWith('terminal:squad-1-123-1', '#42 Fix bug');
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), '#42 Fix bug');
     });
 
     it('should no-op when item has no issue', async () => {
       await getHandler('editless.launchFromWorkItem')({});
-      expect(mockLaunchTerminal).not.toHaveBeenCalled();
+      expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
 
     it('should no-op when item is undefined', async () => {
       await getHandler('editless.launchFromWorkItem')();
-      expect(mockLaunchTerminal).not.toHaveBeenCalled();
+      expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
 
     it('should no-op when user cancels QuickPick', async () => {
-      const squad = makeSquad();
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+
       const item = { issue: { number: 1, title: 'T', url: 'https://example.com/1' } };
-      mockLoadSquads.mockReturnValue([squad]);
       mockShowQuickPick.mockResolvedValue(undefined);
       await getHandler('editless.launchFromWorkItem')(item);
-      expect(mockLaunchTerminal).not.toHaveBeenCalled();
+      expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
   });
 
@@ -1525,15 +1660,6 @@ describe('extension command handlers', () => {
     });
   });
 
-  // --- editless.openRegistry -------------------------------------------------
-
-  describe('editless.openRegistry', () => {
-    it('should open the registry file in editor', async () => {
-      await getHandler('editless.openRegistry')();
-      expect(mockShowTextDocument).toHaveBeenCalled();
-    });
-  });
-
   // --- editless.goToSquadSettings --------------------------------------------
 
   describe('editless.goToSquadSettings', () => {
@@ -1543,7 +1669,7 @@ describe('extension command handlers', () => {
       expect(mockShowTextDocument).not.toHaveBeenCalled();
     });
 
-    it('should open registry file when squadId is present', async () => {
+    it('should open settings file when squadId is present', async () => {
       const item = new MockEditlessTreeItem('Alpha', 'squad', 0, 'squad-1');
       mockShowTextDocument.mockResolvedValue({
         selection: undefined,
@@ -1622,15 +1748,16 @@ describe('extension command handlers', () => {
       expect(mockTerminal.sendText).toHaveBeenCalledWith('git init && npx -y github:bradygaster/squad init; exit');
     });
 
-    it('should silently skip terminal for already-initialized squad directory', async () => {
+    it('should add workspace folder and refresh for already-initialized squad directory', async () => {
       mockIsSquadInitialized.mockReturnValue(true);
-      mockDiscoverAgentTeams.mockReturnValue([{ id: 'squad', name: 'squad', path: '/path/to/squad', icon: '🔷', universe: 'unknown' }]);
       
       await getHandler('editless.addSquad')();
       
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/path/to/squad');
       expect(mockCreateTerminal).not.toHaveBeenCalled();
-      expect(mockAddSquads).toHaveBeenCalled();
+      // refreshDiscovery called -> discoverAll is invoked
+      expect(mockDiscoverAll).toHaveBeenCalled();
+      expect(mockTreeRefresh).toHaveBeenCalled();
     });
 
     it('should not show toast for new squad (silent add)', async () => {
@@ -1643,7 +1770,6 @@ describe('extension command handlers', () => {
 
     it('should not show toast for already-initialized squad (silent add)', async () => {
       mockIsSquadInitialized.mockReturnValue(true);
-      mockDiscoverAgentTeams.mockReturnValue([{ id: 'squad', name: 'squad', path: '/path/to/squad', icon: '🔷', universe: 'unknown' }]);
       
       await getHandler('editless.addSquad')();
       
@@ -1687,7 +1813,6 @@ describe('extension command handlers', () => {
       mockCheckNpxAvailable.mockResolvedValue(true);
       mockShowOpenDialog.mockResolvedValue([{ fsPath: '/existing-squad', toString: () => '/existing-squad' }]);
       mockIsSquadInitialized.mockReturnValue(true);
-      mockDiscoverAgentTeams.mockReturnValue([{ id: 'existing-squad', name: 'existing-squad', path: '/existing-squad', icon: '🔷', universe: 'unknown' }]);
       
       await getHandler('editless.addSquad')();
       
@@ -1695,7 +1820,8 @@ describe('extension command handlers', () => {
       expect(mockShowOpenDialog).toHaveBeenCalled();
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/existing-squad');
       expect(mockCreateTerminal).not.toHaveBeenCalled();
-      expect(mockAddSquads).toHaveBeenCalled();
+      expect(mockDiscoverAll).toHaveBeenCalled();
+      expect(mockTreeRefresh).toHaveBeenCalled();
       expect(mockShowInformationMessage).not.toHaveBeenCalled();
     });
 
@@ -1726,27 +1852,24 @@ describe('extension command handlers', () => {
       expect(mockOnDidCloseTerminal).toHaveBeenCalled();
     });
 
-    it('should auto-register squad when init terminal closes successfully', async () => {
+    it('should auto-refresh discovery when init terminal closes', async () => {
       const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
       mockCreateTerminal.mockReturnValue(mockTerminal);
       mockIsSquadInitialized.mockReturnValue(false);
 
-      const discoveredSquad = makeSquad({ id: 'squad', path: '/path/to/squad' });
-      mockDiscoverAgentTeams.mockReturnValue([discoveredSquad]);
-
       await getHandler('editless.addSquad')();
 
+      mockDiscoverAll.mockClear();
+      mockTreeRefresh.mockClear();
       getLastCloseCallback()(mockTerminal);
 
-      expect(mockAddSquads).toHaveBeenCalledWith([discoveredSquad]);
+      expect(mockDiscoverAll).toHaveBeenCalled();
+      expect(mockTreeRefresh).toHaveBeenCalled();
     });
 
-    it('should refresh tree after auto-registering squad on terminal close', async () => {
+    it('should refresh tree after init terminal closes', async () => {
       const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
       mockCreateTerminal.mockReturnValue(mockTerminal);
-
-      const discoveredSquad = makeSquad({ id: 'squad', path: '/path/to/squad' });
-      mockDiscoverAgentTeams.mockReturnValue([discoveredSquad]);
 
       await getHandler('editless.addSquad')();
 
@@ -1756,55 +1879,19 @@ describe('extension command handlers', () => {
       expect(mockTreeRefresh).toHaveBeenCalled();
     });
 
-    it('should not register squad when discovery finds nothing (init failed)', async () => {
-      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
-      mockCreateTerminal.mockReturnValue(mockTerminal);
-      mockDiscoverAgentTeams.mockReturnValue([]);
-
-      const teamDirMod = await import('../team-dir');
-      (teamDirMod.resolveTeamDir as ReturnType<typeof vi.fn>).mockReturnValue(null);
-
-      await getHandler('editless.addSquad')();
-
-      getLastCloseCallback()(mockTerminal);
-
-      expect(mockAddSquads).not.toHaveBeenCalled();
-    });
-
-    it('should register squad via resolveTeamDir when team.md does not exist yet', async () => {
-      const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
-      mockCreateTerminal.mockReturnValue(mockTerminal);
-      mockDiscoverAgentTeams.mockReturnValue([]);
-      mockLoadSquads.mockReturnValue([]);
-
-      // Get the actual mock reference vitest uses (proxy differs from hoisted ref)
-      const teamDirMod = await import('../team-dir');
-      const resolveTeamDirSpy = teamDirMod.resolveTeamDir as ReturnType<typeof vi.fn>;
-      resolveTeamDirSpy.mockReturnValue('/path/to/squad/.ai-team');
-
-      await getHandler('editless.addSquad')();
-
-      getLastCloseCallback()(mockTerminal);
-
-      expect(resolveTeamDirSpy).toHaveBeenCalledWith('/path/to/squad');
-      expect(mockAddSquads).toHaveBeenCalledWith([expect.objectContaining({
-        name: 'squad',
-        path: '/path/to/squad',
-        icon: '🔷',
-      })]);
-    });
-
     it('should ignore close events from unrelated terminals', async () => {
       const mockTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
       mockCreateTerminal.mockReturnValue(mockTerminal);
-      mockDiscoverAgentTeams.mockReturnValue([makeSquad()]);
 
       await getHandler('editless.addSquad')();
 
+      mockDiscoverAll.mockClear();
+      mockTreeRefresh.mockClear();
       const unrelatedTerminal = { sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() };
       getLastCloseCallback()(unrelatedTerminal);
 
-      expect(mockAddSquads).not.toHaveBeenCalled();
+      // Should not have been called for unrelated terminal
+      expect(mockTreeRefresh).not.toHaveBeenCalled();
     });
   });
 
@@ -1831,142 +1918,23 @@ describe('extension command handlers', () => {
   });
 });
 
-describe('editless.promoteDiscoveredAgent', () => {
-  const testAgent = {
-    id: 'my-agent',
-    name: 'My Agent',
-    filePath: '/workspace/.github/agents/my-agent.agent.md',
-    source: 'workspace' as const,
-    description: 'A test agent',
-  };
-
+describe('additional extension command handlers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     commandHandlers.clear();
-    mockLoadSquads.mockReturnValue([]);
-    mockGetHiddenIds.mockReturnValue([]);
-    mockDiscoverAllAgents.mockReturnValue([testAgent]);
+    mockActiveTerminalRef.current = undefined;
+    mockGetAllTerminals.mockReturnValue([]);
+    mockAgentSettingsGetHiddenIds.mockReturnValue([]);
+    mockAgentSettingsIsHidden.mockReturnValue(false);
+    mockAgentSettingsGet.mockReturnValue(undefined);
+    mockGetLabel.mockReturnValue(undefined);
+    mockDiscoverAll.mockReturnValue([]);
+    mockTreeGetDiscoveredItems.mockReturnValue([]);
+
     activate(makeContext());
   });
 
-  it('should add discovered agent to registry', () => {
-    const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
-    item.id = 'discovered:my-agent';
-
-    getHandler('editless.promoteDiscoveredAgent')(item);
-
-    expect(mockAddSquads).toHaveBeenCalledWith([
-      expect.objectContaining({
-        id: 'my-agent',
-        name: 'My Agent',
-        path: '/workspace/.github/agents',
-        icon: '🤖',
-        universe: 'standalone',
-        description: 'A test agent',
-      }),
-    ]);
-  });
-
-  it('should refresh tree after promotion', () => {
-    const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
-    item.id = 'discovered:my-agent';
-
-    getHandler('editless.promoteDiscoveredAgent')(item);
-
-    expect(mockTreeRefresh).toHaveBeenCalled();
-    // Unified flow re-discovers instead of manually filtering
-    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
-    expect(mockTreeSetDiscoveredItems).toHaveBeenCalled();
-  });
-
-  it('should not show toast on promote (silent add)', () => {
-    const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
-    item.id = 'discovered:my-agent';
-
-    getHandler('editless.promoteDiscoveredAgent')(item);
-
-    expect(mockShowInformationMessage).not.toHaveBeenCalled();
-  });
-
-  it('should no-op when item has no id', () => {
-    const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
-    item.id = undefined;
-
-    getHandler('editless.promoteDiscoveredAgent')(item);
-
-    expect(mockAddSquads).not.toHaveBeenCalled();
-  });
-
-  it('should no-op when agent is not found in discovered list', () => {
-    const item = new MockEditlessTreeItem('Unknown', 'discovered-agent', 0);
-    item.id = 'discovered:unknown-agent';
-
-    getHandler('editless.promoteDiscoveredAgent')(item);
-
-    expect(mockAddSquads).not.toHaveBeenCalled();
-  });
-
-  it('should no-op when called with no argument', () => {
-    getHandler('editless.promoteDiscoveredAgent')();
-
-    expect(mockAddSquads).not.toHaveBeenCalled();
-  });
-
-  it('should re-discover after promotion to exclude promoted item', () => {
-    mockDiscoverAllAgents.mockReturnValue([
-      testAgent,
-      { id: 'other-agent', name: 'Other', filePath: '/workspace/other.agent.md', source: 'workspace' as const },
-    ]);
-    vi.clearAllMocks();
-    commandHandlers.clear();
-    mockLoadSquads.mockReturnValue([]);
-    mockGetHiddenIds.mockReturnValue([]);
-    mockDiscoverAllAgents.mockReturnValue([
-      testAgent,
-      { id: 'other-agent', name: 'Other', filePath: '/workspace/other.agent.md', source: 'workspace' as const },
-    ]);
-    activate(makeContext());
-
-    const item = new MockEditlessTreeItem('My Agent', 'discovered-agent', 0);
-    item.id = 'discovered:my-agent';
-
-    getHandler('editless.promoteDiscoveredAgent')(item);
-
-    // Unified flow re-discovers (calls both setDiscoveredAgents and setDiscoveredItems)
-    expect(mockTreeSetDiscoveredAgents).toHaveBeenCalled();
-    expect(mockTreeSetDiscoveredItems).toHaveBeenCalled();
-    expect(mockTreeRefresh).toHaveBeenCalled();
-  });
-
-  it('should promote a discovered squad with squad-specific properties', () => {
-    vi.clearAllMocks();
-    commandHandlers.clear();
-    mockLoadSquads.mockReturnValue([]);
-    mockGetHiddenIds.mockReturnValue([]);
-    mockDiscoverAllAgents.mockReturnValue([]);
-    mockDiscoverAll.mockReturnValue([
-      { id: 'my-squad', name: 'My Squad', type: 'squad', source: 'workspace', path: '/workspace/my-squad', description: 'A squad', universe: 'acme-corp' },
-    ]);
-    activate(makeContext());
-
-    const item = new MockEditlessTreeItem('My Squad', 'discovered-squad', 0);
-    item.id = 'discovered:my-squad';
-
-    getHandler('editless.promoteDiscoveredAgent')(item);
-
-    expect(mockAddSquads).toHaveBeenCalledWith([
-      expect.objectContaining({
-        id: 'my-squad',
-        name: 'My Squad',
-        path: '/workspace/my-squad',
-        icon: '🔷',
-        universe: 'acme-corp',
-        description: 'A squad',
-      }),
-    ]);
-  });
-
-  // --- editless.goToWorkItem -------------------------------------------------
+// --- editless.goToWorkItem -------------------------------------------------
 
   describe('editless.goToWorkItem', () => {
     it('should open issue URL in browser', async () => {
@@ -1991,42 +1959,46 @@ describe('editless.promoteDiscoveredAgent', () => {
   // --- editless.launchFromPR -------------------------------------------------
 
   describe('editless.launchFromPR', () => {
-    it('should show QuickPick with built-in agent when no squads registered', async () => {
+    it('should always include built-in Copilot CLI in PR picker', async () => {
       const item = { pr: { number: 100, title: 'Add feature', url: 'https://github.com/owner/repo/pull/100' } };
-      mockLoadSquads.mockReturnValue([]);
-      mockShowQuickPick.mockResolvedValue(undefined); // user dismisses
+      mockShowQuickPick.mockResolvedValue(undefined);
       await getHandler('editless.launchFromPR')(item);
       expect(mockShowQuickPick).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({ label: '🤖 Copilot CLI', description: 'standalone' }),
-        ]),
-        expect.objectContaining({ placeHolder: 'Launch agent for PR #100 Add feature' }),
+        [expect.objectContaining({ label: '$(terminal) Copilot CLI' })],
+        expect.anything(),
       );
+      expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
 
     it('should show QuickPick and launch terminal for GitHub PR', async () => {
-      const squad = makeSquad();
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+
       const item = { pr: { number: 100, title: 'Add feature', url: 'https://github.com/owner/repo/pull/100' } };
-      mockLoadSquads.mockReturnValue([squad]);
-      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', squad });
+      mockShowQuickPick.mockResolvedValue({ label: '🔷 Alpha Squad', description: 'test', disc });
 
       await getHandler('editless.launchFromPR')(item);
 
-      expect(mockLaunchTerminal).toHaveBeenCalledWith(squad, 'PR #100 Add feature');
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'PR #100 Add feature');
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('https://github.com/owner/repo/pull/100'),
       );
     });
 
     it('should show QuickPick and launch terminal for ADO PR', async () => {
-      const squad = makeSquad();
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+
       const item = { adoPR: { id: 200, title: 'Fix bug', url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/200' } };
-      mockLoadSquads.mockReturnValue([squad]);
-      mockShowQuickPick.mockResolvedValue({ label: '🚀 Alpha Squad', description: 'test', squad });
+      mockShowQuickPick.mockResolvedValue({ label: '🔷 Alpha Squad', description: 'test', disc });
 
       await getHandler('editless.launchFromPR')(item);
 
-      expect(mockLaunchTerminal).toHaveBeenCalledWith(squad, 'PR #200 Fix bug');
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'PR #200 Fix bug');
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('https://dev.azure.com/org/project/_git/repo/pullrequest/200'),
       );
@@ -2034,16 +2006,19 @@ describe('editless.promoteDiscoveredAgent', () => {
 
     it('should no-op when item has no PR', async () => {
       await getHandler('editless.launchFromPR')({});
-      expect(mockLaunchTerminal).not.toHaveBeenCalled();
+      expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
 
     it('should no-op when user cancels QuickPick', async () => {
-      const squad = makeSquad();
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+
       const item = { pr: { number: 100, title: 'Test', url: 'https://example.com/100' } };
-      mockLoadSquads.mockReturnValue([squad]);
       mockShowQuickPick.mockResolvedValue(undefined);
       await getHandler('editless.launchFromPR')(item);
-      expect(mockLaunchTerminal).not.toHaveBeenCalled();
+      expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
   });
 
