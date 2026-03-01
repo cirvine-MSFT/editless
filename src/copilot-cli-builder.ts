@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { AgentTeamConfig } from './types';
 
 // ---------------------------------------------------------------------------
 // Copilot CLI Command Builder
@@ -30,8 +31,8 @@ export interface CopilotCommandOptions {
  * Precedence: override parameter → `editless.cli.command` setting → `"copilot"`.
  */
 export function getCliCommand(override?: string): string {
-  if (override) { return override; }
-  return vscode.workspace.getConfiguration('editless.cli').get<string>('command', 'copilot');
+  if (override?.trim()) { return override; }
+  return vscode.workspace.getConfiguration('editless.cli').get<string>('command', 'copilot')?.trim() || 'copilot';
 }
 
 /**
@@ -88,7 +89,7 @@ export function buildCopilotCommand(options: CopilotCommandOptions = {}): string
  * Build a launch command from structured config fields.
  * Merges per-config additionalArgs with global `editless.cli.additionalArgs`.
  */
-export function buildLaunchCommandForConfig(config: { id: string; universe: string; model?: string; additionalArgs?: string; command?: string }): string {
+export function buildLaunchCommandForConfig(config: Pick<AgentTeamConfig, 'id' | 'universe' | 'model' | 'additionalArgs' | 'command'>): string {
   // Derive --agent flag value from id/universe
   let agentFlag: string | undefined;
   if (config.id === 'builtin:copilot-cli') {

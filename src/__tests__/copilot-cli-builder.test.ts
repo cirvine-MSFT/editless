@@ -58,6 +58,30 @@ describe('copilot-cli-builder', () => {
       });
       expect(getCliCommand('per-agent-cli')).toBe('per-agent-cli');
     });
+
+    it('falls through to config when override is empty string', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return 'global-cli';
+        return def;
+      });
+      expect(getCliCommand('')).toBe('global-cli');
+    });
+
+    it('falls back to "copilot" when config returns empty string', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return '';
+        return def;
+      });
+      expect(getCliCommand()).toBe('copilot');
+    });
+
+    it('falls back to "copilot" when config returns whitespace-only', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return '   ';
+        return def;
+      });
+      expect(getCliCommand()).toBe('copilot');
+    });
   });
 
   describe('buildCopilotCommand', () => {
@@ -198,6 +222,15 @@ describe('copilot-cli-builder', () => {
       const cmd = buildDefaultLaunchCommand();
       expect(cmd).not.toContain('$(');
       expect(cmd).not.toContain('${');
+    });
+
+    it('uses global editless.cli.command setting', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return 'custom-copilot';
+        if (key === 'additionalArgs') return '';
+        return def;
+      });
+      expect(buildDefaultLaunchCommand()).toBe('custom-copilot --agent squad');
     });
   });
 
