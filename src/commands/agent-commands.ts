@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
-import { EditlessTreeItem, DEFAULT_COPILOT_CLI_ID } from '../editless-tree';
+import { EditlessTreeItem, DEFAULT_COPILOT_CLI_ID, buildCopilotCLIConfig } from '../editless-tree';
 import type { EditlessTreeProvider } from '../editless-tree';
 import type { AgentSettingsManager } from '../agent-settings';
 import type { TerminalManager } from '../terminal-manager';
@@ -137,44 +137,40 @@ export function register(context: vscode.ExtensionContext, deps: AgentCommandDep
         || squadIdOrItem === DEFAULT_COPILOT_CLI_ID;
       if (isDefaultAgent) {
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        const defaultCfg: AgentTeamConfig = {
-          id: DEFAULT_COPILOT_CLI_ID,
-          name: 'Copilot CLI',
-          path: cwd ?? '',
-          icon: '🤖',
-          universe: 'standalone',
-        };
-        terminalManager.launchTerminal(defaultCfg);
+        terminalManager.launchTerminal(buildCopilotCLIConfig(cwd));
         return;
       }
 
       const allItems = treeProvider.getDiscoveredItems();
-      if (allItems.length === 0) {
-        vscode.window.showWarningMessage('No agents discovered yet.');
-        return;
-      }
 
       let chosen: string | undefined = typeof squadIdOrItem === 'string'
         ? squadIdOrItem
         : squadIdOrItem?.squadId;
       if (!chosen) {
+        const cliItem = { label: '$(terminal) Copilot CLI', description: 'standalone', id: DEFAULT_COPILOT_CLI_ID };
+        const discoveredPicks = allItems.filter(d => !agentSettings.isHidden(d.id)).map(d => ({
+          label: `${d.type === 'squad' ? '🔷' : '🤖'} ${d.name}`,
+          description: d.universe ?? d.source,
+          id: d.id,
+        }));
         const pick = await vscode.window.showQuickPick(
-          allItems.filter(d => !agentSettings.isHidden(d.id)).map(d => ({
-            label: `${d.type === 'squad' ? '🔷' : '🤖'} ${d.name}`,
-            description: d.universe ?? d.source,
-            id: d.id,
-          })),
+          [cliItem, ...discoveredPicks],
           { placeHolder: 'Select an agent to launch' },
         );
         chosen = pick?.id;
       }
 
       if (chosen) {
-        const disc = allItems.find(d => d.id === chosen);
-        if (disc) {
-          const settings = agentSettings.get(disc.id);
-          const cfg = toAgentTeamConfig(disc, settings);
-          terminalManager.launchTerminal(cfg);
+        if (chosen === DEFAULT_COPILOT_CLI_ID) {
+          const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+          terminalManager.launchTerminal(buildCopilotCLIConfig(cwd));
+        } else {
+          const disc = allItems.find(d => d.id === chosen);
+          if (disc) {
+            const settings = agentSettings.get(disc.id);
+            const cfg = toAgentTeamConfig(disc, settings);
+            terminalManager.launchTerminal(cfg);
+          }
         }
       }
     }),
