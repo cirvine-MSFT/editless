@@ -26,6 +26,7 @@
 
 ---
 
+
 ### 2026-02-26: Eliminate agent-registry.json — Auto-Discover Refactor
 
 **Date:** 2026-02-26  
