@@ -10026,3 +10026,691 @@ Same flow as `relaunchSession()` in `TerminalManager`:
 5. Casey: Test with real external sessions (dogfood with raw CLI)
 
 
+
+
+---
+
+### 2026-03-01: Branching strategy — v0.1.3 ships from main, then branch
+
+**By:** Casey Irvine (via Copilot)
+**What:** v0.1.3 releases from main (includes auto-discover refactor #427). After #439 merges and any docs PRs, tag v0.1.3 on main. THEN create release/v0.1.x from that tag for any future 0.1.x hotfixes. From that point, main is the v0.2 dev line.
+**Why:** User decision — auto-discover refactor is fine to ship in v0.1.3. Branching happens AFTER the v0.1.3 tag, not before.
+
+---
+
+### 2026-03-01: Worktree settings inherit from parent, with overrides
+
+**By:** Casey Irvine (via Copilot)
+**What:** Worktree agent settings should inherit from the parent agent's settings by default, but be individually overridable. E.g., if the parent has model=opus, the worktree agent gets model=opus unless explicitly changed. This is a layered settings model: parent defaults → worktree overrides.
+**Why:** User directive — avoids having to re-configure every worktree copy. Makes the common case (same settings) effortless while still allowing per-worktree customization.
+
+
+---
+
+### 2026-03-01: Worktree Agent/Squad Discovery — Architecture Proposal
+
+**Date:** 2026-03-01  
+**Author:** Rick (Lead)  
+**Status:** Proposed  
+**Issue Context:** #422 (worktree support), #348 (branch names), Casey's "discovery dimension" insight
+
+## Problem
+
+EditLess discovery is flat. `discoverAll()` scans workspace folders and `~/.copilot/agents/` for agents and squads, returns a flat `DiscoveredItem[]`. No relationship between items.
+
+When a user has git worktrees (e.g., `editless/` on `main`, `editless-v01/` on `release/v0.1.x`), those worktrees contain the *same squad* operating on different branches. Today they show as unrelated entries — or worse, only the one in the workspace shows up. Casey wants: discover a squad → automatically find its worktrees → show them as children.
+
+## Architecture
+
+### 1. Worktree Detection — New Module: `src/worktree-discovery.ts`
+
+Single responsibility: given a repo path, return its worktrees.
+
+```typescript
+export interface WorktreeInfo {
+  /** Absolute path to the worktree root */
+  path: string;
+  /** Git branch checked out in this worktree */
+  branch: string;
+  /** Whether this is the main worktree (bare checkout) */
+  isMain: boolean;
+  /** Whether this worktree has a .squad/ or .ai-team/ dir */
+  hasSquadConfig: boolean;
+}
+
+/**
+ * Run `git worktree list --porcelain` in the given repo and parse output.
+ * Returns empty array if not a git repo or no worktrees.
+ */
+export async function discoverWorktrees(repoPath: string): Promise<WorktreeInfo[]>;
+
+/**
+ * Check if a path is inside a git repo (has .git file or directory).
+ */
+export function isGitRepo(dirPath: string): boolean;
+```
+
+**Why porcelain?** `git worktree list --porcelain` outputs machine-parseable format:
+```
+worktree /home/user/editless
+HEAD abc123
+branch refs/heads/main
+
+worktree /home/user/editless-v01
+HEAD def456
+branch refs/heads/release/v0.1.x
+```
+
+No regex gymnastics. No locale issues. Fast (~5ms on local repos).
+
+**Why async?** `git worktree list` shells out via `child_process.execFile`. Discovery runs on activation and refresh — we don't want to block the extension host. Use `execFile` with a reasonable timeout (5s).
+
+### 2. Data Model — Extend `DiscoveredItem`
+
+Add optional worktree metadata to the existing type. No new wrapper type — keeps the flat array contract intact while enabling the tree to group.
+
+```typescript
+export interface DiscoveredItem {
+  id: string;
+  name: string;
+  type: 'agent' | 'squad';
+  source: 'workspace' | 'copilot-dir';
+  path: string;
+  description?: string;
+  universe?: string;
+
+  // --- NEW: Worktree fields ---
+  /** Git branch checked out at this item's path (if in a git repo) */
+  branch?: string;
+  /** ID of the parent item this is a worktree of (undefined = not a worktree child) */
+  parentId?: string;
+  /** If true, this is the main worktree (the original clone) */
+  isMainWorktree?: boolean;
+}
+```
+
+**Why extend, not wrap?** The entire pipeline (`discoverAll()` → `setDiscoveredItems()` → `getRootItems()` → `getChildren()`) operates on `DiscoveredItem[]`. A new wrapper type would require a parallel pipeline. The optional fields add zero overhead for non-worktree items and keep all existing code working unchanged.
+
+**ID scheme for worktree children:** `{parentId}:wt:{branch-kebab}`. Example: `editless:wt:release-v0-1-x`. This ensures uniqueness and makes parent lookup trivial.
+
+**Settings inheritance:** Per Casey's directive (`.squad/decisions/inbox/copilot-directive-worktree-settings-inheritance.md`), worktree agents inherit parent settings. `AgentSettingsManager.get(worktreeId)` falls back to `get(parentId)` if no override exists. This is a small change to `AgentSettingsManager.get()`:
+
+```typescript
+get(id: string): AgentSettings | undefined {
+  const direct = this._cache.agents[id];
+  if (direct) return direct;
+  // Worktree fallback: if id contains ':wt:', try parent
+  const wtIndex = id.indexOf(':wt:');
+  if (wtIndex !== -1) {
+    const parentId = id.substring(0, wtIndex);
+    return this._cache.agents[parentId];
+  }
+  return undefined;
+}
+```
+
+### 3. Discovery Integration — Post-Discovery Enrichment Phase
+
+**NOT** integrated into the existing scan. Separate phase after `discoverAll()` returns.
+
+```
+discoverAll()          → flat DiscoveredItem[] (unchanged)
+  ↓
+enrichWithWorktrees()  → same array, with worktree children appended + branch/parentId populated
+  ↓
+setDiscoveredItems()   → tree provider renders parent-child
+```
+
+New function in `unified-discovery.ts`:
+
+```typescript
+/**
+ * Post-process discovered items: for each squad/agent in a git repo,
+ * find its worktrees and add them as child items.
+ * Items already in the workspace (discovered independently) get their
+ * branch populated but are NOT duplicated as children.
+ */
+export async function enrichWithWorktrees(
+  items: DiscoveredItem[],
+): Promise<DiscoveredItem[]>;
+```
+
+**Why post-discovery?**
+1. `discoverAll()` is synchronous today. Worktree detection requires `execFile` (async). Changing `discoverAll()` to async would cascade through the entire activation path. Post-enrichment isolates the async boundary.
+2. Separation of concerns: filesystem scanning vs. git metadata are different operations.
+3. Testability: `enrichWithWorktrees()` can be tested independently with mocked `discoverWorktrees()`.
+
+**Dedup logic:** If a worktree path is *already* a workspace folder (and thus already discovered), don't create a duplicate — just populate its `branch` and `parentId` on the existing item. Only create new `DiscoveredItem` entries for worktrees outside the workspace.
+
+**Performance:** `git worktree list --porcelain` runs once per unique git repo root (not per item). Multiple squads in the same repo share one call. Cache results by repo root within a single enrichment pass.
+
+### 4. Tree Integration — Parent-Child Rendering
+
+Changes to `EditlessTreeProvider`:
+
+**`getRootItems()`**: Filter out items where `parentId` is set. These are children, not roots.
+
+```typescript
+// In getRootItems():
+const roots = this._discoveredItems.filter(i => !i.parentId && !this.agentSettings.isHidden(i.id));
+```
+
+**`getChildren(element)`**: When expanding a squad/agent that has worktree children, return them.
+
+```typescript
+// New case in getChildren():
+if ((element.type === 'squad' || element.type === 'squad-hidden') && element.squadId) {
+  const worktreeChildren = this._discoveredItems
+    .filter(i => i.parentId === element.squadId);
+  // ... existing squad children (terminals, roster) ...
+  // Append worktree items as a "Worktrees" category
+}
+```
+
+**Display:** Worktree children show as:
+```
+🔷 EditLess Squad          main · 2 sessions
+  ├── 🌿 release/v0.1.x    1 session
+  ├── 🌿 squad/442-feature  no sessions
+  ├── Session 1
+  ├── Session 2
+  └── Roster (5)
+```
+
+New tree item type: `'worktree'` added to `TreeItemType`. Icon: `git-branch` theme icon (🌿 in emoji fallback). Description shows branch name + session count.
+
+### 5. File Watching — `.git/worktrees/` Directory
+
+Git stores worktree metadata in `.git/worktrees/`. A new worktree created via `git worktree add` creates a subdirectory there. Watching this directory detects worktree creation/deletion.
+
+```typescript
+// In extension.ts, after squad watcher setup:
+for (const folder of (vscode.workspace.workspaceFolders ?? [])) {
+  const gitWorktreesDir = path.join(folder.uri.fsPath, '.git', 'worktrees');
+  if (fs.existsSync(gitWorktreesDir)) {
+    const pattern = new vscode.RelativePattern(
+      vscode.Uri.file(gitWorktreesDir), '*'
+    );
+    const wtWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+    wtWatcher.onDidCreate(() => debouncedRefreshDiscovery());
+    wtWatcher.onDidDelete(() => debouncedRefreshDiscovery());
+    context.subscriptions.push(wtWatcher);
+  }
+}
+```
+
+**Edge case:** The workspace folder might itself be a worktree (not the main checkout). In that case, `.git` is a file (not a directory) pointing to the main repo's `.git/worktrees/{name}`. Need to resolve the main `.git` directory first:
+
+```typescript
+function resolveGitDir(dirPath: string): string | null {
+  const dotGit = path.join(dirPath, '.git');
+  if (!fs.existsSync(dotGit)) return null;
+  const stat = fs.statSync(dotGit);
+  if (stat.isDirectory()) return dotGit;
+  // .git is a file → read gitdir pointer
+  const content = fs.readFileSync(dotGit, 'utf-8').trim();
+  const match = content.match(/^gitdir:\s*(.+)$/);
+  if (match) {
+    const resolved = path.resolve(dirPath, match[1]);
+    // Go up from .git/worktrees/{name} to .git/
+    return path.resolve(resolved, '..', '..');
+  }
+  return null;
+}
+```
+
+### 6. File Change Map
+
+| File | Change | Size |
+|------|--------|------|
+| `src/worktree-discovery.ts` | **NEW** — `discoverWorktrees()`, `isGitRepo()`, `resolveGitDir()`, porcelain parser | ~120 LOC |
+| `src/unified-discovery.ts` | Add `enrichWithWorktrees()`, extend `DiscoveredItem` with `branch`/`parentId`/`isMainWorktree` | ~60 LOC |
+| `src/editless-tree.ts` | Filter roots by `!parentId`, add worktree children rendering, new `'worktree'` TreeItemType | ~40 LOC |
+| `src/agent-settings.ts` | Parent fallback in `get()` for `:wt:` IDs | ~8 LOC |
+| `src/extension.ts` | Call `enrichWithWorktrees()` after `discoverAll()`, add `.git/worktrees/` watcher | ~25 LOC |
+| `src/types.ts` | No changes (worktree fields live on `DiscoveredItem`, not `AgentTeamConfig`) | 0 |
+| Tests | `worktree-discovery.test.ts` (new), updates to `unified-discovery.test.ts`, `editless-tree.test.ts`, `agent-settings.test.ts` | ~200 LOC |
+
+**Total:** ~250 LOC production, ~200 LOC tests. Small, focused.
+
+### 7. Scope and Issue Recommendations
+
+**New issue. Do not expand #422.**
+
+\#422 is about "clone to worktree" — an *action* that creates a worktree from the EditLess UI. This proposal is about *discovery* — detecting existing worktrees automatically. They're related but orthogonal:
+- Discovery works without #422 (user creates worktrees via CLI or the git-worktree skill)
+- \#422 works without discovery (action creates worktree, user manually adds to workspace)
+- Combined: #422 creates worktree → discovery picks it up automatically
+
+**Recommended issue structure:**
+1. **New issue: "Auto-discover git worktrees for agents/squads"** — this architecture. Core discovery + tree rendering.
+2. **#422 stays as-is** — "Clone to worktree" action. Can reference the new issue as "see also."
+3. **#348 (branch names in terminal labels)** — complementary but independent. Branch info from worktree discovery could *feed* #348, but #348 solves a different problem (showing branch in terminal title). No blocking dependency.
+
+### 8. Dependency Analysis — v0.2 Execution Order
+
+**Does NOT change the v0.2 execution order.**
+
+- **#394 (scanner refactor):** Worktree discovery doesn't touch `scanner.ts`. Independent.
+- **#395 (terminal manager refactor):** Worktree discovery doesn't change terminal management. Independent.
+- **#399 (auto-discover refactor):** Already merged. This proposal builds on the post-#399 architecture (`discoverAll()`, `DiscoveredItem`, `AgentSettingsManager`). Correct dependency direction.
+
+**Recommended sequencing:**
+1. #394, #395 land first (as planned) — they clean up the codebase
+2. Worktree discovery lands after — it's a new feature, not a refactor
+3. #422 (clone to worktree) can land before or after — no dependency
+
+**Why after Phase 1 refactors?** Not a hard dependency, but landing this on a clean codebase reduces merge conflicts. The tree provider changes in this proposal touch `getRootItems()` and `getChildren()` — same areas #394/#395 may refactor.
+
+## Risks and Mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| `git worktree list` not available (git < 2.5) | `discoverWorktrees()` returns `[]` on error. Graceful degradation. |
+| Worktree path is on a network drive (slow) | Timeout on `execFile` (5s). Cache results. Skip if previous call timed out. |
+| Repo has 50+ worktrees (unlikely but possible) | Cap at 20 worktree children in tree view. Show "N more…" item. |
+| `enrichWithWorktrees()` makes activation async | It already is — `extension.ts` activation uses `setTimeout` for deferred work. Run enrichment in the deferred phase. |
+
+## Two-Sentence Summary
+
+Worktree discovery is a post-discovery enrichment phase: `discoverAll()` (unchanged, sync) → `enrichWithWorktrees()` (new, async) → tree provider groups parents with worktree children. New module `worktree-discovery.ts` (~120 LOC) owns git interaction; existing files get ~100 LOC of surgical changes to support `parentId`/`branch` fields and parent-child rendering.
+
+## Open Questions
+
+1. Should worktree children be auto-expanded or collapsed by default?
+2. Should we show worktrees for standalone agents (not just squads)?
+3. If a worktree has different agents than the parent (e.g., squad member was added on a branch), how do we reconcile?
+
+
+---
+
+# v0.1.3 Release Docs — Workflow-First Documentation
+
+**Date:** 2026-03-01  
+**Author:** Summer  
+**Status:** Completed
+
+## Context
+
+Casey requested v0.1.3 release docs prep with focus on "prepare to share more broadly." This is the first release where EditLess will be shared beyond the internal dogfooding audience — new users will discover it for the first time.
+
+## Decision
+
+Restructured documentation to be **workflow-first, not feature-first**. 
+
+### README.md Features Section
+
+**Before:** Technical feature list
+- "Agent tree view" — what it has
+- "Terminal integration" — what it does
+- "Auto-detection" — how it works
+
+**After:** Workflow story
+- "Launch sessions from work" — what YOU do
+- "Sessions grouped by agent" — what YOU see
+- "Rename sessions" — what YOU control
+- "Resume sessions" — what YOU can do next
+- "Attention state" — what YOU know
+
+**Why:** New users don't care what the extension "has" — they care what they can DO with it. The workflow story answers "How do I work with this?" instead of "What features does it have?"
+
+### CHANGELOG.md v0.1.3
+
+Added narrative intro paragraph with personality:
+> "The auto-discovery release. We've eliminated the agent registry entirely — no more manual registration, no more stale configs. Just drop your agent files in your workspace and they appear, ready to work."
+
+**Why:** Matches the tone of 0.1.1 and 0.1.2. The changelog tells a story about the release, not just a bulleted list. Each release has a theme and personality — 0.1.0 was "it works," 0.1.1 was "it works when you use it all day," 0.1.3 is "it works without making you think about it."
+
+### SETTINGS.md — Agent Registry → Agent Settings
+
+Replaced 100+ lines of `agent-registry.json` schema documentation (obsolete as of #427) with:
+- **Agent Settings** section explaining auto-discovery
+- How agent-settings.json works (user preferences)
+- Migration notes from v0.1.2
+
+**Why:** The registry is gone. Documenting a file that no longer exists is confusing. New users need to know how auto-discovery works, not how to hand-edit a JSON file.
+
+## Impact
+
+Documentation now tells a **user story** instead of a feature spec. First-time users will understand:
+1. What they can accomplish (README features)
+2. What changed and why (CHANGELOG narrative)
+3. How to configure what they need (SETTINGS auto-discovery model)
+
+## Key Learnings
+
+- **Docs are product.** The README is the first impression — it needs to tell a story, not just list features.
+- **Write for the person who's never seen this before.** Casey's audience (Microsoft engineers) are smart, but they're also busy. Make it scannable and actionable.
+- **Migration notes matter.** Breaking changes need clear migration paths. "Auto-migrated on first activation, old file left for cleanup" gives users confidence.
+- **Personality in changelogs.** The narrative intro paragraph makes the changelog readable and memorable. It's not just a compliance doc — it's part of the product voice.
+
+
+---
+
+### 2026-03-01: Worktree Agent Hierarchy in the EditLess Tree View
+
+**Date:** 2026-03-01  
+**Author:** Summer (Product Designer)  
+**Status:** Proposed  
+**Issue Context:** Worktree discovery & hierarchy UX for EditLess sidebar
+
+---
+
+## Problem
+
+Casey uses git worktrees as his primary development pattern. When a repo contains a `.squad/` directory (or agents), each worktree is a full copy of that agent/squad — with its own sessions, its own state, and potentially its own configuration overrides. Today, EditLess shows agents in a flat list discovered from workspace folders. If Casey has worktrees open as workspace folders, they'd appear as separate, disconnected squads with the same name — confusing and noisy.
+
+**Core user need:** "I want to see all my worktree copies of a squad grouped together, know which branch each one is on, and launch sessions against the right one — without thinking about it."
+
+---
+
+## Recommendation: Nested Under Parent (Option A)
+
+After evaluating all options, **nested hierarchy** is the right call. Here's why:
+
+1. **Mental model match.** Casey already thinks of worktrees as "copies of the same repo on different branches." Nesting mirrors that mental model — one squad, multiple workspaces.
+2. **Noise reduction.** Flat-with-annotation would triple the top-level items for a repo with 2 worktrees. The sidebar gets cluttered fast.
+3. **Consistent with VS Code patterns.** Source Control already nests repositories. Explorer nests folders. EditLess should follow the platform's information architecture.
+4. **Supports the settings inheritance decision.** The existing directive (worktree settings inherit from parent) implies a parent→child relationship. The tree should reflect that.
+
+---
+
+## Tree Design
+
+### Primary Scenario: Main checkout + 2 worktrees, all in workspace
+
+```
+🤖 Copilot CLI                          Generic Copilot agent
+🔷 EditLess (main)                      squad · 2 worktrees
+  ├─ 🌿 feat/auth                       worktree · 1 session
+  │    └─ 🟢 Session 1                  3m ago
+  ├─ 🌿 fix/crash                       worktree
+  │    └─ 💤 No active sessions         Click + to launch
+  ├─ 🚀 Session 2                       5m ago
+  ├─ 🕐 Session 3 (resumable)           previous session — resume
+  └─ 👥 Roster (6)
+```
+
+**Key design choices:**
+
+| Element | Treatment | Rationale |
+|---------|-----------|-----------|
+| Parent squad | `🔷 Name (branch)` | Same as today, branch in parens |
+| Worktree nodes | `🌿 branch-name` | Leaf icon = branch. Distinct from `🔷` squad or `🚀` session |
+| Worktree description | `worktree · N sessions` | Mirrors squad description pattern |
+| Session under worktree | Same `🚀`/`🟢`/`💤` icons | Reuse existing session state icons |
+| Roster | Only on parent | Roster is the same across worktrees (same `.squad/team.md`) |
+| Orphaned sessions | Under their respective worktree or parent | Sessions are CWD-scoped, so they naturally belong where they ran |
+
+### Icon Legend
+
+| Icon | ThemeIcon | Meaning |
+|------|-----------|---------|
+| 🌿 | `$(git-branch)` | Worktree (branch checkout) |
+| 🔷 | `$(organization)` | Squad (parent, existing) |
+| 🤖 | `$(hubot)` | Standalone agent (existing) |
+| 🚀 | `$(loading~spin)` | Active session (existing) |
+| 💤 | `$(circle-outline)` | Inactive session (existing) |
+| 🕐 | `$(history)` | Resumable orphan (existing) |
+
+The `$(git-branch)` ThemeIcon is already in VS Code's icon set and instantly communicates "this is a branch." No custom assets needed.
+
+---
+
+## Naming & Labeling Conventions
+
+### Tree item labels
+
+| Scenario | Label | Description |
+|----------|-------|-------------|
+| Parent (main checkout) | `🔷 EditLess (main)` | Name + branch in parens |
+| Parent (no worktrees) | `🔷 EditLess` | No branch annotation needed (same as today) |
+| Worktree node | `🌿 feat/auth` | Branch name only — squad name is redundant (it's nested) |
+| Worktree (detached HEAD) | `🌿 abc1234` | Short SHA when no branch |
+
+### Description text (grey, right-aligned)
+
+| Item | Description |
+|------|-------------|
+| Parent with worktrees | `squad · 2 worktrees` |
+| Parent without worktrees | `squad` (same as today) |
+| Worktree with sessions | `worktree · 1 session` |
+| Worktree without sessions | `worktree` |
+| Standalone agent with worktrees | `2 worktrees` |
+
+### Tooltip (on hover)
+
+Parent tooltip adds a "Worktrees" section:
+
+```markdown
+**🔷 EditLess**
+Path: `C:\Users\cirvine\code\work\editless`
+Universe: rick-and-morty
+Branch: main
+
+**Worktrees:**
+- feat/auth → `C:\Users\cirvine\code\work\editless-feat-auth`
+- fix/crash → `C:\Users\cirvine\code\work\editless-fix-crash`
+```
+
+Worktree tooltip:
+
+```markdown
+**🌿 feat/auth**
+Path: `C:\Users\cirvine\code\work\editless-feat-auth`
+Parent: EditLess (main)
+Branch: feat/auth
+```
+
+---
+
+## Interaction Design
+
+### Click behavior
+
+| Target | Action |
+|--------|--------|
+| Parent squad | Expand/collapse (same as today) |
+| Worktree node | Expand/collapse to show sessions |
+| Session under worktree | Focus terminal (same as today) |
+
+### Context menu (right-click)
+
+**On worktree node (`🌿 feat/auth`):**
+
+| Action | Command | Group |
+|--------|---------|-------|
+| ▶️ Launch Session | `editless.launchSession` | `inline@0` |
+| Resume Session… | `editless.resumeSession` | `session@1` |
+| Open Folder in Workspace | `editless.openWorktreeFolder` | `worktree@1` |
+| Copy Path | `editless.copyWorktreePath` | `worktree@2` |
+| Remove from Tree | `editless.hideWorktree` | `worktree@3` |
+
+**Not on worktree node:** Rename, Change Model, Squad Settings — these are parent-level actions (settings inheritance means you configure the parent). If a user needs per-worktree overrides, they use the parent's "Go to Squad Settings" and add worktree-specific overrides there.
+
+**On parent squad with worktrees — additions to existing menu:**
+
+| Action | Command | Group |
+|--------|---------|-------|
+| Discover Worktrees | `editless.discoverWorktrees` | `squad@6` |
+
+This is a manual refresh for worktree discovery — useful if the user creates a new worktree while EditLess is running.
+
+### Expand/collapse defaults
+
+| Item | Default State | Rationale |
+|------|--------------|-----------|
+| Parent squad | **Expanded** | Same as today when it has sessions |
+| Worktree with active sessions | **Expanded** | Active work should be visible |
+| Worktree with no sessions | **Collapsed** | Don't waste vertical space on empty worktrees |
+| Worktree with only orphaned sessions | **Collapsed** | Not urgent; expand when needed |
+| Roster | **Collapsed** | Same as today |
+
+---
+
+## Discovery Logic
+
+### How worktrees are found
+
+1. **On discovery refresh** (startup + manual refresh + file watcher): For each discovered squad, run `git worktree list --porcelain` from the squad's path.
+2. **Parse output** to get each worktree's path and branch.
+3. **Filter:** Only include worktrees whose path either:
+   - Is in the current VS Code workspace, OR
+   - Exists on disk (for repos where the user may not have added all worktrees to workspace)
+4. **Match to parent:** Worktrees share the same git repository (same `.git` or `.git` file pointing to shared objects). Use the common git dir to link worktree → parent.
+
+### Discovery setting
+
+```jsonc
+// settings.json
+{
+  // Whether to auto-discover worktrees for squad repos
+  "editless.discovery.worktrees": true,  // default: true
+
+  // Whether to show worktrees that aren't in the current workspace
+  "editless.discovery.worktreesOutsideWorkspace": false  // default: false
+}
+```
+
+When `worktreesOutsideWorkspace` is `true`, EditLess shows all worktrees on disk (useful for Casey's workflow where he may not add every worktree to the workspace). When `false`, only workspace-folder worktrees appear.
+
+---
+
+## Edge Cases
+
+### 1. Main checkout absent, worktree present
+
+**Scenario:** User has `~/code/editless-feat-auth` (worktree) in their workspace but NOT `~/code/editless` (main checkout).
+
+**Design:** The worktree promotes itself to a top-level item, but shows the parent relationship:
+
+```
+🔷 EditLess (feat/auth)                 squad · worktree of main
+  ├─ 🚀 Session 1                       3m ago
+  └─ 👥 Roster (6)
+```
+
+- Label uses the squad name (not the branch name) because it's at the top level now.
+- Description says `worktree of main` so the user knows this isn't the primary checkout.
+- Tooltip includes the main checkout path even though it's not in the workspace.
+- If the main checkout is later added to the workspace, the worktree re-nests under it automatically.
+
+### 2. Multiple worktrees, only some in workspace
+
+```
+🔷 EditLess (main)                      squad · 1 worktree
+  ├─ 🌿 feat/auth                       worktree · 1 session
+  │    └─ 🚀 Session 1                  3m ago
+  ├─ 🚀 Session 2                       5m ago
+  └─ 👥 Roster (6)
+```
+
+Only the `feat/auth` worktree is in the workspace, so only it appears. `fix/crash` exists on disk but isn't shown (unless `worktreesOutsideWorkspace` is enabled, in which case it shows dimmed):
+
+```
+🔷 EditLess (main)                      squad · 2 worktrees
+  ├─ 🌿 feat/auth                       worktree · 1 session
+  │    └─ 🚀 Session 1                  3m ago
+  ├─ 🌿 fix/crash                       worktree (not in workspace)
+  ├─ 🚀 Session 2                       5m ago
+  └─ 👥 Roster (6)
+```
+
+The "not in workspace" worktree uses `disabledForeground` color and its context menu offers "Open Folder in Workspace" as the primary action.
+
+### 3. Personal agents AND squad agents in worktrees
+
+Standalone agents (`.agent.md` files) and squads (`.squad/` directories) are discovered independently. If a worktree contains both:
+
+```
+🔷 My Squad (main)                      squad · 1 worktree
+  ├─ 🌿 feat/auth                       worktree
+  └─ 👥 Roster (6)
+🤖 code-reviewer                        workspace
+```
+
+The standalone agent (`code-reviewer.agent.md`) is NOT nested under the squad — it lives at the top level as it does today. Only squad/agent items that share the **same git repository** and the **same `.squad/` directory** are grouped.
+
+### 4. Worktree and main on the same branch (bare repo pattern)
+
+If the main checkout is a bare repo (no working tree) and all work happens in worktrees:
+
+```
+🔷 EditLess                             squad · 3 worktrees
+  ├─ 🌿 main                            worktree · 2 sessions
+  │    ├─ 🚀 Session 1                  3m ago
+  │    └─ 🚀 Session 2                  10m ago
+  ├─ 🌿 feat/auth                       worktree
+  └─ 🌿 fix/crash                       worktree · 1 session
+       └─ 🚀 Session 3                  1m ago
+```
+
+The bare repo root has no branch label (no `(main)` suffix). All branches are worktrees.
+
+### 5. Worktree removed from disk
+
+If a previously-discovered worktree no longer exists:
+- Remove it from the tree silently on next refresh.
+- If it had orphaned sessions, those sessions move to the parent squad's orphaned sessions list.
+
+### 6. Same squad discovered from both main and worktree workspace folders
+
+Dedup by git repository identity (shared `.git` objects directory). The first-discovered path (typically the main checkout) becomes the parent. The worktree is nested under it. The `discoverAll()` function already deduplicates by ID — we extend this to detect worktree relationships before dedup.
+
+---
+
+## Data Model Changes
+
+### New tree item type
+
+Add `'worktree'` to `TreeItemType`:
+
+```typescript
+export type TreeItemType = 'squad' | 'squad-hidden' | 'category' | 'agent' 
+  | 'terminal' | 'orphanedSession' | 'default-agent' | 'worktree';
+```
+
+### New fields on DiscoveredItem
+
+```typescript
+export interface DiscoveredItem {
+  // ... existing fields ...
+
+  /** If this item is a worktree, the branch name */
+  worktreeBranch?: string;
+  /** If this item is a worktree, the parent item's ID */
+  worktreeParentId?: string;
+  /** If this item has worktrees, their IDs */
+  worktreeChildIds?: string[];
+}
+```
+
+### Context value for menus
+
+Worktree nodes get `contextValue = 'worktree'` so package.json `when` clauses can target them:
+
+```json
+{
+  "command": "editless.launchSession",
+  "when": "view == editlessTree && viewItem == worktree",
+  "group": "inline@0"
+}
+```
+
+---
+
+## Implementation Priority
+
+This is a UX proposal — implementation is Morty's domain. Suggested phasing:
+
+1. **Phase 1 — Discovery:** `git worktree list --porcelain` integration in `unified-discovery.ts`. Detect worktree relationships. Enrich `DiscoveredItem` with worktree metadata.
+2. **Phase 2 — Tree rendering:** New `getWorktreeChildren()` in `editless-tree.ts`. `$(git-branch)` icon. Collapse behavior.
+3. **Phase 3 — Context menus:** `package.json` contributions for worktree actions. "Open Folder in Workspace" command.
+4. **Phase 4 — Settings:** `worktrees` and `worktreesOutsideWorkspace` discovery settings. Settings inheritance (already decided, see `copilot-directive-worktree-settings-inheritance.md`).
+
+---
+
+## Two-Sentence Summary
+
+Worktree copies of a squad nest under their parent with a `$(git-branch)` icon and branch name, keeping the sidebar clean while making every worktree launchable. When the main checkout is absent, the worktree promotes itself to top level with a "worktree of {branch}" annotation so the user always knows what they're looking at.
+

@@ -2,11 +2,50 @@
 
 ## [0.1.3] - Unreleased
 
+The auto-discovery release. We've eliminated the agent registry entirely — no more manual registration, no more stale configs. Just drop your agent files in your workspace and they appear, ready to work. This release also brings session resume, attention state for sessions that need input, and smarter session management across the board. If 0.1.1 was "it works when you actually use it all day," 0.1.3 is "it works without making you think about it."
+
 ### Added
-- **Custom CLI command** — new `editless.cli.command` setting to override the default `copilot` binary with a custom command or wrapper script (#434)
-- Per-agent `command` override in agent settings — each agent can use a different CLI command
-- Multi-word commands supported (e.g. `my-wrapper copilot`) — not shell-quoted, spaces are intentional tokens
-- Precedence: per-agent command → global `editless.cli.command` → `"copilot"` (default)
+- **Auto-discover agents** (#427) — Agents are now discovered automatically from disk (personal `~/.copilot/agents/` + workspace `.squad/.ai-team/` directories). No registration step needed — just put agent files in your workspace and they appear. Agent preferences (hidden, model, additionalArgs) stored in `agent-settings.json` in globalStorageUri. Old registries are auto-migrated on first activation.
+- **Resume Session command** (#426) — Resume any Copilot CLI session from a searchable QuickPick. Shows all sessions from `~/.copilot/session-state/`, searchable by summary, branch, and GUID. CWD-matched sessions sorted to top. "Paste GUID directly" fallback for power users. Available from agent context menu + command palette.
+- **Attention state for sessions** (#414) — Sessions show a bell icon and "needs input" description when Copilot CLI is waiting for user input (ask_user events). Detects parallel tool calls, handles turn boundaries, uses official Copilot SDK event types.
+- **Collapsible Hidden group** (#427) — Hidden agents now appear under a collapsible "Hidden (N)" group at the bottom of the tree instead of inline with dimmed styling.
+- **Custom CLI command** (#435) — new `editless.cli.command` setting to override the default `copilot` binary with a custom command or wrapper script. Per-agent `command` override in agent settings. Multi-word commands supported (e.g. `my-wrapper copilot`). Precedence: per-agent command → global `editless.cli.command` → `"copilot"` (default).
+- **Terminal icon for launch buttons** (#437) — PR and work item launch buttons now use the terminal icon for visual consistency.
+- **Copilot SDK event types** (#414) — Official event type definitions from copilot-sdk, replacing magic strings.
+- **Agent picker includes Copilot CLI** (#420) — Built-in Copilot CLI always available in agent picker for work item/PR launches.
+- **Discovery fallback for .squad/ without team.md** (#427) — Workspace folders with `.squad/` or `.ai-team/` directories discovered even when team.md is absent.
+
+### Changed
+- **⚠️ BREAKING: Agent registry eliminated** (#427) — `agent-registry.json` replaced by auto-discovery + `agent-settings.json`. Old registries are auto-migrated on first activation (the old file is left in place for manual cleanup). See Migration section below.
+- Agent picker always shows built-in Copilot CLI option (#420)
+- Hidden agents grouped under collapsible section instead of dimmed inline (#427)
+- Extension.ts decomposed from ~1300 lines to ~230 lines — commands extracted to `src/commands/` modules (#427)
+
+### Fixed
+- Roster agents no longer show launch button (#419)
+- Re-init ADO integration when org/project settings change (#424)
+- Re-detect unknown universe on registry load (#413)
+- Personal agent CWD defaults to workspace root (#412)
+- Auto-create registry for resilience (#410)
+- Deduplicate --model/--agent flags in CLI builder (#411)
+- FileSystemWatcher Windows bug — backslashes in glob patterns misinterpreted as glob escapes, now uses RelativePattern with Uri.file() (#427)
+- Agent picker shows Copilot CLI in work item/PR launches (#420)
+- Parse "Casting Universe:" variant in team.md (#427)
+- Terminal state persisted before workspace folder changes to survive extension host restarts (#427)
+
+### Removed
+- `agent-registry.json` and EditlessRegistry — replaced by auto-discovery
+- `AgentVisibilityManager` — replaced by AgentSettingsManager
+- `editless.registryPath` setting
+- "Add to Registry" / "Promote Discovered Agent" commands
+- "Show Hidden Agents" toolbar button (replaced by collapsible group)
+
+### Migration from v0.1.2
+**Agent registry → auto-discovery:**
+- Your existing `agent-registry.json` is auto-migrated to `agent-settings.json` on first activation
+- The old registry file is left in place for manual cleanup — you can delete it after confirming the migration worked
+- Hidden agents, model overrides, and additionalArgs are all preserved
+- No action required — just update and restart VS Code
 
 ## [0.1.2] - 2026-02-24
 

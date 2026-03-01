@@ -4,13 +4,12 @@ All EditLess settings are accessible through VS Code's Settings UI (**Ctrl+,**) 
 
 ---
 
-## Registry & Discovery
+## Discovery
 
-Settings for discovering and registering agent teams and standalone agents.
+Settings for discovering agent teams and standalone agents.
 
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
-| `editless.registryPath` | `string` | `"./agent-registry.json"` | resource | Path to the agent registry JSON file (relative to workspace root). The registry tracks which agent teams are available and their configuration. |
 | `editless.discoveryDir` | `string` | `""` | resource | **(Deprecated)** Use `discovery.scanPaths` instead. Directory to scan for squad projects on startup. |
 | `editless.discovery.scanPaths` | `array` | `[]` | window | Additional directories to scan for agents and squads on startup and when configuration changes. Accepts absolute paths or paths relative to workspace root. |
 | `editless.scanDebounceMs` | `number` | `500` | resource | Debounce interval in milliseconds for file-system scanning. Increase this value if you experience excessive refreshes in large workspaces with many file changes. |
@@ -19,7 +18,6 @@ Settings for discovering and registering agent teams and standalone agents.
 
 ```jsonc
 {
-  "editless.registryPath": "./agent-registry.json",
   "editless.discovery.scanPaths": [
     "./squads",
     "C:\\teams\\shared-agents"
@@ -36,12 +34,14 @@ Settings for configuring how EditLess launches Copilot CLI sessions.
 
 | Setting | Type | Default | Scope | Description |
 |---------|------|---------|-------|-------------|
+| `editless.cli.command` | `string` | `"copilot"` | window | Override the default `copilot` binary with a custom command or wrapper script. Supports multi-word commands (e.g., `"my-wrapper copilot"`). Can be overridden per-agent in agent settings. |
 | `editless.cli.additionalArgs` | `string` | `""` | window | Additional command-line arguments appended to the Copilot CLI when launching sessions. Use this to pass flags like `--yolo` to every session. |
 
 **Example:**
 
 ```jsonc
 {
+  "editless.cli.command": "copilot",
   "editless.cli.additionalArgs": "--yolo"
 }
 ```
@@ -142,12 +142,12 @@ Settings for controlling desktop toasts and notifications.
 
 ```jsonc
 {
-  // Registry
-  "editless.registryPath": "./agent-registry.json",
+  // Discovery
   "editless.discovery.scanPaths": ["./squads"],
   "editless.scanDebounceMs": 500,
 
   // CLI
+  "editless.cli.command": "copilot",
   "editless.cli.additionalArgs": "",
 
   // GitHub
@@ -172,111 +172,58 @@ Settings for controlling desktop toasts and notifications.
 
 ---
 
-## Agent Registry Configuration
+## Agent Settings
 
-The **agent registry** (`agent-registry.json`) is the per-user manifest that tracks registered agent teams and standalone agents. It's stored at the path configured in `editless.registryPath` (default: `./agent-registry.json` relative to workspace root).
+As of v0.1.3, agents are **auto-discovered** from your workspace and personal directories. EditLess scans:
+- Personal agents: `~/.copilot/agents/`
+- Workspace agents: `.squad/` or `.ai-team/` directories in your workspace folders
 
-### Registry File Format
+No registration file needed — just drop agent files in these locations and they appear in the sidebar.
 
-```jsonc
-{
-  "version": "1.0",
-  "squads": [
-    {
-      "id": "my-squad",
-      "name": "My Squad",
-      "path": "/absolute/path/to/squad",
-      "icon": "🚀",
-      "universe": "my-org",
-      "description": "My custom squad",
-      "model": "gpt-4",
-      "additionalArgs": "--yolo"
-    }
-  ]
-}
-```
+### Agent Settings File
 
-### Agent Registry Schema
+User preferences for discovered agents are stored in **`agent-settings.json`** in VS Code's global storage directory. This file is managed automatically — you don't need to edit it manually. Settings include:
 
-Each entry in `squads` is an **AgentTeamConfig** object with the following fields:
+| Setting | Type | Description |
+|---------|------|-------------|
+| `hidden` | `boolean` | Whether the agent is hidden from the tree view. Set via "Hide Agent" context menu. |
+| `model` | `string` | Override the Copilot CLI `--model` flag for this agent (e.g., `"gpt-4"`). |
+| `additionalArgs` | `string` | Extra CLI flags for this agent (e.g., `"--yolo"`). Merged with global `editless.cli.additionalArgs`. |
+| `command` | `string` | Override `editless.cli.command` for this agent (e.g., `"my-wrapper copilot"`). |
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `id` | string | ✓ | Kebab-case unique identifier (e.g., `"my-squad"`). Used in CLI `--agent` flag. |
-| `name` | string | ✓ | Display name shown in UI (e.g., `"My Squad"`). |
-| `path` | string | ✓ | Absolute path to squad root directory. Used as working directory when launching. |
-| `icon` | string | ✓ | Emoji icon displayed in panes (e.g., `"🚀"`). |
-| `universe` | string | ✓ | Casting universe name. Either `"standalone"` for single agents or a squad name like `"my-org"`. |
-| `description` | string | — | Optional squad description shown in UI hover text. |
-| `terminalProfileName` | string | — | Optional Windows Terminal profile name for session matching. |
-| `terminalProfileGuid` | string | — | Optional Windows Terminal profile GUID. |
-| `model` | string | — | Optional. Sets `--model` flag for Copilot CLI. Overrides any global `editless.cli.additionalArgs` model setting. |
-| `additionalArgs` | string | — | Optional extra CLI flags for this agent (e.g., `"--yolo"`). Merged with global `editless.cli.additionalArgs` (not replaced). |
-
-### Example Configurations
-
-**Registering a squad:**
+**Example `agent-settings.json`:**
 
 ```jsonc
 {
-  "version": "1.0",
-  "squads": [
-    {
-      "id": "platform",
-      "name": "Platform Squad",
-      "path": "/home/user/projects/platform",
-      "icon": "🏗️",
-      "universe": "acme-corp",
-      "description": "Infrastructure and deployment specialists",
-      "terminalProfileName": "PowerShell Admin"
-    }
-  ]
+  "my-squad": {
+    "hidden": false,
+    "model": "gpt-4",
+    "additionalArgs": "--yolo"
+  },
+  "code-reviewer": {
+    "hidden": false,
+    "command": "custom-copilot",
+    "additionalArgs": "--no-cache"
+  }
 }
 ```
 
-**Registering multiple squads with per-agent models:**
+### How Auto-Discovery Works
 
-```jsonc
-{
-  "version": "1.0",
-  "squads": [
-    {
-      "id": "frontend",
-      "name": "Frontend Team",
-      "path": "/home/user/work/frontend",
-      "icon": "⚛️",
-      "universe": "mycompany",
-      "model": "gpt-4"
-    },
-    {
-      "id": "backend",
-      "name": "Backend Team",
-      "path": "/home/user/work/backend",
-      "icon": "🐍",
-      "universe": "mycompany",
-      "model": "claude-opus-4"
-    }
-  ]
-}
-```
+1. **Workspace scan** — EditLess watches your workspace folders for `.squad/` or `.ai-team/` directories. Any folder containing a `team.md` file is treated as a squad.
+2. **Personal agent scan** — EditLess scans `~/.copilot/agents/` for `.agent.md` files.
+3. **Additional scan paths** — You can configure `editless.discovery.scanPaths` to add extra directories.
+4. **Automatic updates** — When you add, remove, or modify agent files, the tree view updates automatically (debounced by `editless.scanDebounceMs`).
 
-**Standalone agent with custom flags:**
+### Managing Agent Settings
 
-```jsonc
-{
-  "version": "1.0",
-  "squads": [
-    {
-      "id": "code-reviewer",
-      "name": "Code Reviewer",
-      "path": "/usr/local/agents/code-review",
-      "icon": "👀",
-      "universe": "standalone",
-      "additionalArgs": "--yolo --no-cache"
-    }
-  ]
-}
-```
+- **Hide/show agents** — Right-click an agent → "Hide Agent". Hidden agents appear under a collapsible "Hidden (N)" group.
+- **Per-agent model** — Right-click an agent → "Set Model" (planned feature).
+- **Per-agent CLI flags** — Edit `agent-settings.json` in VS Code settings storage (or wait for UI support in future releases).
+
+### Migration from agent-registry.json
+
+If you're upgrading from v0.1.2 or earlier, your existing `agent-registry.json` is automatically migrated to `agent-settings.json` on first activation. The old registry file is left in place for manual cleanup — you can delete it after confirming the migration worked.
 
 ---
 
@@ -286,29 +233,21 @@ When launching an agent, EditLess builds a command line by combining global CLI 
 
 ### Model Override
 
-The `model` field in an agent's registry entry sets the Copilot CLI `--model` flag **for that agent only**, overriding any global settings:
+The `model` field in `agent-settings.json` sets the Copilot CLI `--model` flag **for that agent only**, overriding any global settings:
 
 ```jsonc
+// VS Code settings.json
 {
-  "editless.cli.additionalArgs": "--yolo",
-  "editless.registryPath": "./agent-registry.json"
+  "editless.cli.additionalArgs": "--yolo"
 }
 ```
 
 ```jsonc
-// agent-registry.json
+// agent-settings.json (in global storage)
 {
-  "version": "1.0",
-  "squads": [
-    {
-      "id": "my-squad",
-      "name": "My Squad",
-      "path": "/squad/path",
-      "icon": "🚀",
-      "universe": "myorg",
-      "model": "gpt-4"  // This squad always uses gpt-4
-    }
-  ]
+  "my-squad": {
+    "model": "gpt-4"  // This agent always uses gpt-4
+  }
 }
 ```
 
@@ -316,33 +255,26 @@ When this agent launches, the CLI receives: `--model gpt-4 --yolo` (global args 
 
 ### Additional Args Merge
 
-The `additionalArgs` field in agent config is **merged with** (not replaced by) global `editless.cli.additionalArgs`. The merge order is:
+The `additionalArgs` field in agent settings is **merged with** (not replaced by) global `editless.cli.additionalArgs`. The merge order is:
 
 1. Per-agent `additionalArgs` (applied first)
 2. Global `editless.cli.additionalArgs` (applied second)
 
-Flags are concatenated and split on whitespace. **Note:** Duplicate flags are not yet deduplicated (see [#404](https://github.com/microsoft/editless/issues/404)).
+Flags are concatenated and split on whitespace.
 
 **Example:**
 
 ```jsonc
-// VS Code settings
+// VS Code settings.json
 {
   "editless.cli.additionalArgs": "--verbose --cache-dir=/tmp/cache"
 }
 
-// agent-registry.json
+// agent-settings.json
 {
-  "squads": [
-    {
-      "id": "my-agent",
-      "name": "My Agent",
-      "path": "/agent/path",
-      "icon": "🤖",
-      "universe": "standalone",
-      "additionalArgs": "--no-telemetry"
-    }
-  ]
+  "my-agent": {
+    "additionalArgs": "--no-telemetry"
+  }
 }
 ```
 
@@ -354,12 +286,12 @@ Flags are concatenated and split on whitespace. **Note:** Duplicate flags are no
 
 EditLess builds the final Copilot CLI command from multiple sources. The command is constructed in this order:
 
-1. **Binary:** `editless.cli.command` (or `copilot` if not set)
-2. **Agent flag:** Derived from registry `id` and `universe`:
+1. **Binary:** Per-agent `command` → `editless.cli.command` → `"copilot"` (default)
+2. **Agent flag:** Derived from agent `id` and `universe` (auto-discovered from team.md):
    - `id === "builtin:copilot-cli"` → no `--agent` flag
    - `universe === "standalone"` → `--agent <id>`
    - All others → `--agent squad`
-3. **Model:** From per-agent `model` field (if set) → `--model <model>`
+3. **Model:** From per-agent `model` field in agent-settings.json (if set) → `--model <model>`
 4. **Extra args:** Per-agent `additionalArgs` + global `editless.cli.additionalArgs` (concatenated, per-agent first)
 
 **Example build process:**
@@ -376,18 +308,31 @@ Final command:             copilot --agent squad --model gpt-4 --yolo --verbose
 
 ---
 
-## Migration from v0.1.0
+## Migration from v0.1.2 and Earlier
 
-The agent registry format changed in v0.1.1. Old registries are **automatically migrated** in memory on load, so existing entries continue to work. However, you should update your registry file format for clarity:
+### v0.1.3: agent-registry.json → Auto-Discovery
 
-### Removed & Renamed Fields
+The agent registry file has been eliminated in v0.1.3. Agents are now auto-discovered from your workspace and personal directories.
 
-| Old Field | New Approach |
-|-----------|--------------|
-| `launchCommand` | Auto-migrated to `model` + `additionalArgs` on load |
-| `agentFlag` | Now derived from `id` and `universe` (not stored) |
+**Migration process:**
+1. On first activation of v0.1.3, EditLess reads your existing `agent-registry.json`
+2. Hidden status, model overrides, and additionalArgs are migrated to `agent-settings.json` in global storage
+3. The old `agent-registry.json` is left in place for manual cleanup
+4. Agents now appear automatically from discovered `.squad/` or `.ai-team/` directories — no registration needed
 
-### Auto-Migration Example
+**What changed:**
+- ❌ `agent-registry.json` — no longer used (replaced by auto-discovery)
+- ❌ `editless.registryPath` setting — removed
+- ❌ "Add to Registry" / "Promote Discovered Agent" commands — removed
+- ✅ `agent-settings.json` — new file for user preferences (hidden, model, additionalArgs, command)
+- ✅ Auto-discovery — agents appear automatically when you add them to your workspace
+
+**Action required:**
+- None — migration is automatic. You can delete `agent-registry.json` after confirming your agents appear correctly.
+
+### v0.1.1: launchCommand → Structured Fields
+
+If you're upgrading from v0.1.0, the registry format changed in v0.1.1. Old registries are **automatically migrated** in memory on load.
 
 **Old format (v0.1.0):**
 
@@ -396,27 +341,19 @@ The agent registry format changed in v0.1.1. Old registries are **automatically 
   "squads": [
     {
       "id": "my-squad",
-      "name": "My Squad",
-      "path": "/path",
-      "icon": "🚀",
-      "universe": "myorg",
       "launchCommand": "copilot --agent squad --model gpt-4 --yolo"
     }
   ]
 }
 ```
 
-**Auto-migrated to (v0.1.1, in memory):**
+**Auto-migrated to (v0.1.1+):**
 
 ```jsonc
 {
   "squads": [
     {
       "id": "my-squad",
-      "name": "My Squad",
-      "path": "/path",
-      "icon": "🚀",
-      "universe": "myorg",
       "model": "gpt-4",
       "additionalArgs": "--yolo"
     }
@@ -424,17 +361,13 @@ The agent registry format changed in v0.1.1. Old registries are **automatically 
 }
 ```
 
-The migration extracts `--model <value>` and remaining flags into `additionalArgs`. **To persist the change**, save the registry using the UI (e.g., update squad settings and save).
-
 ---
 
 ## Known Limitations
 
 | Issue | Impact | Workaround |
 |-------|--------|-----------|
-| **Settings changes don't update existing entries** | When you change global `editless.cli.additionalArgs`, squads registered before the change won't pick up the new value until re-registered. | Manually update agent settings or delete and re-add the squad. |
-| **Duplicate flags not deduplicated** ([#404](https://github.com/cirvine-MSFT/editless/issues/404)) | If global and per-agent `additionalArgs` both contain the same flag, both will be passed to Copilot CLI. | Use distinct flags or ensure global and per-agent args don't overlap. |
-| **Personal agent path used as CWD** ([#403](https://github.com/cirvine-MSFT/editless/issues/403)) | When launching a personal agent, the session's working directory is set to the agent's squad path, which may not be correct for per-user agents. | Use squad agents instead or manage CWD manually after launch. |
+| **Settings changes don't update existing entries** | When you change global `editless.cli.additionalArgs`, agents discovered before the change won't pick up the new value until the extension reloads. | Reload the VS Code window after changing global CLI settings. |
 
 ---
 

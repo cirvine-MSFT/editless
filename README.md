@@ -46,14 +46,20 @@ New to agentic development? Start here — install EditLess, add a squad, and le
 
 ## Features
 
-- 🌳 **Agent tree view** — see all discovered agents in your workspace
-- 📋 **Work items** — view GitHub issues and Azure DevOps work items with label filtering
-- 🔀 **Pull requests** — track PRs across repos, jump to linked issues
-- 💻 **Terminal integration** — launch agent sessions from a work item, pull request, or agent — get to work on what you care about faster, label and organize your sessions, and never lose track of what a session was for
-- 🔔 **Notifications** — keep track of what your sessions are doing at a glance, so you never miss a call to action or leave a session idle
-- 🔍 **Auto-detection** — discovers agents in your workspace automatically
-- 🐙 **GitHub integration** — connect to GitHub issues and pull requests
-- 🏗️ **Azure DevOps integration** — pull in ADO work items and pull requests
+**Work faster with AI agents:**
+
+- 🚀 **Launch sessions from work** — Start working on an issue or PR directly from the Work Items or Pull Requests panel. One click takes you from backlog to active session with the right agent and context.
+- 🗂️ **Sessions grouped by agent** — See which agent is working on what at a glance. Sessions appear under their agent in the tree, so you always know who's doing what.
+- ✏️ **Rename sessions** — Give sessions meaningful names so you can tell them apart. "Fix login bug" beats "Session 1" every time.
+- ⏸️ **Resume sessions** — Pick up where you left off. Resume any Copilot CLI session from a searchable list — by summary, branch, or GUID.
+- 🔔 **Attention state** — Know when a session needs your input. The bell icon shows when Copilot is waiting for you, so nothing sits idle.
+
+**Manage your AI team:**
+
+- 🌳 **Auto-discover agents** — Drop agent files in your workspace and they appear automatically. No registration, no config files, no friction.
+- 🐙 **GitHub integration** — View issues and PRs across repos with label filtering and linked navigation.
+- 🏗️ **Azure DevOps integration** — Pull in ADO work items and PRs alongside your GitHub work.
+- 💻 **Terminal integration** — Launch, label, and organize sessions without leaving the sidebar. Your work stays in one place.
 
 ## Development
 

@@ -573,3 +573,28 @@ Decision document: .squad/decisions/inbox/rick-v013-pr-reviews.md
 - Extension reveal tests exercise the debounce logic via a simulated helper rather than importing `extension.ts` directly — pragmatic given heavy dependency graph.
 - 28 tests cover single events, coalescing, timer reset, dispose cleanup, boundary conditions, error recovery, and null guards. Comprehensive.
 - Decision doc (`morty-debounce-tree-reveal.md`) correctly establishes `_scheduleChange()` as the canonical pattern going forward.
+---
+
+### 2026-03-01: Worktree Discovery Architecture — Planning & Proposal
+
+**Task:** Plan implementation architecture for auto-discovering git worktrees as child agents/squads.
+
+**Key decisions:**
+
+1. **New module, not inline.** Created worktree-discovery.ts spec — single-responsibility module that wraps `git worktree list --porcelain` with async `execFile`. Keeps git concerns isolated from filesystem scanning.
+
+2. **Post-discovery enrichment, not integrated scan.** `discoverAll()` stays synchronous and unchanged. New `enrichWithWorktrees()` runs after as an async phase. Avoids cascading async changes through activation path. Pipeline: `discoverAll() → enrichWithWorktrees() → setDiscoveredItems()`.
+
+3. **Extend DiscoveredItem, don't wrap.** Added optional `branch`, `parentId`, `isMainWorktree` fields. Zero overhead for non-worktree items. Avoids parallel pipeline for a new type.
+
+4. **Settings inheritance via ID convention.** Worktree IDs use `{parentId}:wt:{branch-kebab}` pattern. `AgentSettingsManager.get()` falls back to parent when no direct override exists. Per Casey's directive on layered settings.
+
+5. **New issue, not #422 expansion.** Discovery (detecting existing worktrees) is orthogonal to #422 (creating worktrees from UI). They compose well but are independently shippable.
+
+6. **Lands after Phase 1 refactors.** No hard dependency on #394/#395, but reduces merge conflicts by landing on clean codebase. Does not change v0.2 execution order.
+
+**Files analyzed:** `unified-discovery.ts`, `discovery.ts`, `editless-tree.ts`, `agent-settings.ts`, `team-dir.ts`, `agent-discovery.ts`, `extension.ts`, `types.ts`
+
+**Deliverable:** Architecture proposal at `.squad/decisions/inbox/rick-worktree-discovery-architecture.md` — covers data model, file change map (~250 LOC prod, ~200 LOC test), dependency analysis, and issue recommendations.
+
+**Key insight:** The `.git` file-vs-directory distinction matters. When a workspace folder is itself a worktree, `.git` is a file pointing to the main repo's `.git/worktrees/{name}`. Must resolve this to find the real git dir for both worktree listing and file watching.
