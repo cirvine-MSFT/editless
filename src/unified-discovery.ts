@@ -161,5 +161,6 @@ export function toAgentTeamConfig(disc: DiscoveredItem, settings?: AgentSettings
     description: disc.description,
     model: settings?.model || undefined,
     additionalArgs: settings?.additionalArgs || undefined,
+    command: settings?.command || undefined,
   };
 }

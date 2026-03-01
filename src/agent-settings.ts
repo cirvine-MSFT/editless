@@ -8,6 +8,7 @@ export interface AgentSettings {
   additionalArgs?: string;
   icon?: string;
   name?: string;
+  command?: string;
 }
 
 export interface AgentSettingsFile {
@@ -159,6 +160,7 @@ export function migrateFromRegistry(oldRegistryPath: string, settings: AgentSett
       if (squad.model) partial.model = squad.model;
       if (squad.additionalArgs) partial.additionalArgs = squad.additionalArgs;
       if (squad.name) partial.name = squad.name;
+      if (squad.command) partial.command = squad.command;
       // Always create an entry so the agent is visible in settings,
       // even if it has no custom overrides (just id+path in old registry).
       settings.update(squad.id, partial);

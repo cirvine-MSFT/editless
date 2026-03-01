@@ -13,6 +13,8 @@ function shellQuote(arg: string): string {
 }
 
 export interface CopilotCommandOptions {
+  /** Custom CLI command override (e.g. "my-wrapper copilot"). Not shell-quoted — may be multi-word. */
+  command?: string;
   /** Agent type to launch (e.g. "squad", "my-agent"). Maps to --agent flag. */
   agent?: string;
   /** Session ID to resume. Maps to --resume flag. */
@@ -24,11 +26,12 @@ export interface CopilotCommandOptions {
 }
 
 /**
- * Returns the base CLI binary name.
- * Always returns `"copilot"`.
+ * Returns the CLI command to use.
+ * Precedence: override parameter → `editless.cli.command` setting → `"copilot"`.
  */
-export function getCliCommand(): string {
-  return 'copilot';
+export function getCliCommand(override?: string): string {
+  if (override) { return override; }
+  return vscode.workspace.getConfiguration('editless.cli').get<string>('command', 'copilot');
 }
 
 /**
@@ -40,7 +43,7 @@ export function getCliCommand(): string {
  * ```
  */
 export function buildCopilotCommand(options: CopilotCommandOptions = {}): string {
-  const parts: string[] = [getCliCommand()];
+  const parts: string[] = [getCliCommand(options.command)];
 
   if (options.agent) {
     parts.push('--agent', options.agent);
@@ -85,7 +88,7 @@ export function buildCopilotCommand(options: CopilotCommandOptions = {}): string
  * Build a launch command from structured config fields.
  * Merges per-config additionalArgs with global `editless.cli.additionalArgs`.
  */
-export function buildLaunchCommandForConfig(config: { id: string; universe: string; model?: string; additionalArgs?: string }): string {
+export function buildLaunchCommandForConfig(config: { id: string; universe: string; model?: string; additionalArgs?: string; command?: string }): string {
   // Derive --agent flag value from id/universe
   let agentFlag: string | undefined;
   if (config.id === 'builtin:copilot-cli') {
@@ -133,6 +136,7 @@ export function buildLaunchCommandForConfig(config: { id: string; universe: stri
   const extraArgs = [...modelArgs, ...allExtra];
 
   return buildCopilotCommand({
+    command: config.command,
     agent: agentFlag,
     extraArgs: extraArgs.length ? extraArgs : undefined,
   });
