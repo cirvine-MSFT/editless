@@ -213,7 +213,36 @@ Implemented four features on branch `squad/370-acp-spike`:
 - `relaunchSession()` was missing a `return` after `showErrorMessage` when `isSessionResumable()` returned `resumable: false`. This caused terminal creation and `--resume <id>` to proceed, resulting in both an error toast and a broken terminal.
 - Fix: Added `return undefined` after the error message, changed return type to `vscode.Terminal | undefined`, and added `.filter()` in `relaunchAllOrphans()` to handle the new undefined possibility.
 - Lesson: Always guard control flow after validation error paths — showing an error message is not the same as aborting the operation.
+- **Arg dedup design rationale (PR #411):** Only `--model` and `--agent` are deduped in `buildLaunchCommandForConfig` because they have structured config equivalents (`config.model`, `config.id`/`config.universe`). Other flags like `--yolo` only exist in `additionalArgs` so there's no dual-source conflict. Global + agent-level `additionalArgs` concatenation is expected user behavior, not a bug. Tests cover both `--flag value` and `--flag=value` syntax for all deduped flags.
+- **loadSquads readability refactor (PR #413):** Extracted two private helpers from `loadSquads()` — `migrateLegacyLaunchCommand(squad)` and `redetectUnknownUniverse(squad)` — each returning a boolean indicating if the registry needs persisting. Renamed `needsPersist` to `registryDirty` since it tracks in-memory divergence from disk caused by both migration paths, not just universe re-detection. Pure refactor, no behavioral changes, all 864 tests pass.
+- **Registry schema mismatch fix (#401, PR #413):** `readUniverseFromRegistry()` only checked `data.agents` (per-agent Record with `{status, universe}`), but real-world `casting/registry.json` files can have a top-level `"universe"` field with a `"members"` array instead of `"agents"`. Fix: check `data.universe` at top level first, fall back to per-agent iteration. Two schemas coexist: casting registry (top-level universe + members array) and editless internal (agents Record). Always handle both when reading registry files.
 
+## Fix: Built-in Copilot CLI missing from agent pickers (#420, PR #423, 2026-02-23)
+
+When launching a session from a work item or PR, the built-in Copilot CLI agent (id: `builtin:copilot-cli`) was missing from the agent picker. The pickers only showed squads from `registry.loadSquads()`, which excludes the synthetic built-in agent.
+
+**Architecture insight:**
+- The built-in Copilot CLI agent is a *synthetic* agent — it lives in `editless-tree.ts` as a hardcoded tree node with special-case handling in `launchSession`. It's not in the registry, so any picker code that only calls `loadSquads()` won't see it.
+- Three pickers were affected: `launchSession` (line 335), `launchFromWorkItem` (line 976), `launchFromPR` (line 1058).
+
+**Fix:**
+- Created `getAllAgentsForPicker()` helper in `extension.ts` that prepends the built-in agent config to the squad list. This ensures the built-in agent always appears first in pickers.
+- Updated all three commands to call `getAllAgentsForPicker(squads)` instead of directly mapping `squads`.
+- Changed behavior: pickers now show even when `squads.length === 0` (just the built-in agent), so removed "No agents registered" early returns.
+- Updated `launchSession` to handle built-in agent selection: checks if `chosen === DEFAULT_COPILOT_CLI_ID` and uses the built-in config from `allAgents` instead of `registry.getSquad()`.
+
+**Test updates:**
+- Changed 3 tests from expecting `showWarningMessage('No agents registered')` to expecting `showQuickPick` with the built-in agent in the options.
+- Tests now mock `mockShowQuickPick.mockResolvedValue(undefined)` (user dismisses) to verify no terminal launches when picker is cancelled.
+
+**Key files:**
+- `src/extension.ts:37-53` — `getAllAgentsForPicker()` helper
+- `src/extension.ts:327-361` — `launchSession` updated
+- `src/extension.ts:979-1005` — `launchFromWorkItem` updated
+- `src/extension.ts:1058-1084` — `launchFromPR` updated
+- `src/__tests__/extension-commands.test.ts` — 3 tests updated
+
+All 826 tests pass. Commit: 6707aa9.
 ## Research: microsoft/DebugMCP Integration (2026-02-25)
 
 Investigated DebugMCP (v1.0.7, beta) as a potential companion extension for EditLess. Key findings:
