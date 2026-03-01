@@ -52,7 +52,7 @@ New to agentic development? Start here — install EditLess, add a squad, and le
 - 🗂️ **Sessions grouped by agent** — See which agent is working on what at a glance. Sessions appear under their agent in the tree, so you always know who's doing what.
 - ✏️ **Rename sessions** — Give sessions meaningful names so you can tell them apart. "Fix login bug" beats "Session 1" every time.
 - ⏸️ **Resume sessions** — Pick up where you left off. Resume any Copilot CLI session from a searchable list — by summary, branch, or GUID.
-- 🔔 **Attention state** — Know when a session needs your input. The bell icon shows when Copilot is waiting for you, so nothing sits idle.
+- 💬 **Attention state** — Know when a session needs your input. A chat icon shows when Copilot is waiting for you, so nothing sits idle.
 
 **Manage your AI team:**
 
