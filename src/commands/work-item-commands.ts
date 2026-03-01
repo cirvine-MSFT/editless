@@ -9,6 +9,7 @@ import type { PRsTreeProvider } from '../prs-tree';
 import { fetchLinkedPRs } from '../github-client';
 import { toAgentTeamConfig } from '../unified-discovery';
 import type { DiscoveredItem } from '../unified-discovery';
+import { DEFAULT_COPILOT_CLI_ID, buildCopilotCLIConfig } from '../editless-tree';
 import { getAdoToken, promptAdoSignIn } from '../ado-auth';
 import { fetchAdoWorkItems, fetchAdoPRs, fetchAdoMe } from '../ado-client';
 import { launchAndLabel } from '../launch-utils';
@@ -413,33 +414,39 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
 
       const discoveredItems = getDiscoveredItems();
       const visibleItems = discoveredItems.filter(d => !agentSettings.isHidden(d.id));
-      if (visibleItems.length === 0) {
-        vscode.window.showWarningMessage('No agents discovered.');
-        return;
-      }
 
       const number = issue?.number ?? adoItem?.id;
       const title = issue?.title ?? adoItem?.title ?? '';
       const url = issue?.url ?? adoItem?.url ?? '';
 
+      const cliItem = {
+        label: '$(terminal) Copilot CLI',
+        description: 'standalone',
+        disc: undefined as DiscoveredItem | undefined,
+      };
+      const discoveredPicks = visibleItems.map(d => {
+        const settings = agentSettings.get(d.id);
+        return {
+          label: `${d.type === 'squad' ? (settings?.icon ?? '🔷') : '🤖'} ${settings?.name ?? d.name}`,
+          description: d.universe ?? d.source,
+          disc: d as DiscoveredItem | undefined,
+        };
+      });
       const pick = await vscode.window.showQuickPick(
-        visibleItems.map(d => {
-          const settings = agentSettings.get(d.id);
-          return {
-            label: `${d.type === 'squad' ? (settings?.icon ?? '🔷') : '🤖'} ${settings?.name ?? d.name}`,
-            description: d.universe ?? d.source,
-            disc: d,
-          };
-        }),
+        [cliItem, ...discoveredPicks],
         { placeHolder: `Launch agent for #${number} ${title}` },
       );
       if (!pick) return;
 
-      const d = pick.disc;
-      const settings = agentSettings.get(d.id);
-      const cfg = toAgentTeamConfig(d, settings);
       const rawName = `#${number} ${title}`;
-      launchAndLabel(terminalManager, labelManager, cfg, rawName);
+      if (!pick.disc) {
+        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName);
+      } else {
+        const settings = agentSettings.get(pick.disc.id);
+        const cfg = toAgentTeamConfig(pick.disc, settings);
+        launchAndLabel(terminalManager, labelManager, cfg, rawName);
+      }
 
       if (url) {
         await vscode.env.clipboard.writeText(url);
@@ -488,33 +495,39 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
 
       const discoveredItems = getDiscoveredItems();
       const visibleItems = discoveredItems.filter(d => !agentSettings.isHidden(d.id));
-      if (visibleItems.length === 0) {
-        vscode.window.showWarningMessage('No agents discovered.');
-        return;
-      }
 
       const number = pr?.number ?? adoPR?.id;
       const title = pr?.title ?? adoPR?.title ?? '';
       const url = pr?.url ?? adoPR?.url ?? '';
 
+      const cliItem = {
+        label: '$(terminal) Copilot CLI',
+        description: 'standalone',
+        disc: undefined as DiscoveredItem | undefined,
+      };
+      const discoveredPicks = visibleItems.map(d => {
+        const settings = agentSettings.get(d.id);
+        return {
+          label: `${d.type === 'squad' ? (settings?.icon ?? '🔷') : '🤖'} ${settings?.name ?? d.name}`,
+          description: d.universe ?? d.source,
+          disc: d as DiscoveredItem | undefined,
+        };
+      });
       const pick = await vscode.window.showQuickPick(
-        visibleItems.map(d => {
-          const settings = agentSettings.get(d.id);
-          return {
-            label: `${d.type === 'squad' ? (settings?.icon ?? '🔷') : '🤖'} ${settings?.name ?? d.name}`,
-            description: d.universe ?? d.source,
-            disc: d,
-          };
-        }),
+        [cliItem, ...discoveredPicks],
         { placeHolder: `Launch agent for PR #${number} ${title}` },
       );
       if (!pick) return;
 
-      const d = pick.disc;
-      const settings = agentSettings.get(d.id);
-      const cfg = toAgentTeamConfig(d, settings);
       const rawName = `PR #${number} ${title}`;
-      launchAndLabel(terminalManager, labelManager, cfg, rawName);
+      if (!pick.disc) {
+        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName);
+      } else {
+        const settings = agentSettings.get(pick.disc.id);
+        const cfg = toAgentTeamConfig(pick.disc, settings);
+        launchAndLabel(terminalManager, labelManager, cfg, rawName);
+      }
 
       if (url) {
         await vscode.env.clipboard.writeText(url);

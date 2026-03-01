@@ -11,6 +11,56 @@
 
 ## Learnings
 
+### 2026-02-26: Auto-Discover Refactor Architecture Review (#399)
+
+**Reviewed:** `agent-settings.ts`, `editless-tree.ts`, `extension.ts`, `unified-discovery.ts`, `discovery.ts`, `status-bar.ts`, `package.json`
+
+**Verdict:** Architecture is sound. AgentSettingsManager is clean, well-encapsulated, and the right abstraction. The auto-discover pattern eliminates registry friction correctly. Found and fixed 6 issues:
+
+1. **`_writeToDisk()` had no error handling** — disk full or permission errors would crash the extension mid-operation. Added try/catch so cache remains authoritative; next `reload()` reconciles from disk.
+2. **100+ lines of dead code in `discovery.ts`** — `RegistryLike`, `promptAndAddSquads`, `autoRegisterWorkspaceSquads` marked `@deprecated` but still present. Removed along with unused `vscode` and `resolveTeamDir` imports.
+3. **`status-bar.test.ts` used old registry mock shape** — `makeRegistry()` returned `{ loadSquads }` but `EditlessStatusBar` now takes `AgentSettingsManager` with `isHidden()`. Tests passed by accident (empty `_discoveredItems`). Fixed to use proper `AgentSettingsManager` mock with `setDiscoveredItems()`.
+4. **`auto-refresh.test.ts` mocked deleted modules** — `../registry` and `../visibility` mocks referenced non-existent files. Removed.
+5. **`types.ts` stale comments** — references to "Agent Team Registry" and "agent-registry.json". Updated.
+6. **`agent-settings-extra.test.ts` tested old behavior** — expected `_writeToDisk` to propagate errors, now expects graceful swallow. Fixed.
+
+**Pre-existing issue noted (not fixed — not mine):** `extension-commands-extra.test.ts` fails due to `config.get('github.repos', [])` returning `undefined` in mock. Separate bug on this branch.
+
+**Key architectural observations:**
+- Settings watcher fires on self-writes (update → writeToDisk → watcher → reload). Redundant I/O but not a bug. Could optimize with a dirty flag if it becomes a problem.
+- Cross-window sync via file watcher is correct pattern for globalStorageUri.
+- 300ms debounce is appropriate for filesystem discovery. No race conditions found.
+
+---
+
+### 2026-02-26: PR #424 Config Refresh Pattern — 3x Review Cycle
+
+**Session:** 3x Review + Fix cycle for PR #424 (squad/417-ado-config-refresh)  
+**Participants:** Rick (architecture), Meeseeks (tests), Unity (integration), Morty (implementation)  
+**Outcome:** All reviews APPROVED ✅
+
+**Rick's architecture review (APPROVED):**
+- Validated config refresh pattern as canonical for integration re-initialization
+- Pattern: handlers in `activate()` call full idempotent init functions
+- No circular dependencies, clean architecture
+- Decision documented and ready for team-wide use
+
+**Key takeaways:**
+1. **Handler placement matters:** Placing listeners inside init functions creates circular dependencies. Move all handlers to `activate()` after setup complete.
+2. **Idempotency is critical:** Init functions must be safe to call multiple times. No subscriptions, allocations, or state accumulation during re-init.
+3. **Separate listeners per scope:** One integration = one listener. Combines SRP with performance (negligible cost).
+4. **Pattern is now canonical:** Future integrations should follow this pattern. Documented with examples and anti-patterns.
+
+**Architecture principles affirmed:**
+- VS Code extension lifecycle matters (subscriptions must be in `activate()`)
+- Config handlers are re-initialization triggers, not setup handlers
+- Idempotency enables safe config-driven re-init
+
+**Decision merged:** `.squad/decisions.md` — Config Refresh Pattern  
+**Related decisions:** Config Handler Debounce Pattern, DebugMCP Integration Research
+
+---
+
 ### 2026-02-22: v0.1.1 Release Planning — Viability Fixes & Scope Prioritization
 
 Analyzed 9 issues across 3 domains to define v0.1.1 as a **viability release**. EditLess shipped in v0.1 functionally but with UX gaps and performance issues that made it unreliable for terminal sessions and work item management.

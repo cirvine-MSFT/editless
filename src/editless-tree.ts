@@ -19,6 +19,17 @@ export type TreeItemType = 'squad' | 'squad-hidden' | 'category' | 'agent' | 'te
 
 /** Sentinel ID for the built-in Copilot CLI entry. */
 export const DEFAULT_COPILOT_CLI_ID = 'builtin:copilot-cli';
+
+/** Build the AgentTeamConfig for the built-in Copilot CLI agent. */
+export function buildCopilotCLIConfig(cwd?: string): AgentTeamConfig {
+  return {
+    id: DEFAULT_COPILOT_CLI_ID,
+    name: 'Copilot CLI',
+    path: cwd ?? '',
+    icon: '🤖',
+    universe: 'standalone',
+  };
+}
 type CategoryKind = 'roster' | 'hidden';
 
 function stableHash(input: string): string {
@@ -496,6 +507,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private buildAgentItem(agent: AgentInfo, squadId?: string): EditlessTreeItem {
     const item = new EditlessTreeItem(agent.name, 'agent', vscode.TreeItemCollapsibleState.None);
+    item.contextValue = 'roster-agent';
     if (squadId) {
       const state = this.getState(squadId);
       const squadPath = state?.config.path ?? squadId;

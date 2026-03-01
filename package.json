@@ -65,7 +65,7 @@
         "command": "editless.launchSession",
         "title": "Launch Session",
         "category": "EditLess",
-        "icon": "$(add)"
+        "icon": "$(terminal)"
       },
       {
         "command": "editless.focusSession",
@@ -287,6 +287,12 @@
         "icon": "$(debug-restart)"
       },
       {
+        "command": "editless.resumeSession",
+        "title": "Resume Session...",
+        "category": "EditLess",
+        "icon": "$(history)"
+      },
+      {
         "command": "editless.filterLevel",
         "title": "Filter...",
         "category": "EditLess",
@@ -396,6 +402,11 @@
           "command": "editless.launchSession",
           "when": "view == editlessTree && viewItem =~ /^squad|^squad-hidden|^agent|^default-agent$/",
           "group": "session@0"
+        },
+        {
+          "command": "editless.resumeSession",
+          "when": "view == editlessTree && viewItem =~ /^squad|^squad-hidden|^agent|^default-agent$/",
+          "group": "session@1"
         },
         {
           "command": "editless.renameSquad",
