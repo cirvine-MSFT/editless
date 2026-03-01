@@ -125,6 +125,7 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _launchingTerminals = new Set<vscode.Terminal>();
   private readonly _launchTimers = new Map<vscode.Terminal, ReturnType<typeof setTimeout>>();
   private _matchTimer: ReturnType<typeof setTimeout> | undefined;
+  private _changeTimer: ReturnType<typeof setTimeout> | undefined;
   private _persistTimer: ReturnType<typeof setInterval> | undefined;
   private _sessionResolver?: SessionContextResolver;
   private _reconcileResolve?: () => void;
@@ -152,21 +153,32 @@ export class TerminalManager implements vscode.Disposable {
         }
         if (this._terminals.delete(terminal)) {
           this._persist();
-          this._onDidChange.fire();
+          this._scheduleChange();
         }
       }),
       vscode.window.onDidStartTerminalShellExecution(e => {
         this._clearLaunching(e.terminal);
         this._shellExecutionActive.set(e.terminal, true);
         this._lastActivityAt.set(e.terminal, Date.now());
-        this._onDidChange.fire();
+        this._scheduleChange();
       }),
       vscode.window.onDidEndTerminalShellExecution(e => {
         this._shellExecutionActive.set(e.terminal, false);
         this._lastActivityAt.set(e.terminal, Date.now());
-        this._onDidChange.fire();
+        this._scheduleChange();
       }),
     );
+  }
+
+  /** Batch rapid-fire change events into a single tree refresh (~50ms). */
+  private _scheduleChange(): void {
+    if (this._changeTimer !== undefined) {
+      clearTimeout(this._changeTimer);
+    }
+    this._changeTimer = setTimeout(() => {
+      this._changeTimer = undefined;
+      this._onDidChange.fire();
+    }, 50);
   }
 
   // -- Launch state tracking (#337) ------------------------------------------
@@ -177,7 +189,7 @@ export class TerminalManager implements vscode.Disposable {
     this._launchingTerminals.add(terminal);
     const timer = setTimeout(() => {
       this._clearLaunching(terminal);
-      this._onDidChange.fire();
+      this._scheduleChange();
     }, TerminalManager.LAUNCH_TIMEOUT_MS);
     this._launchTimers.set(terminal, timer);
   }
@@ -242,7 +254,7 @@ export class TerminalManager implements vscode.Disposable {
         this._clearLaunching(terminal);
         this._lastSessionEvent.set(terminal, event);
         this._lastActivityAt.set(terminal, Date.now());
-        this._onDidChange.fire();
+        this._scheduleChange();
       });
       this._sessionWatchers.set(terminal, watcher);
     }
@@ -252,7 +264,7 @@ export class TerminalManager implements vscode.Disposable {
 
     this._counters.set(config.id, index + 1);
     this._persist();
-    this._onDidChange.fire();
+    this._scheduleChange();
 
     return terminal;
   }
@@ -296,7 +308,7 @@ export class TerminalManager implements vscode.Disposable {
     if (!info) return;
     info.displayName = newDisplayName;
     this._persist();
-    this._onDidChange.fire();
+    this._scheduleChange();
   }
 
   focusTerminal(terminal: vscode.Terminal | string): void {
@@ -369,14 +381,14 @@ export class TerminalManager implements vscode.Disposable {
       const watcher = this._sessionResolver.watchSession(entry.agentSessionId, event => {
         this._lastSessionEvent.set(match, event);
         this._lastActivityAt.set(match, Date.now());
-        this._onDidChange.fire();
+        this._scheduleChange();
       });
       this._sessionWatchers.set(match, watcher);
     }
 
     this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
     this._persist();
-    this._onDidChange.fire();
+    this._scheduleChange();
     return match;
   }
 
@@ -460,21 +472,21 @@ export class TerminalManager implements vscode.Disposable {
         this._clearLaunching(terminal);
         this._lastSessionEvent.set(terminal, event);
         this._lastActivityAt.set(terminal, Date.now());
-        this._onDidChange.fire();
+        this._scheduleChange();
       });
       this._sessionWatchers.set(terminal, watcher);
     }
 
     this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
     this._persist();
-    this._onDidChange.fire();
+    this._scheduleChange();
     return terminal;
   }
 
   dismissOrphan(entry: PersistedTerminalInfo): void {
     this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
     this._persist();
-    this._onDidChange.fire();
+    this._scheduleChange();
   }
 
   relaunchAllOrphans(): vscode.Terminal[] {
@@ -511,7 +523,7 @@ export class TerminalManager implements vscode.Disposable {
     if (!info) return;
     info.agentSessionId = sessionId;
     this._persist();
-    this._onDidChange.fire();
+    this._scheduleChange();
   }
 
   /**
@@ -553,7 +565,7 @@ export class TerminalManager implements vscode.Disposable {
 
     if (changed) {
       this._persist();
-      this._onDidChange.fire();
+      this._scheduleChange();
     }
   }
 
@@ -727,7 +739,7 @@ export class TerminalManager implements vscode.Disposable {
 
     if (this._terminals.size > 0) {
       this._persist();
-      this._onDidChange.fire();
+      this._scheduleChange();
     }
   }
 
@@ -764,6 +776,9 @@ export class TerminalManager implements vscode.Disposable {
   dispose(): void {
     if (this._matchTimer !== undefined) {
       clearTimeout(this._matchTimer);
+    }
+    if (this._changeTimer !== undefined) {
+      clearTimeout(this._changeTimer);
     }
     if (this._reconcileTimer !== undefined) {
       clearTimeout(this._reconcileTimer);

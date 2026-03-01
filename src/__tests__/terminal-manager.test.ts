@@ -319,6 +319,7 @@ describe('TerminalManager', () => {
 
   describe('reconcile fires onDidChange when terminals restored', () => {
     it('should fire the change event after successful reconciliation', () => {
+      vi.useFakeTimers();
       const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
       mockTerminals.push(liveTerminal);
 
@@ -330,8 +331,10 @@ describe('TerminalManager', () => {
       mgr.onDidChange(changeSpy);
 
       mgr.reconcile();
+      vi.advanceTimersByTime(50);
 
       expect(changeSpy).toHaveBeenCalledOnce();
+      vi.useRealTimers();
     });
 
     it('should not fire the change event when no terminals are restored', () => {
@@ -380,6 +383,7 @@ describe('TerminalManager', () => {
     });
 
     it('should fire onDidChange when renaming', () => {
+      vi.useFakeTimers();
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
       const config = makeSquadConfig();
@@ -390,7 +394,9 @@ describe('TerminalManager', () => {
       mgr.onDidChange(changeSpy);
 
       mgr.renameSession(terminal, 'Renamed');
+      vi.advanceTimersByTime(50);
       expect(changeSpy).toHaveBeenCalledOnce();
+      vi.useRealTimers();
     });
 
     it('should be a no-op for an untracked terminal', () => {
@@ -1479,6 +1485,7 @@ describe('TerminalManager', () => {
     });
 
     it('should fire onDidChange when setting agent session ID', () => {
+      vi.useFakeTimers();
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
       const config = makeSquadConfig();
@@ -1488,7 +1495,9 @@ describe('TerminalManager', () => {
       mgr.onDidChange(changeSpy);
 
       mgr.setAgentSessionId(terminal, 'session-xyz');
+      vi.advanceTimersByTime(50);
       expect(changeSpy).toHaveBeenCalledOnce();
+      vi.useRealTimers();
     });
 
     it('should be a no-op for an untracked terminal', () => {
@@ -1868,6 +1877,7 @@ describe('TerminalManager', () => {
     });
 
     it('should fire onDidChange and persist when sessions are detected (legacy terminal)', () => {
+      vi.useFakeTimers();
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
       const config = makeSquadConfig({ path: '/project' });
@@ -1888,9 +1898,11 @@ describe('TerminalManager', () => {
 
       vi.mocked(ctx.workspaceState.update).mockClear();
       mgr.detectSessionIds();
+      vi.advanceTimersByTime(50);
 
       expect(changeSpy).toHaveBeenCalled();
       expect(ctx.workspaceState.update).toHaveBeenCalled();
+      vi.useRealTimers();
     });
 
     it('should skip terminals without a squadPath', () => {
