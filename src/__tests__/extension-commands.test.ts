@@ -517,10 +517,14 @@ describe('extension command handlers', () => {
   // --- editless.launchSession -----------------------------------------------
 
   describe('editless.launchSession', () => {
-    it('should show warning when no agents discovered', async () => {
+    it('should always include built-in Copilot CLI in picker', async () => {
       mockTreeGetDiscoveredItems.mockReturnValue([]);
+      mockShowQuickPick.mockResolvedValue(undefined);
       await getHandler('editless.launchSession')();
-      expect(mockShowWarningMessage).toHaveBeenCalledWith('No agents discovered yet.');
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        [expect.objectContaining({ label: '$(terminal) Copilot CLI', id: 'builtin:copilot-cli' })],
+        expect.anything(),
+      );
       expect(mockLaunchTerminal).not.toHaveBeenCalled();
     });
 
@@ -1515,10 +1519,15 @@ describe('extension command handlers', () => {
   // --- editless.launchFromWorkItem -------------------------------------------
 
   describe('editless.launchFromWorkItem', () => {
-    it('should show warning when no agents discovered', async () => {
+    it('should always include built-in Copilot CLI in work item picker', async () => {
       const item = { issue: { number: 42, title: 'Fix bug', url: 'https://example.com/42' } };
+      mockShowQuickPick.mockResolvedValue(undefined);
       await getHandler('editless.launchFromWorkItem')(item);
-      expect(mockShowWarningMessage).toHaveBeenCalledWith('No agents discovered.');
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        [expect.objectContaining({ label: '$(terminal) Copilot CLI' })],
+        expect.anything(),
+      );
+      expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
 
     it('should show QuickPick and launch terminal for selected agent', async () => {
@@ -1950,10 +1959,15 @@ describe('additional extension command handlers', () => {
   // --- editless.launchFromPR -------------------------------------------------
 
   describe('editless.launchFromPR', () => {
-    it('should show warning when no agents discovered', async () => {
+    it('should always include built-in Copilot CLI in PR picker', async () => {
       const item = { pr: { number: 100, title: 'Add feature', url: 'https://github.com/owner/repo/pull/100' } };
+      mockShowQuickPick.mockResolvedValue(undefined);
       await getHandler('editless.launchFromPR')(item);
-      expect(mockShowWarningMessage).toHaveBeenCalledWith('No agents discovered.');
+      expect(mockShowQuickPick).toHaveBeenCalledWith(
+        [expect.objectContaining({ label: '$(terminal) Copilot CLI' })],
+        expect.anything(),
+      );
+      expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
 
     it('should show QuickPick and launch terminal for GitHub PR', async () => {
