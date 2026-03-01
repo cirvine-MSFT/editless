@@ -548,3 +548,28 @@ Decision document: .squad/decisions/inbox/rick-v013-pr-reviews.md
 **Verdict:** APPROVED (reconfirmed). Architecture is sound, pattern is correct, no changes needed.
 
 **Key learning:** Config change handlers should live in `activate()` after the initial setup they monitor, not inside the setup functions themselves. This avoids circular dependencies and follows VS Code extension conventions.
+
+---
+
+### 2026-03-01: PR #439 Code Review — Debounce Tree Reveal (#438) — 3x Review
+
+**Branch:** `squad/438-debounce-tree-reveal`
+**Reviewed files:** `terminal-manager.ts`, `extension.ts`, `debounce-behavior.test.ts`, `editless-tree.ts`
+
+**Verdict:** APPROVE ✅
+
+**Architecture assessment:**
+1. `_scheduleChange()` pattern is correct — single debounced funnel replacing 15 direct `_onDidChange.fire()` calls. No direct `fire()` remains outside the debounce callback.
+2. 50ms TerminalManager debounce + 100ms reveal debounce = proper cascade. Tree settles before selection runs.
+3. `dispose()` clears `_changeTimer` — no leaked timers. Extension reveal cleanup is inline via disposable pushback.
+4. No event loss risk: debounce preserves the *latest* state; `onDidChange` is a void signal (no payload), so coalescing is lossless.
+5. Reveal handler correctly guards with `getTerminalInfo()` inside the timeout (stale terminal check) rather than capturing outside.
+
+**Risk for v0.1.3 same-day ship:** Low. The change is strictly narrowing (fewer events, same data path). No new APIs, no structural changes. 50ms/100ms values are imperceptible to users but sufficient to batch rapid-fire terminal events.
+
+**Best practices alignment:** Debouncing `onDidChange`/`treeView.reveal()` is standard in VS Code extensions (GitLens, ESLint extension both use similar patterns). 50-150ms is the typical range. No better VS Code API alternative exists.
+
+**Key observations:**
+- Extension reveal tests exercise the debounce logic via a simulated helper rather than importing `extension.ts` directly — pragmatic given heavy dependency graph.
+- 28 tests cover single events, coalescing, timer reset, dispose cleanup, boundary conditions, error recovery, and null guards. Comprehensive.
+- Decision doc (`morty-debounce-tree-reveal.md`) correctly establishes `_scheduleChange()` as the canonical pattern going forward.
