@@ -286,12 +286,12 @@ describe('hydrateFromDiscovery', () => {
   it('creates entries for new agents with all default fields', () => {
     const mgr = new AgentSettingsManager(settingsPath);
     mgr.hydrateFromDiscovery([
-      { id: 'agent-1', defaults: { name: 'Agent One', icon: '🤖', hidden: false, model: '', additionalArgs: '' } },
-      { id: 'squad-1', defaults: { name: 'Squad One', icon: '🔷', hidden: false, model: '', additionalArgs: '' } },
+      { id: 'agent-1', defaults: { name: 'Agent One', icon: '🤖', hidden: false, model: '', additionalArgs: '', command: '' } },
+      { id: 'squad-1', defaults: { name: 'Squad One', icon: '🔷', hidden: false, model: '', additionalArgs: '', command: '' } },
     ]);
 
-    expect(mgr.get('agent-1')).toEqual({ name: 'Agent One', icon: '🤖', hidden: false, model: '', additionalArgs: '' });
-    expect(mgr.get('squad-1')).toEqual({ name: 'Squad One', icon: '🔷', hidden: false, model: '', additionalArgs: '' });
+    expect(mgr.get('agent-1')).toEqual({ name: 'Agent One', icon: '🤖', hidden: false, model: '', additionalArgs: '', command: '' });
+    expect(mgr.get('squad-1')).toEqual({ name: 'Squad One', icon: '🔷', hidden: false, model: '', additionalArgs: '', command: '' });
   });
 
   it('does not overwrite existing user-customized values', () => {
@@ -299,7 +299,7 @@ describe('hydrateFromDiscovery', () => {
     mgr.update('agent-1', { name: 'My Custom Name', icon: '⚡', additionalArgs: '--yolo' });
 
     mgr.hydrateFromDiscovery([
-      { id: 'agent-1', defaults: { name: 'Agent One', icon: '🤖', hidden: false, model: '', additionalArgs: '' } },
+      { id: 'agent-1', defaults: { name: 'Agent One', icon: '🤖', hidden: false, model: '', additionalArgs: '', command: '' } },
     ]);
 
     const entry = mgr.get('agent-1');
@@ -309,6 +309,7 @@ describe('hydrateFromDiscovery', () => {
     // Missing fields filled in
     expect(entry?.hidden).toBe(false);
     expect(entry?.model).toBe('');
+    expect(entry?.command).toBe('');
   });
 
   it('fills in missing fields on existing entries', () => {
@@ -316,7 +317,7 @@ describe('hydrateFromDiscovery', () => {
     mgr.update('agent-1', { hidden: true });
 
     mgr.hydrateFromDiscovery([
-      { id: 'agent-1', defaults: { name: 'Agent One', icon: '🤖', hidden: false, model: '', additionalArgs: '' } },
+      { id: 'agent-1', defaults: { name: 'Agent One', icon: '🤖', hidden: false, model: '', additionalArgs: '', command: '' } },
     ]);
 
     const entry = mgr.get('agent-1');
@@ -328,7 +329,7 @@ describe('hydrateFromDiscovery', () => {
   it('does not write to disk when nothing changed', () => {
     const mgr = new AgentSettingsManager(settingsPath);
     mgr.hydrateFromDiscovery([
-      { id: 'agent-1', defaults: { name: 'A', icon: '🤖', hidden: false, model: '', additionalArgs: '' } },
+      { id: 'agent-1', defaults: { name: 'A', icon: '🤖', hidden: false, model: '', additionalArgs: '', command: '' } },
     ]);
 
     const statBefore = fs.statSync(settingsPath).mtimeMs;
@@ -338,7 +339,7 @@ describe('hydrateFromDiscovery', () => {
 
     // Same hydration — nothing new
     mgr.hydrateFromDiscovery([
-      { id: 'agent-1', defaults: { name: 'A', icon: '🤖', hidden: false, model: '', additionalArgs: '' } },
+      { id: 'agent-1', defaults: { name: 'A', icon: '🤖', hidden: false, model: '', additionalArgs: '', command: '' } },
     ]);
 
     const statAfter = fs.statSync(settingsPath).mtimeMs;
@@ -348,9 +349,9 @@ describe('hydrateFromDiscovery', () => {
   it('writes to disk in a single batch', () => {
     const mgr = new AgentSettingsManager(settingsPath);
     mgr.hydrateFromDiscovery([
-      { id: 'a', defaults: { name: 'A', icon: '🤖', hidden: false, model: '', additionalArgs: '' } },
-      { id: 'b', defaults: { name: 'B', icon: '🔷', hidden: false, model: '', additionalArgs: '' } },
-      { id: 'c', defaults: { name: 'C', icon: '🤖', hidden: false, model: '', additionalArgs: '' } },
+      { id: 'a', defaults: { name: 'A', icon: '🤖', hidden: false, model: '', additionalArgs: '', command: '' } },
+      { id: 'b', defaults: { name: 'B', icon: '🔷', hidden: false, model: '', additionalArgs: '', command: '' } },
+      { id: 'c', defaults: { name: 'C', icon: '🤖', hidden: false, model: '', additionalArgs: '', command: '' } },
     ]);
 
     // Verify all were written by reloading from disk
@@ -364,7 +365,7 @@ describe('hydrateFromDiscovery', () => {
     const mgr = new AgentSettingsManager(settingsPath);
     // First ensure file exists with known mtime
     mgr.hydrateFromDiscovery([
-      { id: 'x', defaults: { name: 'X', icon: '🤖', hidden: false, model: '', additionalArgs: '' } },
+      { id: 'x', defaults: { name: 'X', icon: '🤖', hidden: false, model: '', additionalArgs: '', command: '' } },
     ]);
     const statBefore = fs.statSync(settingsPath).mtimeMs;
     const start = Date.now();
@@ -381,11 +382,11 @@ describe('hydrateFromDiscovery', () => {
     mgr.update('agent-1', { icon: '⚡' });
 
     mgr.hydrateFromDiscovery([
-      { id: 'agent-1', defaults: { name: 'Agent', icon: '🤖', hidden: false, model: '', additionalArgs: '' } },
+      { id: 'agent-1', defaults: { name: 'Agent', icon: '🤖', hidden: false, model: '', additionalArgs: '', command: '' } },
     ]);
 
     mgr.hydrateFromDiscovery([
-      { id: 'agent-1', defaults: { name: 'Agent', icon: '🔷', hidden: false, model: '', additionalArgs: '' } },
+      { id: 'agent-1', defaults: { name: 'Agent', icon: '🔷', hidden: false, model: '', additionalArgs: '', command: '' } },
     ]);
 
     expect(mgr.get('agent-1')?.icon).toBe('⚡');

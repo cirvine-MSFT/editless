@@ -43,6 +43,7 @@ function hydrateSettings(items: DiscoveredItem[], settings: import('./agent-sett
       hidden: false,
       model: '',
       additionalArgs: '',
+      command: '',
     } satisfies AgentSettings,
   }));
   settings.hydrateFromDiscovery(entries);
