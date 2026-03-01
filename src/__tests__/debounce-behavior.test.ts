@@ -7,7 +7,7 @@
  *   2. Extension reveal() — batches rapid onDidChangeActiveTerminal events
  *      into a single treeView.reveal() after ~100ms.
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from 'vitest';
 import type * as vscode from 'vscode';
 import type { AgentTeamConfig } from '../types';
 
@@ -430,9 +430,9 @@ describe('Extension — debounced reveal (#438)', () => {
   // pattern Morty is implementing: clearTimeout + setTimeout(reveal, 100).
 
   let revealTimer: ReturnType<typeof setTimeout> | undefined;
-  let revealFn: ReturnType<typeof vi.fn>;
-  let findTerminalItemFn: ReturnType<typeof vi.fn>;
-  let getTerminalInfoFn: ReturnType<typeof vi.fn>;
+  let revealFn: Mock;
+  let findTerminalItemFn: Mock;
+  let getTerminalInfoFn: Mock;
 
   /** Simulates the debounced reveal handler from extension.ts */
   function debouncedRevealHandler(terminal: vscode.Terminal | undefined): void {
