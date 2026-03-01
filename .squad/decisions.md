@@ -1,3 +1,310 @@
+### 2026-03-01: v0.2 Branching Strategy — release/v0.1.x for Hotfixes, main for v0.2
+
+**Date:** 2026-03-01  
+**Author:** Birdperson (DevOps)  
+**Status:** Proposed  
+**Issue Context:** #438 (v0.1.3 hotfix), #399 (v0.2 refactor already merged)
+
+## Context
+
+PR #427 (auto-discover refactor) merged to main on 2026-02-27. This is a significant architectural change that belongs in v0.2, not v0.1.x. Meanwhile, PR #439 is a small debounce bug fix suitable for v0.1.3 hotfix release.
+
+**Problem:** Main branch is already on the v0.2 track. We need a way to ship v0.1.3 hotfixes from the stable v0.1.2 codebase without backporting the v0.2 refactor.
+
+## Decision
+
+**Branching Model:**
+
+1. **elease/v0.1.x** — Long-lived hotfix branch for v0.1 releases
+   - Branched from 0.1.2 tag
+   - Receives v0.1.3, v0.1.4, etc. bug fixes
+   - Tagged as 0.1.3, 0.1.4, etc.
+
+2. **main** — v0.2 development (current state)
+   - Continues forward with v0.2 features and refactors
+   - Eventually tagged as 0.2.0 when ready
+
+3. **Hotfix flow:**
+   - PR targets elease/v0.1.x (e.g., PR #439)
+   - After merge, tag 0.1.3 on elease/v0.1.x
+   - Cherry-pick to main if fix is still relevant (not always needed if v0.2 changes eliminate the bug)
+
+4. **Feature flow:**
+   - PR targets main (business as usual)
+   - Tagged as 0.2.0-beta.1, 0.2.0-beta.2, etc. during development if needed
+
+## Rationale
+
+**Why elease/v0.1.x instead of keeping main stable?**
+- Main already contains v0.2 changes (PR #427 merged). Reverting would be messy.
+- Release branches are the standard Git-flow pattern for LTS maintenance.
+
+**Why this works for Casey's worktree workflow:**
+- Casey can have worktrees for both:
+  - ~/code/work/editless-v01 (release/v0.1.x branch) — hotfix work
+  - ~/code/work/editless (main branch) — v0.2 feature work
+- Or use the git-worktree skill to manage them
+- Both branches are long-lived and stable, not ephemeral
+
+**Why not a dev/v0.2 feature branch?**
+- Main is already committed to v0.2. A feature branch would require all existing squad/* branches to rebase onto dev/v0.2, which is disruptive.
+
+## Implementation
+
+**Commands to create the release branch:**
+\\\ash
+git checkout v0.1.2
+git checkout -b release/v0.1.x
+git push -u origin release/v0.1.x
+\\\
+
+**Update PR #439:**
+- Change base branch from master to elease/v0.1.x
+- After merge, tag 0.1.3 on elease/v0.1.x
+- Cherry-pick to main if needed: git cherry-pick <commit-sha>
+
+**Tag convention:**
+- v0.1.x releases: 0.1.3, 0.1.4, ... (on elease/v0.1.x)
+- v0.2 releases: 0.2.0-beta.1, 0.2.0, ... (on main)
+
+## Two-Sentence Summary
+
+**release/v0.1.x** is the hotfix branch for v0.1.3+ releases; **main** is now the v0.2 development branch. Hotfixes land on release/v0.1.x, get tagged there, and are cherry-picked to main if needed.
+
+## Open Questions
+
+1. Should we update CI workflows to run on elease/v0.1.x pushes?
+2. Do we want automated cherry-pick reminders (e.g., a GitHub Action that comments on PRs merged to release/v0.1.x)?
+3. Should we protect the elease/v0.1.x branch with the same rules as main?
+
+## Files Modified (if approved)
+
+- .squad/decisions.md — append this decision
+- .github/workflows/ci.yml — add elease/v0.1.x to branch triggers (if we want CI on hotfix branch)
+- PR #439 — update base branch to elease/v0.1.x
+
+---
+### 2026-03-01: v0.2 Milestone Plan — Worktree Integration
+
+**Created:** 2026-03-01  
+**Author:** Rick  
+**Status:** APPROVED for execution
+
+---
+
+## Theme
+
+v0.2 is the **worktree integration release**. EditLess becomes first-class for multi-worktree development — agents/squads follow worktree context, terminals are disambiguated by branch, and UX polish eliminates friction points.
+
+---
+
+## Scope (9 issues)
+
+### Core Worktree Features (2)
+- **#422** — Clone agent/squad in worktree (⭐ centerpiece feature)
+- **#348** — Branch name in terminal labels for worktree disambiguation
+
+### UX Improvements (3)
+- **#440** — Auto-pick non-conflicting icons for new agents
+- **#332** — Terminal link provider (clickable PRs/issues in output)
+- **#329** — Copilot Sessions tree view (browse/resume sessions)
+
+### Foundational Refactors (4)
+- **#432** — Fix SessionContextResolver custom config directory support
+- **#429** — Rename squad→agent for generic functions/types
+- **#395** — Refactor: Separate state management from UI in editless-tree.ts
+- **#394** — Refactor: Extract BaseTreeProvider from work-items-tree and prs-tree
+
+---
+
+## Triage Decisions
+
+### Added to v0.2 (from unlabeled):
+- **#432** — SessionContextResolver is foundational for worktree work; session resolution must work reliably before we add worktree-aware cloning
+- **#429** — squad→agent rename is a natural post-#427 chore that keeps codebase clean for new worktree features
+
+### Moved to backlog:
+- **#282** (telemetry) — Nice-to-have, not urgent for worktree release
+- **#43** (visual docs) — Needs planning, not blocking v0.2 ship
+
+### Out of scope (already labeled elsewhere):
+- **#438** (tree view session tabs) — staying in v0.1.3 with draft PR #439
+- **#247, #246** (test antipatterns, god objects) — remain in backlog
+
+---
+
+## Execution Plan
+
+### Phase 1: Foundation (refactors that unblock features)
+**Start tonight. Parallel work. No blockers.**
+
+1. **#394** — Extract BaseTreeProvider  
+   - **Owner:** Morty  
+   - **Effort:** 4–6 hours  
+   - **Risk:** Medium (tree structure changes, regression risk)  
+   - **Testing:** Verify work-items-tree and prs-tree still render correctly, test expand/collapse, test refresh  
+   - **Blocks:** #395 (state management refactor builds on this)
+
+2. **#432** — Fix SessionContextResolver custom config dirs  
+   - **Owner:** Summer  
+   - **Effort:** 3–4 hours  
+   - **Risk:** Low (focused change in session-context.ts)  
+   - **Testing:** Verify resume works with --config flag, verify CWD index, verify plan resolution  
+   - **Blocks:** #422 (worktree cloning depends on session resolution working reliably)
+
+3. **#429** — Rename squad→agent for generic functions  
+   - **Owner:** Morty  
+   - **Effort:** 2–3 hours (bulk rename + test updates)  
+   - **Risk:** Low (mechanical change, depends on #427 being merged)  
+   - **Testing:** Run full test suite, verify no context value breakage  
+   - **Depends on:** PR #427 (auto-discover refactor) must merge first  
+   - **Blocks:** Nothing (cleanup work)
+
+**Phase 1 exit criteria:** BaseTreeProvider extracted, SessionContextResolver supports custom configs, squad→agent terminology cleaned up, #427 merged.
+
+---
+
+### Phase 2: Worktree Core (key features)
+**Cannot start until #432 and #394 complete.**
+
+4. **#422** — Clone agent/squad in worktree ⭐  
+   - **Owner:** Unity  
+   - **Effort:** 6–8 hours  
+   - **Risk:** High (new command, worktree detection, .squad/ directory cloning logic)  
+   - **Testing:** Clone squad in worktree, verify .squad/ structure, verify agents spawn correctly, test edge cases (no .squad/, nested worktrees)  
+   - **Depends on:** #432 (session resolution), #394 (tree provider refactor for UI updates)  
+   - **Blocks:** Nothing (this IS the centerpiece)
+
+5. **#395** — Refactor: Separate state management from UI in editless-tree.ts  
+   - **Owner:** Morty  
+   - **Effort:** 5–7 hours  
+   - **Risk:** High (core tree logic, tight coupling to refactor)  
+   - **Testing:** Verify tree updates correctly, test drag-drop, test visibility toggles, test auto-refresh  
+   - **Depends on:** #394 (BaseTreeProvider must be extracted first)  
+   - **Blocks:** Nothing (quality improvement)
+
+6. **#348** — Branch name in terminal labels for worktree disambiguation  
+   - **Owner:** Summer  
+   - **Effort:** 2–3 hours  
+   - **Risk:** Low (UI label change, git branch detection)  
+   - **Testing:** Verify labels show branch in worktree context, verify main repo still works  
+   - **Depends on:** #422 (worktree feature ships first, then we add disambiguation)  
+   - **Blocks:** Nothing
+
+**Phase 2 exit criteria:** Worktree cloning works, terminal labels disambiguate by branch, state management is clean.
+
+---
+
+### Phase 3: UX Polish (nice-to-haves)
+**Can start anytime. No dependencies.**
+
+7. **#440** — Auto-pick non-conflicting icons for new agents  
+   - **Owner:** Summer  
+   - **Effort:** 3–4 hours  
+   - **Risk:** Low (icon selection logic, no breaking changes)  
+   - **Testing:** Add 5 agents, verify icons don't conflict, verify manual override still works  
+   - **Blocks:** Nothing
+
+8. **#332** — Terminal link provider (clickable PRs/issues)  
+   - **Owner:** Summer  
+   - **Effort:** 4–5 hours  
+   - **Risk:** Medium (VS Code API integration, regex patterns)  
+   - **Testing:** Print PR/issue URLs in terminal, verify click opens browser, test edge cases (invalid refs)  
+   - **Blocks:** Nothing
+
+9. **#329** — Copilot Sessions tree view (browse/resume)  
+   - **Owner:** Unity  
+   - **Effort:** 6–8 hours  
+   - **Risk:** Medium (new tree view, session discovery logic)  
+   - **Testing:** Verify session list populates, verify resume works, test stale session cleanup  
+   - **Blocks:** Nothing
+
+**Phase 3 exit criteria:** Icon auto-selection works, terminal links are clickable, sessions tree view is functional.
+
+---
+
+## Critical Path
+
+\\\
+Phase 1: #394 (BaseTreeProvider) → #395 (state management)
+         #432 (SessionContextResolver) → #422 (worktree clone) → #348 (branch labels)
+         #429 (squad→agent rename) [parallel, no blockers]
+
+Phase 2: #422 ⭐ worktree clone (CENTERPIECE)
+         #395, #348 (follow-ons)
+
+Phase 3: #440, #332, #329 [all parallel]
+\\\
+
+**Longest path:** #394 → #395 (11–13 hours)  
+**Blocking path:** #432 → #422 → #348 (11–15 hours)
+
+**Total effort estimate:** ~40–50 dev hours across 3–4 devs = ~2 weeks elapsed with parallel work.
+
+---
+
+## Start Tonight
+
+**Immediate actionable work (no dependencies):**
+1. ✅ Morty starts #394 (BaseTreeProvider extraction)
+2. ✅ Summer starts #432 (SessionContextResolver fix)
+3. ⏳ Wait for #427 to merge, then Morty picks up #429 (squad→agent rename)
+
+**Tomorrow (once #427 merges):**
+- Morty finishes #394, picks up #429 or #395
+- Summer finishes #432, picks up #348 or #440
+- Unity starts #422 once #432 completes
+
+**Phase 3 can start anytime** — Summer or Unity can pick up #440, #332, or #329 in parallel with Phase 2.
+
+---
+
+## Risk Mitigation
+
+1. **Tree structure changes (#394, #395)** — High regression risk. Requires comprehensive manual testing of work-items-tree and prs-tree. Add visual regression checks if possible.
+
+2. **Worktree clone (#422)** — New feature, new failure modes. Test matrix: main repo, worktree with .squad/, worktree without .squad/, nested worktrees, git worktree not available.
+
+3. **Dependencies on #427** — Issue #429 blocks on auto-discover refactor merge. Monitor PR #427 status daily; merge conflicts will delay Phase 1.
+
+4. **Session resolution (#432)** — Foundation for worktree work. If fix is incomplete, worktree cloning will inherit the bug. Validate against multiple config directories before marking done.
+
+---
+
+## Release Narrative
+
+**"v0.2 makes EditLess multi-worktree native."**
+
+- Work on feature branches in separate worktrees without losing agent/squad context
+- Terminal labels show branch names so you never mix up which worktree you're in
+- Clone your squad configuration to a new worktree with one command
+- Auto-selected icons eliminate visual clutter when spawning new agents
+- Clickable PR/issue links in terminal output for faster context switching
+- Browse and resume past Copilot sessions from the new Sessions tree view
+
+**Target audience:** Developers who use git worktrees for parallel feature development (i.e., Casey and advanced Git users).
+
+---
+
+## Success Metrics
+
+- [ ] All 9 issues closed
+- [ ] No regressions in existing tree views (work items, PRs, agents)
+- [ ] Worktree clone command works in real-world Casey dogfooding
+- [ ] Branch labels appear correctly in multi-worktree scenarios
+- [ ] Icon auto-selection reduces onboarding friction (subjective, measure by Casey feedback)
+
+---
+
+## Post-v0.2 Backlog Grooming
+
+After v0.2 ships, recommend:
+1. Promote #247 (LLM test antipatterns) to v0.3 — quality debt is accumulating
+2. Consider #246 (god objects) for v0.3 — editless-tree.ts refactor in #395 should inform this
+3. Keep #282 (telemetry) in backlog until we have clear requirements
+4. Revisit #43 (visual docs) after worktree features ship — better to document working UX
+
+---
 ### 2026-02-26: Encapsulate Settings Persistence
 
 **Date:** 2026-02-26  
@@ -9717,4 +10024,5 @@ Same flow as `relaunchSession()` in `TerminalManager`:
 3. Morty: Wire QuickPick with session items + manual GUID fallback
 4. Summer: Review implementation UX against this spec
 5. Casey: Test with real external sessions (dogfood with raw CLI)
+
 
