@@ -692,6 +692,14 @@
           "scope": "resource",
           "order": 3
         },
+        "editless.cli.command": {
+          "type": "string",
+          "default": "copilot",
+          "description": "Command or path used to launch the Copilot CLI.",
+          "markdownDescription": "Command or path used to launch the Copilot CLI.\n\nOverride this if you use a custom wrapper script or alternative binary. Multi-word commands are supported (e.g. `\"my-wrapper copilot\"`).\n\nDefault: `\"copilot\"`.",
+          "scope": "window",
+          "order": 19
+        },
         "editless.cli.additionalArgs": {
           "type": "string",
           "default": "",

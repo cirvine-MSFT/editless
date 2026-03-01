@@ -24,6 +24,8 @@ export interface AgentTeamConfig {
   model?: string;
   /** Per-squad extra CLI flags (e.g., "--yolo") */
   additionalArgs?: string;
+  /** Custom CLI command override (e.g. "my-wrapper copilot") */
+  command?: string;
 }
 
 // ---------------------------------------------------------------------------

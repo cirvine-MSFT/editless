@@ -26,15 +26,60 @@ import type { CopilotCommandOptions } from '../copilot-cli-builder';
 describe('copilot-cli-builder', () => {
   beforeEach(() => {
     mockGet.mockReset();
-    // Default mock: additionalArgs=''
+    // Default mock: command='copilot', additionalArgs=''
     mockGet.mockImplementation((key: string, defaultValue?: unknown) => {
       if (key === 'additionalArgs') return '';
+      if (key === 'command') return 'copilot';
       return defaultValue;
     });
   });
 
   describe('getCliCommand', () => {
-    it('always returns "copilot"', () => {
+    it('returns "copilot" by default', () => {
+      expect(getCliCommand()).toBe('copilot');
+    });
+
+    it('returns override when provided', () => {
+      expect(getCliCommand('my-custom-cli')).toBe('my-custom-cli');
+    });
+
+    it('reads from editless.cli.command setting', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return '/usr/local/bin/my-copilot';
+        return def;
+      });
+      expect(getCliCommand()).toBe('/usr/local/bin/my-copilot');
+    });
+
+    it('override takes precedence over global setting', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return 'global-cli';
+        return def;
+      });
+      expect(getCliCommand('per-agent-cli')).toBe('per-agent-cli');
+    });
+
+    it('falls through to config when override is empty string', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return 'global-cli';
+        return def;
+      });
+      expect(getCliCommand('')).toBe('global-cli');
+    });
+
+    it('falls back to "copilot" when config returns empty string', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return '';
+        return def;
+      });
+      expect(getCliCommand()).toBe('copilot');
+    });
+
+    it('falls back to "copilot" when config returns whitespace-only', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return '   ';
+        return def;
+      });
       expect(getCliCommand()).toBe('copilot');
     });
   });
@@ -70,8 +115,20 @@ describe('copilot-cli-builder', () => {
     });
 
     it('uses configured CLI binary name', () => {
-      // CLI binary is now hardcoded to "copilot"
-      expect(buildCopilotCommand({ agent: 'squad' })).toBe('copilot --agent squad');
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return 'custom-copilot';
+        return def;
+      });
+      expect(buildCopilotCommand({ agent: 'squad' })).toBe('custom-copilot --agent squad');
+    });
+
+    it('uses command override from options', () => {
+      expect(buildCopilotCommand({ command: 'my-cli', agent: 'squad' })).toBe('my-cli --agent squad');
+    });
+
+    it('supports multi-word command without quoting', () => {
+      expect(buildCopilotCommand({ command: 'my-wrapper copilot', agent: 'squad' }))
+        .toBe('my-wrapper copilot --agent squad');
     });
 
     it('does not include $(agent) in output', () => {
@@ -165,6 +222,15 @@ describe('copilot-cli-builder', () => {
       const cmd = buildDefaultLaunchCommand();
       expect(cmd).not.toContain('$(');
       expect(cmd).not.toContain('${');
+    });
+
+    it('uses global editless.cli.command setting', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return 'custom-copilot';
+        if (key === 'additionalArgs') return '';
+        return def;
+      });
+      expect(buildDefaultLaunchCommand()).toBe('custom-copilot --agent squad');
     });
   });
 
@@ -277,6 +343,44 @@ describe('copilot-cli-builder', () => {
       expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('--agent'));
       warnSpy.mockRestore();
     });
+
+    it('uses per-agent command override', () => {
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', command: 'my-cli',
+      });
+      expect(cmd).toBe('my-cli --agent squad');
+    });
+
+    it('uses global editless.cli.command when no per-agent command', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return 'global-cli';
+        if (key === 'additionalArgs') return '';
+        return def;
+      });
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty',
+      });
+      expect(cmd).toBe('global-cli --agent squad');
+    });
+
+    it('per-agent command takes precedence over global setting', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'command') return 'global-cli';
+        if (key === 'additionalArgs') return '';
+        return def;
+      });
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', command: 'agent-cli',
+      });
+      expect(cmd).toBe('agent-cli --agent squad');
+    });
+
+    it('supports multi-word command in buildLaunchCommandForConfig', () => {
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', command: 'my-wrapper copilot',
+      });
+      expect(cmd).toBe('my-wrapper copilot --agent squad');
+    });
   });
 
   describe('shell quoting', () => {
@@ -346,7 +450,7 @@ describe('copilot-cli-builder', () => {
   });
 
   describe('legacy config stripping', () => {
-    it('getCliCommand always returns "copilot" regardless of mock', () => {
+    it('getCliCommand returns "copilot" when no override and default setting', () => {
       expect(getCliCommand()).toBe('copilot');
     });
   });

@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.3] - Unreleased
+
+### Added
+- **Custom CLI command** — new `editless.cli.command` setting to override the default `copilot` binary with a custom command or wrapper script (#434)
+- Per-agent `command` override in agent settings — each agent can use a different CLI command
+- Multi-word commands supported (e.g. `my-wrapper copilot`) — not shell-quoted, spaces are intentional tokens
+- Precedence: per-agent command → global `editless.cli.command` → `"copilot"` (default)
+
 ## [0.1.2] - 2026-02-24
 
 Well, it didn't take long to find a serious bug. Whoops! Turns out we were scanning the *parent* of your workspace instead of the workspace itself, which means squad discovery was running wild looking in all the wrong places. We also added smarter recursive discovery (up to 4 levels deep with sensible exclusions), case-insensitive directory handling for Windows, and locked down hidden directories for security. Your legacy `.ai-team` stuff still works too.
