@@ -63,9 +63,9 @@
     "commands": [
       {
         "command": "editless.launchSession",
-        "title": "New Session",
+        "title": "Launch Session",
         "category": "EditLess",
-        "icon": "$(play)"
+        "icon": "$(terminal)"
       },
       {
         "command": "editless.focusSession",
@@ -123,8 +123,7 @@
       },
       {
         "command": "editless.hideAgent",
-        "title": "Hide",
-        "icon": "$(eye-closed)"
+        "title": "Hide"
       },
       {
         "command": "editless.showHiddenAgents",
@@ -288,8 +287,8 @@
         "icon": "$(debug-restart)"
       },
       {
-        "command": "editless.resumeExternalSession",
-        "title": "Resume External Session...",
+        "command": "editless.resumeSession",
+        "title": "Resume Session...",
         "category": "EditLess",
         "icon": "$(history)"
       },
@@ -405,8 +404,8 @@
           "group": "session@0"
         },
         {
-          "command": "editless.resumeExternalSession",
-          "when": "view == editlessTree && viewItem =~ /^squad|^agent|^default-agent$/",
+          "command": "editless.resumeSession",
+          "when": "view == editlessTree && viewItem =~ /^squad|^squad-hidden|^agent|^default-agent$/",
           "group": "session@1"
         },
         {

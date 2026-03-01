@@ -151,29 +151,12 @@ export function register(context: vscode.ExtensionContext, deps: SessionCommandD
     }),
   );
 
-  // Resume External Session — pick from ~/.copilot/session-state/ (#415)
+  // Resume Session — pick from ~/.copilot/session-state/ (#415)
   context.subscriptions.push(
-    vscode.commands.registerCommand('editless.resumeExternalSession', async () => {
+    vscode.commands.registerCommand('editless.resumeSession', async () => {
       const allSessions = sessionContextResolver.getAllSessions();
       if (allSessions.length === 0) {
         vscode.window.showInformationMessage('No Copilot CLI sessions found in ~/.copilot/session-state/.');
-        return;
-      }
-
-      // Filter out sessions already tracked by EditLess
-      const trackedIds = new Set(
-        terminalManager.getAllTerminals()
-          .map(({ info }) => info.agentSessionId)
-          .filter((id): id is string => !!id),
-      );
-      // Also exclude orphaned sessions already shown in the tree
-      for (const orphan of terminalManager.getOrphanedSessions()) {
-        if (orphan.agentSessionId) trackedIds.add(orphan.agentSessionId);
-      }
-
-      const external = allSessions.filter(s => !trackedIds.has(s.sessionId));
-      if (external.length === 0) {
-        vscode.window.showInformationMessage('All sessions are already active in EditLess.');
         return;
       }
 
@@ -186,7 +169,7 @@ export function register(context: vscode.ExtensionContext, deps: SessionCommandD
         return workspaceCwds.some(w => norm === w || norm.startsWith(w + '/'));
       };
 
-      const sorted = [...external].sort((a, b) => {
+      const sorted = [...allSessions].sort((a, b) => {
         const aMatch = cwdMatch(a.cwd) ? 0 : 1;
         const bMatch = cwdMatch(b.cwd) ? 0 : 1;
         if (aMatch !== bMatch) return aMatch - bMatch;
