@@ -1,3 +1,310 @@
+### 2026-03-01: v0.2 Branching Strategy — release/v0.1.x for Hotfixes, main for v0.2
+
+**Date:** 2026-03-01  
+**Author:** Birdperson (DevOps)  
+**Status:** Proposed  
+**Issue Context:** #438 (v0.1.3 hotfix), #399 (v0.2 refactor already merged)
+
+## Context
+
+PR #427 (auto-discover refactor) merged to main on 2026-02-27. This is a significant architectural change that belongs in v0.2, not v0.1.x. Meanwhile, PR #439 is a small debounce bug fix suitable for v0.1.3 hotfix release.
+
+**Problem:** Main branch is already on the v0.2 track. We need a way to ship v0.1.3 hotfixes from the stable v0.1.2 codebase without backporting the v0.2 refactor.
+
+## Decision
+
+**Branching Model:**
+
+1. **elease/v0.1.x** — Long-lived hotfix branch for v0.1 releases
+   - Branched from 0.1.2 tag
+   - Receives v0.1.3, v0.1.4, etc. bug fixes
+   - Tagged as 0.1.3, 0.1.4, etc.
+
+2. **main** — v0.2 development (current state)
+   - Continues forward with v0.2 features and refactors
+   - Eventually tagged as 0.2.0 when ready
+
+3. **Hotfix flow:**
+   - PR targets elease/v0.1.x (e.g., PR #439)
+   - After merge, tag 0.1.3 on elease/v0.1.x
+   - Cherry-pick to main if fix is still relevant (not always needed if v0.2 changes eliminate the bug)
+
+4. **Feature flow:**
+   - PR targets main (business as usual)
+   - Tagged as 0.2.0-beta.1, 0.2.0-beta.2, etc. during development if needed
+
+## Rationale
+
+**Why elease/v0.1.x instead of keeping main stable?**
+- Main already contains v0.2 changes (PR #427 merged). Reverting would be messy.
+- Release branches are the standard Git-flow pattern for LTS maintenance.
+
+**Why this works for Casey's worktree workflow:**
+- Casey can have worktrees for both:
+  - ~/code/work/editless-v01 (release/v0.1.x branch) — hotfix work
+  - ~/code/work/editless (main branch) — v0.2 feature work
+- Or use the git-worktree skill to manage them
+- Both branches are long-lived and stable, not ephemeral
+
+**Why not a dev/v0.2 feature branch?**
+- Main is already committed to v0.2. A feature branch would require all existing squad/* branches to rebase onto dev/v0.2, which is disruptive.
+
+## Implementation
+
+**Commands to create the release branch:**
+\\\ash
+git checkout v0.1.2
+git checkout -b release/v0.1.x
+git push -u origin release/v0.1.x
+\\\
+
+**Update PR #439:**
+- Change base branch from master to elease/v0.1.x
+- After merge, tag 0.1.3 on elease/v0.1.x
+- Cherry-pick to main if needed: git cherry-pick <commit-sha>
+
+**Tag convention:**
+- v0.1.x releases: 0.1.3, 0.1.4, ... (on elease/v0.1.x)
+- v0.2 releases: 0.2.0-beta.1, 0.2.0, ... (on main)
+
+## Two-Sentence Summary
+
+**release/v0.1.x** is the hotfix branch for v0.1.3+ releases; **main** is now the v0.2 development branch. Hotfixes land on release/v0.1.x, get tagged there, and are cherry-picked to main if needed.
+
+## Open Questions
+
+1. Should we update CI workflows to run on elease/v0.1.x pushes?
+2. Do we want automated cherry-pick reminders (e.g., a GitHub Action that comments on PRs merged to release/v0.1.x)?
+3. Should we protect the elease/v0.1.x branch with the same rules as main?
+
+## Files Modified (if approved)
+
+- .squad/decisions.md — append this decision
+- .github/workflows/ci.yml — add elease/v0.1.x to branch triggers (if we want CI on hotfix branch)
+- PR #439 — update base branch to elease/v0.1.x
+
+---
+### 2026-03-01: v0.2 Milestone Plan — Worktree Integration
+
+**Created:** 2026-03-01  
+**Author:** Rick  
+**Status:** APPROVED for execution
+
+---
+
+## Theme
+
+v0.2 is the **worktree integration release**. EditLess becomes first-class for multi-worktree development — agents/squads follow worktree context, terminals are disambiguated by branch, and UX polish eliminates friction points.
+
+---
+
+## Scope (9 issues)
+
+### Core Worktree Features (2)
+- **#422** — Clone agent/squad in worktree (⭐ centerpiece feature)
+- **#348** — Branch name in terminal labels for worktree disambiguation
+
+### UX Improvements (3)
+- **#440** — Auto-pick non-conflicting icons for new agents
+- **#332** — Terminal link provider (clickable PRs/issues in output)
+- **#329** — Copilot Sessions tree view (browse/resume sessions)
+
+### Foundational Refactors (4)
+- **#432** — Fix SessionContextResolver custom config directory support
+- **#429** — Rename squad→agent for generic functions/types
+- **#395** — Refactor: Separate state management from UI in editless-tree.ts
+- **#394** — Refactor: Extract BaseTreeProvider from work-items-tree and prs-tree
+
+---
+
+## Triage Decisions
+
+### Added to v0.2 (from unlabeled):
+- **#432** — SessionContextResolver is foundational for worktree work; session resolution must work reliably before we add worktree-aware cloning
+- **#429** — squad→agent rename is a natural post-#427 chore that keeps codebase clean for new worktree features
+
+### Moved to backlog:
+- **#282** (telemetry) — Nice-to-have, not urgent for worktree release
+- **#43** (visual docs) — Needs planning, not blocking v0.2 ship
+
+### Out of scope (already labeled elsewhere):
+- **#438** (tree view session tabs) — staying in v0.1.3 with draft PR #439
+- **#247, #246** (test antipatterns, god objects) — remain in backlog
+
+---
+
+## Execution Plan
+
+### Phase 1: Foundation (refactors that unblock features)
+**Start tonight. Parallel work. No blockers.**
+
+1. **#394** — Extract BaseTreeProvider  
+   - **Owner:** Morty  
+   - **Effort:** 4–6 hours  
+   - **Risk:** Medium (tree structure changes, regression risk)  
+   - **Testing:** Verify work-items-tree and prs-tree still render correctly, test expand/collapse, test refresh  
+   - **Blocks:** #395 (state management refactor builds on this)
+
+2. **#432** — Fix SessionContextResolver custom config dirs  
+   - **Owner:** Summer  
+   - **Effort:** 3–4 hours  
+   - **Risk:** Low (focused change in session-context.ts)  
+   - **Testing:** Verify resume works with --config flag, verify CWD index, verify plan resolution  
+   - **Blocks:** #422 (worktree cloning depends on session resolution working reliably)
+
+3. **#429** — Rename squad→agent for generic functions  
+   - **Owner:** Morty  
+   - **Effort:** 2–3 hours (bulk rename + test updates)  
+   - **Risk:** Low (mechanical change, depends on #427 being merged)  
+   - **Testing:** Run full test suite, verify no context value breakage  
+   - **Depends on:** PR #427 (auto-discover refactor) must merge first  
+   - **Blocks:** Nothing (cleanup work)
+
+**Phase 1 exit criteria:** BaseTreeProvider extracted, SessionContextResolver supports custom configs, squad→agent terminology cleaned up, #427 merged.
+
+---
+
+### Phase 2: Worktree Core (key features)
+**Cannot start until #432 and #394 complete.**
+
+4. **#422** — Clone agent/squad in worktree ⭐  
+   - **Owner:** Unity  
+   - **Effort:** 6–8 hours  
+   - **Risk:** High (new command, worktree detection, .squad/ directory cloning logic)  
+   - **Testing:** Clone squad in worktree, verify .squad/ structure, verify agents spawn correctly, test edge cases (no .squad/, nested worktrees)  
+   - **Depends on:** #432 (session resolution), #394 (tree provider refactor for UI updates)  
+   - **Blocks:** Nothing (this IS the centerpiece)
+
+5. **#395** — Refactor: Separate state management from UI in editless-tree.ts  
+   - **Owner:** Morty  
+   - **Effort:** 5–7 hours  
+   - **Risk:** High (core tree logic, tight coupling to refactor)  
+   - **Testing:** Verify tree updates correctly, test drag-drop, test visibility toggles, test auto-refresh  
+   - **Depends on:** #394 (BaseTreeProvider must be extracted first)  
+   - **Blocks:** Nothing (quality improvement)
+
+6. **#348** — Branch name in terminal labels for worktree disambiguation  
+   - **Owner:** Summer  
+   - **Effort:** 2–3 hours  
+   - **Risk:** Low (UI label change, git branch detection)  
+   - **Testing:** Verify labels show branch in worktree context, verify main repo still works  
+   - **Depends on:** #422 (worktree feature ships first, then we add disambiguation)  
+   - **Blocks:** Nothing
+
+**Phase 2 exit criteria:** Worktree cloning works, terminal labels disambiguate by branch, state management is clean.
+
+---
+
+### Phase 3: UX Polish (nice-to-haves)
+**Can start anytime. No dependencies.**
+
+7. **#440** — Auto-pick non-conflicting icons for new agents  
+   - **Owner:** Summer  
+   - **Effort:** 3–4 hours  
+   - **Risk:** Low (icon selection logic, no breaking changes)  
+   - **Testing:** Add 5 agents, verify icons don't conflict, verify manual override still works  
+   - **Blocks:** Nothing
+
+8. **#332** — Terminal link provider (clickable PRs/issues)  
+   - **Owner:** Summer  
+   - **Effort:** 4–5 hours  
+   - **Risk:** Medium (VS Code API integration, regex patterns)  
+   - **Testing:** Print PR/issue URLs in terminal, verify click opens browser, test edge cases (invalid refs)  
+   - **Blocks:** Nothing
+
+9. **#329** — Copilot Sessions tree view (browse/resume)  
+   - **Owner:** Unity  
+   - **Effort:** 6–8 hours  
+   - **Risk:** Medium (new tree view, session discovery logic)  
+   - **Testing:** Verify session list populates, verify resume works, test stale session cleanup  
+   - **Blocks:** Nothing
+
+**Phase 3 exit criteria:** Icon auto-selection works, terminal links are clickable, sessions tree view is functional.
+
+---
+
+## Critical Path
+
+\\\
+Phase 1: #394 (BaseTreeProvider) → #395 (state management)
+         #432 (SessionContextResolver) → #422 (worktree clone) → #348 (branch labels)
+         #429 (squad→agent rename) [parallel, no blockers]
+
+Phase 2: #422 ⭐ worktree clone (CENTERPIECE)
+         #395, #348 (follow-ons)
+
+Phase 3: #440, #332, #329 [all parallel]
+\\\
+
+**Longest path:** #394 → #395 (11–13 hours)  
+**Blocking path:** #432 → #422 → #348 (11–15 hours)
+
+**Total effort estimate:** ~40–50 dev hours across 3–4 devs = ~2 weeks elapsed with parallel work.
+
+---
+
+## Start Tonight
+
+**Immediate actionable work (no dependencies):**
+1. ✅ Morty starts #394 (BaseTreeProvider extraction)
+2. ✅ Summer starts #432 (SessionContextResolver fix)
+3. ⏳ Wait for #427 to merge, then Morty picks up #429 (squad→agent rename)
+
+**Tomorrow (once #427 merges):**
+- Morty finishes #394, picks up #429 or #395
+- Summer finishes #432, picks up #348 or #440
+- Unity starts #422 once #432 completes
+
+**Phase 3 can start anytime** — Summer or Unity can pick up #440, #332, or #329 in parallel with Phase 2.
+
+---
+
+## Risk Mitigation
+
+1. **Tree structure changes (#394, #395)** — High regression risk. Requires comprehensive manual testing of work-items-tree and prs-tree. Add visual regression checks if possible.
+
+2. **Worktree clone (#422)** — New feature, new failure modes. Test matrix: main repo, worktree with .squad/, worktree without .squad/, nested worktrees, git worktree not available.
+
+3. **Dependencies on #427** — Issue #429 blocks on auto-discover refactor merge. Monitor PR #427 status daily; merge conflicts will delay Phase 1.
+
+4. **Session resolution (#432)** — Foundation for worktree work. If fix is incomplete, worktree cloning will inherit the bug. Validate against multiple config directories before marking done.
+
+---
+
+## Release Narrative
+
+**"v0.2 makes EditLess multi-worktree native."**
+
+- Work on feature branches in separate worktrees without losing agent/squad context
+- Terminal labels show branch names so you never mix up which worktree you're in
+- Clone your squad configuration to a new worktree with one command
+- Auto-selected icons eliminate visual clutter when spawning new agents
+- Clickable PR/issue links in terminal output for faster context switching
+- Browse and resume past Copilot sessions from the new Sessions tree view
+
+**Target audience:** Developers who use git worktrees for parallel feature development (i.e., Casey and advanced Git users).
+
+---
+
+## Success Metrics
+
+- [ ] All 9 issues closed
+- [ ] No regressions in existing tree views (work items, PRs, agents)
+- [ ] Worktree clone command works in real-world Casey dogfooding
+- [ ] Branch labels appear correctly in multi-worktree scenarios
+- [ ] Icon auto-selection reduces onboarding friction (subjective, measure by Casey feedback)
+
+---
+
+## Post-v0.2 Backlog Grooming
+
+After v0.2 ships, recommend:
+1. Promote #247 (LLM test antipatterns) to v0.3 — quality debt is accumulating
+2. Consider #246 (god objects) for v0.3 — editless-tree.ts refactor in #395 should inform this
+3. Keep #282 (telemetry) in backlog until we have clear requirements
+4. Revisit #43 (visual docs) after worktree features ship — better to document working UX
+
+---
 ### 2026-02-26: Encapsulate Settings Persistence
 
 **Date:** 2026-02-26  
@@ -8966,4 +9273,1444 @@ Key tools for agent debugging:
 **Rule Going Forward:** When a function is deprecated as part of a refactor, remove it in the same PR. Don't defer cleanup to "later" — later never comes, and deprecated code accumulates. If tests exist solely for deprecated functions, remove those tests too.
 
 **Applies To:** All future refactoring cycles. Remove deprecated code during refactor, not after.
+
+
+---
+
+# Command Module Pattern
+
+**Date:** 2026-02-28
+**Author:** Morty
+**Status:** Implemented
+
+## Decision
+
+Command handlers in `extension.ts` are extracted into domain-specific modules
+under `src/commands/`:
+
+- `agent-commands.ts` — agent discovery, CRUD, model, launch, add
+- `session-commands.ts` — terminal focus, close, rename, label
+- `work-item-commands.ts` — work items, PRs, filters, ADO/GitHub
+
+Each module exports `register(context, deps)` where `deps` is a typed
+interface containing only the services that module needs (dependency injection,
+no module-level singletons).
+
+## Consequences
+
+- `activate()` in `extension.ts` is now ~230 lines of pure wiring (was ~1300)
+- New commands go in the appropriate module, not extension.ts
+- Tests continue using the `activate()` → capture handlers pattern unchanged
+- Mocks for `../unified-discovery` must use `importOriginal` to preserve
+  real exports like `toAgentTeamConfig`
+
+---
+
+# CWD Resolution Expanded to Three Agent Types
+
+**Decided by:** Morty  
+**Date:** 2026-02-23  
+**Issue:** #403 | **PR:** #412  
+
+## Decision
+
+`resolveTerminalCwd()` now resolves CWD for three agent types instead of one:
+
+1. **Repo agents** (path inside a workspace folder, e.g. `.github/agents/`) → that workspace folder root
+2. **Workspace-dir agents** (any path inside a workspace folder) → that workspace folder root
+3. **Personal agents** (`~/.copilot/agents/`, outside workspace) → first workspace folder
+
+**Priority:** workspace folder membership is checked first (covers repo + workspace-dir agents), then personal agent `.copilot/agents` regex fallback. This means repo agents whose path happens to contain `.copilot/agents` will be resolved by the workspace folder match (correct behavior) rather than the personal agent fallback.
+
+## Rationale
+
+The v0.1.2 implementation only handled personal agents, causing repo-defined agents and workspace-dir agents to launch terminals in their agent directory instead of the project root. This broke workflows where the agent needs access to workspace files.
+
+## Impact
+
+- `src/terminal-manager.ts` — `resolveTerminalCwd()` expanded
+- Both call sites (`launchTerminal`, `relaunchSession`) unchanged — they already call `resolveTerminalCwd(config.path)`
+- 7 new tests, 842 total passing
+
+---
+
+# Decision: Multi-line tail analysis for event detection
+
+**Date:** 2026-02-23
+**Author:** Morty
+**Issue:** #402
+
+## Context
+
+The Copilot CLI emits tool calls in parallel. When `ask_user` is called alongside `report_intent`, the last event in `events.jsonl` could be `report_intent`'s `tool.execution_complete` — masking the open `ask_user` start. This broke the attention icon.
+
+## Decision
+
+Parse ALL lines from the 2KB tail chunk (not just the last line) in both `getLastEvent()` and `watchSession()`. Track open `ask_user` tool calls via a `Set<string>` of `toolCallId`s. Expose a computed `hasOpenAskUser` boolean on `SessionEvent`. `isAttentionEvent()` now checks this flag instead of the event type.
+
+## Impact
+
+- `SessionEvent` interface has two new optional fields: `toolCallId` and `hasOpenAskUser`
+- The malformed JSON behavior changed: corrupt trailing lines are now skipped (resilient), and the last valid parsed line is used instead of silently dropping the event
+- Any future code that needs to detect open tool calls can extend the same `Set` tracking pattern
+
+---
+
+# Decision: Official Copilot SDK Event Types
+
+**Date:** 2026-02-23
+**Author:** Morty
+**Status:** Implemented
+**Issue:** #402 / PR #414
+
+## Context
+
+We were using hand-rolled magic strings for Copilot CLI event types (`assistant.ask_user`, `user.ask`, `assistant.code_edit`, `tool.result`) that don't exist in the official `github/copilot-sdk` schema. This caused dead code paths and potential confusion about what events the CLI actually emits.
+
+## Decision
+
+1. Created `src/copilot-sdk-types.ts` as the single source of truth for event type strings, sourced from `github/copilot-sdk` v0.1.8 `session-events.schema.json`.
+2. `CopilotEvents` const object provides named constants for the subset we use in state detection — avoids magic strings while keeping imports minimal.
+3. `SessionEvent.type` remains `string` (not `CopilotEventType`) so unknown future events don't break parsing.
+4. Removed non-official event types: `assistant.ask_user`, `user.ask`, `assistant.code_edit`, `tool.result`.
+
+## Impact
+
+- `isAttentionEvent()` only triggers on `tool.execution_start` with `toolName === 'ask_user'` (the official mechanism).
+- `isWorkingEvent()` only references official schema types.
+- Future event type additions should update `copilot-sdk-types.ts` first, then reference via `CopilotEvents`.
+
+---
+
+### Extract command modules from extension.ts
+
+**Date:** 2026-02-26  
+**Author:** Rick  
+**Status:** Proposed  
+**Trigger:** Modularity review of #399 refresh-speed refactor
+
+## Context
+
+`extension.ts` is 1273 lines and growing. The `activate()` function contains all command registration, event wiring, integration init, and helper utilities in a single scope. This makes it hard to test command handlers in isolation and creates merge conflicts when multiple features touch the same file.
+
+## Decision
+
+Extract command handlers into focused modules:
+
+1. **`src/commands/agent-commands.ts`** — launch, rename, hide/show, change model, add agent/squad (~300 lines)
+2. **`src/commands/work-item-commands.ts`** — work items filtering, level filters, launch from work item (~200 lines)
+3. **`src/commands/pr-commands.ts`** — PR filtering, level filters, launch from PR (~200 lines)
+4. **`src/commands/session-commands.ts`** — focus, rename, close, label, relaunch/dismiss orphans (~150 lines)
+
+Each module exports a `register(context, deps)` function that takes the extension context and shared dependencies (agentSettings, treeProvider, terminalManager, etc.).
+
+Additionally, extract `toAgentTeamConfig(disc: DiscoveredItem, settings: AgentSettings): AgentTeamConfig` into a shared utility — currently duplicated 5× across extension.ts and editless-tree.ts.
+
+## Consequences
+
+- `extension.ts` drops to ~300 lines (init + wiring only)
+- Command handlers become independently testable
+- Reduces merge conflicts on the most-edited file
+- No runtime behavior change
+
+---
+
+# v0.1.3 Triage: Issues #420, #419, #415
+
+**Date:** 2026-02-24  
+**Triaged by:** Rick (Lead)  
+**Status:** Assigned to squad members
+
+---
+
+## Summary
+
+Triaged 3 untriaged v0.1.3 issues. All assigned to squad members. No issues suitable for autonomous @copilot work (1 needs SDK expertise, 2 are extension UI fixes with design nuance).
+
+---
+
+## Routing Decisions
+
+### Issue #420: Copilot CLI missing from agent picker
+- **Assigned to:** Jaguar (Copilot SDK Expert)
+- **Type:** Bug
+- **Capability:** 🟡 Needs review (SDK integration bug)
+- **Reasoning:** Bug involves agent registration and picker logic. Requires Copilot SDK expertise to trace registration flow, agent filtering, and verify correct agent is being published to picker. Not a simple extension code fix — SDK understanding is critical.
+- **Priority:** Medium
+- **Labels:** `squad`, `squad:jaguar`
+
+### Issue #419: Squad roster '+' button UX confusion
+- **Assigned to:** Morty (Extension Dev)
+- **Type:** Bug (UX)
+- **Capability:** 🟢 Good fit (TreeView UI fix)
+- **Reasoning:** Pure VS Code TreeView provider issue. Roster agents are non-launchable reference entries; launch button shouldn't render for them. Straightforward conditional UI logic in tree component. Well-defined scope, no design ambiguity.
+- **Priority:** Medium
+- **Labels:** `squad`, `squad:morty`
+
+### Issue #415: Feature request — resume external session
+- **Assigned to:** Morty (Extension Dev)
+- **Type:** Feature
+- **Capability:** 🟡 Needs review (medium feature, clear spec, sequenced)
+- **Reasoning:** Feature is well-specified by Summer (full UX spec in issue comments). Touches terminal-manager.ts and requires new command + QuickPick UI. Medium complexity with clear acceptance criteria. **Critical sequencing:** Wait for PRs #410–#414 to merge (#412 and #414 both modify terminal-manager.ts; #414 adds 'attention' session state used by resume flow). Implementing on clean post-merge base avoids conflicts and reduces risk of rework.
+- **Priority:** Medium (sequenced, not urgent until dependencies merge)
+- **Labels:** `squad`, `squad:morty`
+
+---
+
+## @copilot Evaluation
+
+No issues routed to `squad:copilot`. Reasoning:
+
+- **#420:** Requires Copilot SDK expertise outside @copilot's general coding capability. Jaguar needed to verify SDK integration assumptions.
+- **#419:** While 🟢 good fit for @copilot (straightforward UI fix), Morty owns all TreeView code and should maintain consistency in tree logic patterns. Keeping with squad member preferred.
+- **#415:** Feature with sequencing dependency. Better handled by squad member who can coordinate with Morty's other v0.1.3 work and understand terminal-manager.ts context.
+
+---
+
+## Next Steps
+
+1. Jaguar to pick up #420 — diagnose agent registration flow
+2. Morty to pick up #419 (immediate) — roster button UX fix
+3. Morty to track #415 sequencing — don't start until #410–#414 merged
+
+---
+
+# Resume External Session — UX Spec
+
+**Author:** Summer (Product Designer)  
+**Date:** 2026-02-24  
+**Issue:** #415  
+**Context:** User request from jnichols0 to resume Copilot CLI sessions started outside EditLess
+
+---
+
+## Problem
+
+EditLess can only resume sessions it already knows about (via `PersistedTerminalInfo`). Sessions started in raw Copilot CLI outside the extension have no persisted metadata, so users can't resume them from the sidebar.
+
+The Copilot CLI stores all sessions in `~/.copilot/session-state/{guid}/`, each with `workspace.yaml`, `events.jsonl`, and other metadata. These sessions are resumable via `copilot --resume {guid}`, but there's no UI to access them.
+
+**User need:** "I started a session in a standalone terminal. I want to resume it from EditLess without typing the GUID manually."
+
+---
+
+## Design Goals
+
+1. **Discoverable** — users can find the feature when they need it
+2. **Searchable** — finding the right session among dozens should be fast
+3. **Informative** — show enough context to pick the right session (summary, date, path)
+4. **Lightweight** — this is a v0.1.3 quick win, not a full session browser
+5. **Agent-scoped** — resume makes sense per agent, not globally
+
+---
+
+## 1. Entry Points
+
+### Primary: Context menu on agent tree items
+
+**Location:** Right-click on any agent (squad or default Copilot CLI) in the sidebar tree
+
+**Menu item:**
+```
+Resume External Session...
+```
+
+**Rationale:**
+- Contextual — you're picking an agent, then picking a session for that agent
+- Consistent with existing "Launch Session" action placement
+- Discoverable — right-click is the natural exploration path for power users
+
+### Secondary: Command palette
+
+**Command:** `EditLess: Resume External Session`
+
+**Behavior:**
+1. If a session terminal is currently focused → pre-select that agent's sessions
+2. Otherwise → show agent picker first, then session picker
+
+**Rationale:**
+- Command palette is for keyboard-first users
+- Still needs agent context before showing sessions
+
+### Not included in v0.1.3:
+- ❌ Inline tree button (would clutter toolbar)
+- ❌ Global "Resume Any Session" command (loses agent context)
+- ❌ Status bar entry point (not discoverable enough)
+
+---
+
+## 2. Picker Design
+
+### Step 1: Session QuickPick
+
+VS Code `QuickPick` with:
+
+**Title:** `Resume Session — {agent-icon} {agent-name}`
+
+**Placeholder:** `Search by summary, branch, or GUID...`
+
+**Items:**
+
+Each session is displayed as:
+
+```
+{summary-first-100-chars}
+{relative-time} · {branch} · {cwd-basename}
+```
+
+**Example items:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Resume Session — 🚀 Alpha Squad                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│ ⏎ Search by summary, branch, or GUID...                            │
+├─────────────────────────────────────────────────────────────────────┤
+│ ● Fix login validation bug in auth module                          │
+│   2 hours ago · squad/213-fix-login · editless                     │
+├─────────────────────────────────────────────────────────────────────┤
+│ ● Add documentation for session resume feature                     │
+│   1 day ago · squad/415-resume-external · editless                 │
+├─────────────────────────────────────────────────────────────────────┤
+│ ● Implement hierarchical filter UX for work items                  │
+│   3 days ago · squad/390-filter-hierarchy · editless               │
+├─────────────────────────────────────────────────────────────────────┤
+│ $(note) Paste GUID directly                                        │
+│   Enter a session GUID manually                                    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Item Structure
+
+**Label (line 1):**
+- Icon: `$(circle-filled)` for recent sessions (< 7 days), `$(circle-outline)` for older
+- Summary text from `workspace.yaml` (truncated to 100 chars)
+
+**Description (line 2):**
+- Relative time (Last modified on `events.jsonl`): "2 hours ago", "3 days ago", "Jan 15"
+- Branch name from `workspace.yaml` (or "—" if missing)
+- CWD basename (not full path — too long)
+
+**Detail (tooltip):**
+```
+Full path: C:\Users\cirvine\code\work\editless
+Session ID: 00031334-f9b2-4f01-ae31-37d7231db0a0
+Last activity: 2 hours ago
+Branch: squad/213-fix-login
+Status: resumable
+```
+
+**Last item (special):**
+- Label: `$(note) Paste GUID directly`
+- Description: `Enter a session GUID manually`
+- Triggers: InputBox for manual GUID entry
+
+### Sorting & Scoping — Show ALL sessions, not just CWD-matched
+
+**IMPORTANT (Casey directive):** The picker MUST show ALL sessions from `~/.copilot/session-state/`, not only those matching the current agent's CWD. The whole point is resuming sessions started outside EditLess — these may come from any directory, any project, any context.
+
+**Default sort order:**
+1. CWD-matched sessions first (sessions whose `workspace.yaml` CWD matches the current workspace) — these are most likely what the user wants
+2. Within each group, sorted by last modified descending (most recent first)
+3. Non-matched sessions follow, also sorted by recency
+4. Sessions updated within last 7 days get `$(circle-filled)` icon; older get `$(circle-outline)`
+
+### Search/Filter Behavior
+
+VS Code QuickPick provides built-in fuzzy search. Users can type:
+- Summary keywords: "login", "documentation"
+- Branch name: "squad/213", "main"
+- GUID fragments: "00031334", "f9b2"
+- CWD path: "editless", "tools-squad"
+
+The QuickPick matches across all visible text (label + description).
+
+### Empty State
+
+**No sessions found for agent:**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Resume Session — 🚀 Alpha Squad                                     │
+├─────────────────────────────────────────────────────────────────────┤
+│ No external sessions found                                          │
+│   No sessions in ~/.copilot/session-state matched this agent       │
+├─────────────────────────────────────────────────────────────────────┤
+│ $(note) Paste GUID directly                                        │
+│   Enter a session GUID manually                                    │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+**All sessions in state dir (no CWD filter):**
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ Resume Session — $(copilot) Copilot CLI                            │
+├─────────────────────────────────────────────────────────────────────┤
+│ ⏎ Search by summary, branch, or GUID...                            │
+├─────────────────────────────────────────────────────────────────────┤
+│ ○ Session in different project                                     │
+│   5 days ago · main · other-project                                │
+├─────────────────────────────────────────────────────────────────────┤
+│ ○ Another external session                                         │
+│   1 week ago · feature/xyz · tools-squad                           │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 3. Flow
+
+### Happy Path: Resume via picker
+
+1. User right-clicks agent "🚀 Alpha Squad" → **Resume External Session...**
+2. EditLess scans `~/.copilot/session-state/` for sessions matching agent's `squadPath` (via CWD in `workspace.yaml`)
+3. QuickPick opens showing matched sessions, sorted by last modified
+4. User types "login" → QuickPick filters to sessions with "login" in summary
+5. User presses Enter on "Fix login validation bug..."
+6. EditLess validates session is resumable (checks `workspace.yaml` + `events.jsonl` exist)
+7. New terminal launches with `copilot --agent squad --resume 00031334-f9b2-4f01-ae31-37d7231db0a0`
+8. Terminal appears in agent's session list with name "🚀 Fix login validation bug"
+
+### Alternative Path: Manual GUID entry
+
+1. User right-clicks agent → **Resume External Session...**
+2. QuickPick opens
+3. User selects "$(note) Paste GUID directly"
+4. InputBox appears: "Enter session GUID to resume"
+5. User pastes `00031334-f9b2-4f01-ae31-37d7231db0a0`
+6. EditLess validates session is resumable
+7. Terminal launches with resume command
+
+### Keyboard-First Path: Command palette
+
+1. User presses Ctrl+Shift+P → types "resume"
+2. Selects **EditLess: Resume External Session**
+3. Agent picker appears (all squads + default CLI)
+4. User picks "🚀 Alpha Squad"
+5. Session QuickPick opens → same flow as above
+
+---
+
+## 4. Edge Cases
+
+### No sessions found for agent
+
+**Scenario:** Agent's `squadPath` has never been used in a Copilot CLI session
+
+**Behavior:**
+- QuickPick shows empty state (see design above)
+- "Paste GUID directly" option still available
+- User can manually enter any GUID from a different project
+
+**Message:** No error toast. The empty picker is self-explanatory.
+
+### Invalid GUID pasted
+
+**Scenario:** User enters malformed GUID or non-existent session ID
+
+**Validation:**
+1. Check GUID format: `^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`
+2. Check session directory exists: `~/.copilot/session-state/{guid}/`
+3. Run `SessionContextResolver.isSessionResumable(guid)`
+
+**Error message (toast):**
+```
+Cannot resume session: Session {guid} not found or is not resumable. Check the GUID and try again.
+```
+
+### Session already active in EditLess
+
+**Scenario:** User tries to resume a session that's already running in an EditLess-tracked terminal
+
+**Detection:**
+- Check `TerminalManager._terminals` for any entry with matching `agentSessionId`
+
+**Behavior:**
+- Don't show the session in the picker (pre-filter during scan)
+- If manually entered, show warning toast:
+  ```
+  Session {guid} is already active. Use "Focus Session" to switch to it.
+  ```
+- Optionally: focus the existing terminal instead of showing error
+
+### Session not resumable (missing files)
+
+**Scenario:** Session directory exists but `workspace.yaml` or `events.jsonl` is missing
+
+**Behavior:**
+- Session appears in picker with warning icon: `$(warning) {summary}`
+- Description includes: `not resumable`
+- On selection, show error (same as existing relaunch validation):
+  ```
+  Cannot resume session: Session {guid} has no workspace.yaml — session state is missing or corrupted.
+  ```
+
+### Stale session (> 14 days old)
+
+**Scenario:** Session exists but hasn't been touched in over 14 days
+
+**Behavior:**
+- Session appears in picker with stale icon: `$(archive) {summary}`
+- Description includes: `{date} (stale)`
+- On selection, show warning (same as existing relaunch):
+  ```
+  ⚠️ Session {guid} has not been updated in over 14 days. It may be outdated.
+  ```
+- Resume proceeds (non-blocking warning)
+
+### No session-state directory
+
+**Scenario:** `~/.copilot/session-state` doesn't exist (fresh Copilot CLI install)
+
+**Behavior:**
+- QuickPick shows empty state
+- "Paste GUID directly" option available
+- No error toast — user hasn't done anything wrong
+
+---
+
+## 5. Naming
+
+### Command Names
+
+| Command ID | Display Name | Menu Label |
+|------------|--------------|------------|
+| `editless.resumeExternalSession` | Resume External Session | Resume External Session... |
+
+### QuickPick Text
+
+| Element | Text |
+|---------|------|
+| Title | `Resume Session — {icon} {agent-name}` |
+| Placeholder | `Search by summary, branch, or GUID...` |
+| Empty state label | `No external sessions found` |
+| Empty state description | `No sessions in ~/.copilot/session-state matched this agent` |
+| Manual GUID item label | `$(note) Paste GUID directly` |
+| Manual GUID item description | `Enter a session GUID manually` |
+
+### InputBox Text (manual GUID)
+
+| Element | Text |
+|---------|------|
+| Prompt | `Enter session GUID to resume` |
+| Placeholder | `00000000-0000-0000-0000-000000000000` |
+| Validation error | `Invalid GUID format` |
+
+### Terminal Naming
+
+**New terminal name:**
+```
+{agent-icon} {session-summary-first-50-chars}
+```
+
+Example: `🚀 Fix login validation bug in auth module`
+
+**If summary is empty:** Use fallback `{agent-icon} Resumed Session`
+
+---
+
+## 6. Mockup
+
+### Full QuickPick with Sessions
+
+```
+╔═════════════════════════════════════════════════════════════════════╗
+║ Resume Session — 🚀 Alpha Squad                                     ║
+╠═════════════════════════════════════════════════════════════════════╣
+║ ⏎ Search by summary, branch, or GUID...                            ║
+╠═════════════════════════════════════════════════════════════════════╣
+║                                                                     ║
+║ ● Fix login validation bug in auth module                          ║
+║   2 hours ago · squad/213-fix-login · editless                     ║
+║                                                                     ║
+║ ● Add documentation for session resume feature                     ║
+║   1 day ago · squad/415-resume-external · editless                 ║
+║                                                                     ║
+║ ● Implement hierarchical filter UX for work items                  ║
+║   3 days ago · squad/390-filter-hierarchy · editless               ║
+║                                                                     ║
+║ ○ Review PR feedback and update tests                              ║
+║   Jan 15 · main · editless                                         ║
+║                                                                     ║
+║ ⚠ Debug terminal state persistence issues                          ║
+║   Jan 10 · bugfix/terminal-state · editless (not resumable)        ║
+║                                                                     ║
+║ ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――― ║
+║                                                                     ║
+║ $(note) Paste GUID directly                                        ║
+║   Enter a session GUID manually                                    ║
+║                                                                     ║
+╚═════════════════════════════════════════════════════════════════════╝
+```
+
+### Search Filtered
+
+```
+╔═════════════════════════════════════════════════════════════════════╗
+║ Resume Session — 🚀 Alpha Squad                                     ║
+╠═════════════════════════════════════════════════════════════════════╣
+║ login                                                               ║
+╠═════════════════════════════════════════════════════════════════════╣
+║                                                                     ║
+║ ● Fix login validation bug in auth module                          ║
+║   2 hours ago · squad/213-fix-login · editless                     ║
+║                                                                     ║
+╚═════════════════════════════════════════════════════════════════════╝
+```
+
+### Empty State
+
+```
+╔═════════════════════════════════════════════════════════════════════╗
+║ Resume Session — 🚀 Alpha Squad                                     ║
+╠═════════════════════════════════════════════════════════════════════╣
+║ ⏎ Search by summary, branch, or GUID...                            ║
+╠═════════════════════════════════════════════════════════════════════╣
+║                                                                     ║
+║ No external sessions found                                         ║
+║   No sessions in ~/.copilot/session-state matched this agent       ║
+║                                                                     ║
+║ ――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――――― ║
+║                                                                     ║
+║ $(note) Paste GUID directly                                        ║
+║   Enter a session GUID manually                                    ║
+║                                                                     ║
+╚═════════════════════════════════════════════════════════════════════╝
+```
+
+### Manual GUID InputBox
+
+```
+╔═════════════════════════════════════════════════════════════════════╗
+║ Enter session GUID to resume                                       ║
+╠═════════════════════════════════════════════════════════════════════╣
+║ 00000000-0000-0000-0000-000000000000                                ║
+╚═════════════════════════════════════════════════════════════════════╝
+```
+
+---
+
+## Implementation Notes
+
+### Session Discovery Logic
+
+**Scan strategy:**
+
+1. Read all directories in `~/.copilot/session-state/`
+2. For each dir, read `workspace.yaml` → parse `cwd` field and `summary`
+3. Normalize paths (lowercase, forward slashes, trim trailing slashes)
+4. Check if `cwd` matches current workspace folder → mark as "local" (sort to top)
+5. Filter out sessions already tracked by `TerminalManager` (check `agentSessionId`)
+6. Read `events.jsonl` last modified time → sort: local-first, then by recency
+7. ALL sessions are shown — non-matching CWDs are included (sorted lower, not excluded)
+
+**Performance:**
+- Only scan once per command invocation (not on picker keystroke)
+- For projects with hundreds of sessions, consider caching in `SessionContextResolver._cwdIndex`
+- Timeout: if scan takes > 2 seconds, show "Loading..." placeholder
+
+### Resumability Check
+
+Reuse existing `SessionContextResolver.isSessionResumable(guid)` logic:
+- ✅ `workspace.yaml` exists and readable
+- ✅ `events.jsonl` exists and readable
+- ⚠️ Stale if last modified > 14 days ago
+
+### Terminal Launch
+
+Same flow as `relaunchSession()` in `TerminalManager`:
+
+1. Build command: `{baseCmd} --resume {guid}`
+2. Create terminal with env vars:
+   - `EDITLESS_SESSION_ID={guid}`
+   - `EDITLESS_SQUAD_ID={squadId}`
+3. Register terminal in `_terminals` map
+4. Start session watcher for activity tracking
+
+**Terminal metadata:**
+- `agentSessionId`: the resumed GUID
+- `displayName`: from `workspace.yaml` summary (or fallback to "Resumed Session")
+- `squadId`, `squadName`, `squadIcon`: from agent config
+- `launchCommand`: for future relaunch
+- `squadPath`: from agent config
+
+---
+
+## Out of Scope (Future Enhancements)
+
+❌ **Rich session browser:** Timeline view, checkpoint history, file tree  
+❌ **Cross-agent session resume:** Resume a Squad session as default CLI  
+❌ **Session tags/favorites:** Bookmark frequently resumed sessions  
+❌ **Auto-suggest recent sessions:** Show recent external sessions in agent tree  
+❌ **Session archival:** Move old sessions to archive, hide from picker  
+❌ **Multi-select resume:** Resume multiple sessions at once  
+❌ **Session diff preview:** Show what changed since last checkpoint  
+
+---
+
+## Success Metrics (Post-Launch)
+
+1. **Usage:** % of users who resume external sessions vs. only EditLess-launched sessions
+2. **Discovery:** Search usage vs. manual GUID entry (should favor search)
+3. **Error rate:** % of resume attempts that fail validation
+4. **Time to resume:** Median time from right-click to session loaded
+
+---
+
+## Acceptance Criteria
+
+✅ User can right-click agent → Resume External Session  
+✅ QuickPick shows sessions from `~/.copilot/session-state/` matching agent's CWD  
+✅ Search filters by summary, branch, GUID, and CWD  
+✅ Manual GUID entry option available  
+✅ Invalid/missing sessions show clear error messages  
+✅ Stale sessions show warning but allow resume  
+✅ Already-active sessions are filtered from picker  
+✅ Resumed terminal appears in agent's session list with appropriate metadata  
+✅ Command palette variant works (agent picker → session picker)  
+
+---
+
+## Design Rationale
+
+### Why agent-scoped, not global?
+
+**Rejected:** Global "Resume Any Session" command with all sessions from all projects
+
+**Reasoning:**
+- Sessions are tied to a project/CWD → resuming in the wrong context is confusing
+- Agent-scoped matches existing mental model (agent = project context)
+- Reduces picker clutter (filter sessions by relevance)
+
+**Concession:** Manual GUID entry allows power users to resume any session if needed
+
+### Why QuickPick, not tree view integration?
+
+**Rejected:** Show external sessions as gray/orphaned items in agent tree
+
+**Reasoning:**
+- Tree is for active sessions — external sessions are ephemeral discovery
+- Scanning `session-state` on every tree refresh is expensive
+- External sessions may number in the hundreds (tree clutter)
+
+**Concession:** If usage shows demand, Phase 2 could add "Recent External" tree section
+
+### Why show stale/non-resumable sessions?
+
+**Rejected:** Hide sessions that fail `isSessionResumable()`
+
+**Reasoning:**
+- Users may be debugging why a session won't resume (file missing)
+- Showing with warning icon signals "something's wrong, but I can see it"
+- Picker is searchable — if user searches for a GUID, they expect to find it
+
+**Safety:** Non-resumable sessions show error on selection, not on picker render
+
+---
+
+## Related Decisions
+
+- **#322: Session resume validation** — reuse validation logic for external sessions
+- **#317: Unified discovery flow** — similar picker pattern (discovered items → action)
+- **Hierarchical filter UX** — QuickPick with sections + search is proven pattern
+
+---
+
+**Next Steps:**
+
+1. Morty: Implement `editless.resumeExternalSession` command
+2. Morty: Add session scan logic using `SessionContextResolver._ensureIndex()`
+3. Morty: Wire QuickPick with session items + manual GUID fallback
+4. Summer: Review implementation UX against this spec
+5. Casey: Test with real external sessions (dogfood with raw CLI)
+
+
+
+
+---
+
+### 2026-03-01: Branching strategy — v0.1.3 ships from main, then branch
+
+**By:** Casey Irvine (via Copilot)
+**What:** v0.1.3 releases from main (includes auto-discover refactor #427). After #439 merges and any docs PRs, tag v0.1.3 on main. THEN create release/v0.1.x from that tag for any future 0.1.x hotfixes. From that point, main is the v0.2 dev line.
+**Why:** User decision — auto-discover refactor is fine to ship in v0.1.3. Branching happens AFTER the v0.1.3 tag, not before.
+
+---
+
+### 2026-03-01: Worktree settings inherit from parent, with overrides
+
+**By:** Casey Irvine (via Copilot)
+**What:** Worktree agent settings should inherit from the parent agent's settings by default, but be individually overridable. E.g., if the parent has model=opus, the worktree agent gets model=opus unless explicitly changed. This is a layered settings model: parent defaults → worktree overrides.
+**Why:** User directive — avoids having to re-configure every worktree copy. Makes the common case (same settings) effortless while still allowing per-worktree customization.
+
+
+---
+
+### 2026-03-01: Worktree Agent/Squad Discovery — Architecture Proposal
+
+**Date:** 2026-03-01  
+**Author:** Rick (Lead)  
+**Status:** Proposed  
+**Issue Context:** #422 (worktree support), #348 (branch names), Casey's "discovery dimension" insight
+
+## Problem
+
+EditLess discovery is flat. `discoverAll()` scans workspace folders and `~/.copilot/agents/` for agents and squads, returns a flat `DiscoveredItem[]`. No relationship between items.
+
+When a user has git worktrees (e.g., `editless/` on `main`, `editless-v01/` on `release/v0.1.x`), those worktrees contain the *same squad* operating on different branches. Today they show as unrelated entries — or worse, only the one in the workspace shows up. Casey wants: discover a squad → automatically find its worktrees → show them as children.
+
+## Architecture
+
+### 1. Worktree Detection — New Module: `src/worktree-discovery.ts`
+
+Single responsibility: given a repo path, return its worktrees.
+
+```typescript
+export interface WorktreeInfo {
+  /** Absolute path to the worktree root */
+  path: string;
+  /** Git branch checked out in this worktree */
+  branch: string;
+  /** Whether this is the main worktree (bare checkout) */
+  isMain: boolean;
+  /** Whether this worktree has a .squad/ or .ai-team/ dir */
+  hasSquadConfig: boolean;
+}
+
+/**
+ * Run `git worktree list --porcelain` in the given repo and parse output.
+ * Returns empty array if not a git repo or no worktrees.
+ */
+export async function discoverWorktrees(repoPath: string): Promise<WorktreeInfo[]>;
+
+/**
+ * Check if a path is inside a git repo (has .git file or directory).
+ */
+export function isGitRepo(dirPath: string): boolean;
+```
+
+**Why porcelain?** `git worktree list --porcelain` outputs machine-parseable format:
+```
+worktree /home/user/editless
+HEAD abc123
+branch refs/heads/main
+
+worktree /home/user/editless-v01
+HEAD def456
+branch refs/heads/release/v0.1.x
+```
+
+No regex gymnastics. No locale issues. Fast (~5ms on local repos).
+
+**Why async?** `git worktree list` shells out via `child_process.execFile`. Discovery runs on activation and refresh — we don't want to block the extension host. Use `execFile` with a reasonable timeout (5s).
+
+### 2. Data Model — Extend `DiscoveredItem`
+
+Add optional worktree metadata to the existing type. No new wrapper type — keeps the flat array contract intact while enabling the tree to group.
+
+```typescript
+export interface DiscoveredItem {
+  id: string;
+  name: string;
+  type: 'agent' | 'squad';
+  source: 'workspace' | 'copilot-dir';
+  path: string;
+  description?: string;
+  universe?: string;
+
+  // --- NEW: Worktree fields ---
+  /** Git branch checked out at this item's path (if in a git repo) */
+  branch?: string;
+  /** ID of the parent item this is a worktree of (undefined = not a worktree child) */
+  parentId?: string;
+  /** If true, this is the main worktree (the original clone) */
+  isMainWorktree?: boolean;
+}
+```
+
+**Why extend, not wrap?** The entire pipeline (`discoverAll()` → `setDiscoveredItems()` → `getRootItems()` → `getChildren()`) operates on `DiscoveredItem[]`. A new wrapper type would require a parallel pipeline. The optional fields add zero overhead for non-worktree items and keep all existing code working unchanged.
+
+**ID scheme for worktree children:** `{parentId}:wt:{branch-kebab}`. Example: `editless:wt:release-v0-1-x`. This ensures uniqueness and makes parent lookup trivial.
+
+**Settings inheritance:** Per Casey's directive (`.squad/decisions/inbox/copilot-directive-worktree-settings-inheritance.md`), worktree agents inherit parent settings. `AgentSettingsManager.get(worktreeId)` falls back to `get(parentId)` if no override exists. This is a small change to `AgentSettingsManager.get()`:
+
+```typescript
+get(id: string): AgentSettings | undefined {
+  const direct = this._cache.agents[id];
+  if (direct) return direct;
+  // Worktree fallback: if id contains ':wt:', try parent
+  const wtIndex = id.indexOf(':wt:');
+  if (wtIndex !== -1) {
+    const parentId = id.substring(0, wtIndex);
+    return this._cache.agents[parentId];
+  }
+  return undefined;
+}
+```
+
+### 3. Discovery Integration — Post-Discovery Enrichment Phase
+
+**NOT** integrated into the existing scan. Separate phase after `discoverAll()` returns.
+
+```
+discoverAll()          → flat DiscoveredItem[] (unchanged)
+  ↓
+enrichWithWorktrees()  → same array, with worktree children appended + branch/parentId populated
+  ↓
+setDiscoveredItems()   → tree provider renders parent-child
+```
+
+New function in `unified-discovery.ts`:
+
+```typescript
+/**
+ * Post-process discovered items: for each squad/agent in a git repo,
+ * find its worktrees and add them as child items.
+ * Items already in the workspace (discovered independently) get their
+ * branch populated but are NOT duplicated as children.
+ */
+export async function enrichWithWorktrees(
+  items: DiscoveredItem[],
+): Promise<DiscoveredItem[]>;
+```
+
+**Why post-discovery?**
+1. `discoverAll()` is synchronous today. Worktree detection requires `execFile` (async). Changing `discoverAll()` to async would cascade through the entire activation path. Post-enrichment isolates the async boundary.
+2. Separation of concerns: filesystem scanning vs. git metadata are different operations.
+3. Testability: `enrichWithWorktrees()` can be tested independently with mocked `discoverWorktrees()`.
+
+**Dedup logic:** If a worktree path is *already* a workspace folder (and thus already discovered), don't create a duplicate — just populate its `branch` and `parentId` on the existing item. Only create new `DiscoveredItem` entries for worktrees outside the workspace.
+
+**Performance:** `git worktree list --porcelain` runs once per unique git repo root (not per item). Multiple squads in the same repo share one call. Cache results by repo root within a single enrichment pass.
+
+### 4. Tree Integration — Parent-Child Rendering
+
+Changes to `EditlessTreeProvider`:
+
+**`getRootItems()`**: Filter out items where `parentId` is set. These are children, not roots.
+
+```typescript
+// In getRootItems():
+const roots = this._discoveredItems.filter(i => !i.parentId && !this.agentSettings.isHidden(i.id));
+```
+
+**`getChildren(element)`**: When expanding a squad/agent that has worktree children, return them.
+
+```typescript
+// New case in getChildren():
+if ((element.type === 'squad' || element.type === 'squad-hidden') && element.squadId) {
+  const worktreeChildren = this._discoveredItems
+    .filter(i => i.parentId === element.squadId);
+  // ... existing squad children (terminals, roster) ...
+  // Append worktree items as a "Worktrees" category
+}
+```
+
+**Display:** Worktree children show as:
+```
+🔷 EditLess Squad          main · 2 sessions
+  ├── 🌿 release/v0.1.x    1 session
+  ├── 🌿 squad/442-feature  no sessions
+  ├── Session 1
+  ├── Session 2
+  └── Roster (5)
+```
+
+New tree item type: `'worktree'` added to `TreeItemType`. Icon: `git-branch` theme icon (🌿 in emoji fallback). Description shows branch name + session count.
+
+### 5. File Watching — `.git/worktrees/` Directory
+
+Git stores worktree metadata in `.git/worktrees/`. A new worktree created via `git worktree add` creates a subdirectory there. Watching this directory detects worktree creation/deletion.
+
+```typescript
+// In extension.ts, after squad watcher setup:
+for (const folder of (vscode.workspace.workspaceFolders ?? [])) {
+  const gitWorktreesDir = path.join(folder.uri.fsPath, '.git', 'worktrees');
+  if (fs.existsSync(gitWorktreesDir)) {
+    const pattern = new vscode.RelativePattern(
+      vscode.Uri.file(gitWorktreesDir), '*'
+    );
+    const wtWatcher = vscode.workspace.createFileSystemWatcher(pattern);
+    wtWatcher.onDidCreate(() => debouncedRefreshDiscovery());
+    wtWatcher.onDidDelete(() => debouncedRefreshDiscovery());
+    context.subscriptions.push(wtWatcher);
+  }
+}
+```
+
+**Edge case:** The workspace folder might itself be a worktree (not the main checkout). In that case, `.git` is a file (not a directory) pointing to the main repo's `.git/worktrees/{name}`. Need to resolve the main `.git` directory first:
+
+```typescript
+function resolveGitDir(dirPath: string): string | null {
+  const dotGit = path.join(dirPath, '.git');
+  if (!fs.existsSync(dotGit)) return null;
+  const stat = fs.statSync(dotGit);
+  if (stat.isDirectory()) return dotGit;
+  // .git is a file → read gitdir pointer
+  const content = fs.readFileSync(dotGit, 'utf-8').trim();
+  const match = content.match(/^gitdir:\s*(.+)$/);
+  if (match) {
+    const resolved = path.resolve(dirPath, match[1]);
+    // Go up from .git/worktrees/{name} to .git/
+    return path.resolve(resolved, '..', '..');
+  }
+  return null;
+}
+```
+
+### 6. File Change Map
+
+| File | Change | Size |
+|------|--------|------|
+| `src/worktree-discovery.ts` | **NEW** — `discoverWorktrees()`, `isGitRepo()`, `resolveGitDir()`, porcelain parser | ~120 LOC |
+| `src/unified-discovery.ts` | Add `enrichWithWorktrees()`, extend `DiscoveredItem` with `branch`/`parentId`/`isMainWorktree` | ~60 LOC |
+| `src/editless-tree.ts` | Filter roots by `!parentId`, add worktree children rendering, new `'worktree'` TreeItemType | ~40 LOC |
+| `src/agent-settings.ts` | Parent fallback in `get()` for `:wt:` IDs | ~8 LOC |
+| `src/extension.ts` | Call `enrichWithWorktrees()` after `discoverAll()`, add `.git/worktrees/` watcher | ~25 LOC |
+| `src/types.ts` | No changes (worktree fields live on `DiscoveredItem`, not `AgentTeamConfig`) | 0 |
+| Tests | `worktree-discovery.test.ts` (new), updates to `unified-discovery.test.ts`, `editless-tree.test.ts`, `agent-settings.test.ts` | ~200 LOC |
+
+**Total:** ~250 LOC production, ~200 LOC tests. Small, focused.
+
+### 7. Scope and Issue Recommendations
+
+**New issue. Do not expand #422.**
+
+\#422 is about "clone to worktree" — an *action* that creates a worktree from the EditLess UI. This proposal is about *discovery* — detecting existing worktrees automatically. They're related but orthogonal:
+- Discovery works without #422 (user creates worktrees via CLI or the git-worktree skill)
+- \#422 works without discovery (action creates worktree, user manually adds to workspace)
+- Combined: #422 creates worktree → discovery picks it up automatically
+
+**Recommended issue structure:**
+1. **New issue: "Auto-discover git worktrees for agents/squads"** — this architecture. Core discovery + tree rendering.
+2. **#422 stays as-is** — "Clone to worktree" action. Can reference the new issue as "see also."
+3. **#348 (branch names in terminal labels)** — complementary but independent. Branch info from worktree discovery could *feed* #348, but #348 solves a different problem (showing branch in terminal title). No blocking dependency.
+
+### 8. Dependency Analysis — v0.2 Execution Order
+
+**Does NOT change the v0.2 execution order.**
+
+- **#394 (scanner refactor):** Worktree discovery doesn't touch `scanner.ts`. Independent.
+- **#395 (terminal manager refactor):** Worktree discovery doesn't change terminal management. Independent.
+- **#399 (auto-discover refactor):** Already merged. This proposal builds on the post-#399 architecture (`discoverAll()`, `DiscoveredItem`, `AgentSettingsManager`). Correct dependency direction.
+
+**Recommended sequencing:**
+1. #394, #395 land first (as planned) — they clean up the codebase
+2. Worktree discovery lands after — it's a new feature, not a refactor
+3. #422 (clone to worktree) can land before or after — no dependency
+
+**Why after Phase 1 refactors?** Not a hard dependency, but landing this on a clean codebase reduces merge conflicts. The tree provider changes in this proposal touch `getRootItems()` and `getChildren()` — same areas #394/#395 may refactor.
+
+## Risks and Mitigations
+
+| Risk | Mitigation |
+|------|------------|
+| `git worktree list` not available (git < 2.5) | `discoverWorktrees()` returns `[]` on error. Graceful degradation. |
+| Worktree path is on a network drive (slow) | Timeout on `execFile` (5s). Cache results. Skip if previous call timed out. |
+| Repo has 50+ worktrees (unlikely but possible) | Cap at 20 worktree children in tree view. Show "N more…" item. |
+| `enrichWithWorktrees()` makes activation async | It already is — `extension.ts` activation uses `setTimeout` for deferred work. Run enrichment in the deferred phase. |
+
+## Two-Sentence Summary
+
+Worktree discovery is a post-discovery enrichment phase: `discoverAll()` (unchanged, sync) → `enrichWithWorktrees()` (new, async) → tree provider groups parents with worktree children. New module `worktree-discovery.ts` (~120 LOC) owns git interaction; existing files get ~100 LOC of surgical changes to support `parentId`/`branch` fields and parent-child rendering.
+
+## Open Questions
+
+1. Should worktree children be auto-expanded or collapsed by default?
+2. Should we show worktrees for standalone agents (not just squads)?
+3. If a worktree has different agents than the parent (e.g., squad member was added on a branch), how do we reconcile?
+
+
+---
+
+# v0.1.3 Release Docs — Workflow-First Documentation
+
+**Date:** 2026-03-01  
+**Author:** Summer  
+**Status:** Completed
+
+## Context
+
+Casey requested v0.1.3 release docs prep with focus on "prepare to share more broadly." This is the first release where EditLess will be shared beyond the internal dogfooding audience — new users will discover it for the first time.
+
+## Decision
+
+Restructured documentation to be **workflow-first, not feature-first**. 
+
+### README.md Features Section
+
+**Before:** Technical feature list
+- "Agent tree view" — what it has
+- "Terminal integration" — what it does
+- "Auto-detection" — how it works
+
+**After:** Workflow story
+- "Launch sessions from work" — what YOU do
+- "Sessions grouped by agent" — what YOU see
+- "Rename sessions" — what YOU control
+- "Resume sessions" — what YOU can do next
+- "Attention state" — what YOU know
+
+**Why:** New users don't care what the extension "has" — they care what they can DO with it. The workflow story answers "How do I work with this?" instead of "What features does it have?"
+
+### CHANGELOG.md v0.1.3
+
+Added narrative intro paragraph with personality:
+> "The auto-discovery release. We've eliminated the agent registry entirely — no more manual registration, no more stale configs. Just drop your agent files in your workspace and they appear, ready to work."
+
+**Why:** Matches the tone of 0.1.1 and 0.1.2. The changelog tells a story about the release, not just a bulleted list. Each release has a theme and personality — 0.1.0 was "it works," 0.1.1 was "it works when you use it all day," 0.1.3 is "it works without making you think about it."
+
+### SETTINGS.md — Agent Registry → Agent Settings
+
+Replaced 100+ lines of `agent-registry.json` schema documentation (obsolete as of #427) with:
+- **Agent Settings** section explaining auto-discovery
+- How agent-settings.json works (user preferences)
+- Migration notes from v0.1.2
+
+**Why:** The registry is gone. Documenting a file that no longer exists is confusing. New users need to know how auto-discovery works, not how to hand-edit a JSON file.
+
+## Impact
+
+Documentation now tells a **user story** instead of a feature spec. First-time users will understand:
+1. What they can accomplish (README features)
+2. What changed and why (CHANGELOG narrative)
+3. How to configure what they need (SETTINGS auto-discovery model)
+
+## Key Learnings
+
+- **Docs are product.** The README is the first impression — it needs to tell a story, not just list features.
+- **Write for the person who's never seen this before.** Casey's audience (Microsoft engineers) are smart, but they're also busy. Make it scannable and actionable.
+- **Migration notes matter.** Breaking changes need clear migration paths. "Auto-migrated on first activation, old file left for cleanup" gives users confidence.
+- **Personality in changelogs.** The narrative intro paragraph makes the changelog readable and memorable. It's not just a compliance doc — it's part of the product voice.
+
+
+---
+
+### 2026-03-01: Worktree Agent Hierarchy in the EditLess Tree View
+
+**Date:** 2026-03-01  
+**Author:** Summer (Product Designer)  
+**Status:** Proposed  
+**Issue Context:** Worktree discovery & hierarchy UX for EditLess sidebar
+
+---
+
+## Problem
+
+Casey uses git worktrees as his primary development pattern. When a repo contains a `.squad/` directory (or agents), each worktree is a full copy of that agent/squad — with its own sessions, its own state, and potentially its own configuration overrides. Today, EditLess shows agents in a flat list discovered from workspace folders. If Casey has worktrees open as workspace folders, they'd appear as separate, disconnected squads with the same name — confusing and noisy.
+
+**Core user need:** "I want to see all my worktree copies of a squad grouped together, know which branch each one is on, and launch sessions against the right one — without thinking about it."
+
+---
+
+## Recommendation: Nested Under Parent (Option A)
+
+After evaluating all options, **nested hierarchy** is the right call. Here's why:
+
+1. **Mental model match.** Casey already thinks of worktrees as "copies of the same repo on different branches." Nesting mirrors that mental model — one squad, multiple workspaces.
+2. **Noise reduction.** Flat-with-annotation would triple the top-level items for a repo with 2 worktrees. The sidebar gets cluttered fast.
+3. **Consistent with VS Code patterns.** Source Control already nests repositories. Explorer nests folders. EditLess should follow the platform's information architecture.
+4. **Supports the settings inheritance decision.** The existing directive (worktree settings inherit from parent) implies a parent→child relationship. The tree should reflect that.
+
+---
+
+## Tree Design
+
+### Primary Scenario: Main checkout + 2 worktrees, all in workspace
+
+```
+🤖 Copilot CLI                          Generic Copilot agent
+🔷 EditLess (main)                      squad · 2 worktrees
+  ├─ 🌿 feat/auth                       worktree · 1 session
+  │    └─ 🟢 Session 1                  3m ago
+  ├─ 🌿 fix/crash                       worktree
+  │    └─ 💤 No active sessions         Click + to launch
+  ├─ 🚀 Session 2                       5m ago
+  ├─ 🕐 Session 3 (resumable)           previous session — resume
+  └─ 👥 Roster (6)
+```
+
+**Key design choices:**
+
+| Element | Treatment | Rationale |
+|---------|-----------|-----------|
+| Parent squad | `🔷 Name (branch)` | Same as today, branch in parens |
+| Worktree nodes | `🌿 branch-name` | Leaf icon = branch. Distinct from `🔷` squad or `🚀` session |
+| Worktree description | `worktree · N sessions` | Mirrors squad description pattern |
+| Session under worktree | Same `🚀`/`🟢`/`💤` icons | Reuse existing session state icons |
+| Roster | Only on parent | Roster is the same across worktrees (same `.squad/team.md`) |
+| Orphaned sessions | Under their respective worktree or parent | Sessions are CWD-scoped, so they naturally belong where they ran |
+
+### Icon Legend
+
+| Icon | ThemeIcon | Meaning |
+|------|-----------|---------|
+| 🌿 | `$(git-branch)` | Worktree (branch checkout) |
+| 🔷 | `$(organization)` | Squad (parent, existing) |
+| 🤖 | `$(hubot)` | Standalone agent (existing) |
+| 🚀 | `$(loading~spin)` | Active session (existing) |
+| 💤 | `$(circle-outline)` | Inactive session (existing) |
+| 🕐 | `$(history)` | Resumable orphan (existing) |
+
+The `$(git-branch)` ThemeIcon is already in VS Code's icon set and instantly communicates "this is a branch." No custom assets needed.
+
+---
+
+## Naming & Labeling Conventions
+
+### Tree item labels
+
+| Scenario | Label | Description |
+|----------|-------|-------------|
+| Parent (main checkout) | `🔷 EditLess (main)` | Name + branch in parens |
+| Parent (no worktrees) | `🔷 EditLess` | No branch annotation needed (same as today) |
+| Worktree node | `🌿 feat/auth` | Branch name only — squad name is redundant (it's nested) |
+| Worktree (detached HEAD) | `🌿 abc1234` | Short SHA when no branch |
+
+### Description text (grey, right-aligned)
+
+| Item | Description |
+|------|-------------|
+| Parent with worktrees | `squad · 2 worktrees` |
+| Parent without worktrees | `squad` (same as today) |
+| Worktree with sessions | `worktree · 1 session` |
+| Worktree without sessions | `worktree` |
+| Standalone agent with worktrees | `2 worktrees` |
+
+### Tooltip (on hover)
+
+Parent tooltip adds a "Worktrees" section:
+
+```markdown
+**🔷 EditLess**
+Path: `C:\Users\cirvine\code\work\editless`
+Universe: rick-and-morty
+Branch: main
+
+**Worktrees:**
+- feat/auth → `C:\Users\cirvine\code\work\editless-feat-auth`
+- fix/crash → `C:\Users\cirvine\code\work\editless-fix-crash`
+```
+
+Worktree tooltip:
+
+```markdown
+**🌿 feat/auth**
+Path: `C:\Users\cirvine\code\work\editless-feat-auth`
+Parent: EditLess (main)
+Branch: feat/auth
+```
+
+---
+
+## Interaction Design
+
+### Click behavior
+
+| Target | Action |
+|--------|--------|
+| Parent squad | Expand/collapse (same as today) |
+| Worktree node | Expand/collapse to show sessions |
+| Session under worktree | Focus terminal (same as today) |
+
+### Context menu (right-click)
+
+**On worktree node (`🌿 feat/auth`):**
+
+| Action | Command | Group |
+|--------|---------|-------|
+| ▶️ Launch Session | `editless.launchSession` | `inline@0` |
+| Resume Session… | `editless.resumeSession` | `session@1` |
+| Open Folder in Workspace | `editless.openWorktreeFolder` | `worktree@1` |
+| Copy Path | `editless.copyWorktreePath` | `worktree@2` |
+| Remove from Tree | `editless.hideWorktree` | `worktree@3` |
+
+**Not on worktree node:** Rename, Change Model, Squad Settings — these are parent-level actions (settings inheritance means you configure the parent). If a user needs per-worktree overrides, they use the parent's "Go to Squad Settings" and add worktree-specific overrides there.
+
+**On parent squad with worktrees — additions to existing menu:**
+
+| Action | Command | Group |
+|--------|---------|-------|
+| Discover Worktrees | `editless.discoverWorktrees` | `squad@6` |
+
+This is a manual refresh for worktree discovery — useful if the user creates a new worktree while EditLess is running.
+
+### Expand/collapse defaults
+
+| Item | Default State | Rationale |
+|------|--------------|-----------|
+| Parent squad | **Expanded** | Same as today when it has sessions |
+| Worktree with active sessions | **Expanded** | Active work should be visible |
+| Worktree with no sessions | **Collapsed** | Don't waste vertical space on empty worktrees |
+| Worktree with only orphaned sessions | **Collapsed** | Not urgent; expand when needed |
+| Roster | **Collapsed** | Same as today |
+
+---
+
+## Discovery Logic
+
+### How worktrees are found
+
+1. **On discovery refresh** (startup + manual refresh + file watcher): For each discovered squad, run `git worktree list --porcelain` from the squad's path.
+2. **Parse output** to get each worktree's path and branch.
+3. **Filter:** Only include worktrees whose path either:
+   - Is in the current VS Code workspace, OR
+   - Exists on disk (for repos where the user may not have added all worktrees to workspace)
+4. **Match to parent:** Worktrees share the same git repository (same `.git` or `.git` file pointing to shared objects). Use the common git dir to link worktree → parent.
+
+### Discovery setting
+
+```jsonc
+// settings.json
+{
+  // Whether to auto-discover worktrees for squad repos
+  "editless.discovery.worktrees": true,  // default: true
+
+  // Whether to show worktrees that aren't in the current workspace
+  "editless.discovery.worktreesOutsideWorkspace": false  // default: false
+}
+```
+
+When `worktreesOutsideWorkspace` is `true`, EditLess shows all worktrees on disk (useful for Casey's workflow where he may not add every worktree to the workspace). When `false`, only workspace-folder worktrees appear.
+
+---
+
+## Edge Cases
+
+### 1. Main checkout absent, worktree present
+
+**Scenario:** User has `~/code/editless-feat-auth` (worktree) in their workspace but NOT `~/code/editless` (main checkout).
+
+**Design:** The worktree promotes itself to a top-level item, but shows the parent relationship:
+
+```
+🔷 EditLess (feat/auth)                 squad · worktree of main
+  ├─ 🚀 Session 1                       3m ago
+  └─ 👥 Roster (6)
+```
+
+- Label uses the squad name (not the branch name) because it's at the top level now.
+- Description says `worktree of main` so the user knows this isn't the primary checkout.
+- Tooltip includes the main checkout path even though it's not in the workspace.
+- If the main checkout is later added to the workspace, the worktree re-nests under it automatically.
+
+### 2. Multiple worktrees, only some in workspace
+
+```
+🔷 EditLess (main)                      squad · 1 worktree
+  ├─ 🌿 feat/auth                       worktree · 1 session
+  │    └─ 🚀 Session 1                  3m ago
+  ├─ 🚀 Session 2                       5m ago
+  └─ 👥 Roster (6)
+```
+
+Only the `feat/auth` worktree is in the workspace, so only it appears. `fix/crash` exists on disk but isn't shown (unless `worktreesOutsideWorkspace` is enabled, in which case it shows dimmed):
+
+```
+🔷 EditLess (main)                      squad · 2 worktrees
+  ├─ 🌿 feat/auth                       worktree · 1 session
+  │    └─ 🚀 Session 1                  3m ago
+  ├─ 🌿 fix/crash                       worktree (not in workspace)
+  ├─ 🚀 Session 2                       5m ago
+  └─ 👥 Roster (6)
+```
+
+The "not in workspace" worktree uses `disabledForeground` color and its context menu offers "Open Folder in Workspace" as the primary action.
+
+### 3. Personal agents AND squad agents in worktrees
+
+Standalone agents (`.agent.md` files) and squads (`.squad/` directories) are discovered independently. If a worktree contains both:
+
+```
+🔷 My Squad (main)                      squad · 1 worktree
+  ├─ 🌿 feat/auth                       worktree
+  └─ 👥 Roster (6)
+🤖 code-reviewer                        workspace
+```
+
+The standalone agent (`code-reviewer.agent.md`) is NOT nested under the squad — it lives at the top level as it does today. Only squad/agent items that share the **same git repository** and the **same `.squad/` directory** are grouped.
+
+### 4. Worktree and main on the same branch (bare repo pattern)
+
+If the main checkout is a bare repo (no working tree) and all work happens in worktrees:
+
+```
+🔷 EditLess                             squad · 3 worktrees
+  ├─ 🌿 main                            worktree · 2 sessions
+  │    ├─ 🚀 Session 1                  3m ago
+  │    └─ 🚀 Session 2                  10m ago
+  ├─ 🌿 feat/auth                       worktree
+  └─ 🌿 fix/crash                       worktree · 1 session
+       └─ 🚀 Session 3                  1m ago
+```
+
+The bare repo root has no branch label (no `(main)` suffix). All branches are worktrees.
+
+### 5. Worktree removed from disk
+
+If a previously-discovered worktree no longer exists:
+- Remove it from the tree silently on next refresh.
+- If it had orphaned sessions, those sessions move to the parent squad's orphaned sessions list.
+
+### 6. Same squad discovered from both main and worktree workspace folders
+
+Dedup by git repository identity (shared `.git` objects directory). The first-discovered path (typically the main checkout) becomes the parent. The worktree is nested under it. The `discoverAll()` function already deduplicates by ID — we extend this to detect worktree relationships before dedup.
+
+---
+
+## Data Model Changes
+
+### New tree item type
+
+Add `'worktree'` to `TreeItemType`:
+
+```typescript
+export type TreeItemType = 'squad' | 'squad-hidden' | 'category' | 'agent' 
+  | 'terminal' | 'orphanedSession' | 'default-agent' | 'worktree';
+```
+
+### New fields on DiscoveredItem
+
+```typescript
+export interface DiscoveredItem {
+  // ... existing fields ...
+
+  /** If this item is a worktree, the branch name */
+  worktreeBranch?: string;
+  /** If this item is a worktree, the parent item's ID */
+  worktreeParentId?: string;
+  /** If this item has worktrees, their IDs */
+  worktreeChildIds?: string[];
+}
+```
+
+### Context value for menus
+
+Worktree nodes get `contextValue = 'worktree'` so package.json `when` clauses can target them:
+
+```json
+{
+  "command": "editless.launchSession",
+  "when": "view == editlessTree && viewItem == worktree",
+  "group": "inline@0"
+}
+```
+
+---
+
+## Implementation Priority
+
+This is a UX proposal — implementation is Morty's domain. Suggested phasing:
+
+1. **Phase 1 — Discovery:** `git worktree list --porcelain` integration in `unified-discovery.ts`. Detect worktree relationships. Enrich `DiscoveredItem` with worktree metadata.
+2. **Phase 2 — Tree rendering:** New `getWorktreeChildren()` in `editless-tree.ts`. `$(git-branch)` icon. Collapse behavior.
+3. **Phase 3 — Context menus:** `package.json` contributions for worktree actions. "Open Folder in Workspace" command.
+4. **Phase 4 — Settings:** `worktrees` and `worktreesOutsideWorkspace` discovery settings. Settings inheritance (already decided, see `copilot-directive-worktree-settings-inheritance.md`).
+
+---
+
+## Two-Sentence Summary
+
+Worktree copies of a squad nest under their parent with a `$(git-branch)` icon and branch name, keeping the sidebar clean while making every worktree launchable. When the main checkout is absent, the worktree promotes itself to top level with a "worktree of {branch}" annotation so the user always knows what they're looking at.
 
