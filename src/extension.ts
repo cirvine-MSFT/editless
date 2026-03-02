@@ -259,6 +259,7 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
     terminalManager,
     labelManager,
     sessionContextResolver,
+    agentSettings,
   });
 
   registerWorkItemCommands(context, {
