@@ -86,7 +86,7 @@ export class SessionContextResolver {
     this._defaultSessionStateDir = path.join(os.homedir(), '.copilot', 'session-state');
   }
 
-  /** Register an additional session-state directory (e.g. from --config). */
+  /** Register an additional session-state directory (e.g. from --config-dir). */
   addSessionStateDir(dir: string): void {
     if (dir === this._defaultSessionStateDir) return;
     if (this._additionalSessionStateDirs.has(dir)) return;

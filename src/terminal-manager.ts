@@ -221,7 +221,7 @@ export class TerminalManager implements vscode.Disposable {
     const baseCmd = buildLaunchCommandForConfig(config);
     const launchCmd = `${baseCmd} --resume ${uuid}`;
 
-    // Detect --config flag from merged additionalArgs (#432)
+    // Detect --config-dir flag from merged additionalArgs (#432)
     const globalAdditional = vscode.workspace.getConfiguration('editless.cli').get<string>('additionalArgs', '');
     const mergedArgs = [config.additionalArgs, globalAdditional].filter(Boolean).join(' ');
     const configDir = parseConfigDir(mergedArgs);
