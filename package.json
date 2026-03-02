@@ -57,6 +57,10 @@
         {
           "id": "editlessPRs",
           "name": "Pull Requests"
+        },
+        {
+          "id": "editlessSessions",
+          "name": "Sessions"
         }
       ]
     },
@@ -331,6 +335,35 @@
         "title": "Open Task File",
         "category": "EditLess",
         "icon": "$(go-to-file)"
+      },
+      {
+        "command": "editless.resumeCopilotSession",
+        "title": "Resume Session",
+        "category": "EditLess",
+        "icon": "$(play)"
+      },
+      {
+        "command": "editless.dismissSession",
+        "title": "Dismiss Session",
+        "category": "EditLess"
+      },
+      {
+        "command": "editless.refreshSessions",
+        "title": "Refresh Sessions",
+        "category": "EditLess",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "editless.filterSessions",
+        "title": "Filter Sessions",
+        "category": "EditLess",
+        "icon": "$(filter)"
+      },
+      {
+        "command": "editless.clearSessionsFilter",
+        "title": "Clear Filter",
+        "category": "EditLess",
+        "icon": "$(clear-all)"
       }
     ],
     "keybindings": [
@@ -401,6 +434,21 @@
           "command": "editless.configurePRs",
           "when": "view == editlessPRs",
           "group": "navigation@5"
+        },
+        {
+          "command": "editless.refreshSessions",
+          "when": "view == editlessSessions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "editless.filterSessions",
+          "when": "view == editlessSessions",
+          "group": "navigation@2"
+        },
+        {
+          "command": "editless.clearSessionsFilter",
+          "when": "view == editlessSessions && editless.sessionsFiltered",
+          "group": "navigation@3"
         }
       ],
       "view/item/context": [
@@ -565,6 +613,16 @@
           "command": "editless.showAgent",
           "when": "view == editlessTree && viewItem == squad-hidden",
           "group": "squad@5"
+        },
+        {
+          "command": "editless.resumeCopilotSession",
+          "when": "view == editlessSessions && viewItem =~ /^copilot-session/",
+          "group": "inline@0"
+        },
+        {
+          "command": "editless.dismissSession",
+          "when": "view == editlessSessions && viewItem =~ /^copilot-session/",
+          "group": "session@1"
         }
       ],
       "commandPalette": [
@@ -706,6 +764,26 @@
         },
         {
           "command": "editless.openTaskFile",
+          "when": "false"
+        },
+        {
+          "command": "editless.resumeCopilotSession",
+          "when": "false"
+        },
+        {
+          "command": "editless.dismissSession",
+          "when": "false"
+        },
+        {
+          "command": "editless.refreshSessions",
+          "when": "false"
+        },
+        {
+          "command": "editless.filterSessions",
+          "when": "false"
+        },
+        {
+          "command": "editless.clearSessionsFilter",
           "when": "false"
         }
       ]
