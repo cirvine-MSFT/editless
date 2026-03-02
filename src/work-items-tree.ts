@@ -237,6 +237,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   private _adoRefresh?: () => Promise<void>;
+  private _disposed = false;
 
   setAdoRefresh(fn: () => Promise<void>): void {
     this._adoRefresh = fn;
@@ -283,15 +284,28 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       fetches.push(this._adoRefresh());
     }
 
-    await Promise.all(fetches);
+    try {
+      await Promise.all(fetches);
 
-    this._issues = nextIssues;
-    this._allLabels = nextLabels;
-    this._loading = false;
-    this._onDidChangeTreeData.fire();
-    if (this._pendingRefresh) {
-      this._pendingRefresh = false;
-      this.fetchAll();
+      this._issues = nextIssues;
+      this._allLabels = nextLabels;
+      this._loading = false;
+      if (!this._disposed) {
+        this._onDidChangeTreeData.fire();
+      }
+      if (this._pendingRefresh) {
+        this._pendingRefresh = false;
+        this.fetchAll();
+      }
+    } catch (err) {
+      this._loading = false;
+      if (err instanceof vscode.CancellationError) {
+        return;
+      }
+      if (err instanceof Error && (err.message.includes('Canceled') || err.message.includes('Channel has been closed'))) {
+        return;
+      }
+      throw err;
     }
   }
 
@@ -761,5 +775,9 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       items.push(noMsItem);
     }
     return items;
+  }
+
+  dispose(): void {
+    this._disposed = true;
   }
 }
