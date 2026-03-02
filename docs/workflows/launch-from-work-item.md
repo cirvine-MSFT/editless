@@ -2,7 +2,7 @@
 
 Open a session directly from a GitHub issue or Azure DevOps work item — your agent starts with full context about what you want it to work on.
 
-<!-- TODO: Add GIF recording for this workflow -->
+![Launching a session from a work item](../media/launch-from-work-item.gif)
 
 ## Steps
 
