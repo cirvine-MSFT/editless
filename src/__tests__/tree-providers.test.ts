@@ -48,6 +48,7 @@ vi.mock('../terminal-manager', () => ({
 import { WorkItemsTreeProvider, WorkItemsTreeItem } from '../work-items-tree';
 import { PRsTreeProvider, PRsTreeItem } from '../prs-tree';
 import { EditlessTreeProvider, EditlessTreeItem } from '../editless-tree';
+import { AgentStateManager } from '../agent-state-manager';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -276,7 +277,7 @@ describe('EditlessTreeProvider — getParent', () => {
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
     ];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
 
@@ -291,7 +292,7 @@ describe('EditlessTreeProvider — getParent', () => {
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
     ];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad');
@@ -309,7 +310,7 @@ describe('EditlessTreeProvider — getParent', () => {
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
     ];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
@@ -363,7 +364,7 @@ describe('EditlessTreeProvider — getChildren(squad)', () => {
   it('returns terminal sessions + roster category', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
@@ -376,7 +377,7 @@ describe('EditlessTreeProvider — getChildren(squad)', () => {
 
   it('returns empty array for unknown squad id', () => {
     const agentSettings = createMockAgentSettings([]);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     const fakeSquadItem = new EditlessTreeItem('Fake', 'squad', 1, 'nonexistent');
 
     const children = provider.getChildren(fakeSquadItem);
@@ -423,7 +424,7 @@ describe('EditlessTreeProvider — getChildren(category)', () => {
 
   it('returns roster agents for roster category', () => {
     const agentSettings = createMockAgentSettings(testSquads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(testSquads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
@@ -440,7 +441,7 @@ describe('EditlessTreeProvider — getChildren(category)', () => {
 
   it('returns empty for non-squad non-category element', () => {
     const agentSettings = createMockAgentSettings(testSquads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     const item = new EditlessTreeItem('Random', 'agent');
 
     const children = provider.getChildren(item);
@@ -485,7 +486,7 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
 
   it('returns undefined when no terminal manager', () => {
     const agentSettings = createMockAgentSettings([]);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     const mockTerminal = { name: 'test' } as never;
 
     expect(provider.findTerminalItem(mockTerminal)).toBeUndefined();
@@ -503,7 +504,7 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
-    const provider = new EditlessTreeProvider(agentSettings as never, mockTerminalMgr as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never, mockTerminalMgr as never);
     provider.setDiscoveredItems(toDiscovered(squads));
     const mockTerminal = { name: 'untracked' } as never;
 
@@ -524,7 +525,7 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
-    const provider = new EditlessTreeProvider(agentSettings as never, mockTerminalMgr as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never, mockTerminalMgr as never);
     provider.setDiscoveredItems(toDiscovered(squads));
     const found = provider.findTerminalItem(mockTerminal);
 
@@ -571,7 +572,7 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
   it('refresh clears cache and fires onDidChangeTreeData', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
@@ -588,7 +589,7 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
 
   it('setDiscoveredItems updates list and fires event', () => {
     const agentSettings = createMockAgentSettings([]);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
 
@@ -611,7 +612,7 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
       { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
     ];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
@@ -662,7 +663,7 @@ describe('EditlessTreeProvider — visibility filtering', () => {
       { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
     ];
     const agentSettings = createMockAgentSettings(squads, { isHidden: (id: string) => id === 'squad-a' });
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
@@ -683,7 +684,7 @@ describe('EditlessTreeProvider — visibility filtering', () => {
   it('"Hidden" group shown when everything hidden', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
     const agentSettings = createMockAgentSettings(squads, { isHidden: () => true, getHiddenIds: () => ['squad-a'] });
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
@@ -698,7 +699,7 @@ describe('EditlessTreeProvider — visibility filtering', () => {
 
   it('shows default Copilot CLI agent when no squads registered', () => {
     const agentSettings = createMockAgentSettings([], { isHidden: () => false, getHiddenIds: () => [] });
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
 
     const roots = provider.getChildren();
 
@@ -747,7 +748,7 @@ describe('EditlessTreeProvider — default Copilot CLI agent', () => {
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
     ];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
@@ -763,7 +764,7 @@ describe('EditlessTreeProvider — default Copilot CLI agent', () => {
       { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
     ];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
@@ -776,7 +777,7 @@ describe('EditlessTreeProvider — default Copilot CLI agent', () => {
 
   it('has contextValue "default-agent" for menu targeting', () => {
     const agentSettings = createMockAgentSettings([]);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
 
     const roots = provider.getChildren();
     const defaultItem = roots.find(r => r.type === 'default-agent');
@@ -787,7 +788,7 @@ describe('EditlessTreeProvider — default Copilot CLI agent', () => {
 
   it('is not affected by agentSettings isHidden', () => {
     const agentSettings = createMockAgentSettings([], { isHidden: () => true, getHiddenIds: () => [] });
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
 
     const roots = provider.getChildren();
     const defaultItem = roots.find(r => r.type === 'default-agent');
@@ -798,7 +799,7 @@ describe('EditlessTreeProvider — default Copilot CLI agent', () => {
 
   it('shows "Generic Copilot agent" description when no sessions', () => {
     const agentSettings = createMockAgentSettings([]);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
 
     const roots = provider.getChildren();
     const defaultItem = roots.find(r => r.type === 'default-agent');
@@ -836,7 +837,7 @@ describe('EditlessTreeProvider — discovered agents', () => {
 
   it('shows discovered agents as root items', () => {
     const agentSettings = createMockAgentSettings([]);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems([
       { id: 'a1', name: 'Bot One', type: 'agent' as const, source: 'workspace' as const, path: '/bots/one.md' },
       { id: 'a2', name: 'Bot Two', type: 'agent' as const, source: 'copilot-dir' as const, path: '/bots/two.agent.md' },
@@ -849,7 +850,7 @@ describe('EditlessTreeProvider — discovered agents', () => {
 
   it('hidden discovered agents appear under collapsible Hidden group', () => {
     const agentSettings = createMockAgentSettings([], { isHidden: (id: string) => id === 'a1' });
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems([
       { id: 'a1', name: 'Bot One', type: 'agent' as const, source: 'workspace' as const, path: '/bots/one.md' },
       { id: 'a2', name: 'Bot Two', type: 'agent' as const, source: 'workspace' as const, path: '/bots/two.md' },
@@ -899,7 +900,7 @@ describe('EditlessTreeProvider — setDiscoveredItems', () => {
 
   it('shows both agents and squads from unified discovery as root items', () => {
     const agentSettings = createMockAgentSettings([]);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems([
       { id: 'agent-1', name: 'Solo Agent', type: 'agent' as const, source: 'workspace' as const, path: '/agents/solo.agent.md', description: 'An agent' },
       { id: 'squad-1', name: 'Team Alpha', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', description: 'A squad', universe: 'acme' },
@@ -963,7 +964,7 @@ describe('EditlessTreeProvider — squad item description', () => {
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
-    const provider = new EditlessTreeProvider(agentSettings as never, mockTerminalMgr as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never, mockTerminalMgr as never);
     provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
@@ -982,7 +983,7 @@ describe('EditlessTreeProvider — squad item description', () => {
       getLastActivityAt: vi.fn().mockReturnValue(undefined),
     };
 
-    const provider = new EditlessTreeProvider(agentSettings as never, mockTerminalMgr as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never, mockTerminalMgr as never);
     provider.setDiscoveredItems(toDiscovered(squads));
     const roots = provider.getChildren();
     const squadItem = roots.find(r => r.type === 'squad')!;
@@ -1032,7 +1033,7 @@ describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
       { id: 'squad-b', name: 'Squad B', path: '/projects/beta', icon: '🚀', universe: 'test' },
     ];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
@@ -1060,7 +1061,7 @@ describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
       { id: 'squad-a', name: 'Squad A', path: '/projects/alpha', icon: '🤖', universe: 'test' },
     ];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
 
     const getRosterIds = () => {
@@ -1085,7 +1086,7 @@ describe('EditlessTreeProvider — Tree Item ID Collision Prevention', () => {
       { id: 'squad-b', name: 'Squad B', path: '/projects/beta', icon: '🚀', universe: 'test' },
     ];
     const agentSettings = createMockAgentSettings(squads);
-    const provider = new EditlessTreeProvider(agentSettings as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
 
     const collectAllIds = (item?: EditlessTreeItem): string[] => {
@@ -1172,7 +1173,7 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
 
     const agentSettings = createMockAgentSettings(squads);
     const tm = makeTerminalManager([orphan]);
-    const provider = new EditlessTreeProvider(agentSettings as never, tm as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never, tm as never);
     provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
@@ -1203,7 +1204,7 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
 
     const agentSettings = createMockAgentSettings(squads);
     const tm = makeTerminalManager([orphan]);
-    const provider = new EditlessTreeProvider(agentSettings as never, tm as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never, tm as never);
     provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
@@ -1230,7 +1231,7 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
 
     const agentSettings = createMockAgentSettings(squads);
     const tm = makeTerminalManager([resumableOrphan, nonResumableOrphan]);
-    const provider = new EditlessTreeProvider(agentSettings as never, tm as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never, tm as never);
     provider.setDiscoveredItems(toDiscovered(squads));
 
     const roots = provider.getChildren();
@@ -1302,7 +1303,7 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
       { id: 'o2', squadId: 'squad-a', agentSessionId: 'sess-2', displayName: 'Test2', labelKey: 'k2', squadName: 'A', squadIcon: '🤖', index: 2, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T2', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
-    const provider = new EditlessTreeProvider(createMockAgentSettings(standaloneSquad) as never, tm as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(createMockAgentSettings(standaloneSquad) as never), createMockAgentSettings(standaloneSquad) as never, tm as never);
     provider.setDiscoveredItems(toDiscovered(standaloneSquad));
 
     const roots = provider.getChildren();
@@ -1315,7 +1316,7 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
       { id: 'o1', squadId: 'squad-a', agentSessionId: 'sess-1', displayName: 'Test', labelKey: 'k', squadName: 'A', squadIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
-    const provider = new EditlessTreeProvider(createMockAgentSettings(standaloneSquad) as never, tm as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(createMockAgentSettings(standaloneSquad) as never), createMockAgentSettings(standaloneSquad) as never, tm as never);
     provider.setDiscoveredItems(toDiscovered(standaloneSquad));
 
     const roots = provider.getChildren();
@@ -1329,7 +1330,7 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
       { id: 'o1', squadId: 'builtin:copilot-cli', agentSessionId: 'sess-1', displayName: 'CLI', labelKey: 'k', squadName: 'CLI', squadIcon: '', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'CLI', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
-    const provider = new EditlessTreeProvider(createMockAgentSettings([]) as never, tm as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(createMockAgentSettings([]) as never), createMockAgentSettings([]) as never, tm as never);
 
     const roots = provider.getChildren();
     const defaultItem = roots.find(r => r.type === 'default-agent')!;
@@ -1343,7 +1344,7 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
       { id: 'o1', squadId: 'builtin:copilot-cli', agentSessionId: 'sess-1', displayName: 'CLI #1', labelKey: 'k', squadName: 'CLI', squadIcon: '', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'CLI', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
-    const provider = new EditlessTreeProvider(createMockAgentSettings([]) as never, tm as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(createMockAgentSettings([]) as never), createMockAgentSettings([]) as never, tm as never);
 
     const roots = provider.getChildren();
     const defaultItem = roots.find(r => r.type === 'default-agent')!;
@@ -1356,7 +1357,7 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
 
   it('description has no resumable text when no orphans exist', () => {
     const tm = makeTerminalManager([], []);
-    const provider = new EditlessTreeProvider(createMockAgentSettings(standaloneSquad) as never, tm as never);
+    const provider = new EditlessTreeProvider(new AgentStateManager(createMockAgentSettings(standaloneSquad) as never), createMockAgentSettings(standaloneSquad) as never, tm as never);
     provider.setDiscoveredItems(toDiscovered(standaloneSquad));
 
     const roots = provider.getChildren();

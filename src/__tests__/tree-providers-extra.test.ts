@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EditlessTreeProvider, EditlessTreeItem } from '../editless-tree';
+import { AgentStateManager } from '../agent-state-manager';
 import { ThemeIcon, ThemeColor } from 'vscode';
 
 // Mock AgentSettingsManager
@@ -48,7 +49,7 @@ describe('EditlessTreeProvider — Extra Visibility Tests', () => {
     mockAgentSettings.isHidden.mockReturnValue(false);
     mockAgentSettings.getHiddenIds.mockReturnValue([]);
     // Cast to never to bypass strict typing of mock vs real
-    provider = new EditlessTreeProvider(mockAgentSettings as never);
+    provider = new EditlessTreeProvider(new AgentStateManager(mockAgentSettings as never), mockAgentSettings as never);
   });
 
   it('renders hidden agents with dimmed icon and (hidden) description inside group', () => {

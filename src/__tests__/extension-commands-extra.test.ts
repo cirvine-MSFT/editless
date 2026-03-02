@@ -95,6 +95,11 @@ vi.mock('../editless-tree', () => ({
   },
   DEFAULT_COPILOT_CLI_ID: 'builtin:copilot-cli'
 }));
+vi.mock('../agent-state-manager', () => ({
+  AgentStateManager: class {
+    getState = vi.fn(); invalidate = vi.fn(); invalidateAll = vi.fn(); setDiscoveredItems = vi.fn(); getDiscoveredItems = vi.fn().mockReturnValue([]); onDidChange = vi.fn(() => ({ dispose: vi.fn() })); dispose = vi.fn();
+  },
+}));
 vi.mock('../unified-discovery', () => ({ discoverAll: vi.fn(() => []) }));
 vi.mock('../watcher', () => ({ SquadWatcher: class {} }));
 vi.mock('../status-bar', () => ({ EditlessStatusBar: class { 
