@@ -17,7 +17,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { AgentSettingsManager, migrateFromRegistry } from '../agent-settings';
+import { AgentSettingsManager, migrateFromRegistry, ICON_PALETTE } from '../agent-settings';
 
 let tmpDir: string;
 let settingsPath: string;
@@ -390,5 +390,106 @@ describe('hydrateFromDiscovery', () => {
     ]);
 
     expect(mgr.get('agent-1')?.icon).toBe('⚡');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pickNextIcon
+// ---------------------------------------------------------------------------
+
+describe('AgentSettingsManager — pickNextIcon', () => {
+  it('returns first palette icon when no agents exist', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    expect(mgr.pickNextIcon()).toBe('🔷');
+  });
+
+  it('skips icons already in use', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    expect(mgr.pickNextIcon()).toBe('🟢');
+  });
+
+  it('skips multiple used icons', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    mgr.update('squad-2', { icon: '🟢' });
+    mgr.update('squad-3', { icon: '🟠' });
+    expect(mgr.pickNextIcon()).toBe('🟣');
+  });
+
+  it('respects exclude set for batch allocation', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    const exclude = new Set(['🔷', '🟢']);
+    expect(mgr.pickNextIcon(exclude)).toBe('🟠');
+  });
+
+  it('combines existing icons and exclude set', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    const exclude = new Set(['🟢']);
+    expect(mgr.pickNextIcon(exclude)).toBe('🟠');
+  });
+
+  it('returns fallback when palette is exhausted', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    // Use all palette icons
+    for (let i = 0; i < ICON_PALETTE.length; i++) {
+      mgr.update(`squad-${i}`, { icon: ICON_PALETTE[i] });
+    }
+    expect(mgr.pickNextIcon()).toBe('🔷'); // default fallback
+  });
+
+  it('returns custom fallback when palette is exhausted', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    for (let i = 0; i < ICON_PALETTE.length; i++) {
+      mgr.update(`squad-${i}`, { icon: ICON_PALETTE[i] });
+    }
+    expect(mgr.pickNextIcon(new Set(), '🎪')).toBe('🎪');
+  });
+
+  it('ignores agents without icons when computing used set', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { name: 'No Icon Agent' }); // no icon field
+    mgr.update('squad-2', { icon: '🔷' });
+    expect(mgr.pickNextIcon()).toBe('🟢'); // skips 🔷, ignores squad-1
+  });
+
+  it('skips palette icon that was manually assigned to a different agent', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    // squad-1 auto-got 🔷, user manually changes squad-2 to 🟢 (skipping auto)
+    mgr.update('squad-1', { icon: '🔷' });
+    mgr.update('squad-2', { icon: '🟠' }); // auto-assigned 3rd icon
+    // User manually overrides squad-2 to use 🟢
+    mgr.update('squad-2', { icon: '🟢' });
+    // Next pick should skip both 🔷 (squad-1) and 🟢 (squad-2's new manual icon)
+    expect(mgr.pickNextIcon()).toBe('🟠');
+  });
+
+  it('handles user swapping icon to one later in the palette', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    // User manually sets squad-2 to ⭐ (position 10 in palette)
+    mgr.update('squad-2', { icon: '⭐' });
+    // Next pick should be 🟢 (first unused), not skip to after ⭐
+    expect(mgr.pickNextIcon()).toBe('🟢');
+  });
+
+  it('handles user changing icon to a non-palette emoji', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    // User sets a custom emoji not in the palette
+    mgr.update('squad-2', { icon: '🦄' });
+    // 🦄 is not in palette, so pickNextIcon only skips 🔷
+    expect(mgr.pickNextIcon()).toBe('🟢');
+  });
+
+  it('detects duplicate palette icons from manual edits', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    mgr.update('squad-2', { icon: '🟢' });
+    // User manually changes squad-3 to 🔷 (duplicate of squad-1)
+    mgr.update('squad-3', { icon: '🔷' });
+    // 🔷 and 🟢 are both used; next should be 🟠
+    expect(mgr.pickNextIcon()).toBe('🟠');
   });
 });
