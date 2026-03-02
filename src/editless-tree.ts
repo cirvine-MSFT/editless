@@ -1,15 +1,15 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
-import { scanSquad } from './scanner';
 import { getLocalSquadVersion } from './squad-utils';
 import { getStateIcon, getStateDescription } from './terminal-manager';
 import type { TerminalManager, PersistedTerminalInfo, SessionState } from './terminal-manager';
 import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
 import type { AgentTeamConfig, SquadState, AgentInfo, SessionContext } from './types';
-import { type DiscoveredItem, toAgentTeamConfig } from './unified-discovery';
+import type { DiscoveredItem } from './unified-discovery';
 import { normalizeSquadName } from './discovery';
 import type { AgentSettingsManager } from './agent-settings';
+import type { AgentStateManager } from './agent-state-manager';
 
 // ---------------------------------------------------------------------------
 // Tree item types
@@ -68,18 +68,18 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   private _onDidChangeTreeData = new vscode.EventEmitter<EditlessTreeItem | undefined | void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  private _cache = new Map<string, SquadState>();
-  private _discoveredItems: DiscoveredItem[] = [];
-
   private readonly _terminalSub: vscode.Disposable | undefined;
   private readonly _labelSub: vscode.Disposable | undefined;
+  private readonly _stateSub: vscode.Disposable | undefined;
 
   constructor(
+    private readonly stateManager: AgentStateManager,
     private readonly agentSettings: AgentSettingsManager,
     private readonly terminalManager?: TerminalManager,
     private readonly labelManager?: SessionLabelManager,
     private readonly sessionContextResolver?: SessionContextResolver,
   ) {
+    this._stateSub = stateManager.onDidChange(() => this._onDidChangeTreeData.fire());
     if (terminalManager) {
       this._terminalSub = terminalManager.onDidChange(() => this._onDidChangeTreeData.fire());
     }
@@ -89,28 +89,26 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   }
 
   dispose(): void {
+    this._stateSub?.dispose();
     this._terminalSub?.dispose();
     this._labelSub?.dispose();
     this._onDidChangeTreeData.dispose();
   }
 
   refresh(): void {
-    this._cache.clear();
-    this._onDidChangeTreeData.fire();
+    this.stateManager.invalidateAll();
   }
 
   setDiscoveredItems(items: DiscoveredItem[]): void {
-    this._discoveredItems = items;
-    this._onDidChangeTreeData.fire();
+    this.stateManager.setDiscoveredItems(items);
   }
 
   getDiscoveredItems(): readonly DiscoveredItem[] {
-    return this._discoveredItems;
+    return this.stateManager.getDiscoveredItems();
   }
 
   invalidate(squadId: string): void {
-    this._cache.delete(squadId);
-    this._onDidChangeTreeData.fire();
+    this.stateManager.invalidate(squadId);
   }
 
   findTerminalItem(terminal: vscode.Terminal): EditlessTreeItem | undefined {
@@ -180,8 +178,8 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     items.push(this.buildDefaultAgentItem());
 
     // Visible agents at top level, hidden agents in collapsible group
-    const visible = this._discoveredItems.filter(i => !this.agentSettings.isHidden(i.id));
-    const hidden = this._discoveredItems.filter(i => this.agentSettings.isHidden(i.id));
+    const visible = this.stateManager.getDiscoveredItems().filter(i => !this.agentSettings.isHidden(i.id));
+    const hidden = this.stateManager.getDiscoveredItems().filter(i => this.agentSettings.isHidden(i.id));
 
     for (const disc of visible) {
       items.push(this.buildDiscoveredRootItem(disc, false));
@@ -383,14 +381,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   // -- Squad children: categories + terminal sessions ---------------------
 
   private getState(squadId: string): SquadState | undefined {
-    if (!this._cache.has(squadId)) {
-      const disc = this._discoveredItems.find(d => d.id === squadId);
-      if (!disc) return undefined;
-      const settings = this.agentSettings.get(squadId);
-      const cfg = toAgentTeamConfig(disc, settings);
-      this._cache.set(squadId, scanSquad(cfg));
-    }
-    return this._cache.get(squadId);
+    return this.stateManager.getState(squadId);
   }
 
   private getSquadChildren(squadId: string, parentItem?: EditlessTreeItem): EditlessTreeItem[] {
@@ -472,7 +463,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   // -- Hidden group children ------------------------------------------------
 
   private getHiddenGroupChildren(parentItem: EditlessTreeItem): EditlessTreeItem[] {
-    const hidden = this._discoveredItems.filter(i => this.agentSettings.isHidden(i.id));
+    const hidden = this.stateManager.getDiscoveredItems().filter(i => this.agentSettings.isHidden(i.id));
     const children = hidden.map(disc => this.buildDiscoveredRootItem(disc, true));
     for (const child of children) {
       child.parent = parentItem;
