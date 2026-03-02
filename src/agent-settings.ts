@@ -2,6 +2,17 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 
+/**
+ * Icon palette for auto-assigning distinct icons to new agents/squads.
+ * Order is intentional: visually distinct, easy to differentiate at a glance.
+ */
+export const ICON_PALETTE = [
+  '🔷', '🟢', '🟠', '🟣', '🔴',
+  '🔶', '🟡', '💠', '⬡', '🌀',
+  '⭐', '💎', '🔮', '🎯', '🛡️',
+  '⚡', '🔥', '🧊', '🌿', '🎲',
+];
+
 export interface AgentSettings {
   hidden?: boolean;
   model?: string;
@@ -115,6 +126,23 @@ export class AgentSettingsManager implements vscode.Disposable {
     if (changed) {
       this._writeToDisk();
     }
+  }
+
+  /**
+   * Return the next icon from the palette that isn't already in use.
+   * @param exclude Additional icons to treat as "in use" (for batch allocation).
+   * Falls back to the provided `fallback` when the palette is exhausted.
+   */
+  pickNextIcon(exclude: Set<string> = new Set(), fallback: string = '🔷'): string {
+    const usedIcons = new Set(
+      Object.values(this._cache.agents)
+        .map(a => a.icon)
+        .filter((i): i is string => !!i),
+    );
+    for (const icon of ICON_PALETTE) {
+      if (!usedIcons.has(icon) && !exclude.has(icon)) return icon;
+    }
+    return fallback;
   }
 
   reload(): void {
