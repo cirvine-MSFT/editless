@@ -11,6 +11,15 @@ import { type DiscoveredItem, toAgentTeamConfig } from './unified-discovery';
 import { normalizeSquadName } from './discovery';
 import type { AgentSettingsManager } from './agent-settings';
 
+/**
+ * Shorten a branch name for display in terminal labels.
+ * Strips common prefixes and truncates to maxLen chars.
+ */
+export function shortenBranch(branch: string, maxLen = 20): string {
+  const short = branch.replace(/^(feat|fix|squad|feature|bugfix|hotfix|release)\//, '');
+  return short.length > maxLen ? short.slice(0, maxLen - 1) + '…' : short;
+}
+
 // ---------------------------------------------------------------------------
 // Tree item types
 // ---------------------------------------------------------------------------
@@ -404,7 +413,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         ? this.sessionContextResolver.resolveForSquad(state.config.path)
         : null;
 
-      for (const { terminal, info } of this.terminalManager.getTerminalsForSquad(squadId)) {
+      const squadTerminals = this.terminalManager.getTerminalsForSquad(squadId);
+      const showBranch = squadTerminals.length > 1;
+
+      for (const { terminal, info } of squadTerminals) {
         const sessionState = this.terminalManager.getSessionState(terminal) ?? 'inactive';
         const lastActivityAt = this.terminalManager.getLastActivityAt(terminal);
 
@@ -413,7 +425,15 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         const relative = mins < 1 ? 'just now' : mins < 60 ? `${mins}m ago` : `${Math.floor(mins / 60)}h ago`;
 
         const customLabel = this.labelManager?.getLabel(info.labelKey);
-        const title = customLabel ? `🏷️ ${customLabel}` : info.displayName;
+        let title = customLabel ? `🏷️ ${customLabel}` : info.displayName;
+
+        // Append branch for disambiguation when multiple terminals exist (#348)
+        if (showBranch && !customLabel && info.agentSessionId && this.sessionContextResolver) {
+          const branch = this.sessionContextResolver.getSessionBranch(info.agentSessionId);
+          if (branch) {
+            title = `${title} (${shortenBranch(branch)})`;
+          }
+        }
         const item = new EditlessTreeItem(title, 'terminal');
         item.terminal = terminal;
         item.description = sessionState === 'launching' ? 'launching…'

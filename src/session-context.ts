@@ -122,6 +122,18 @@ export class SessionContextResolver {
     return map.get(squadPath) ?? null;
   }
 
+  /** Get the branch for a specific session by reading its workspace.yaml. */
+  getSessionBranch(sessionId: string): string | undefined {
+    try {
+      const workspacePath = path.join(this._sessionStateDir, sessionId, 'workspace.yaml');
+      const content = fs.readFileSync(workspacePath, 'utf-8');
+      const yaml = parseSimpleYaml(content);
+      return yaml['branch'] || undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
   resolveAll(squadPaths: string[]): Map<string, SessionContext> {
     const now = Date.now();
     if (this._cache && (now - this._cache.timestamp) < CACHE_TTL_MS) {
