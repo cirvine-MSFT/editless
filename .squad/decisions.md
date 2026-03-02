@@ -1,3 +1,74 @@
+### 2026-03-02: Worktree Feature — Resolved Design Decisions
+
+**Date:** 2026-03-01  
+**Author:** Casey Irvine (via Copilot)  
+**Status:** Decided  
+**Issue Context:** #422 (clone to worktree), #442 (auto-discover worktrees), #348 (branch labels)
+
+---
+
+## Decisions
+
+### 1. Workspace Membership: Hybrid with "already in workspace" awareness
+
+Worktrees are discovered via `git worktree list --porcelain`, NOT via workspace folder scan. A worktree is shown if its path is **under any workspace folder** (not just a top-level workspace folder). No need to "Add Folder to Workspace" separately if the worktree lives under an already-open parent folder.
+
+Setting `editless.discovery.worktreesOutsideWorkspace` (default: false) shows worktrees outside the workspace, rendered dimmed.
+
+### 2. Settings Inheritance: Field-by-field merge
+
+```
+Parent:    { model: "sonnet", additionalArgs: "--yolo", icon: "🔷" }
+Worktree:  { model: "gpt-5.2-codex" }
+Effective: { model: "gpt-5.2-codex", additionalArgs: "--yolo", icon: "🔷" }
+```
+
+Implementation: `{ ...parentSettings, ...worktreeOverrides }` — override one field, inherit the rest.
+
+### 3. Hiding: Cascading + Independent
+
+- Hiding a parent squad hides the parent AND all its worktrees (cascade down)
+- Individual worktrees CAN be hidden independently (without affecting parent or siblings)
+- Example: Hide 🌿 feat/old-experiment → only that worktree disappears
+- Example: Hide 🔷 EditLess (parent) → entire squad + all worktrees disappear
+- Implementation: `isHidden(id)` checks own ID first, then checks parent ID if it's a worktree
+
+### 4. Clone-to-worktree (#422): Create + auto-add to workspace, no auto-session
+
+Right-click → "Clone to Worktree" → prompt branch + path → `git worktree add` → auto-add folder to VS Code workspace. Does NOT auto-launch a session. Discovery handles tree appearance.
+
+### 5. Dedup: Worktree-aware dedup before standard dedup
+
+Detect worktree relationships via `git worktree list` BEFORE running dedup. Main checkout = parent, worktree copies = children with IDs `{parentId}:wt:{branch-kebab}`.
+
+### 6. Branch info source: DiscoveredItem.branch
+
+Terminal labels (#348) use `DiscoveredItem.branch` populated by `enrichWithWorktrees()` via `git worktree list`. Always available, no running session needed.
+
+---
+
+### 2026-02-28: Debounce Pattern for TerminalManager Change Events
+
+**Author:** Morty  
+**Date:** 2026-02-28  
+**Issue:** #438  
+**PR:** #439
+
+## Decision
+
+All `TerminalManager._onDidChange.fire()` calls are now routed through a 50ms debounced `_scheduleChange()` method. The `treeView.reveal()` call in `onDidChangeActiveTerminal` is separately debounced at 100ms.
+
+## Rationale
+
+During active terminal sessions, rapid-fire events (shell execution start/end, session watcher callbacks, reconciliation) caused the tree to rebuild multiple times per frame. The `reveal()` call would race with these rebuilds, resulting in stale or missed selections. Batching events into a single 50ms window eliminates redundant rebuilds, and the 100ms reveal delay ensures the tree has settled before selection.
+
+## Impact
+
+- Any new code that needs to signal a tree change in TerminalManager should call `this._scheduleChange()` instead of `this._onDidChange.fire()`.
+- Tests asserting synchronous fire behavior must use `vi.useFakeTimers()` + `vi.advanceTimersByTime(50)`.
+
+---
+
 ### 2026-03-01: v0.2 Branching Strategy — release/v0.1.x for Hotfixes, main for v0.2
 
 **Date:** 2026-03-01  
