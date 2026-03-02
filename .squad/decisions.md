@@ -1,3 +1,30 @@
+### 2026-03-02: v0.1.4 Release — Triage & Branch Strategy
+
+**Date:** 2026-03-02  
+**Author:** Rick (Lead)  
+**Status:** Decided  
+**Issue Context:** v0.1.4 release (3 critical bugs: #456, #458, #457)
+
+## Decision Summary
+
+Three critical bugs triaged and prioritized for v0.1.4 release:
+
+1. **#456 (P1):** CancellationError during tree refresh on extension shutdown — runtime crash, needs immediate fix
+2. **#458 (P2):** Resume session ignores agent additionalArgs — functional loss for power users  
+3. **#457 (P3):** Resume session doesn't register with terminal manager — UI organization issue
+
+**Branch Strategy:** Create hotfix branches directly from `release/v0.1.x` (stable base), NOT cherry-pick from master. Avoids shipping 4 master-only commits (features, docs, auto-icon, decision merge) into the v0.1.4 release.
+
+**Implementation Routing:**
+- #456 → @copilot (squad:copilot) — good fit, isolated error handling
+- #457–#458 → Morty (squad:morty) — extension dev expertise required, flagged for review
+
+**Execution Order:** #456 (independent, low risk) → #458–#457 (in parallel once metadata story is clear)
+
+**Status:** Decided. Morty executing fixes.
+
+---
+
 ### 2026-03-02: Worktree Feature — Resolved Design Decisions
 
 **Date:** 2026-03-01  
