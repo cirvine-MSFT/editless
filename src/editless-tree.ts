@@ -8,14 +8,14 @@ import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
 import type { AgentTeamConfig, SquadState, AgentInfo, SessionContext } from './types';
 import { type DiscoveredItem, toAgentTeamConfig } from './unified-discovery';
-import { normalizeSquadName } from './discovery';
+import { normalizeAgentName } from './discovery';
 import type { AgentSettingsManager } from './agent-settings';
 
 // ---------------------------------------------------------------------------
 // Tree item types
 // ---------------------------------------------------------------------------
 
-export type TreeItemType = 'squad' | 'squad-hidden' | 'category' | 'agent' | 'terminal' | 'orphanedSession' | 'default-agent';
+export type TreeItemType = 'squad' | 'agent-hidden' | 'category' | 'agent' | 'terminal' | 'orphanedSession' | 'default-agent';
 
 /** Sentinel ID for the built-in Copilot CLI entry. */
 export const DEFAULT_COPILOT_CLI_ID = 'builtin:copilot-cli';
@@ -120,7 +120,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     // Build the parent squad item so getParent() can traverse back to root
     const rootItems = this.getRootItems();
     let parentItem: EditlessTreeItem | undefined = rootItems.find(item =>
-      (item.type === 'squad' || item.type === 'default-agent') && item.squadId === info.squadId,
+      (item.type === 'squad' || item.type === 'default-agent') && item.squadId === info.agentId,
     );
 
     // Also search inside the hidden group
@@ -128,7 +128,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       const hiddenGroup = rootItems.find(item => item.type === 'category' && item.categoryKind === 'hidden');
       if (hiddenGroup) {
         parentItem = this.getHiddenGroupChildren(hiddenGroup)
-          .find(item => item.squadId === info.squadId);
+          .find(item => item.squadId === info.agentId);
       }
     }
     if (!parentItem) return undefined;
@@ -138,8 +138,8 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         .find(item => item.type === 'terminal' && item.terminal === terminal);
     }
 
-    const squadChildren = this.getSquadChildren(info.squadId, parentItem);
-    return squadChildren.find(item => item.type === 'terminal' && item.terminal === terminal);
+    const agentChildren = this.getAgentChildren(info.agentId, parentItem);
+    return agentChildren.find(item => item.type === 'terminal' && item.terminal === terminal);
   }
 
   // -- TreeDataProvider implementation -------------------------------------
@@ -159,8 +159,8 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     if (element.type === 'default-agent' && element.squadId) {
       return this.getDefaultAgentChildren(element);
     }
-    if ((element.type === 'squad' || element.type === 'squad-hidden') && element.squadId) {
-      return this.getSquadChildren(element.squadId, element);
+    if ((element.type === 'squad' || element.type === 'agent-hidden') && element.squadId) {
+      return this.getAgentChildren(element.squadId, element);
     }
     if (element.type === 'category' && element.categoryKind === 'hidden') {
       return this.getHiddenGroupChildren(element);
@@ -209,19 +209,19 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     // For squads with a path, build a full squad item from discovery + settings
     if (isSquad) {
       const settings = this.agentSettings.get(disc.id);
-      const displayName = normalizeSquadName(settings?.name || disc.name, disc.id);
+      const displayName = normalizeAgentName(settings?.name || disc.name, disc.id);
       const icon = settings?.icon || (isStandalone ? '🤖' : '🔷');
 
       const terminalCount = this.terminalManager
-        ? this.terminalManager.getTerminalsForSquad(disc.id).length
+        ? this.terminalManager.getTerminalsForAgent(disc.id).length
         : 0;
       const orphanCount = this.terminalManager
         ? this.terminalManager.getOrphanedSessions()
-            .filter(o => o.squadId === disc.id && !!o.agentSessionId)
+            .filter(o => o.agentId === disc.id && !!o.agentSessionId)
             .length
         : 0;
 
-      const itemType: TreeItemType = isHidden ? 'squad-hidden' : 'squad';
+      const itemType: TreeItemType = isHidden ? 'agent-hidden' : 'squad';
 
       const item = new EditlessTreeItem(
         `${icon} ${displayName}`,
@@ -268,14 +268,14 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     const settings = this.agentSettings.get(disc.id);
     const displayName = settings?.name || disc.name;
     const icon = settings?.icon || '🤖';
-    const itemType: TreeItemType = isHidden ? 'squad-hidden' : 'squad';
+    const itemType: TreeItemType = isHidden ? 'agent-hidden' : 'squad';
 
     const terminalCount = this.terminalManager
-      ? this.terminalManager.getTerminalsForSquad(disc.id).length
+      ? this.terminalManager.getTerminalsForAgent(disc.id).length
       : 0;
     const orphanCount = this.terminalManager
       ? this.terminalManager.getOrphanedSessions()
-          .filter(o => o.squadId === disc.id && !!o.agentSessionId)
+          .filter(o => o.agentId === disc.id && !!o.agentSessionId)
           .length
       : 0;
 
@@ -312,12 +312,12 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
 
   private buildDefaultAgentItem(): EditlessTreeItem {
     const terminalCount = this.terminalManager
-      ? this.terminalManager.getTerminalsForSquad(DEFAULT_COPILOT_CLI_ID).length
+      ? this.terminalManager.getTerminalsForAgent(DEFAULT_COPILOT_CLI_ID).length
       : 0;
 
     const orphanCount = this.terminalManager
       ? this.terminalManager.getOrphanedSessions()
-          .filter(o => o.squadId === DEFAULT_COPILOT_CLI_ID && !!o.agentSessionId)
+          .filter(o => o.agentId === DEFAULT_COPILOT_CLI_ID && !!o.agentSessionId)
           .length
       : 0;
 
@@ -351,7 +351,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     if (!this.terminalManager) return [];
 
     const children: EditlessTreeItem[] = [];
-    for (const { terminal, info } of this.terminalManager.getTerminalsForSquad(DEFAULT_COPILOT_CLI_ID)) {
+    for (const { terminal, info } of this.terminalManager.getTerminalsForAgent(DEFAULT_COPILOT_CLI_ID)) {
       const sessionState = this.terminalManager.getSessionState(terminal) ?? 'inactive';
 
       const elapsed = Date.now() - info.createdAt.getTime();
@@ -393,7 +393,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     return this._cache.get(squadId);
   }
 
-  private getSquadChildren(squadId: string, parentItem?: EditlessTreeItem): EditlessTreeItem[] {
+  private getAgentChildren(squadId: string, parentItem?: EditlessTreeItem): EditlessTreeItem[] {
     const state = this.getState(squadId);
     if (!state) return [];
 
@@ -404,7 +404,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         ? this.sessionContextResolver.resolveForSquad(state.config.path)
         : null;
 
-      for (const { terminal, info } of this.terminalManager.getTerminalsForSquad(squadId)) {
+      for (const { terminal, info } of this.terminalManager.getTerminalsForAgent(squadId)) {
         const sessionState = this.terminalManager.getSessionState(terminal) ?? 'inactive';
         const lastActivityAt = this.terminalManager.getLastActivityAt(terminal);
 
@@ -430,13 +430,13 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
         children.push(item);
       }
 
-      for (const orphan of this.terminalManager.getOrphanedSessions().filter(o => o.squadId === squadId)) {
+      for (const orphan of this.terminalManager.getOrphanedSessions().filter(o => o.agentId === squadId)) {
         children.push(this._buildOrphanItem(orphan));
       }
 
       // Hint when squad has no sessions yet
-      const hasTerminals = this.terminalManager.getTerminalsForSquad(squadId).length > 0;
-      const hasOrphans = this.terminalManager.getOrphanedSessions().some(o => o.squadId === squadId);
+      const hasTerminals = this.terminalManager.getTerminalsForAgent(squadId).length > 0;
+      const hasOrphans = this.terminalManager.getOrphanedSessions().some(o => o.agentId === squadId);
       if (!hasTerminals && !hasOrphans) {
         const hint = new EditlessTreeItem('No active sessions', 'category');
         hint.description = 'Click + to launch';
@@ -532,8 +532,8 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     item.contextValue = 'orphanedSession';
     item.tooltip = new vscode.MarkdownString(
       resumable
-        ? [`**${entry.displayName}**`, `Squad: ${entry.squadName}`, 'Your conversation is saved. Click to pick up where you left off.'].join('\n\n')
-        : [`**${entry.displayName}**`, `Squad: ${entry.squadName}`, 'This terminal was closed. The conversation cannot be resumed.'].join('\n\n'),
+        ? [`**${entry.displayName}**`, `Agent: ${entry.agentName}`, 'Your conversation is saved. Click to pick up where you left off.'].join('\n\n')
+        : [`**${entry.displayName}**`, `Agent: ${entry.agentName}`, 'This terminal was closed. The conversation cannot be resumed.'].join('\n\n'),
     );
     item.command = {
       command: 'editless.relaunchSession',

@@ -493,7 +493,7 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
     const agentSettings = createMockAgentSettings(squads);
     const mockTerminalMgr = {
       getTerminalInfo: vi.fn().mockReturnValue(undefined),
-      getTerminalsForSquad: vi.fn().mockReturnValue([]),
+      getTerminalsForAgent: vi.fn().mockReturnValue([]),
       getOrphanedSessions: vi.fn().mockReturnValue([]),
       getSessionState: vi.fn().mockReturnValue('inactive'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
@@ -513,8 +513,8 @@ describe('EditlessTreeProvider — findTerminalItem', () => {
     const mockTerminal = { name: 'test-session' } as never;
 
     const mockTerminalMgr = {
-      getTerminalInfo: vi.fn().mockReturnValue({ squadId: 'squad-a', displayName: 'Test', labelKey: 'lk', createdAt: new Date() }),
-      getTerminalsForSquad: vi.fn().mockReturnValue([{ terminal: mockTerminal, info: { squadId: 'squad-a', displayName: 'Test', labelKey: 'lk', createdAt: new Date() } }]),
+      getTerminalInfo: vi.fn().mockReturnValue({ agentId: 'squad-a', displayName: 'Test', labelKey: 'lk', createdAt: new Date() }),
+      getTerminalsForAgent: vi.fn().mockReturnValue([{ terminal: mockTerminal, info: { agentId: 'squad-a', displayName: 'Test', labelKey: 'lk', createdAt: new Date() } }]),
       getOrphanedSessions: vi.fn().mockReturnValue([]),
       getSessionState: vi.fn().mockReturnValue('inactive'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
@@ -674,7 +674,7 @@ describe('EditlessTreeProvider — visibility filtering', () => {
     const hiddenChildren = provider.getChildren(hiddenGroup!);
     expect(hiddenChildren).toHaveLength(1);
     expect(hiddenChildren[0].squadId).toBe('squad-a');
-    expect(hiddenChildren[0].contextValue).toBe('squad-hidden');
+    expect(hiddenChildren[0].contextValue).toBe('agent-hidden');
   });
 
   it('"Hidden" group shown when everything hidden', () => {
@@ -863,7 +863,7 @@ describe('EditlessTreeProvider — discovered agents', () => {
     const hiddenChildren = provider.getChildren(hiddenGroup!);
     expect(hiddenChildren).toHaveLength(1);
     expect(hiddenChildren[0].label).toBe('🤖 Bot One');
-    expect(hiddenChildren[0].contextValue).toBe('squad-hidden');
+    expect(hiddenChildren[0].contextValue).toBe('agent-hidden');
   });
 });
 
@@ -950,7 +950,7 @@ describe('EditlessTreeProvider — squad item description', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
     const agentSettings = createMockAgentSettings(squads);
     const mockTerminalMgr = {
-      getTerminalsForSquad: vi.fn().mockReturnValue([
+      getTerminalsForAgent: vi.fn().mockReturnValue([
         { terminal: {}, info: {} },
         { terminal: {}, info: {} },
       ]),
@@ -972,7 +972,7 @@ describe('EditlessTreeProvider — squad item description', () => {
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
     const agentSettings = createMockAgentSettings(squads);
     const mockTerminalMgr = {
-      getTerminalsForSquad: vi.fn().mockReturnValue([{ terminal: {}, info: {} }]),
+      getTerminalsForAgent: vi.fn().mockReturnValue([{ terminal: {}, info: {} }]),
       getOrphanedSessions: vi.fn().mockReturnValue([]),
       getSessionState: vi.fn().mockReturnValue('inactive'),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
@@ -1138,7 +1138,7 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
 
   function makeTerminalManager(orphans: Array<Record<string, unknown>>) {
     return {
-      getTerminalsForSquad: () => [],
+      getTerminalsForAgent: () => [],
       getOrphanedSessions: () => orphans,
       onDidChange: (cb: Function) => ({ dispose: () => {} }),
       getSessionState: () => 'orphaned',
@@ -1156,9 +1156,9 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
       id: 'orphan-1',
       labelKey: 'terminal:orphan-1',
       displayName: '🤖 Squad A #1',
-      squadId: 'squad-a',
-      squadName: 'Squad A',
-      squadIcon: '🤖',
+      agentId: 'squad-a',
+      agentName: 'Squad A',
+      agentIcon: '🤖',
       index: 1,
       createdAt: '2026-01-01T00:00:00.000Z',
       terminalName: '🤖 Squad A #1',
@@ -1187,9 +1187,9 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
       id: 'orphan-2',
       labelKey: 'terminal:orphan-2',
       displayName: '🤖 Squad A #1',
-      squadId: 'squad-a',
-      squadName: 'Squad A',
-      squadIcon: '🤖',
+      agentId: 'squad-a',
+      agentName: 'Squad A',
+      agentIcon: '🤖',
       index: 1,
       createdAt: '2026-01-01T00:00:00.000Z',
       terminalName: '🤖 Squad A #1',
@@ -1215,13 +1215,13 @@ describe('EditlessTreeProvider — orphan item resumability', () => {
 
   it('should have different tooltip for resumable vs non-resumable', () => {
     const resumableOrphan = {
-      id: 'res-1', labelKey: 'terminal:res-1', displayName: 'Test', squadId: 'squad-a',
-      squadName: 'Squad A', squadIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z',
+      id: 'res-1', labelKey: 'terminal:res-1', displayName: 'Test', agentId: 'squad-a',
+      agentName: 'Squad A', agentIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z',
       terminalName: 'Test', lastSeenAt: Date.now(), rebootCount: 0, agentSessionId: 'sess-1',
     };
     const nonResumableOrphan = {
-      id: 'non-1', labelKey: 'terminal:non-1', displayName: 'Test2', squadId: 'squad-a',
-      squadName: 'Squad A', squadIcon: '🤖', index: 2, createdAt: '2026-01-01T00:00:00.000Z',
+      id: 'non-1', labelKey: 'terminal:non-1', displayName: 'Test2', agentId: 'squad-a',
+      agentName: 'Squad A', agentIcon: '🤖', index: 2, createdAt: '2026-01-01T00:00:00.000Z',
       terminalName: 'Test2', lastSeenAt: Date.now(), rebootCount: 0,
     };
 
@@ -1283,7 +1283,7 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
     orphans: Array<Record<string, unknown>>,
   ) {
     return {
-      getTerminalsForSquad: vi.fn().mockReturnValue(terminals),
+      getTerminalsForAgent: vi.fn().mockReturnValue(terminals),
       getOrphanedSessions: vi.fn().mockReturnValue(orphans),
       onDidChange: vi.fn().mockReturnValue({ dispose: vi.fn() }),
       getSessionState: vi.fn().mockReturnValue('orphaned'),
@@ -1295,8 +1295,8 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
 
   it('squad item shows resumable count in description when orphans exist', () => {
     const orphans = [
-      { id: 'o1', squadId: 'squad-a', agentSessionId: 'sess-1', displayName: 'Test', labelKey: 'k', squadName: 'A', squadIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T', lastSeenAt: Date.now(), rebootCount: 0 },
-      { id: 'o2', squadId: 'squad-a', agentSessionId: 'sess-2', displayName: 'Test2', labelKey: 'k2', squadName: 'A', squadIcon: '🤖', index: 2, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T2', lastSeenAt: Date.now(), rebootCount: 0 },
+      { id: 'o1', agentId: 'squad-a', agentSessionId: 'sess-1', displayName: 'Test', labelKey: 'k', agentName: 'A', agentIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T', lastSeenAt: Date.now(), rebootCount: 0 },
+      { id: 'o2', agentId: 'squad-a', agentSessionId: 'sess-2', displayName: 'Test2', labelKey: 'k2', agentName: 'A', agentIcon: '🤖', index: 2, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T2', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
     const provider = new EditlessTreeProvider(createMockAgentSettings(standaloneSquad) as never, tm as never);
@@ -1309,7 +1309,7 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
 
   it('standalone squad with 0 terminals but orphans still shows as Collapsed', () => {
     const orphans = [
-      { id: 'o1', squadId: 'squad-a', agentSessionId: 'sess-1', displayName: 'Test', labelKey: 'k', squadName: 'A', squadIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T', lastSeenAt: Date.now(), rebootCount: 0 },
+      { id: 'o1', agentId: 'squad-a', agentSessionId: 'sess-1', displayName: 'Test', labelKey: 'k', agentName: 'A', agentIcon: '🤖', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'T', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
     const provider = new EditlessTreeProvider(createMockAgentSettings(standaloneSquad) as never, tm as never);
@@ -1323,7 +1323,7 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
 
   it('default agent item shows resumable count in description', () => {
     const orphans = [
-      { id: 'o1', squadId: 'builtin:copilot-cli', agentSessionId: 'sess-1', displayName: 'CLI', labelKey: 'k', squadName: 'CLI', squadIcon: '', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'CLI', lastSeenAt: Date.now(), rebootCount: 0 },
+      { id: 'o1', agentId: 'builtin:copilot-cli', agentSessionId: 'sess-1', displayName: 'CLI', labelKey: 'k', agentName: 'CLI', agentIcon: '', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'CLI', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
     const provider = new EditlessTreeProvider(createMockAgentSettings([]) as never, tm as never);

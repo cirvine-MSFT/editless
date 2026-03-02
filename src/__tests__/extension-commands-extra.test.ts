@@ -129,7 +129,7 @@ describe('Extra Extension Commands', () => {
     const handler = mockCommands['editless.hideAgent'];
     expect(handler).toBeDefined();
 
-    const item = { squadId: 'squad-1', type: 'squad-hidden' };
+    const item = { squadId: 'squad-1', type: 'agent-hidden' };
     handler(item);
 
     expect(mockAgentSettings.show).toHaveBeenCalledWith('squad-1');
@@ -148,7 +148,7 @@ describe('Extra Extension Commands', () => {
 
   it('editless.hideAgent should work with item.id if squadId is missing', () => {
     const handler = mockCommands['editless.hideAgent'];
-    const item = { id: 'agent-1', type: 'squad-hidden' }; // EditlessTreeItem has id
+    const item = { id: 'agent-1', type: 'agent-hidden' }; // EditlessTreeItem has id
     handler(item);
 
     expect(mockAgentSettings.show).toHaveBeenCalledWith('agent-1');

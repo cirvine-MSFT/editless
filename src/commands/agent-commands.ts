@@ -183,7 +183,7 @@ export function register(context: vscode.ExtensionContext, deps: AgentCommandDep
       const rawId = item.squadId ?? item.id;
       if (!rawId) return;
       const id = rawId.replace(/^discovered:/, '');
-      if (item.type === 'squad-hidden') {
+      if (item.type === 'agent-hidden') {
         agentSettings.show(id);
       } else {
         agentSettings.hide(id);
@@ -192,7 +192,7 @@ export function register(context: vscode.ExtensionContext, deps: AgentCommandDep
     }),
   );
 
-  // Show a single hidden agent (context menu on squad-hidden items)
+  // Show a single hidden agent (context menu on agent-hidden items)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.showAgent', (item?: EditlessTreeItem) => {
       if (!item) return;

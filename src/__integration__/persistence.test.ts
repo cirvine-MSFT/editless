@@ -117,9 +117,9 @@ suite('Session Persistence (integration)', () => {
     assert.strictEqual(entry.rebootCount, 0, 'New session rebootCount should be 0');
 
     // Validate squad identity echoes config
-    assert.strictEqual(entry.squadId, config.id);
-    assert.strictEqual(entry.squadName, config.name);
-    assert.strictEqual(entry.squadIcon, config.icon);
+    assert.strictEqual(entry.agentId, config.id);
+    assert.strictEqual(entry.agentName, config.name);
+    assert.strictEqual(entry.agentIcon, config.icon);
   });
 
   // -----------------------------------------------------------------------
@@ -146,17 +146,17 @@ suite('Session Persistence (integration)', () => {
     assert.ok(persisted, 'Should have persisted data');
     assert.strictEqual(persisted.length, 2, 'Should have two persisted sessions');
 
-    const alphaEntry = persisted.find((e: Record<string, unknown>) => e.squadId === 'test-squad-alpha');
-    const betaEntry = persisted.find((e: Record<string, unknown>) => e.squadId === 'test-squad-beta');
+    const alphaEntry = persisted.find((e: Record<string, unknown>) => e.agentId === 'test-squad-alpha');
+    const betaEntry = persisted.find((e: Record<string, unknown>) => e.agentId === 'test-squad-beta');
 
     assert.ok(alphaEntry, 'Should have an entry for alpha squad');
     assert.ok(betaEntry, 'Should have an entry for beta squad');
 
-    assert.strictEqual(alphaEntry.squadName, 'Alpha Squad');
-    assert.strictEqual(alphaEntry.squadIcon, '🅰️');
+    assert.strictEqual(alphaEntry.agentName, 'Alpha Squad');
+    assert.strictEqual(alphaEntry.agentIcon, '🅰️');
 
-    assert.strictEqual(betaEntry.squadName, 'Beta Squad');
-    assert.strictEqual(betaEntry.squadIcon, '🅱️');
+    assert.strictEqual(betaEntry.agentName, 'Beta Squad');
+    assert.strictEqual(betaEntry.agentIcon, '🅱️');
 
     // IDs should be unique
     assert.notStrictEqual(alphaEntry.id, betaEntry.id, 'Session IDs should be unique');
