@@ -10785,3 +10785,44 @@ This is a UX proposal — implementation is Morty's domain. Suggested phasing:
 
 Worktree copies of a squad nest under their parent with a `$(git-branch)` icon and branch name, keeping the sidebar clean while making every worktree launchable. When the main checkout is absent, the worktree promotes itself to top level with a "worktree of {branch}" annotation so the user always knows what they're looking at.
 
+
+---
+
+## Local Tasks Client Pattern (Unity, 2026-03-01)
+
+**Status:** Implemented
+
+Russell uses markdown files with YAML frontmatter in utler-army/tasks/ as local task tracking. EditLess needs to display these alongside GitHub Issues and ADO Work Items.
+
+**Decision:** Created src/local-tasks-client.ts as a filesystem-based data adapter following the established service-client pattern (do-client.ts, github-client.ts).
+
+**Implementation:**
+- Manual YAML parsing — frontmatter split on --- markers, parsed line-by-line. No npm dependency added (format is simple enough).
+- State mapping via UnifiedState — Todo/Done maps to open/active/closed using session_id as the active-work signal.
+- Graceful degradation — missing directory returns [], malformed files skipped silently (same error-boundary pattern as other clients).
+
+**Impact:** Morty integrates etchLocalTasks and mapLocalState into the work-items tree provider. VS Code setting for olderPath configuration needed.
+
+---
+
+## Local Tasks Integration Pattern (Morty, 2026-02-28)
+
+**Status:** Implemented
+
+**Decision:** Added Local Tasks as a third work-item backend alongside GitHub Issues and Azure DevOps, following exact patterns established by the ADO backend.
+
+**Implementation:**
+- Config: ditless.local.taskFolders (string array) in contributes.configuration
+- Init function: initLocalTasksIntegration() reads config, calls setLocalFolders() on the provider
+- Config watcher: 500ms debounced onDidChangeConfiguration handler (same pattern as ADO/GitHub)
+- File watcher: FileSystemWatcher per folder watches *.md for create/change/delete
+- Tree integration: local-backend → local-folder → local-task hierarchy; collapses when single backend/single folder
+- Filtering: _applyLocalRuntimeFilter and _applyLocalLevelFilter follow the same shape as ADO/GitHub filters
+- Commands: configureLocalTasks, openTaskFile + updated configureWorkItems and launchFromWorkItem
+
+**Rationale:** Following the existing ADO integration pattern ensures consistency and makes it easy for the team to understand and maintain the new backend.
+
+**Impact:**
+- All 974 tests pass
+- 4 test files updated with mocks for setLocalFolders and local-tasks-client
+- package.json menu when clauses extended to include local- context values
