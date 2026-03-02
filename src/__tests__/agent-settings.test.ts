@@ -17,7 +17,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { AgentSettingsManager, migrateFromRegistry } from '../agent-settings';
+import { AgentSettingsManager, migrateFromRegistry, ICON_PALETTE } from '../agent-settings';
 
 let tmpDir: string;
 let settingsPath: string;
@@ -432,19 +432,17 @@ describe('AgentSettingsManager — pickNextIcon', () => {
 
   it('returns fallback when palette is exhausted', () => {
     const mgr = new AgentSettingsManager(settingsPath);
-    // Use all 20 palette icons
-    const palette = ['🔷','🟢','🟠','🟣','🔴','🔶','🟡','💠','⬡','🌀','⭐','💎','🔮','🎯','🛡️','⚡','🔥','🧊','🌿','🎲'];
-    for (let i = 0; i < palette.length; i++) {
-      mgr.update(`squad-${i}`, { icon: palette[i] });
+    // Use all palette icons
+    for (let i = 0; i < ICON_PALETTE.length; i++) {
+      mgr.update(`squad-${i}`, { icon: ICON_PALETTE[i] });
     }
     expect(mgr.pickNextIcon()).toBe('🔷'); // default fallback
   });
 
   it('returns custom fallback when palette is exhausted', () => {
     const mgr = new AgentSettingsManager(settingsPath);
-    const palette = ['🔷','🟢','🟠','🟣','🔴','🔶','🟡','💠','⬡','🌀','⭐','💎','🔮','🎯','🛡️','⚡','🔥','🧊','🌿','🎲'];
-    for (let i = 0; i < palette.length; i++) {
-      mgr.update(`squad-${i}`, { icon: palette[i] });
+    for (let i = 0; i < ICON_PALETTE.length; i++) {
+      mgr.update(`squad-${i}`, { icon: ICON_PALETTE[i] });
     }
     expect(mgr.pickNextIcon(new Set(), '🎪')).toBe('🎪');
   });
