@@ -14,6 +14,7 @@ import type { AgentTeamConfig } from './types';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
 import { SessionContextResolver } from './session-context';
+import { CopilotSessionsProvider } from './copilot-sessions-provider';
 
 import { initSquadUiContext } from './squad-ui-integration';
 import { TEAM_DIR_NAMES } from './team-dir';
@@ -98,6 +99,77 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   const prsView = vscode.window.createTreeView('editlessPRs', { treeDataProvider: prsProvider });
   prsProvider.setTreeView(prsView);
   context.subscriptions.push(prsView);
+
+  // --- Sessions tree view ----------------------------------------------------
+  const sessionsProvider = new CopilotSessionsProvider(sessionContextResolver);
+  const sessionsView = vscode.window.createTreeView('editlessSessions', { treeDataProvider: sessionsProvider });
+  sessionsProvider.setTreeView(sessionsView);
+  context.subscriptions.push(sessionsView);
+
+  // Sessions tree commands
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.resumeCopilotSession', async (item: import('./copilot-sessions-provider').SessionTreeItem) => {
+      const entry = item?.sessionEntry;
+      if (!entry) return;
+      const check = sessionContextResolver.isSessionResumable(entry.sessionId);
+      if (!check.resumable) {
+        vscode.window.showWarningMessage(`Cannot resume session: ${check.reason}`);
+        return;
+      }
+      if (check.stale) {
+        const proceed = await vscode.window.showWarningMessage(
+          `This session hasn't been updated in over ${SessionContextResolver.STALE_SESSION_DAYS} days. Resume anyway?`,
+          'Resume', 'Cancel',
+        );
+        if (proceed !== 'Resume') return;
+      }
+      const { buildCopilotCommand } = await import('./copilot-cli-builder');
+      const launchCmd = buildCopilotCommand({ resume: entry.sessionId });
+      const displayName = entry.summary ? `↩ ${entry.summary}`.slice(0, 50) : `↩ ${entry.sessionId.slice(0, 8)}`;
+      const terminal = vscode.window.createTerminal({
+        name: displayName,
+        cwd: entry.cwd || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',
+        isTransient: true,
+        iconPath: new vscode.ThemeIcon('history'),
+      });
+      terminal.sendText(launchCmd);
+      terminal.show(false);
+    }),
+    vscode.commands.registerCommand('editless.dismissSession', (item: import('./copilot-sessions-provider').SessionTreeItem) => {
+      const entry = item?.sessionEntry;
+      if (entry) sessionsProvider.dismiss(entry.sessionId);
+    }),
+    vscode.commands.registerCommand('editless.refreshSessions', () => {
+      sessionsProvider.refresh();
+    }),
+    vscode.commands.registerCommand('editless.filterSessions', async () => {
+      const pick = await vscode.window.showQuickPick(
+        [
+          { label: 'Filter by workspace CWD', value: 'workspace' },
+          { label: 'Filter by squad name', value: 'squad' },
+        ],
+        { placeHolder: 'Select filter type' },
+      );
+      if (!pick) return;
+      if (pick.value === 'workspace') {
+        const cwd = await vscode.window.showInputBox({ prompt: 'Enter workspace CWD path to filter by' });
+        if (cwd !== undefined) {
+          sessionsProvider.filter = { ...sessionsProvider.filter, workspace: cwd || undefined };
+          vscode.commands.executeCommand('setContext', 'editless.sessionsFiltered', true);
+        }
+      } else {
+        const squad = await vscode.window.showInputBox({ prompt: 'Enter squad name to filter by' });
+        if (squad !== undefined) {
+          sessionsProvider.filter = { ...sessionsProvider.filter, squad: squad || undefined };
+          vscode.commands.executeCommand('setContext', 'editless.sessionsFiltered', true);
+        }
+      }
+    }),
+    vscode.commands.registerCommand('editless.clearSessionsFilter', () => {
+      sessionsProvider.filter = {};
+      vscode.commands.executeCommand('setContext', 'editless.sessionsFiltered', false);
+    }),
+  );
 
   // Reconcile persisted terminal sessions with live terminals after reload.
   // Orphaned sessions appear in the tree view — users can resume individually.

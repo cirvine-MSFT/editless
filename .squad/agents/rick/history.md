@@ -598,3 +598,20 @@ Decision document: .squad/decisions/inbox/rick-v013-pr-reviews.md
 **Deliverable:** Architecture proposal at `.squad/decisions/inbox/rick-worktree-discovery-architecture.md` — covers data model, file change map (~250 LOC prod, ~200 LOC test), dependency analysis, and issue recommendations.
 
 **Key insight:** The `.git` file-vs-directory distinction matters. When a workspace folder is itself a worktree, `.git` is a file pointing to the main repo's `.git/worktrees/{name}`. Must resolve this to find the real git dir for both worktree listing and file watching.
+
+---
+
+### 2026-03-02: v0.2 Planning — Issue Specs Finalized (#442, #422, #348)
+
+**Updated three GitHub issues with resolved design decisions from planning session.**
+
+**#442 (Auto-discover git worktrees):** Replaced body with comprehensive spec. All 6 design questions resolved: hybrid discovery via `git worktree list --porcelain`, field-by-field settings merge, cascading + independent hiding, worktree-aware dedup with `{parentId}:wt:{branch-kebab}` IDs, branch info from `DiscoveredItem.branch`. Includes architecture (new `worktree-discovery.ts` module, post-discovery enrichment pipeline), UX design (tree rendering, context menus, edge cases), and 4-step implementation checklist.
+
+**#422 (Clone to worktree):** Replaced body with full spec. Action creates worktree + auto-adds folder to VS Code workspace but does NOT auto-launch session. Discovery (#442) handles tree appearance. Includes complete user flow (right-click → branch pick → path pick → git worktree add → workspace update), 8-item implementation checklist. Blocked by #432, depends on #442.
+
+**#348 (Branch name in terminal labels):** Added design update comment (did not replace existing body). Key change: branch info source moves from `sessionCtx?.branch` to `DiscoveredItem.branch` — always available, no running session needed. Existing disambiguation logic in issue body remains valid. Naturally follows #442.
+
+**Key decisions captured:**
+- Branch info is always available from discovery, not session context
+- Clone action is deliberately lightweight (no auto-launch)
+- Implementation order: #442 → #422 and #348 (parallel after #442)

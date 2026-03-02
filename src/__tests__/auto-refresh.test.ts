@@ -17,11 +17,24 @@ const {
 vi.mock('vscode', () => ({
   window: {
     onDidChangeWindowState: mockOnDidChangeWindowState,
+    createTreeView: vi.fn(() => ({ dispose: vi.fn() })),
   },
   workspace: {
     getConfiguration: mockGetConfiguration,
     onDidChangeConfiguration: mockOnDidChangeConfiguration,
   },
+  TreeItem: class { constructor(public label: string, public collapsibleState?: number) {} },
+  TreeItemCollapsibleState: { None: 0, Collapsed: 1, Expanded: 2 },
+  ThemeIcon: class { constructor(public id: string, public color?: unknown) {} },
+  ThemeColor: class { constructor(public id: string) {} },
+  MarkdownString: class { constructor(public value: string) {} },
+  EventEmitter: class {
+    private listeners: Function[] = [];
+    get event() { return (l: Function) => { this.listeners.push(l); return { dispose: () => {} }; }; }
+    fire(v?: unknown) { this.listeners.forEach(l => l(v)); }
+    dispose() {}
+  },
+  commands: { registerCommand: vi.fn(() => ({ dispose: vi.fn() })), executeCommand: vi.fn() },
 }));
 
 // Stub remaining module mocks so extension.ts doesn't blow up at import time
@@ -48,6 +61,7 @@ vi.mock('../ado-auth', () => ({ getAdoToken: vi.fn(), promptAdoSignIn: vi.fn(), 
 vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn() }));
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn(), openSquadUiDashboard: vi.fn() }));
 vi.mock('../team-dir', () => ({ resolveTeamDir: vi.fn() }));
+vi.mock('../copilot-sessions-provider', () => ({ CopilotSessionsProvider: vi.fn(function () { return { refresh: vi.fn(), setTreeView: vi.fn(), filter: {}, dismiss: vi.fn(), onDidChangeTreeData: vi.fn(() => ({ dispose: vi.fn() })) }; }), SessionTreeItem: class { constructor(public label: string) {} } }));
 
 import { initAutoRefresh } from '../extension';
 

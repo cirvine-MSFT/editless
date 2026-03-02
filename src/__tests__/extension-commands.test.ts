@@ -434,6 +434,7 @@ vi.mock('../team-dir', () => ({
   resolveTeamMd: vi.fn(),
   TEAM_DIR_NAMES: ['.squad', '.ai-team'],
 }));
+vi.mock('../copilot-sessions-provider', () => ({ CopilotSessionsProvider: vi.fn(function () { return { refresh: vi.fn(), setTreeView: vi.fn(), filter: {}, dismiss: vi.fn(), onDidChangeTreeData: vi.fn(() => ({ dispose: vi.fn() })) }; }), SessionTreeItem: class { constructor(public label: string) {} } }));
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();

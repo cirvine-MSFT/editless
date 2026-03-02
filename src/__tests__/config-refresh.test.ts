@@ -196,6 +196,7 @@ vi.mock('../ado-auth', () => ({ getAdoToken: vi.fn(), promptAdoSignIn: vi.fn(), 
 vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn(), fetchAdoMe: vi.fn() }));
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn(), openSquadUiDashboard: vi.fn() }));
 vi.mock('../team-dir', () => ({ resolveTeamDir: vi.fn(), resolveTeamMd: vi.fn(), TEAM_DIR_NAMES: ['.squad', '.ai-team'] }));
+vi.mock('../copilot-sessions-provider', () => ({ CopilotSessionsProvider: vi.fn(function () { return { refresh: vi.fn(), setTreeView: vi.fn(), filter: {}, dismiss: vi.fn(), onDidChangeTreeData: vi.fn(() => ({ dispose: vi.fn() })) }; }), SessionTreeItem: class { constructor(public label: string) {} } }));
 vi.mock('../launch-utils', () => ({ launchAndLabel: vi.fn() }));
 
 vi.mock('fs', async (importOriginal) => {

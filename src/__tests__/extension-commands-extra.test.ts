@@ -110,6 +110,7 @@ vi.mock('../vscode-compat', () => ({ getEdition: () => 'code' }));
 vi.mock('../ado-auth', () => ({ setAdoAuthOutput: vi.fn() }));
 vi.mock('../ado-client', () => ({}));
 vi.mock('../launch-utils', () => ({}));
+vi.mock('../copilot-sessions-provider', () => ({ CopilotSessionsProvider: vi.fn(function () { return { refresh: vi.fn(), setTreeView: vi.fn(), filter: {}, dismiss: vi.fn(), onDidChangeTreeData: vi.fn(() => ({ dispose: vi.fn() })) }; }), SessionTreeItem: class { constructor(public label: string) {} } }));
 
 import { createAgentSettings } from '../agent-settings';
 import { EditlessTreeProvider } from '../editless-tree';
