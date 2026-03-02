@@ -392,3 +392,67 @@ describe('hydrateFromDiscovery', () => {
     expect(mgr.get('agent-1')?.icon).toBe('⚡');
   });
 });
+
+// ---------------------------------------------------------------------------
+// pickNextIcon
+// ---------------------------------------------------------------------------
+
+describe('AgentSettingsManager — pickNextIcon', () => {
+  it('returns first palette icon when no agents exist', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    expect(mgr.pickNextIcon()).toBe('🔷');
+  });
+
+  it('skips icons already in use', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    expect(mgr.pickNextIcon()).toBe('🟢');
+  });
+
+  it('skips multiple used icons', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    mgr.update('squad-2', { icon: '🟢' });
+    mgr.update('squad-3', { icon: '🟠' });
+    expect(mgr.pickNextIcon()).toBe('🟣');
+  });
+
+  it('respects exclude set for batch allocation', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    const exclude = new Set(['🔷', '🟢']);
+    expect(mgr.pickNextIcon(exclude)).toBe('🟠');
+  });
+
+  it('combines existing icons and exclude set', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    const exclude = new Set(['🟢']);
+    expect(mgr.pickNextIcon(exclude)).toBe('🟠');
+  });
+
+  it('returns fallback when palette is exhausted', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    // Use all 20 palette icons
+    const palette = ['🔷','🟢','🟠','🟣','🔴','🔶','🟡','💠','⬡','🌀','⭐','💎','🔮','🎯','🛡️','⚡','🔥','🧊','🌿','🎲'];
+    for (let i = 0; i < palette.length; i++) {
+      mgr.update(`squad-${i}`, { icon: palette[i] });
+    }
+    expect(mgr.pickNextIcon()).toBe('🔷'); // default fallback
+  });
+
+  it('returns custom fallback when palette is exhausted', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    const palette = ['🔷','🟢','🟠','🟣','🔴','🔶','🟡','💠','⬡','🌀','⭐','💎','🔮','🎯','🛡️','⚡','🔥','🧊','🌿','🎲'];
+    for (let i = 0; i < palette.length; i++) {
+      mgr.update(`squad-${i}`, { icon: palette[i] });
+    }
+    expect(mgr.pickNextIcon(new Set(), '🎪')).toBe('🎪');
+  });
+
+  it('ignores agents without icons when computing used set', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { name: 'No Icon Agent' }); // no icon field
+    mgr.update('squad-2', { icon: '🔷' });
+    expect(mgr.pickNextIcon()).toBe('🟢'); // skips 🔷, ignores squad-1
+  });
+});
