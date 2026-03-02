@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { createAgentSettings, migrateFromRegistry, type AgentSettings } from './agent-settings';
+import { createAgentSettings, migrateFromRegistry, type AgentSettings, type AgentSettingsManager } from './agent-settings';
 import { EditlessTreeProvider } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager } from './session-labels';
@@ -34,18 +34,34 @@ function getCreateCommand(): string {
 }
 
 /** Compute default AgentSettings for each discovered item and hydrate the settings file. */
-function hydrateSettings(items: DiscoveredItem[], settings: import('./agent-settings').AgentSettingsManager): void {
-  const entries = items.map(item => ({
-    id: item.id,
-    defaults: {
-      name: item.name,
-      icon: item.type === 'squad' ? '🔷' : '🤖',
-      hidden: false,
-      model: '',
-      additionalArgs: '',
-      command: '',
-    } satisfies AgentSettings,
-  }));
+function hydrateSettings(items: DiscoveredItem[], settings: AgentSettingsManager): void {
+  const batchPicked = new Set<string>();
+  const entries = items.map(item => {
+    let icon: string;
+    if (item.type === 'agent') {
+      icon = '🤖';
+    } else {
+      // Only auto-pick for items that don't already have a saved icon
+      const existing = settings.get(item.id);
+      if (existing?.icon) {
+        icon = existing.icon;
+      } else {
+        icon = settings.pickNextIcon(batchPicked);
+        batchPicked.add(icon);
+      }
+    }
+    return {
+      id: item.id,
+      defaults: {
+        name: item.name,
+        icon,
+        hidden: false,
+        model: '',
+        additionalArgs: '',
+        command: '',
+      } satisfies AgentSettings,
+    };
+  });
   settings.hydrateFromDiscovery(entries);
 }
 
