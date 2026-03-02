@@ -95,7 +95,7 @@ vi.mock('../editless-tree', () => ({
   },
   DEFAULT_COPILOT_CLI_ID: 'builtin:copilot-cli'
 }));
-vi.mock('../unified-discovery', () => ({ discoverAll: vi.fn(() => []) }));
+vi.mock('../unified-discovery', () => ({ discoverAll: vi.fn(() => []), enrichWithWorktrees: vi.fn((items: unknown[]) => items) }));
 vi.mock('../watcher', () => ({ SquadWatcher: class {} }));
 vi.mock('../status-bar', () => ({ EditlessStatusBar: class { 
   setDiscoveredItems = vi.fn(); 

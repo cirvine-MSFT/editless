@@ -180,8 +180,10 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     items.push(this.buildDefaultAgentItem());
 
     // Visible agents at top level, hidden agents in collapsible group
-    const visible = this._discoveredItems.filter(i => !this.agentSettings.isHidden(i.id));
-    const hidden = this._discoveredItems.filter(i => this.agentSettings.isHidden(i.id));
+    // Filter out worktree children (they appear under their parent)
+    const rootItems = this._discoveredItems.filter(i => !i.parentId);
+    const visible = rootItems.filter(i => !this.agentSettings.isHidden(i.id));
+    const hidden = rootItems.filter(i => this.agentSettings.isHidden(i.id));
 
     for (const disc of visible) {
       items.push(this.buildDiscoveredRootItem(disc, false));
@@ -460,6 +462,30 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       children.push(rosterItem);
     }
 
+    // Worktree children
+    const worktreeChildren = this._discoveredItems.filter(i => i.parentId === squadId);
+    for (const wt of worktreeChildren) {
+      const label = wt.branch || wt.name;
+      const wtTerminalCount = this.terminalManager
+        ? this.terminalManager.getTerminalsForSquad(wt.id).length
+        : 0;
+      const wtItem = new EditlessTreeItem(
+        label,
+        'squad',
+        wtTerminalCount > 0
+          ? vscode.TreeItemCollapsibleState.Collapsed
+          : vscode.TreeItemCollapsibleState.None,
+        wt.id,
+      );
+      wtItem.iconPath = new vscode.ThemeIcon('git-branch');
+      wtItem.contextValue = 'worktree';
+      wtItem.description = wt.path;
+      wtItem.tooltip = new vscode.MarkdownString(
+        [`**${label}**`, `Path: \`${wt.path}\``].join('\n\n'),
+      );
+      children.push(wtItem);
+    }
+
     if (parentItem) {
       for (const child of children) {
         child.parent = parentItem;
@@ -472,7 +498,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   // -- Hidden group children ------------------------------------------------
 
   private getHiddenGroupChildren(parentItem: EditlessTreeItem): EditlessTreeItem[] {
-    const hidden = this._discoveredItems.filter(i => this.agentSettings.isHidden(i.id));
+    const hidden = this._discoveredItems.filter(i => !i.parentId && this.agentSettings.isHidden(i.id));
     const children = hidden.map(disc => this.buildDiscoveredRootItem(disc, true));
     for (const child of children) {
       child.parent = parentItem;
