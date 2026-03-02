@@ -247,6 +247,20 @@ export function register(context: vscode.ExtensionContext, deps: SessionCommandD
       });
       terminal.sendText(launchCmd);
       terminal.show(false);
+
+      // Look up orphaned session to get squad metadata, then register with terminalManager
+      const orphanedSessions = terminalManager.getOrphanedSessions();
+      const orphanEntry = orphanedSessions.find(e => e.agentSessionId === sessionId);
+      if (orphanEntry) {
+        terminalManager.registerExternalTerminal(terminal, {
+          squadId: orphanEntry.squadId,
+          squadName: orphanEntry.squadName,
+          squadIcon: orphanEntry.squadIcon,
+          agentSessionId: sessionId,
+          launchCommand: orphanEntry.launchCommand,
+          squadPath: orphanEntry.squadPath,
+        });
+      }
     }),
   );
 }
