@@ -170,11 +170,11 @@ path: c:\\Users\\test`;
       const aiTeamPath = path.join(tmpSessionDir, '.copilot', 'session-state');
       fs.mkdirSync(aiTeamPath, { recursive: true });
       
-      resolver._sessionStateDir = aiTeamPath;
+      resolver._defaultSessionStateDir = aiTeamPath;
     });
 
     it('resolves session context from workspace.yaml', () => {
-      const sessionDir = path.join(resolver._sessionStateDir, 'session-1');
+      const sessionDir = path.join(resolver._defaultSessionStateDir, 'session-1');
       fs.mkdirSync(sessionDir, { recursive: true });
       const squadPath = path.join(tmpSessionDir, 'test-squad');
       
@@ -195,7 +195,7 @@ branch: feature/abc`,
     });
 
     it('skips sessions without cwd field', () => {
-      const sessionDir = path.join(resolver._sessionStateDir, 'session-1');
+      const sessionDir = path.join(resolver._defaultSessionStateDir, 'session-1');
       fs.mkdirSync(sessionDir, { recursive: true });
       const squadPath = path.join(tmpSessionDir, 'test-squad');
       
@@ -212,7 +212,7 @@ branch: main`,
     });
 
     it('returns null for non-matching paths', () => {
-      const sessionDir = path.join(resolver._sessionStateDir, 'session-1');
+      const sessionDir = path.join(resolver._defaultSessionStateDir, 'session-1');
       fs.mkdirSync(sessionDir, { recursive: true });
       const matchPath = path.join(tmpSessionDir, 'match-squad');
       const noMatchPath = path.join(tmpSessionDir, 'other-squad');
@@ -230,8 +230,8 @@ summary: Test`,
     });
 
     it('prefers most recently updated session', () => {
-      const squad1Dir = path.join(resolver._sessionStateDir, 'session-1');
-      const squad2Dir = path.join(resolver._sessionStateDir, 'session-2');
+      const squad1Dir = path.join(resolver._defaultSessionStateDir, 'session-1');
+      const squad2Dir = path.join(resolver._defaultSessionStateDir, 'session-2');
       fs.mkdirSync(squad1Dir, { recursive: true });
       fs.mkdirSync(squad2Dir, { recursive: true });
       const squadPath = path.join(tmpSessionDir, 'test-squad');
@@ -259,8 +259,8 @@ updated_at: 2025-01-02T11:00:00Z`,
     });
 
     it('resolves multiple squads in one call', () => {
-      const session1Dir = path.join(resolver._sessionStateDir, 'session-1');
-      const session2Dir = path.join(resolver._sessionStateDir, 'session-2');
+      const session1Dir = path.join(resolver._defaultSessionStateDir, 'session-1');
+      const session2Dir = path.join(resolver._defaultSessionStateDir, 'session-2');
       fs.mkdirSync(session1Dir, { recursive: true });
       fs.mkdirSync(session2Dir, { recursive: true });
       
@@ -289,7 +289,7 @@ summary: Squad 2`,
     });
 
     it('clears cache when clearCache is called', () => {
-      const sessionDir = path.join(resolver._sessionStateDir, 'session-1');
+      const sessionDir = path.join(resolver._defaultSessionStateDir, 'session-1');
       fs.mkdirSync(sessionDir, { recursive: true });
       const squadPath = path.join(tmpSessionDir, 'test-squad');
       
@@ -318,7 +318,7 @@ summary: Modified`,
 
     it('handles missing session state directory', () => {
       // Override to point to non-existent directory
-      resolver._sessionStateDir = path.join(tmpSessionDir, 'nonexistent');
+      resolver._defaultSessionStateDir = path.join(tmpSessionDir, 'nonexistent');
       
       const squadPath = path.join(tmpSessionDir, 'test-squad');
       const result = resolver.resolveForSquad(squadPath);
@@ -331,7 +331,7 @@ summary: Modified`,
 
       // Create 200 session directories, only one matching our target
       for (let i = 0; i < 200; i++) {
-        const sessionDir = path.join(resolver._sessionStateDir, `session-${i}`);
+        const sessionDir = path.join(resolver._defaultSessionStateDir, `session-${i}`);
         fs.mkdirSync(sessionDir, { recursive: true });
         const cwd = i === 42 ? targetSquad : path.join(tmpSessionDir, `other-squad-${i}`);
         fs.writeFileSync(
@@ -361,7 +361,7 @@ summary: Modified`,
       const squadPath = path.join(tmpSessionDir, 'test-squad');
 
       // Create initial session
-      const session1Dir = path.join(resolver._sessionStateDir, 'session-old');
+      const session1Dir = path.join(resolver._defaultSessionStateDir, 'session-old');
       fs.mkdirSync(session1Dir, { recursive: true });
       fs.writeFileSync(
         path.join(session1Dir, 'workspace.yaml'),
@@ -376,7 +376,7 @@ summary: Modified`,
       resolver._cache = null;
 
       // Add a new session directory — index should rebuild
-      const session2Dir = path.join(resolver._sessionStateDir, 'session-new');
+      const session2Dir = path.join(resolver._defaultSessionStateDir, 'session-new');
       fs.mkdirSync(session2Dir, { recursive: true });
       fs.writeFileSync(
         path.join(session2Dir, 'workspace.yaml'),
@@ -396,7 +396,7 @@ summary: Modified`,
     beforeEach(async () => {
       const module = await import('../session-context');
       resolver = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
     });
 
     function writeEvents(sessionId: string, events: Array<Record<string, any>>): void {
@@ -640,7 +640,7 @@ summary: Modified`,
     beforeEach(async () => {
       const module = await import('../session-context');
       resolver = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
     });
 
     function createSession(sessionId: string, opts: { workspace?: boolean; events?: boolean; staleEvents?: boolean } = {}): void {
@@ -723,7 +723,7 @@ summary: Modified`,
     it('should call callback when events.jsonl is modified', async () => {
       const module = await import('../session-context');
       const resolver: any = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
 
       const sessionId = 'watch-session';
       const sessionDir = path.join(tmpSessionDir, sessionId);
@@ -751,7 +751,7 @@ summary: Modified`,
     it('should parse the last event from events.jsonl', async () => {
       const module = await import('../session-context');
       const resolver: any = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
 
       const sessionId = 'parse-session';
       const sessionDir = path.join(tmpSessionDir, sessionId);
@@ -779,7 +779,7 @@ summary: Modified`,
     it('should debounce rapid changes', async () => {
       const module = await import('../session-context');
       const resolver: any = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
 
       const sessionId = 'debounce-session';
       const sessionDir = path.join(tmpSessionDir, sessionId);
@@ -813,7 +813,7 @@ summary: Modified`,
     it('should return a disposable that stops watching', async () => {
       const module = await import('../session-context');
       const resolver: any = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
 
       const sessionId = 'dispose-session';
       const sessionDir = path.join(tmpSessionDir, sessionId);
@@ -844,7 +844,7 @@ summary: Modified`,
     it('should handle events.jsonl not existing yet', async () => {
       const module = await import('../session-context');
       const resolver: any = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
 
       const sessionId = 'future-session';
       const sessionDir = path.join(tmpSessionDir, sessionId);
@@ -871,7 +871,7 @@ summary: Modified`,
     it('watcher callback respects turn-boundary guard on hasOpenAskUser', async () => {
       const module = await import('../session-context');
       const resolver: any = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
 
       const sessionId = 'watcher-turn-boundary';
       const sessionDir = path.join(tmpSessionDir, sessionId);
@@ -908,7 +908,7 @@ summary: Modified`,
     it('should still call callback with last valid line when events.jsonl has corrupt last line', async () => {
       const module = await import('../session-context');
       const resolver: any = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
 
       const sessionId = 'malformed-json-session';
       const sessionDir = path.join(tmpSessionDir, sessionId);
@@ -944,7 +944,7 @@ summary: Modified`,
     it('should call callback when files change in session directory', async () => {
       const module = await import('../session-context');
       const resolver: any = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
 
       const sessionId = 'dir-watch-session';
       const sessionDir = path.join(tmpSessionDir, sessionId);
@@ -968,7 +968,7 @@ summary: Modified`,
     it('should return a disposable that stops watching', async () => {
       const module = await import('../session-context');
       const resolver: any = new module.SessionContextResolver();
-      resolver._sessionStateDir = tmpSessionDir;
+      resolver._defaultSessionStateDir = tmpSessionDir;
 
       const sessionId = 'dir-dispose-session';
       const sessionDir = path.join(tmpSessionDir, sessionId);
@@ -988,6 +988,104 @@ summary: Modified`,
 
       // Should not have been called
       expect(callback).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('multiple session-state directories (#432)', () => {
+    let resolver: any;
+    let customDir: string;
+
+    beforeEach(async () => {
+      const module = await import('../session-context');
+      resolver = new module.SessionContextResolver();
+      resolver._defaultSessionStateDir = tmpSessionDir;
+
+      // Create a second session-state directory
+      customDir = fs.mkdtempSync(path.join(os.tmpdir(), 'session-custom-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(customDir, { recursive: true, force: true });
+    });
+
+    it('addSessionStateDir registers additional directory', () => {
+      resolver.addSessionStateDir(customDir);
+      const dirs = resolver.getSessionStateDirs();
+      expect(dirs).toContain(tmpSessionDir);
+      expect(dirs).toContain(customDir);
+    });
+
+    it('addSessionStateDir is idempotent', () => {
+      resolver.addSessionStateDir(customDir);
+      resolver.addSessionStateDir(customDir);
+      const dirs = resolver.getSessionStateDirs();
+      expect(dirs.filter((d: string) => d === customDir)).toHaveLength(1);
+    });
+
+    it('addSessionStateDir skips the default dir', () => {
+      resolver.addSessionStateDir(tmpSessionDir);
+      const dirs = resolver.getSessionStateDirs();
+      expect(dirs.filter((d: string) => d === tmpSessionDir)).toHaveLength(1);
+    });
+
+    it('isSessionResumable finds session in additional dir', () => {
+      resolver.addSessionStateDir(customDir);
+      const sessionId = 'custom-session';
+      const sessionDir = path.join(customDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+      fs.writeFileSync(path.join(sessionDir, 'workspace.yaml'), 'cwd: /test\nsummary: test', 'utf-8');
+      fs.writeFileSync(path.join(sessionDir, 'events.jsonl'), '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n', 'utf-8');
+
+      const result = resolver.isSessionResumable(sessionId);
+      expect(result.resumable).toBe(true);
+    });
+
+    it('getLastEvent finds session in additional dir', () => {
+      resolver.addSessionStateDir(customDir);
+      const sessionId = 'custom-event-session';
+      const sessionDir = path.join(customDir, sessionId);
+      fs.mkdirSync(sessionDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(sessionDir, 'events.jsonl'),
+        '{"type":"session.start","timestamp":"2026-01-01T00:00:00Z"}\n',
+        'utf-8',
+      );
+
+      const event = resolver.getLastEvent(sessionId);
+      expect(event).not.toBeNull();
+      expect(event?.type).toBe('session.start');
+    });
+
+    it('_ensureIndex includes sessions from all dirs', () => {
+      resolver.addSessionStateDir(customDir);
+
+      // Session in default dir
+      const defaultSession = path.join(tmpSessionDir, 'default-sess');
+      fs.mkdirSync(defaultSession, { recursive: true });
+      fs.writeFileSync(path.join(defaultSession, 'workspace.yaml'), 'cwd: /default\nsummary: default', 'utf-8');
+
+      // Session in custom dir
+      const customSession = path.join(customDir, 'custom-sess');
+      fs.mkdirSync(customSession, { recursive: true });
+      fs.writeFileSync(path.join(customSession, 'workspace.yaml'), 'cwd: /custom\nsummary: custom', 'utf-8');
+
+      const all = resolver.getAllSessions();
+      const ids = all.map((e: any) => e.sessionId);
+      expect(ids).toContain('default-sess');
+      expect(ids).toContain('custom-sess');
+    });
+
+    it('resolveForSquad finds sessions in additional dir', () => {
+      resolver.addSessionStateDir(customDir);
+
+      const sessionDir = path.join(customDir, 'custom-resolve');
+      fs.mkdirSync(sessionDir, { recursive: true });
+      fs.writeFileSync(path.join(sessionDir, 'workspace.yaml'), 'cwd: /custom-squad\nsummary: Custom session', 'utf-8');
+
+      const result = resolver.resolveForSquad('/custom-squad');
+      expect(result).not.toBeNull();
+      expect(result?.sessionId).toBe('custom-resolve');
+      expect(result?.summary).toBe('Custom session');
     });
   });
 });

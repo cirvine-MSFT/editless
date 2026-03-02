@@ -16,7 +16,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { buildCopilotCommand, buildDefaultLaunchCommand, buildLaunchCommandForConfig, getCliCommand } from '../copilot-cli-builder';
+import { buildCopilotCommand, buildDefaultLaunchCommand, buildLaunchCommandForConfig, getCliCommand, parseConfigDir } from '../copilot-cli-builder';
 import type { CopilotCommandOptions } from '../copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
@@ -452,6 +452,54 @@ describe('copilot-cli-builder', () => {
   describe('legacy config stripping', () => {
     it('getCliCommand returns "copilot" when no override and default setting', () => {
       expect(getCliCommand()).toBe('copilot');
+    });
+  });
+
+  describe('parseConfigDir', () => {
+    it('returns undefined when no additionalArgs', () => {
+      expect(parseConfigDir(undefined)).toBeUndefined();
+      expect(parseConfigDir('')).toBeUndefined();
+    });
+
+    it('parses --config with space-separated path', () => {
+      const result = parseConfigDir('--config /custom/config');
+      expect(result).toContain('custom');
+      expect(result).toContain('config');
+    });
+
+    it('parses --config=path format', () => {
+      const result = parseConfigDir('--config=/custom/config');
+      expect(result).toContain('custom');
+      expect(result).toContain('config');
+    });
+
+    it('handles --config with tilde path', () => {
+      const result = parseConfigDir('--config ~/copilot-personal');
+      expect(result).toBeDefined();
+      expect(result).toContain('copilot-personal');
+      expect(result).not.toContain('~');
+    });
+
+    it('handles --config= with tilde path', () => {
+      const result = parseConfigDir('--config=~/copilot-personal');
+      expect(result).toBeDefined();
+      expect(result).toContain('copilot-personal');
+      expect(result).not.toContain('~');
+    });
+
+    it('returns undefined when --config is not present', () => {
+      expect(parseConfigDir('--model gpt-5 --yolo')).toBeUndefined();
+    });
+
+    it('parses --config among other flags', () => {
+      const result = parseConfigDir('--yolo --config /my/config --model gpt-5');
+      expect(result).toContain('my');
+      expect(result).toContain('config');
+    });
+
+    it('handles --config as last flag without value', () => {
+      // --config at end with no value — no path to parse
+      expect(parseConfigDir('--yolo --config')).toBeUndefined();
     });
   });
 });
