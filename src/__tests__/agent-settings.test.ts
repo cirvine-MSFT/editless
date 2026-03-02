@@ -493,3 +493,55 @@ describe('AgentSettingsManager — pickNextIcon', () => {
     expect(mgr.pickNextIcon()).toBe('🟠');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Worktree settings inheritance via :wt: convention (#442)
+// ---------------------------------------------------------------------------
+
+describe('AgentSettingsManager — worktree inheritance', () => {
+  it('get() merges parent settings for :wt: id', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('my-squad', { model: 'gpt-5', icon: '🔷' });
+
+    const settings = mgr.get('my-squad:wt:feat-auth');
+    expect(settings?.model).toBe('gpt-5');
+    expect(settings?.icon).toBe('🔷');
+  });
+
+  it('get() allows worktree-specific overrides to win', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('my-squad', { model: 'gpt-5', icon: '🔷' });
+    mgr.update('my-squad:wt:feat-auth', { model: 'o4-mini' });
+
+    const settings = mgr.get('my-squad:wt:feat-auth');
+    expect(settings?.model).toBe('o4-mini'); // overridden
+    expect(settings?.icon).toBe('🔷');       // inherited
+  });
+
+  it('get() returns undefined when neither parent nor worktree settings exist', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    expect(mgr.get('unknown:wt:branch')).toBeUndefined();
+  });
+
+  it('isHidden() cascades from parent to worktree child', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.hide('my-squad');
+
+    expect(mgr.isHidden('my-squad:wt:feat-auth')).toBe(true);
+  });
+
+  it('isHidden() returns false for worktree when parent is not hidden', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('my-squad', { name: 'Visible Squad' });
+
+    expect(mgr.isHidden('my-squad:wt:feat-auth')).toBe(false);
+  });
+
+  it('isHidden() returns true when worktree itself is hidden', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('my-squad', { name: 'Visible' });
+    mgr.hide('my-squad:wt:feat-auth');
+
+    expect(mgr.isHidden('my-squad:wt:feat-auth')).toBe(true);
+  });
+});
