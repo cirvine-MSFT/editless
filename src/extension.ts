@@ -26,6 +26,7 @@ import { fetchAdoWorkItems, fetchAdoPRs, fetchAdoMe } from './ado-client';
 import { register as registerAgentCommands } from './commands/agent-commands';
 import { register as registerSessionCommands } from './commands/session-commands';
 import { register as registerWorkItemCommands } from './commands/work-item-commands';
+import { EditlessTerminalLinkProvider } from './terminal-link-provider';
 
 const execFileAsync = promisify(execFile);
 
@@ -102,6 +103,23 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // Reconcile persisted terminal sessions with live terminals after reload.
   // Orphaned sessions appear in the tree view — users can resume individually.
   terminalManager.reconcile();
+
+  // --- Terminal link provider — clickable PRs/issues/files in output (#332) ---
+  context.subscriptions.push(
+    vscode.window.registerTerminalLinkProvider(new EditlessTerminalLinkProvider(
+      () => {
+        const cfg = vscode.workspace.getConfiguration('editless');
+        const org = String(cfg.get<string>('ado.organization') ?? '').trim();
+        const project = String(cfg.get<string>('ado.project') ?? '').trim();
+        return org && project ? { org, project } : undefined;
+      },
+      () => {
+        const cfg = vscode.workspace.getConfiguration('editless');
+        const repos = cfg.get<string[]>('github.repos', []);
+        return repos.length > 0 ? repos[0] : undefined;
+      },
+    )),
+  );
 
   // Sync tree selection when switching terminals via tab bar
   let revealTimer: ReturnType<typeof setTimeout> | undefined;

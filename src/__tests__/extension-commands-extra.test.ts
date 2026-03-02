@@ -41,6 +41,7 @@ vi.mock('vscode', () => ({
     onDidChangeActiveTerminal: vi.fn(() => ({ dispose: vi.fn() })),
     onDidChangeWindowState: vi.fn(() => ({ dispose: vi.fn() })),
     createStatusBarItem: () => ({ show: vi.fn(), hide: vi.fn(), dispose: vi.fn() }),
+    registerTerminalLinkProvider: vi.fn(() => ({ dispose: vi.fn() })),
   },
   workspace: {
     workspaceFolders: [{ uri: { fsPath: '/mock/workspace' } }],
@@ -110,6 +111,7 @@ vi.mock('../vscode-compat', () => ({ getEdition: () => 'code' }));
 vi.mock('../ado-auth', () => ({ setAdoAuthOutput: vi.fn() }));
 vi.mock('../ado-client', () => ({}));
 vi.mock('../launch-utils', () => ({}));
+vi.mock('../terminal-link-provider', () => ({ EditlessTerminalLinkProvider: class {} }));
 
 import { createAgentSettings } from '../agent-settings';
 import { EditlessTreeProvider } from '../editless-tree';
