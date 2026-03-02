@@ -769,6 +769,14 @@
           "markdownDescription": "Auto-refresh interval in minutes for the **Work Items** and **Pull Requests** panels.\n\nEditLess also refreshes when the VS Code window regains focus.\n\nSet to `0` to disable auto-refresh entirely (manual refresh only).\n\nDefault: `5` minutes.",
           "scope": "window",
           "order": 34
+        },
+        "editless.discovery.worktreesOutsideWorkspace": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include git worktrees located outside the current workspace folders in discovery results.",
+          "markdownDescription": "When enabled, EditLess will include git worktrees that live outside the current VS Code workspace folders.\n\nDefault: `false` (only worktrees inside workspace folders are shown).",
+          "scope": "window",
+          "order": 35
         }
       }
     }

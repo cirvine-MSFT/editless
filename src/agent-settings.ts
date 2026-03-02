@@ -43,6 +43,15 @@ export class AgentSettingsManager implements vscode.Disposable {
   }
 
   get(id: string): AgentSettings | undefined {
+    // Worktree child: inherit from parent, merge with worktree-specific overrides
+    const wtIdx = id.indexOf(':wt:');
+    if (wtIdx !== -1) {
+      const parentId = id.slice(0, wtIdx);
+      const parentSettings = this._cache.agents[parentId];
+      const wtSettings = this._cache.agents[id];
+      if (!parentSettings && !wtSettings) return undefined;
+      return { ...parentSettings, ...wtSettings };
+    }
     return this._cache.agents[id];
   }
 
@@ -62,7 +71,14 @@ export class AgentSettingsManager implements vscode.Disposable {
   }
 
   isHidden(id: string): boolean {
-    return this._cache.agents[id]?.hidden === true;
+    if (this._cache.agents[id]?.hidden === true) return true;
+    // Cascading: if parent is hidden, worktree child is also hidden
+    const wtIdx = id.indexOf(':wt:');
+    if (wtIdx !== -1) {
+      const parentId = id.slice(0, wtIdx);
+      return this._cache.agents[parentId]?.hidden === true;
+    }
+    return false;
   }
 
   hide(id: string): void {
