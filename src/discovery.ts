@@ -5,7 +5,7 @@ import { resolveTeamMd, TEAM_DIR_NAMES } from './team-dir';
 
 const TEAM_ROSTER_PREFIX = /^team\s+roster\s*[—\-:]\s*(.+)$/i;
 
-export function normalizeSquadName(name: string, fallback: string): string {
+export function normalizeAgentName(name: string, fallback: string): string {
   const trimmed = name.trim();
   if (!trimmed) {
     return fallback;
@@ -30,7 +30,7 @@ export function parseTeamMd(content: string, folderName: string): Pick<AgentTeam
 
   const headingMatch = content.match(/^#\s+(.+)$/m);
   if (headingMatch) {
-    name = normalizeSquadName(headingMatch[1], folderName);
+    name = normalizeAgentName(headingMatch[1], folderName);
   }
 
   const blockquoteMatch = content.match(/^>\s+(.+)$/m);

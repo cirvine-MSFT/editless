@@ -88,7 +88,7 @@ export function register(context: vscode.ExtensionContext, deps: SessionCommandD
         });
         if (value !== undefined && value.length > 0) {
           const info = terminalManager.getTerminalInfo(terminal);
-          const iconPrefix = info?.squadIcon ? `${info.squadIcon} ` : '';
+          const iconPrefix = info?.agentIcon ? `${info.agentIcon} ` : '';
           await renameTerminalTab(terminal, `${iconPrefix}${value}`);
           labelManager.setLabel(labelKey, value);
           terminalManager.renameSession(terminal, value);
@@ -122,7 +122,7 @@ export function register(context: vscode.ExtensionContext, deps: SessionCommandD
         });
         if (value !== undefined && value.length > 0) {
           const info = terminalManager.getTerminalInfo(pick.terminal);
-          const iconPrefix = info?.squadIcon ? `${info.squadIcon} ` : '';
+          const iconPrefix = info?.agentIcon ? `${info.agentIcon} ` : '';
           await renameTerminalTab(pick.terminal, `${iconPrefix}${value}`);
           labelManager.setLabel(pick.labelKey, value);
           terminalManager.renameSession(pick.terminal, value);

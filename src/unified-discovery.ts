@@ -108,7 +108,7 @@ export function discoverAll(
     for (const squad of discovered) {
       if (seenIds.has(squad.id)) { continue; }
       seenIds.add(squad.id);
-      items.push(squadConfigToItem(squad));
+      items.push(agentConfigToItem(squad));
     }
   }
 
@@ -135,7 +135,7 @@ export function discoverAll(
   });
 }
 
-function squadConfigToItem(cfg: AgentTeamConfig): DiscoveredItem {
+function agentConfigToItem(cfg: AgentTeamConfig): DiscoveredItem {
   return {
     id: cfg.id,
     name: cfg.name,

@@ -645,8 +645,8 @@ describe('extension command handlers', () => {
       expect(mockAgentSettingsHide).toHaveBeenCalledWith('my-agent');
     });
 
-    it('should show agent when item type is squad-hidden (toggle)', () => {
-      const item = new MockEditlessTreeItem('Alpha', 'squad-hidden', 0, 'squad-1');
+    it('should show agent when item type is agent-hidden (toggle)', () => {
+      const item = new MockEditlessTreeItem('Alpha', 'agent-hidden', 0, 'squad-1');
       getHandler('editless.hideAgent')(item);
       expect(mockAgentSettingsShow).toHaveBeenCalledWith('squad-1');
       expect(mockTreeRefresh).toHaveBeenCalled();
@@ -738,7 +738,7 @@ describe('extension command handlers', () => {
 
   describe('editless.relaunchSession', () => {
     it('should relaunch from persisted entry on tree item', () => {
-      const entry = { id: 't-1', squadId: 'squad-1', displayName: 'Agent' };
+      const entry = { id: 't-1', agentId: 'squad-1', displayName: 'Agent' };
       const item = new MockEditlessTreeItem('Orphan', 'orphan', 0);
       item.persistedEntry = entry;
 
@@ -762,7 +762,7 @@ describe('extension command handlers', () => {
 
   describe('editless.dismissOrphan', () => {
     it('should dismiss orphan from persisted entry', () => {
-      const entry = { id: 't-1', squadId: 'squad-1', displayName: 'Dead' };
+      const entry = { id: 't-1', agentId: 'squad-1', displayName: 'Dead' };
       const item = new MockEditlessTreeItem('Orphan', 'orphan', 0);
       item.persistedEntry = entry;
 
@@ -834,7 +834,7 @@ describe('extension command handlers', () => {
       mockGetLabelKey.mockReturnValue('squad-1:0');
       mockGetLabel.mockReturnValue(undefined);
       mockGetDisplayName.mockReturnValue('Agent');
-      mockGetTerminalInfo.mockReturnValue({ squadIcon: '🚀' });
+      mockGetTerminalInfo.mockReturnValue({ agentIcon: '🚀' });
       mockShowInputBox.mockResolvedValue('My Agent');
       mockExecuteCommand.mockResolvedValue(undefined);
 
@@ -852,7 +852,7 @@ describe('extension command handlers', () => {
       item.terminal = terminal;
 
       mockGetLabelKey.mockReturnValue('squad-1:0');
-      mockGetTerminalInfo.mockReturnValue({ squadIcon: '🚀' });
+      mockGetTerminalInfo.mockReturnValue({ agentIcon: '🚀' });
       mockShowInputBox.mockResolvedValue('Renamed');
       mockExecuteCommand.mockResolvedValue(undefined);
 
@@ -869,7 +869,7 @@ describe('extension command handlers', () => {
       mockActiveTerminalRef.current = terminal;
 
       mockGetLabelKey.mockReturnValue('squad-1:0');
-      mockGetTerminalInfo.mockReturnValue({ squadIcon: '🚀' });
+      mockGetTerminalInfo.mockReturnValue({ agentIcon: '🚀' });
       mockShowInputBox.mockResolvedValue('Renamed');
       mockExecuteCommand.mockResolvedValue(undefined);
 
@@ -888,7 +888,7 @@ describe('extension command handlers', () => {
       ]);
       mockGetLabel.mockReturnValue(undefined);
       mockGetDisplayName.mockReturnValue('Agent');
-      mockGetTerminalInfo.mockReturnValue({ squadIcon: '🚀' });
+      mockGetTerminalInfo.mockReturnValue({ agentIcon: '🚀' });
       mockShowQuickPick.mockResolvedValue({
         label: 'Agent',
         terminal,

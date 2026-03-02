@@ -52,7 +52,7 @@ describe('EditlessTreeProvider — Extra Visibility Tests', () => {
   });
 
   it('renders hidden agents with dimmed icon and (hidden) description inside group', () => {
-    const hiddenId = 'squad-hidden';
+    const hiddenId = 'agent-hidden';
     mockAgentSettings.isHidden.mockImplementation((id: string) => id === hiddenId);
     
     provider.setDiscoveredItems([
@@ -68,7 +68,7 @@ describe('EditlessTreeProvider — Extra Visibility Tests', () => {
     const hiddenItem = hiddenChildren.find(r => r.squadId === hiddenId);
 
     expect(hiddenItem).toBeDefined();
-    expect(hiddenItem!.contextValue).toBe('squad-hidden');
+    expect(hiddenItem!.contextValue).toBe('agent-hidden');
     expect(hiddenItem!.description).toContain('(hidden)');
     
     // Check icon is dimmed
