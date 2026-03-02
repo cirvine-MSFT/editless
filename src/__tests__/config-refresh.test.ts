@@ -66,6 +66,7 @@ vi.mock('vscode', async () => {
       terminals: [],
       showOpenDialog: vi.fn(),
       showTextDocument: vi.fn(),
+      registerTerminalLinkProvider: vi.fn(() => ({ dispose: vi.fn() })),
     },
     workspace: {
       getConfiguration: () => ({
@@ -197,6 +198,7 @@ vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn(), openSquadUiDashboard: vi.fn() }));
 vi.mock('../team-dir', () => ({ resolveTeamDir: vi.fn(), resolveTeamMd: vi.fn(), TEAM_DIR_NAMES: ['.squad', '.ai-team'] }));
 vi.mock('../launch-utils', () => ({ launchAndLabel: vi.fn() }));
+vi.mock('../terminal-link-provider', () => ({ EditlessTerminalLinkProvider: class {} }));
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();

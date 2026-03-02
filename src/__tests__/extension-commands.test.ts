@@ -192,6 +192,7 @@ vi.mock('vscode', async () => {
       terminals: [],
       showOpenDialog: mockShowOpenDialog,
       showTextDocument: mockShowTextDocument,
+      registerTerminalLinkProvider: vi.fn(() => ({ dispose: vi.fn() })),
     },
     workspace: {
       getConfiguration: () => ({
@@ -434,6 +435,8 @@ vi.mock('../team-dir', () => ({
   resolveTeamMd: vi.fn(),
   TEAM_DIR_NAMES: ['.squad', '.ai-team'],
 }));
+
+vi.mock('../terminal-link-provider', () => ({ EditlessTerminalLinkProvider: class {} }));
 
 vi.mock('fs', async (importOriginal) => {
   const actual = await importOriginal<typeof import('fs')>();
