@@ -453,4 +453,43 @@ describe('AgentSettingsManager — pickNextIcon', () => {
     mgr.update('squad-2', { icon: '🔷' });
     expect(mgr.pickNextIcon()).toBe('🟢'); // skips 🔷, ignores squad-1
   });
+
+  it('skips palette icon that was manually assigned to a different agent', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    // squad-1 auto-got 🔷, user manually changes squad-2 to 🟢 (skipping auto)
+    mgr.update('squad-1', { icon: '🔷' });
+    mgr.update('squad-2', { icon: '🟠' }); // auto-assigned 3rd icon
+    // User manually overrides squad-2 to use 🟢
+    mgr.update('squad-2', { icon: '🟢' });
+    // Next pick should skip both 🔷 (squad-1) and 🟢 (squad-2's new manual icon)
+    expect(mgr.pickNextIcon()).toBe('🟠');
+  });
+
+  it('handles user swapping icon to one later in the palette', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    // User manually sets squad-2 to ⭐ (position 10 in palette)
+    mgr.update('squad-2', { icon: '⭐' });
+    // Next pick should be 🟢 (first unused), not skip to after ⭐
+    expect(mgr.pickNextIcon()).toBe('🟢');
+  });
+
+  it('handles user changing icon to a non-palette emoji', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    // User sets a custom emoji not in the palette
+    mgr.update('squad-2', { icon: '🦄' });
+    // 🦄 is not in palette, so pickNextIcon only skips 🔷
+    expect(mgr.pickNextIcon()).toBe('🟢');
+  });
+
+  it('detects duplicate palette icons from manual edits', () => {
+    const mgr = new AgentSettingsManager(settingsPath);
+    mgr.update('squad-1', { icon: '🔷' });
+    mgr.update('squad-2', { icon: '🟢' });
+    // User manually changes squad-3 to 🔷 (duplicate of squad-1)
+    mgr.update('squad-3', { icon: '🔷' });
+    // 🔷 and 🟢 are both used; next should be 🟠
+    expect(mgr.pickNextIcon()).toBe('🟠');
+  });
 });
