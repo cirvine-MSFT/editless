@@ -31,7 +31,7 @@ vi.mock('../editless-tree', () => ({
   }),
   EditlessTreeItem: class {},
 }));
-vi.mock('../terminal-manager', () => ({ TerminalManager: vi.fn(function () { return { persist: vi.fn(), reconcile: vi.fn(), waitForReconciliation: vi.fn().mockResolvedValue(undefined), setSessionResolver: vi.fn(), setAgentSessionId: vi.fn(), getOrphanedSessions: vi.fn().mockReturnValue([]), onDidChange: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn(), getAllTerminals: vi.fn().mockReturnValue([]) }; }), getStateIcon: vi.fn(), getStateDescription: vi.fn() }));
+vi.mock('../terminal-manager', () => ({ TerminalManager: vi.fn(function () { return { persist: vi.fn(), reconcile: vi.fn(), waitForReconciliation: vi.fn().mockResolvedValue(undefined), setSessionResolver: vi.fn(), setAgentSessionId: vi.fn(), getOrphanedSessions: vi.fn().mockReturnValue([]), onDidChange: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn(), getAllTerminals: vi.fn().mockReturnValue([]) }; }), EDITLESS_INSTRUCTIONS_DIR: '/mock/editless', getStateIcon: vi.fn(), getStateDescription: vi.fn() }));
 vi.mock('../session-labels', () => ({ SessionLabelManager: vi.fn(function () { return { getLabel: vi.fn(), setLabel: vi.fn(), clearLabel: vi.fn() }; }), promptClearLabel: vi.fn(), promptRenameSession: vi.fn() }));
 vi.mock('../squad-utils', () => ({ checkNpxAvailable: vi.fn().mockResolvedValue(true), promptInstallNode: vi.fn(), isSquadInitialized: vi.fn() }));
 vi.mock('../discovery', () => ({ discoverAgentTeams: vi.fn().mockReturnValue([]) }));
