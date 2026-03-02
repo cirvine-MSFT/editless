@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { createAgentSettings, migrateFromRegistry, type AgentSettings } from './agent-settings';
+import { AgentStateManager } from './agent-state-manager';
 import { EditlessTreeProvider } from './editless-tree';
 import { TerminalManager } from './terminal-manager';
 import { SessionLabelManager } from './session-labels';
@@ -82,7 +83,8 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   terminalManager.setSessionResolver(sessionContextResolver);
 
   // --- Tree view ---------------------------------------------------------
-  const treeProvider = new EditlessTreeProvider(agentSettings, terminalManager, labelManager, sessionContextResolver);
+  const agentStateManager = new AgentStateManager(agentSettings);
+  const treeProvider = new EditlessTreeProvider(agentStateManager, agentSettings, terminalManager, labelManager, sessionContextResolver);
   const treeView = vscode.window.createTreeView('editlessTree', { treeDataProvider: treeProvider });
   context.subscriptions.push(treeView);
   context.subscriptions.push(treeProvider);

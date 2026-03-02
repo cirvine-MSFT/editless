@@ -110,6 +110,11 @@ vi.mock('../editless-tree', () => ({
   EditlessTreeItem: class {},
   DEFAULT_COPILOT_CLI_ID: 'builtin:copilot-cli',
 }));
+vi.mock('../agent-state-manager', () => ({
+  AgentStateManager: vi.fn(function () {
+    return { getState: vi.fn(), invalidate: vi.fn(), invalidateAll: vi.fn(), setDiscoveredItems: vi.fn(), getDiscoveredItems: vi.fn().mockReturnValue([]), onDidChange: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn() };
+  }),
+}));
 vi.mock('../agent-settings', () => ({
   createAgentSettings: vi.fn(() => ({
     get: vi.fn(),
