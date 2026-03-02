@@ -2,7 +2,7 @@
 
 Launch a new terminal session with your AI agent and give it a meaningful name so you can stay organized across multiple conversations.
 
-<!-- TODO: Add GIF recording for this workflow -->
+![Creating a session and naming it](../media/create-session.gif)
 
 ## Steps
 
