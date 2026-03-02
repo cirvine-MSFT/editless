@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.3] - Unreleased
+## [0.1.3] - 2026-03-01
 
 The auto-discovery release. We've eliminated the agent registry entirely — no more manual registration, no more stale configs. Just drop your agent files in your workspace and they appear, ready to work. This release also brings session resume, attention state for sessions that need input, and smarter session management across the board. If 0.1.1 was "it works when you actually use it all day," 0.1.3 is "it works without making you think about it."
 
