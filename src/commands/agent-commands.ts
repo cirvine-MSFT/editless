@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { EditlessTreeItem, DEFAULT_COPILOT_CLI_ID, buildCopilotCLIConfig } from '../editless-tree';
 import type { EditlessTreeProvider } from '../editless-tree';
 import type { AgentSettingsManager } from '../agent-settings';
@@ -12,6 +14,8 @@ import { toAgentTeamConfig } from '../unified-discovery';
 import { openSquadUiDashboard } from '../squad-ui-integration';
 import type { AgentTeamConfig } from '../types';
 
+const execFileAsync = promisify(execFile);
+
 export interface AgentCommandDeps {
   agentSettings: AgentSettingsManager;
   treeProvider: EditlessTreeProvider;
@@ -21,6 +25,21 @@ export interface AgentCommandDeps {
   refreshDiscovery: () => void;
   ensureWorkspaceFolder: (dirPath: string) => void;
   output: vscode.OutputChannel;
+}
+
+/** Validate a git branch name (no spaces, basic ref safety). Exported for testing. */
+export function isValidBranchName(name: string): boolean {
+  if (!name || /\s/.test(name)) return false;
+  if (/[~^:?*\[\\]/.test(name)) return false;
+  if (name.includes('..') || name.startsWith('/') || name.endsWith('/') || name.endsWith('.lock') || name.endsWith('.')) return false;
+  return true;
+}
+
+/** Compute the default worktree path. Exported for testing. */
+export function defaultWorktreePath(repoPath: string, branch: string): string {
+  const repoName = path.basename(repoPath);
+  const slug = branch.replace(/\//g, '-');
+  return path.join(path.dirname(repoPath), `${repoName}.wt`, slug);
 }
 
 const modelChoices = [
@@ -427,6 +446,77 @@ export function register(context: vscode.ExtensionContext, deps: AgentCommandDep
         treeProvider.refresh();
       });
       context.subscriptions.push(listener);
+    }),
+  );
+
+  // Clone to Worktree (#422)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.cloneToWorktree', async (item?: EditlessTreeItem) => {
+      if (!item?.squadId) return;
+      const disc = getDiscoveredItems().find(d => d.id === item.squadId);
+      if (!disc) return;
+      const repoPath = disc.path;
+
+      // 1. Branch selection
+      let branches: string[] = [];
+      try {
+        const { stdout } = await execFileAsync('git', ['branch', '--list', '--format=%(refname:short)'], { cwd: repoPath });
+        branches = stdout.split('\n').map(b => b.trim()).filter(Boolean);
+      } catch { /* ignore – empty list */ }
+
+      const newBranchItem = { label: '$(add) Create new branch', description: '', alwaysShow: true, isNew: true as const };
+      const branchItems = [
+        newBranchItem,
+        ...(branches.length ? [{ label: '', kind: vscode.QuickPickItemKind.Separator } as any] : []),
+        ...branches.map(b => ({ label: b, isNew: false as const })),
+      ];
+
+      const picked = await vscode.window.showQuickPick(branchItems, { placeHolder: 'Select or create a branch for the worktree' });
+      if (!picked) return;
+
+      let branch: string;
+      let isNewBranch: boolean;
+      if ((picked as any).isNew) {
+        const name = await vscode.window.showInputBox({
+          prompt: 'New branch name',
+          validateInput: v => isValidBranchName(v) ? undefined : 'Invalid branch name',
+        });
+        if (!name) return;
+        branch = name;
+        isNewBranch = true;
+      } else {
+        branch = picked.label;
+        isNewBranch = false;
+      }
+
+      // 2. Path selection
+      const defaultPath = defaultWorktreePath(repoPath, branch);
+      const wtPath = await vscode.window.showInputBox({
+        prompt: 'Worktree path',
+        value: defaultPath,
+        validateInput: v => v.trim() ? undefined : 'Path cannot be empty',
+      });
+      if (!wtPath) return;
+
+      // 3. Execute git worktree add
+      try {
+        const args = ['worktree', 'add'];
+        if (isNewBranch) args.push('-b', branch);
+        args.push(wtPath);
+        if (!isNewBranch) args.push(branch);
+        await execFileAsync('git', args, { cwd: repoPath });
+      } catch (err: any) {
+        vscode.window.showErrorMessage(`Git worktree failed: ${err.stderr || err.message}`);
+        return;
+      }
+
+      // 4. Post-create: add to workspace & refresh
+      vscode.workspace.updateWorkspaceFolders(
+        (vscode.workspace.workspaceFolders?.length ?? 0), 0,
+        { uri: vscode.Uri.file(wtPath) },
+      );
+      refreshDiscovery();
+      vscode.window.showInformationMessage(`Worktree created at ${wtPath}`);
     }),
   );
 }
