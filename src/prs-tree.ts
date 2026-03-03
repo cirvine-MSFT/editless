@@ -43,6 +43,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   private _adoPRs: AdoPR[] = [];
   private _adoConfigured = false;
   private _loading = false;
+  private _disposed = false;
   private _filter: PRsFilter = { repos: [], labels: [], statuses: [], author: '' };
   private _levelFilters = new Map<string, PRLevelFilter>();
   private _filterSeq = 0;
