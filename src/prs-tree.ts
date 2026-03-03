@@ -43,6 +43,7 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
   private _adoPRs: AdoPR[] = [];
   private _adoConfigured = false;
   private _loading = false;
+  private _disposed = false;
   private _filter: PRsFilter = { repos: [], labels: [], statuses: [], author: '' };
   private _levelFilters = new Map<string, PRLevelFilter>();
   private _filterSeq = 0;
@@ -262,15 +263,28 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       fetches.push(this._adoRefresh());
     }
 
-    await Promise.all(fetches);
+    try {
+      await Promise.all(fetches);
 
-    this._prs = nextPrs;
-    this._allLabels = nextLabels;
-    this._loading = false;
-    this._onDidChangeTreeData.fire();
-    if (this._pendingRefresh) {
-      this._pendingRefresh = false;
-      this.fetchAll();
+      this._prs = nextPrs;
+      this._allLabels = nextLabels;
+      this._loading = false;
+      if (!this._disposed) {
+        this._onDidChangeTreeData.fire();
+      }
+      if (this._pendingRefresh) {
+        this._pendingRefresh = false;
+        this.fetchAll();
+      }
+    } catch (err) {
+      this._loading = false;
+      if (err instanceof vscode.CancellationError) {
+        return;
+      }
+      if (err instanceof Error && (err.message.includes('Canceled') || err.message.includes('Channel has been closed'))) {
+        return;
+      }
+      throw err;
     }
   }
 
@@ -639,5 +653,9 @@ export class PRsTreeProvider implements vscode.TreeDataProvider<PRsTreeItem> {
       if (filter.labels && filter.labels.length > 0 && !this.matchesLabelFilter(pr.labels, filter.labels)) return false;
       return true;
     });
+  }
+
+  dispose(): void {
+    this._disposed = true;
   }
 }
