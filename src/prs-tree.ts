@@ -107,8 +107,8 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
     const cleanId = nodeId.replace(/:f\d+$/, '');
     const baseContext = contextValue.replace(/-filtered$/, '');
 
-    if (baseContext === 'github-pr-repo') {
-      const repoName = cleanId.replace('github-pr:', '');
+    if (baseContext === `${this._ghIdPrefix}-repo`) {
+      const repoName = cleanId.replace(`${this._ghIdPrefix}:`, '');
       const prs = this._prs.get(repoName) ?? [];
       const labels = new Set<string>();
       for (const pr of prs) {
@@ -120,7 +120,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
       };
     }
 
-    if (baseContext === 'ado-pr-project') {
+    if (baseContext === `${this._adoIdPrefix}-project`) {
       return {
         statuses: ['draft', 'open', 'merged'],
       };
@@ -214,7 +214,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
 
   protected _getChildrenForContext(element: PRsTreeItem, ctx: string): PRsTreeItem[] {
     // ADO project → PR items
-    if (ctx === 'ado-pr-project') {
+    if (ctx === `${this._adoIdPrefix}-project`) {
       let filtered = this.applyAdoRuntimeFilter(this._adoPRs);
       const projectFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       if (projectFilter) {
@@ -224,8 +224,8 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
     }
 
     // GitHub repo → PR items
-    if (ctx === 'github-pr-repo') {
-      const repoName = element.id?.replace(/^github-pr:|:f\d+$/g, '') ?? '';
+    if (ctx === `${this._ghIdPrefix}-repo`) {
+      const repoName = element.id?.replace(new RegExp(`^${this._ghIdPrefix}:|:f\\d+$`, 'g'), '') ?? '';
       let filtered = this.applyRuntimeFilter(this._prs.get(repoName) ?? []);
       const repoFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       if (repoFilter) {

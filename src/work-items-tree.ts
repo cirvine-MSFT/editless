@@ -149,8 +149,8 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
     const cleanId = nodeId.replace(/:f\d+$/, '');
     const baseContext = contextValue.replace(/-filtered$/, '');
 
-    if (baseContext === 'github-repo') {
-      const repoName = cleanId.replace('github:', '');
+    if (baseContext === `${this._ghIdPrefix}-repo`) {
+      const repoName = cleanId.replace(`${this._ghIdPrefix}:`, '');
       const issues = this._issues.get(repoName) ?? [];
       const labels = new Set<string>();
       for (const issue of issues) {
@@ -162,7 +162,7 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
       };
     }
 
-    if (baseContext === 'ado-project') {
+    if (baseContext === `${this._adoIdPrefix}-project`) {
       const types = new Set<string>();
       const tags = new Set<string>();
       for (const wi of this._adoItems) {
@@ -421,7 +421,7 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
     }
 
     // ADO project node
-    if (ctx === 'ado-project') {
+    if (ctx === `${this._adoIdPrefix}-project`) {
       const filteredAdo = this.applyAdoRuntimeFilter(this._adoItems);
       const projectFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       let filtered = filteredAdo;
@@ -442,8 +442,8 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
     }
 
     // GitHub repo node
-    if (ctx === 'github-repo') {
-      const repoName = element.id?.replace(/^github:|:f\d+$/g, '') ?? '';
+    if (ctx === `${this._ghIdPrefix}-repo`) {
+      const repoName = element.id?.replace(new RegExp(`^${this._ghIdPrefix}:|:f\\d+$`, 'g'), '') ?? '';
       const issues = this._issues.get(repoName) ?? [];
       let filtered = this.applyRuntimeFilter(issues);
       
