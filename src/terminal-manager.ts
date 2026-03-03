@@ -229,7 +229,7 @@ export class TerminalManager implements vscode.Disposable {
       iconPath: new vscode.ThemeIcon('terminal'),
       env: {
         ...extraEnv,
-        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: EDITLESS_INSTRUCTIONS_DIR,
+        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: [process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS, EDITLESS_INSTRUCTIONS_DIR].filter(Boolean).join(path.delimiter),
         EDITLESS_TERMINAL_ID: id,
         EDITLESS_SQUAD_ID: config.id,
         EDITLESS_SQUAD_NAME: config.name,
@@ -437,7 +437,7 @@ export class TerminalManager implements vscode.Disposable {
       iconPath: new vscode.ThemeIcon('terminal'),
       env: {
         ...env,
-        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: EDITLESS_INSTRUCTIONS_DIR,
+        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: [process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS, EDITLESS_INSTRUCTIONS_DIR].filter(Boolean).join(path.delimiter),
         EDITLESS_TERMINAL_ID: entry.id,
         EDITLESS_SQUAD_ID: entry.squadId,
         EDITLESS_SQUAD_NAME: entry.squadName,
