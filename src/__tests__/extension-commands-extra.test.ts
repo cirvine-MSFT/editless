@@ -83,7 +83,7 @@ vi.mock('../terminal-manager', () => ({ TerminalManager: class {
   setSessionResolver = vi.fn(); 
   reconcile = vi.fn(); 
   onDidChange = vi.fn(() => ({ dispose: vi.fn() }));
-} }));
+}, EDITLESS_INSTRUCTIONS_DIR: '/mock/editless' }));
 vi.mock('../session-labels', () => ({ SessionLabelManager: class {} }));
 vi.mock('../session-context', () => ({ SessionContextResolver: class {} }));
 vi.mock('../editless-tree', () => ({ 

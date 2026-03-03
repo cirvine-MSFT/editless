@@ -40,6 +40,7 @@ vi.mock('../squad-utils', () => ({
 }));
 
 vi.mock('../terminal-manager', () => ({
+  EDITLESS_INSTRUCTIONS_DIR: '/mock/editless',
   getStateIcon: vi.fn(() => undefined),
   getStateDescription: vi.fn(() => ''),
 }));
