@@ -103,12 +103,13 @@ vi.mock('../status-bar', () => ({ EditlessStatusBar: class {
   updateSessionsOnly = vi.fn(); 
 } }));
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn() }));
-vi.mock('../work-items-tree', () => ({ WorkItemsTreeProvider: class { setTreeView = vi.fn(); setAdoConfig = vi.fn(); setRepos = vi.fn(); } }));
+vi.mock('../work-items-tree', () => ({ WorkItemsTreeProvider: class { setTreeView = vi.fn(); setAdoConfig = vi.fn(); setRepos = vi.fn(); setLocalFolders = vi.fn(); setLocalTasks = vi.fn(); } }));
 vi.mock('../prs-tree', () => ({ PRsTreeProvider: class { setTreeView = vi.fn(); setAdoConfig = vi.fn(); setRepos = vi.fn(); } }));
 vi.mock('../github-client', () => ({}));
 vi.mock('../vscode-compat', () => ({ getEdition: () => 'code' }));
 vi.mock('../ado-auth', () => ({ setAdoAuthOutput: vi.fn() }));
 vi.mock('../ado-client', () => ({}));
+vi.mock('../local-tasks-client', () => ({ fetchLocalTasks: vi.fn().mockResolvedValue([]), mapLocalState: vi.fn().mockReturnValue('open') }));
 vi.mock('../launch-utils', () => ({}));
 
 import { createAgentSettings } from '../agent-settings';

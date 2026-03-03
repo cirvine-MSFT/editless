@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
 import { GitHubIssue, fetchAssignedIssues, isGhAvailable } from './github-client';
 import type { AdoWorkItem } from './ado-client';
+import type { LocalTask } from './local-tasks-client';
+import { mapLocalState } from './local-tasks-client';
+import { fetchLocalTasks } from './local-tasks-client';
 
 interface IssueFilter {
   includeLabels?: string[];
@@ -41,6 +44,7 @@ export interface LevelFilter {
 export class WorkItemsTreeItem extends vscode.TreeItem {
   public issue?: GitHubIssue;
   public adoWorkItem?: AdoWorkItem;
+  public localTask?: LocalTask;
 
   constructor(
     label: string,
@@ -67,6 +71,9 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   private _allLabels = new Set<string>();
   private _adoOrg: string | undefined;
   private _adoProject: string | undefined;
+  private _localTasks = new Map<string, LocalTask[]>();
+  private _localConfigured = false;
+  private _localFolders: string[] = [];
 
   setRepos(repos: string[]): void {
     this._repos = repos;
@@ -89,6 +96,24 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     this._adoItems = [];
     this._adoChildMap.clear();
     this._adoConfigured = false;
+    this._onDidChangeTreeData.fire();
+  }
+
+  setLocalFolders(folders: string[]): void {
+    this._localFolders = folders;
+    this._localConfigured = folders.length > 0;
+    this._onDidChangeTreeData.fire();
+  }
+
+  setLocalTasks(folderPath: string, tasks: LocalTask[]): void {
+    this._localTasks.set(folderPath, tasks);
+    this._onDidChangeTreeData.fire();
+  }
+
+  clearLocal(): void {
+    this._localTasks.clear();
+    this._localFolders = [];
+    this._localConfigured = false;
     this._onDidChangeTreeData.fire();
   }
 
@@ -142,6 +167,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   getAllRepos(): string[] {
     const repos = [...this._repos];
     if (this._adoConfigured) repos.push('(ADO)');
+    if (this._localConfigured) repos.push('(Local)');
     return repos;
   }
 
@@ -233,6 +259,12 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       };
     }
 
+    if (baseContext === 'local-backend' || baseContext === 'local-folder') {
+      return {
+        states: ['open', 'active', 'closed'] as UnifiedState[]
+      };
+    }
+
     return {};
   }
 
@@ -284,6 +316,15 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       fetches.push(this._adoRefresh());
     }
 
+    // Local tasks fetch
+    for (const folder of this._localFolders) {
+      fetches.push(
+        fetchLocalTasks(folder).then(tasks => {
+          this._localTasks.set(folder, tasks);
+        })
+      );
+    }
+
     try {
       await Promise.all(fetches);
 
@@ -322,7 +363,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         return [item];
       }
 
-      if (this._repos.length === 0 && !this._adoConfigured) {
+      if (this._repos.length === 0 && !this._adoConfigured && !this._localConfigured) {
         const ghItem = new WorkItemsTreeItem('Configure in GitHub');
         ghItem.iconPath = new vscode.ThemeIcon('github');
         ghItem.command = {
@@ -337,7 +378,14 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
           title: 'Configure Azure DevOps',
         };
 
-        return [ghItem, adoItem];
+        const localItem = new WorkItemsTreeItem('Configure Local Tasks');
+        localItem.iconPath = new vscode.ThemeIcon('checklist');
+        localItem.command = {
+          command: 'editless.configureLocalTasks',
+          title: 'Configure Local Tasks',
+        };
+
+        return [ghItem, adoItem, localItem];
       }
 
       // Apply runtime filters
@@ -347,11 +395,13 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         if (filtered.length > 0) filteredIssues.set(repo, filtered);
       }
       const filteredAdo = this.applyAdoRuntimeFilter(this._adoItems);
+      const filteredLocal = this._getAllFilteredLocalTasks();
 
       const hasGitHub = filteredIssues.size > 0;
       const hasAdo = filteredAdo.length > 0;
+      const hasLocal = filteredLocal.length > 0;
 
-      if (!hasGitHub && !hasAdo) {
+      if (!hasGitHub && !hasAdo && !hasLocal) {
         const msg = this.isFiltered ? 'No items match current filter' : 'No assigned issues found';
         const icon = this.isFiltered ? 'filter' : 'check';
         const item = new WorkItemsTreeItem(msg);
@@ -363,7 +413,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       const fseq = this._filterSeq;
 
       // Check if we have only one backend configured
-      const backendCount = (hasGitHub ? 1 : 0) + (hasAdo ? 1 : 0);
+      const backendCount = (hasGitHub ? 1 : 0) + (hasAdo ? 1 : 0) + (hasLocal ? 1 : 0);
 
       // ADO backend group
       if (hasAdo) {
@@ -407,6 +457,24 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         }
       }
 
+      // Local Tasks backend group
+      if (hasLocal) {
+        if (backendCount > 1) {
+          const localGroup = new WorkItemsTreeItem('Local Tasks', vscode.TreeItemCollapsibleState.Expanded);
+          localGroup.iconPath = new vscode.ThemeIcon('checklist');
+          localGroup.description = this._getFilterDescription('local:', filteredLocal.length);
+          localGroup.contextValue = this._contextWithFilter('local-backend', `local:`);
+          localGroup.id = `local::f${fseq}`;
+          items.push(localGroup);
+        } else {
+          // Only local configured — collapse to folder→tasks if single folder
+          if (this._localFolders.length === 1) {
+            return filteredLocal.map(t => this._buildLocalTaskItem(t));
+          }
+          return this._getLocalFolderNodes(filteredLocal);
+        }
+      }
+
       return items;
     }
 
@@ -425,6 +493,30 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         if (filtered.length > 0) filteredIssues.set(repo, filtered);
       }
       return this._getGitHubOwnerNodes(filteredIssues);
+    }
+
+    if (ctx === 'local-backend') {
+      const backendFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
+      let tasks = this._getAllFilteredLocalTasks();
+      if (backendFilter) {
+        tasks = this._applyLocalLevelFilter(tasks, backendFilter);
+      }
+      return this._getLocalFolderNodes(tasks);
+    }
+
+    if (ctx === 'local-folder') {
+      const folderPath = element.id?.replace(/^local:|:f\d+$/g, '') ?? '';
+      const tasks = this._localTasks.get(folderPath) ?? [];
+      const folderFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
+      const effectiveFilter = folderFilter ?? this._levelFilters.get('local:');
+      if (effectiveFilter?.states && effectiveFilter.states.length > 0) {
+        let filtered = tasks;
+        if (this._filter.repos.length > 0 && !this._filter.repos.includes('(Local)')) return [];
+        return this._applyLocalLevelFilter(filtered, effectiveFilter).map(t => this._buildLocalTaskItem(t));
+      }
+      const filtered = this._applyLocalRuntimeFilter(tasks);
+      const levelFiltered = effectiveFilter ? this._applyLocalLevelFilter(filtered, effectiveFilter) : filtered;
+      return levelFiltered.map(t => this._buildLocalTaskItem(t));
     }
 
     // ADO org node
@@ -775,6 +867,82 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       items.push(noMsItem);
     }
     return items;
+  }
+
+  private _getAllFilteredLocalTasks(): LocalTask[] {
+    const all: LocalTask[] = [];
+    for (const folder of this._localFolders) {
+      const tasks = this._localTasks.get(folder) ?? [];
+      all.push(...this._applyLocalRuntimeFilter(tasks));
+    }
+    return all;
+  }
+
+  private _applyLocalRuntimeFilter(tasks: LocalTask[]): LocalTask[] {
+    return tasks.filter(task => {
+      const state = mapLocalState(task);
+      if (this._filter.repos.length > 0 && !this._filter.repos.includes('(Local)')) return false;
+      if (this._filter.states.length > 0 && !this._filter.states.includes(state)) return false;
+      return true;
+    });
+  }
+
+  private _applyLocalLevelFilter(tasks: LocalTask[], filter: LevelFilter): LocalTask[] {
+    return tasks.filter(task => {
+      const state = mapLocalState(task);
+      if (filter.states && filter.states.length > 0 && !filter.states.includes(state)) return false;
+      return true;
+    });
+  }
+
+  private _getLocalFolderNodes(filteredLocal: LocalTask[]): WorkItemsTreeItem[] {
+    const fseq = this._filterSeq;
+    const folderMap = new Map<string, LocalTask[]>();
+    for (const task of filteredLocal) {
+      const existing = folderMap.get(task.folderPath) ?? [];
+      existing.push(task);
+      folderMap.set(task.folderPath, existing);
+    }
+    const items: WorkItemsTreeItem[] = [];
+    for (const [folderPath, tasks] of folderMap) {
+      const first = tasks[0];
+      const label = `${first.parentName} / ${first.folderName}`;
+      const folderItem = new WorkItemsTreeItem(label, vscode.TreeItemCollapsibleState.Expanded);
+      folderItem.iconPath = new vscode.ThemeIcon('folder');
+      folderItem.description = this._getFilterDescription(`local:${folderPath}`, tasks.length);
+      folderItem.contextValue = this._contextWithFilter('local-folder', `local:${folderPath}`);
+      folderItem.id = `local:${folderPath}:f${fseq}`;
+      items.push(folderItem);
+    }
+    return items;
+  }
+
+  private _buildLocalTaskItem(task: LocalTask): WorkItemsTreeItem {
+    const item = new WorkItemsTreeItem(task.title);
+    item.localTask = task;
+
+    const state = mapLocalState(task);
+    if (task.state === 'Done') {
+      item.iconPath = new vscode.ThemeIcon('pass-filled');
+    } else if (task.sessionId) {
+      item.iconPath = new vscode.ThemeIcon('debug-start');
+    } else {
+      item.iconPath = new vscode.ThemeIcon('circle-large-outline');
+    }
+
+    item.description = task.state;
+    item.contextValue = 'local-task';
+    item.id = `local-task:${task.id}`;
+
+    const tooltipParts = [
+      `**${task.title}**`,
+      `State: ${task.state}`,
+      `Created: ${task.created}`,
+    ];
+    if (task.sessionId) tooltipParts.push(`Session: ${task.sessionId}`);
+    item.tooltip = new vscode.MarkdownString(tooltipParts.join('\n\n'));
+
+    return item;
   }
 
   dispose(): void {

@@ -320,6 +320,17 @@
         "command": "editless.showAgent",
         "title": "Show",
         "category": "EditLess"
+      },
+      {
+        "command": "editless.configureLocalTasks",
+        "title": "Configure Local Tasks",
+        "category": "EditLess"
+      },
+      {
+        "command": "editless.openTaskFile",
+        "title": "Open Task File",
+        "category": "EditLess",
+        "icon": "$(go-to-file)"
       }
     ],
     "keybindings": [
@@ -452,8 +463,13 @@
         },
         {
           "command": "editless.launchFromWorkItem",
-          "when": "view == editlessWorkItems && viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
+          "when": "view == editlessWorkItems && viewItem =~ /^(work-item|ado-work-item|ado-parent-item|local-task)$/",
           "group": "inline@0"
+        },
+        {
+          "command": "editless.openTaskFile",
+          "when": "view == editlessWorkItems && viewItem == local-task",
+          "group": "inline@1"
         },
         {
           "command": "editless.openInBrowser",
@@ -462,13 +478,18 @@
         },
         {
           "command": "editless.launchFromWorkItem",
-          "when": "viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
+          "when": "viewItem =~ /^(work-item|ado-work-item|ado-parent-item|local-task)$/",
           "group": "work-item@1"
+        },
+        {
+          "command": "editless.openTaskFile",
+          "when": "viewItem == local-task",
+          "group": "work-item@2"
         },
         {
           "command": "editless.openInBrowser",
           "when": "viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
-          "group": "work-item@2"
+          "group": "work-item@3"
         },
         {
           "command": "editless.launchFromPR",
@@ -502,7 +523,7 @@
         },
         {
           "command": "editless.filterLevel",
-          "when": "view == editlessWorkItems && viewItem =~ /^(ado|github)-(backend|org|project|repo)(-filtered)?$/",
+          "when": "view == editlessWorkItems && viewItem =~ /^(ado|github|local)-(backend|org|project|repo|folder)(-filtered)?$/",
           "group": "inline@1"
         },
         {
@@ -512,12 +533,12 @@
         },
         {
           "command": "editless.filterLevel",
-          "when": "view == editlessWorkItems && viewItem =~ /^(ado|github)-(backend|org|project|repo)(-filtered)?$/",
+          "when": "view == editlessWorkItems && viewItem =~ /^(ado|github|local)-(backend|org|project|repo|folder)(-filtered)?$/",
           "group": "filter@1"
         },
         {
           "command": "editless.clearLevelFilter",
-          "when": "view == editlessWorkItems && viewItem =~ /^(ado|github)-(backend|org|project|repo)-filtered$/",
+          "when": "view == editlessWorkItems && viewItem =~ /^(ado|github|local)-(backend|org|project|repo|folder)-filtered$/",
           "group": "filter@2"
         },
         {
@@ -678,6 +699,14 @@
         {
           "command": "editless.clearPRLevelFilter",
           "when": "false"
+        },
+        {
+          "command": "editless.configureLocalTasks",
+          "when": "false"
+        },
+        {
+          "command": "editless.openTaskFile",
+          "when": "false"
         }
       ]
     },
@@ -761,6 +790,17 @@
           "scope": "resource",
           "order": 33
         },
+        "editless.local.taskFolders": {
+          "type": "array",
+          "default": [],
+          "description": "Local directories containing task markdown files to show in Work Items (e.g., ['C:\\workspace\\my-project\\tasks'])",
+          "markdownDescription": "Local directories containing task `.md` files (with YAML frontmatter) to show in the **Work Items** pane.\n\nEach directory is scanned for `.md` files with `state`, `created`, and `session_id` frontmatter fields.\n\nExample: `[\"C:\\\\workspace\\\\my-project\\\\tasks\"]`",
+          "scope": "resource",
+          "order": 34,
+          "items": {
+            "type": "string"
+          }
+        },
         "editless.refreshInterval": {
           "type": "number",
           "default": 5,
@@ -768,7 +808,7 @@
           "description": "Auto-refresh interval in minutes for Work Items and PRs panels. Set to 0 to disable.",
           "markdownDescription": "Auto-refresh interval in minutes for the **Work Items** and **Pull Requests** panels.\n\nEditLess also refreshes when the VS Code window regains focus.\n\nSet to `0` to disable auto-refresh entirely (manual refresh only).\n\nDefault: `5` minutes.",
           "scope": "window",
-          "order": 34
+          "order": 35
         }
       }
     }

@@ -156,6 +156,8 @@ vi.mock('../work-items-tree', () => ({
       setAdoItems: vi.fn(),
       setAdoConfig: mockWorkItemsSetAdoConfig,
       setAdoRefresh: vi.fn(),
+      setLocalFolders: vi.fn(),
+      setLocalTasks: vi.fn(),
       getLevelFilter: vi.fn(),
       setLevelFilter: vi.fn(),
       clearLevelFilter: vi.fn(),
@@ -194,6 +196,7 @@ vi.mock('../github-client', () => ({ fetchLinkedPRs: vi.fn() }));
 vi.mock('../vscode-compat', () => ({ getEdition: vi.fn(() => 'VS Code') }));
 vi.mock('../ado-auth', () => ({ getAdoToken: vi.fn(), promptAdoSignIn: vi.fn(), clearAzTokenCache: vi.fn(), setAdoAuthOutput: vi.fn() }));
 vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn(), fetchAdoMe: vi.fn() }));
+vi.mock('../local-tasks-client', () => ({ fetchLocalTasks: vi.fn().mockResolvedValue([]), mapLocalState: vi.fn().mockReturnValue('open') }));
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn(), openSquadUiDashboard: vi.fn() }));
 vi.mock('../team-dir', () => ({ resolveTeamDir: vi.fn(), resolveTeamMd: vi.fn(), TEAM_DIR_NAMES: ['.squad', '.ai-team'] }));
 vi.mock('../launch-utils', () => ({ launchAndLabel: vi.fn() }));
