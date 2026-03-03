@@ -466,13 +466,14 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       if (!pick) return;
 
       const rawName = localTask ? localTask.title : `#${number} ${title}`;
+      const env = url ? { EDITLESS_WORK_ITEM_URI: url } : undefined;
       if (!pick.disc) {
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName);
+        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName, env);
       } else {
         const settings = agentSettings.get(pick.disc.id);
         const cfg = toAgentTeamConfig(pick.disc, settings);
-        launchAndLabel(terminalManager, labelManager, cfg, rawName);
+        launchAndLabel(terminalManager, labelManager, cfg, rawName, env);
       }
 
       if (localTask?.filePath) {
@@ -550,13 +551,14 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       if (!pick) return;
 
       const rawName = `PR #${number} ${title}`;
+      const env = url ? { EDITLESS_WORK_ITEM_URI: url } : undefined;
       if (!pick.disc) {
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName);
+        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName, env);
       } else {
         const settings = agentSettings.get(pick.disc.id);
         const cfg = toAgentTeamConfig(pick.disc, settings);
-        launchAndLabel(terminalManager, labelManager, cfg, rawName);
+        launchAndLabel(terminalManager, labelManager, cfg, rawName, env);
       }
 
       if (url) {

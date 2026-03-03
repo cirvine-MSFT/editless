@@ -41,9 +41,10 @@ export function launchAndLabel(
   labelManager: SessionLabelManager,
   cfg: AgentTeamConfig,
   rawName: string,
+  extraEnv?: Record<string, string>,
 ): vscode.Terminal {
   const terminalName = buildSessionName(rawName);
-  const terminal = terminalManager.launchTerminal(cfg, terminalName);
+  const terminal = terminalManager.launchTerminal(cfg, terminalName, extraEnv);
   labelManager.setLabel(terminalManager.getLabelKey(terminal), terminalName);
   return terminal;
 }
