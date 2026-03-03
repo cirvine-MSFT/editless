@@ -1,3 +1,5 @@
+import * as path from 'path';
+import * as os from 'os';
 import * as vscode from 'vscode';
 import type { AgentTeamConfig } from './types';
 
@@ -141,6 +143,34 @@ export function buildLaunchCommandForConfig(config: Pick<AgentTeamConfig, 'id' |
     agent: agentFlag,
     extraArgs: extraArgs.length ? extraArgs : undefined,
   });
+}
+
+/**
+ * Parse the `--config-dir` flag value from an additionalArgs string.
+ * Handles `--config-dir <path>` and `--config-dir=<path>` formats.
+ * Returns the resolved absolute path, or undefined if no --config-dir flag is present.
+ */
+export function parseConfigDir(additionalArgs: string | undefined): string | undefined {
+  if (!additionalArgs) return undefined;
+  const tokens = additionalArgs.trim().split(/\s+/);
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token === '--config-dir' && i + 1 < tokens.length) {
+      const raw = tokens[i + 1];
+      if (raw.startsWith('~')) {
+        return path.resolve(os.homedir(), raw.slice(2));
+      }
+      return path.resolve(raw);
+    }
+    if (token.startsWith('--config-dir=')) {
+      const raw = token.slice('--config-dir='.length);
+      if (raw.startsWith('~')) {
+        return path.resolve(os.homedir(), raw.slice(2));
+      }
+      return path.resolve(raw);
+    }
+  }
+  return undefined;
 }
 
 /**

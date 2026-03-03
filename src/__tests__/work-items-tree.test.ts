@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createVscodeMock, ThemeIcon } from './mocks/vscode-mocks';
+import { createVscodeMock, ThemeIcon, CancellationError } from './mocks/vscode-mocks';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -1606,5 +1606,85 @@ describe('WorkItemsTreeProvider — local tasks integration', () => {
   it('should not include (Local) in getAllRepos when local is not configured', () => {
     const provider = new WorkItemsTreeProvider();
     expect(provider.getAllRepos()).not.toContain('(Local)');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CancellationError handling (#456)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — CancellationError handling', () => {
+  it('fetchAll should not fire tree data change event after dispose()', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+
+    provider.dispose();
+    (provider as any)._repos = ['owner/repo'];
+    await (provider as any).fetchAll();
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('fetchAll should silently handle CancellationError', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockRejectedValue(new CancellationError());
+
+    const provider = new WorkItemsTreeProvider();
+    (provider as any)._repos = ['owner/repo'];
+
+    await expect((provider as any).fetchAll()).resolves.toBeUndefined();
+  });
+
+  it('fetchAll should silently handle "Canceled" message errors', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockRejectedValue(new Error('The operation was Canceled by the user'));
+
+    const provider = new WorkItemsTreeProvider();
+    (provider as any)._repos = ['owner/repo'];
+
+    await expect((provider as any).fetchAll()).resolves.toBeUndefined();
+  });
+
+  it('fetchAll should silently handle "Channel has been closed" errors', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockRejectedValue(new Error('Channel has been closed'));
+
+    const provider = new WorkItemsTreeProvider();
+    (provider as any)._repos = ['owner/repo'];
+
+    await expect((provider as any).fetchAll()).resolves.toBeUndefined();
+  });
+
+  it('fetchAll should re-throw non-cancellation errors', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockRejectedValue(new Error('network failure'));
+
+    const provider = new WorkItemsTreeProvider();
+    (provider as any)._repos = ['owner/repo'];
+
+    await expect((provider as any).fetchAll()).rejects.toThrow('network failure');
+  });
+
+  it('fetchAll should reset _loading on error', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockRejectedValue(new CancellationError());
+
+    const provider = new WorkItemsTreeProvider();
+    (provider as any)._repos = ['owner/repo'];
+    await (provider as any).fetchAll();
+
+    expect((provider as any)._loading).toBe(false);
+  });
+
+  it('dispose() should set the provider as disposed', () => {
+    const provider = new WorkItemsTreeProvider();
+    expect((provider as any)._disposed).toBe(false);
+
+    provider.dispose();
+    expect((provider as any)._disposed).toBe(true);
   });
 });
