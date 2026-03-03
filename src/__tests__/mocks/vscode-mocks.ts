@@ -59,6 +59,13 @@ export class EventEmitter {
   }
 }
 
+export class CancellationError extends Error {
+  constructor() {
+    super('Canceled');
+    this.name = 'CancellationError';
+  }
+}
+
 export class MockEditlessTreeItem {
   terminal?: unknown;
   persistedEntry?: unknown;
@@ -87,6 +94,7 @@ export function createVscodeMock(overrides?: Record<string, unknown>) {
     ThemeColor,
     MarkdownString,
     EventEmitter,
+    CancellationError,
     Uri: {
       parse: (s: string) => ({ toString: () => s }),
       file: (s: string) => ({ toString: () => s, fsPath: s }),
