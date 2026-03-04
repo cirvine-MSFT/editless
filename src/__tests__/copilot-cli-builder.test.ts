@@ -504,5 +504,38 @@ describe('copilot-cli-builder', () => {
     it('ignores --config (wrong flag name)', () => {
       expect(parseConfigDir('--config /custom/config')).toBeUndefined();
     });
+
+    it('strips surrounding quotes from path', () => {
+      const result = parseConfigDir('--config-dir "/custom/config"');
+      expect(result).toContain('custom');
+      expect(result).not.toContain('"');
+    });
+
+    it('expands $env:USERPROFILE in quoted path', () => {
+      const home = process.env.USERPROFILE ?? process.env.HOME ?? '';
+      const result = parseConfigDir('--config-dir "$env:USERPROFILE\\copilot-personal"');
+      expect(result).toBeDefined();
+      expect(result).toContain('copilot-personal');
+      expect(result).not.toContain('$env:');
+      expect(result).toContain(home);
+    });
+
+    it('expands %USERPROFILE% in path', () => {
+      const home = process.env.USERPROFILE ?? process.env.HOME ?? '';
+      const result = parseConfigDir('--config-dir=%USERPROFILE%\\copilot-personal');
+      expect(result).toBeDefined();
+      expect(result).toContain('copilot-personal');
+      expect(result).not.toContain('%');
+      expect(result).toContain(home);
+    });
+
+    it('expands $env: with --config-dir= format', () => {
+      const home = process.env.USERPROFILE ?? process.env.HOME ?? '';
+      const result = parseConfigDir('--config-dir="$env:USERPROFILE\\copilot-personal"');
+      expect(result).toBeDefined();
+      expect(result).toContain('copilot-personal');
+      expect(result).not.toContain('$env:');
+      expect(result).toContain(home);
+    });
   });
 });
