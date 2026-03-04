@@ -440,6 +440,7 @@ export class TerminalManager implements vscode.Disposable {
       agentSessionId: entry.agentSessionId,
       launchCommand: entry.launchCommand,
       squadPath: entry.squadPath,
+      configDir: entry.configDir,
     });
 
     // Start watching the reconnected session for activity
@@ -539,6 +540,7 @@ export class TerminalManager implements vscode.Disposable {
       agentSessionId: entry.agentSessionId,
       launchCommand: entry.launchCommand,
       squadPath: entry.squadPath,
+      configDir: entry.configDir,
     });
     this._setLaunching(terminal);
 
