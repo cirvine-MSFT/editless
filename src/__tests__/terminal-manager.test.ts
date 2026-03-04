@@ -2998,4 +2998,155 @@ describe('TerminalManager', () => {
       fs.rmSync(parentDir, { recursive: true, force: true });
     });
   });
+
+  // =========================================================================
+  // registerExternalTerminal (#457)
+  // =========================================================================
+
+  describe('registerExternalTerminal', () => {
+    const defaultMetadata = {
+      squadId: 'ext-squad',
+      squadName: 'External Squad',
+      squadIcon: '🔌',
+      agentSessionId: 'session-abc-123',
+      launchCommand: 'copilot-agent --resume session-abc-123',
+      squadPath: '/tmp/ext-squad',
+    };
+
+    it('should register terminal with correct metadata', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const terminal = makeMockTerminal('🔌 External Squad #1');
+
+      mgr.registerExternalTerminal(terminal, defaultMetadata);
+
+      const info = mgr.getTerminalInfo(terminal);
+      expect(info).toBeDefined();
+      expect(info!.squadId).toBe('ext-squad');
+      expect(info!.squadName).toBe('External Squad');
+      expect(info!.squadIcon).toBe('🔌');
+      expect(info!.displayName).toBe('🔌 External Squad #1');
+      expect(info!.originalName).toBe('🔌 External Squad #1');
+      expect(info!.agentSessionId).toBe('session-abc-123');
+      expect(info!.launchCommand).toBe('copilot-agent --resume session-abc-123');
+      expect(info!.squadPath).toBe('/tmp/ext-squad');
+      expect(info!.index).toBe(1);
+      expect(info!.createdAt).toBeInstanceOf(Date);
+    });
+
+    it('should set up session watcher when agentSessionId and sessionResolver are present', () => {
+      const mockResolver = {
+        resolveAll: vi.fn().mockReturnValue(new Map()),
+        resolveForSquad: vi.fn(),
+        clearCache: vi.fn(),
+        getLastEvent: vi.fn(),
+        isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+        watchSession: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        _sessionStateDir: '/tmp/sessions',
+      };
+
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      mgr.setSessionResolver(mockResolver as any);
+
+      const terminal = makeMockTerminal('🔌 External Squad #1');
+      mgr.registerExternalTerminal(terminal, defaultMetadata);
+
+      expect(mockResolver.watchSession).toHaveBeenCalledWith(
+        'session-abc-123',
+        expect.any(Function),
+      );
+    });
+
+    it('should not crash when sessionResolver is null', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const terminal = makeMockTerminal('🔌 External Squad #1');
+
+      // No setSessionResolver call — _sessionResolver is undefined
+      expect(() => mgr.registerExternalTerminal(terminal, defaultMetadata)).not.toThrow();
+
+      const info = mgr.getTerminalInfo(terminal);
+      expect(info).toBeDefined();
+      expect(info!.squadId).toBe('ext-squad');
+    });
+
+    it('should not create session watcher when agentSessionId is undefined', () => {
+      const mockResolver = {
+        resolveAll: vi.fn().mockReturnValue(new Map()),
+        resolveForSquad: vi.fn(),
+        clearCache: vi.fn(),
+        getLastEvent: vi.fn(),
+        isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+        watchSession: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        watchSessionDir: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+        _sessionStateDir: '/tmp/sessions',
+      };
+
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      mgr.setSessionResolver(mockResolver as any);
+
+      const terminal = makeMockTerminal('🔌 External Squad #1');
+      const metadataNoSession = { ...defaultMetadata, agentSessionId: undefined };
+      mgr.registerExternalTerminal(terminal, metadataNoSession);
+
+      expect(mockResolver.watchSession).not.toHaveBeenCalled();
+    });
+
+    it('should increment counter for the squadId after registration', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+
+      // Register first external terminal
+      const terminal1 = makeMockTerminal('🔌 External Squad #1');
+      mgr.registerExternalTerminal(terminal1, defaultMetadata);
+
+      // Register second external terminal for same squad
+      const terminal2 = makeMockTerminal('🔌 External Squad #2');
+      mgr.registerExternalTerminal(terminal2, defaultMetadata);
+
+      const info2 = mgr.getTerminalInfo(terminal2);
+      expect(info2).toBeDefined();
+      expect(info2!.index).toBe(2);
+    });
+
+    it('should fire onDidChange event after registration', () => {
+      vi.useFakeTimers();
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+
+      const changeSpy = vi.fn();
+      mgr.onDidChange(changeSpy);
+
+      const terminal = makeMockTerminal('🔌 External Squad #1');
+      mgr.registerExternalTerminal(terminal, defaultMetadata);
+
+      vi.advanceTimersByTime(50);
+      expect(changeSpy).toHaveBeenCalled();
+      vi.useRealTimers();
+    });
+
+    it('should call persist to save state after registration', () => {
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const terminal = makeMockTerminal('🔌 External Squad #1');
+
+      vi.mocked(ctx.workspaceState.update).mockClear();
+
+      mgr.registerExternalTerminal(terminal, defaultMetadata);
+
+      expect(ctx.workspaceState.update).toHaveBeenCalledWith(
+        'editless.terminalSessions',
+        expect.arrayContaining([
+          expect.objectContaining({
+            squadId: 'ext-squad',
+            squadName: 'External Squad',
+            squadIcon: '🔌',
+          }),
+        ]),
+      );
+    });
+  });
 });

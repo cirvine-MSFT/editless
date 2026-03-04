@@ -269,6 +269,58 @@ export class TerminalManager implements vscode.Disposable {
     return terminal;
   }
 
+  /**
+   * Register a terminal that was created externally (e.g., via editless.resumeSession).
+   * This allows the terminal to appear in the tree view under the correct agent.
+   */
+  registerExternalTerminal(
+    terminal: vscode.Terminal,
+    metadata: {
+      squadId: string;
+      squadName: string;
+      squadIcon: string;
+      agentSessionId?: string;
+      launchCommand?: string;
+      squadPath?: string;
+    },
+  ): void {
+    const index = this._counters.get(metadata.squadId) || 1;
+    const id = `${metadata.squadId}-${Date.now()}-${index}`;
+    const labelKey = `terminal:${id}`;
+
+    const info: TerminalInfo = {
+      id,
+      labelKey,
+      displayName: terminal.name,
+      originalName: terminal.name,
+      squadId: metadata.squadId,
+      squadName: metadata.squadName,
+      squadIcon: metadata.squadIcon,
+      index,
+      createdAt: new Date(),
+      agentSessionId: metadata.agentSessionId,
+      launchCommand: metadata.launchCommand,
+      squadPath: metadata.squadPath,
+    };
+
+    this._terminals.set(terminal, info);
+
+    // Start watching the session for activity
+    if (metadata.agentSessionId && this._sessionResolver) {
+      const watcher = this._sessionResolver.watchSession(metadata.agentSessionId, event => {
+        this._clearLaunching(terminal);
+        this._lastSessionEvent.set(terminal, event);
+        this._lastActivityAt.set(terminal, Date.now());
+        this._scheduleChange();
+      });
+      this._sessionWatchers.set(terminal, watcher);
+    }
+
+    this._counters.set(metadata.squadId, index + 1);
+    this._persist();
+    this._scheduleChange();
+  }
+
   getTerminalsForSquad(squadId: string): { terminal: vscode.Terminal; info: TerminalInfo }[] {
     const results: { terminal: vscode.Terminal; info: TerminalInfo }[] = [];
     for (const [terminal, info] of this._terminals) {
