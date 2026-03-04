@@ -26,6 +26,7 @@ export interface TerminalInfo {
   agentSessionId?: string;
   launchCommand?: string;
   squadPath?: string;
+  configDir?: string;
 }
 
 export interface PersistedTerminalInfo {
@@ -45,6 +46,7 @@ export interface PersistedTerminalInfo {
   agentSessionId?: string;
   launchCommand?: string;
   squadPath?: string;
+  configDir?: string;
 }
 
 const STORAGE_KEY = 'editless.terminalSessions';
