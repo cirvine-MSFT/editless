@@ -135,7 +135,10 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       // States
       if (options.states && options.states.length > 0) {
         quickPickItems.push({ label: 'State', kind: vscode.QuickPickItemKind.Separator });
-        const stateLabels = { open: 'Open (New)', active: 'Active / In Progress', closed: 'Closed' };
+        const isLocal = contextValue.replace(/-filtered$/, '').startsWith('local-');
+        const stateLabels = isLocal
+          ? { open: 'Todo', active: 'Active (has session)', closed: 'Done' }
+          : { open: 'Open (New)', active: 'Active / In Progress', closed: 'Closed' };
         for (const state of options.states) {
           quickPickItems.push({ label: stateLabels[state], description: 'state', picked: currentFilter.states?.includes(state) });
         }
@@ -158,7 +161,10 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       filter.types = picks.filter(p => p.description === 'type').map(p => p.label);
       filter.labels = picks.filter(p => p.description === 'label').map(p => p.label);
       filter.tags = picks.filter(p => p.description === 'tag').map(p => p.label);
-      const stateLabels = { 'Open (New)': 'open', 'Active / In Progress': 'active', 'Closed': 'closed' };
+      const isLocalReverse = contextValue.replace(/-filtered$/, '').startsWith('local-');
+      const stateLabels = isLocalReverse
+        ? { 'Todo': 'open', 'Active (has session)': 'active', 'Done': 'closed' }
+        : { 'Open (New)': 'open', 'Active / In Progress': 'active', 'Closed': 'closed' };
       filter.states = picks.filter(p => p.description === 'state')
         .map(p => stateLabels[p.label as keyof typeof stateLabels])
         .filter((s): s is UnifiedState => s !== undefined);
@@ -333,6 +339,24 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
     }),
   );
 
+  // Configure Local Tasks (opens settings)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.configureLocalTasks', async () => {
+      await vscode.commands.executeCommand('workbench.action.openSettings', 'editless.local');
+    }),
+  );
+
+  // Open local task file in editor
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.openTaskFile', async (item?: WorkItemsTreeItem) => {
+      const filePath = item?.localTask?.filePath;
+      if (filePath) {
+        const doc = await vscode.workspace.openTextDocument(filePath);
+        await vscode.window.showTextDocument(doc);
+      }
+    }),
+  );
+
   // Configure Work Items (quick pick between GitHub and ADO)
   context.subscriptions.push(
     vscode.commands.registerCommand('editless.configureWorkItems', async () => {
@@ -340,6 +364,7 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
         [
           { label: 'GitHub', description: 'Configure GitHub repositories for work items', command: 'editless.configureRepos' },
           { label: 'Azure DevOps', description: 'Configure Azure DevOps project', command: 'editless.configureAdo' },
+          { label: 'Local Tasks', description: 'Configure local task file directories', command: 'editless.configureLocalTasks' },
         ],
         { placeHolder: 'Choose a provider to configure' },
       );
@@ -410,14 +435,16 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
     vscode.commands.registerCommand('editless.launchFromWorkItem', async (item?: WorkItemsTreeItem) => {
       const issue = item?.issue;
       const adoItem = item?.adoWorkItem;
-      if (!issue && !adoItem) return;
+      const localTask = item?.localTask;
+      if (!issue && !adoItem && !localTask) return;
 
       const discoveredItems = getDiscoveredItems();
       const visibleItems = discoveredItems.filter(d => !agentSettings.isHidden(d.id));
 
       const number = issue?.number ?? adoItem?.id;
-      const title = issue?.title ?? adoItem?.title ?? '';
+      const title = issue?.title ?? adoItem?.title ?? localTask?.title ?? '';
       const url = issue?.url ?? adoItem?.url ?? '';
+      const displayLabel = localTask ? localTask.title : `#${number} ${title}`;
 
       const cliItem = {
         label: '$(terminal) Copilot CLI',
@@ -434,21 +461,25 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       });
       const pick = await vscode.window.showQuickPick(
         [cliItem, ...discoveredPicks],
-        { placeHolder: `Launch agent for #${number} ${title}` },
+        { placeHolder: `Launch agent for ${displayLabel}` },
       );
       if (!pick) return;
 
-      const rawName = `#${number} ${title}`;
+      const rawName = localTask ? localTask.title : `#${number} ${title}`;
+      const env = url ? { EDITLESS_WORK_ITEM_URI: url } : undefined;
       if (!pick.disc) {
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName);
+        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName, env);
       } else {
         const settings = agentSettings.get(pick.disc.id);
         const cfg = toAgentTeamConfig(pick.disc, settings);
-        launchAndLabel(terminalManager, labelManager, cfg, rawName);
+        launchAndLabel(terminalManager, labelManager, cfg, rawName, env);
       }
 
-      if (url) {
+      if (localTask?.filePath) {
+        await vscode.env.clipboard.writeText(localTask.filePath);
+        vscode.window.showInformationMessage(`Copied ${localTask.filePath} to clipboard`);
+      } else if (url) {
         await vscode.env.clipboard.writeText(url);
         vscode.window.showInformationMessage(`Copied ${url} to clipboard`);
       }
@@ -520,13 +551,14 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       if (!pick) return;
 
       const rawName = `PR #${number} ${title}`;
+      const env = url ? { EDITLESS_WORK_ITEM_URI: url } : undefined;
       if (!pick.disc) {
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName);
+        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName, env);
       } else {
         const settings = agentSettings.get(pick.disc.id);
         const cfg = toAgentTeamConfig(pick.disc, settings);
-        launchAndLabel(terminalManager, labelManager, cfg, rawName);
+        launchAndLabel(terminalManager, labelManager, cfg, rawName, env);
       }
 
       if (url) {

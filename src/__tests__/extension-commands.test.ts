@@ -287,6 +287,7 @@ vi.mock('../terminal-manager', () => ({
       dispose: vi.fn(),
     };
   }),
+  EDITLESS_INSTRUCTIONS_DIR: '/mock/editless',
   getStateIcon: vi.fn(),
   getStateDescription: vi.fn(),
 }));
@@ -362,6 +363,8 @@ vi.mock('../work-items-tree', () => ({
       setAdoItems: vi.fn(),
       setAdoConfig: vi.fn(),
       setAdoRefresh: vi.fn(),
+      setLocalFolders: vi.fn(),
+      setLocalTasks: vi.fn(),
       getLevelFilter: vi.fn(),
       setLevelFilter: vi.fn(),
       clearLevelFilter: vi.fn(),
@@ -372,6 +375,7 @@ vi.mock('../work-items-tree', () => ({
   WorkItemsTreeItem: class {
     issue?: unknown;
     adoWorkItem?: unknown;
+    localTask?: unknown;
     constructor(public label: string) {}
   },
 }));
@@ -423,6 +427,11 @@ vi.mock('../ado-auth', () => ({
 vi.mock('../ado-client', () => ({
   fetchAdoWorkItems: vi.fn(),
   fetchAdoPRs: vi.fn(),
+}));
+
+vi.mock('../local-tasks-client', () => ({
+  fetchLocalTasks: vi.fn().mockResolvedValue([]),
+  mapLocalState: vi.fn().mockReturnValue('open'),
 }));
 
 vi.mock('../squad-ui-integration', () => ({
@@ -1542,7 +1551,7 @@ describe('extension command handlers', () => {
 
       await getHandler('editless.launchFromWorkItem')(item);
 
-      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), '#42 Fix bug');
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), '#42 Fix bug', { EDITLESS_WORK_ITEM_URI: 'https://example.com/42' });
     });
 
     it('should no-op when item has no issue', async () => {
@@ -1982,7 +1991,7 @@ describe('additional extension command handlers', () => {
 
       await getHandler('editless.launchFromPR')(item);
 
-      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'PR #100 Add feature');
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'PR #100 Add feature', { EDITLESS_WORK_ITEM_URI: 'https://github.com/owner/repo/pull/100' });
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('https://github.com/owner/repo/pull/100'),
       );
@@ -1999,7 +2008,7 @@ describe('additional extension command handlers', () => {
 
       await getHandler('editless.launchFromPR')(item);
 
-      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'PR #200 Fix bug');
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'PR #200 Fix bug', { EDITLESS_WORK_ITEM_URI: 'https://dev.azure.com/org/project/_git/repo/pullrequest/200' });
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('https://dev.azure.com/org/project/_git/repo/pullrequest/200'),
       );

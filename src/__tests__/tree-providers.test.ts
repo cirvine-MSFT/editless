@@ -40,6 +40,7 @@ vi.mock('../squad-utils', () => ({
 }));
 
 vi.mock('../terminal-manager', () => ({
+  EDITLESS_INSTRUCTIONS_DIR: '/mock/editless',
   getStateIcon: vi.fn(() => undefined),
   getStateDescription: vi.fn(() => ''),
 }));
@@ -63,11 +64,13 @@ describe('WorkItemsTreeProvider', () => {
     const provider = new WorkItemsTreeProvider();
     const children = provider.getChildren();
 
-    expect(children).toHaveLength(2);
+    expect(children).toHaveLength(3);
     expect(children[0].label).toBe('Configure in GitHub');
     expect(children[1].label).toBe('Configure in ADO');
+    expect(children[2].label).toBe('Configure Local Tasks');
     expect(children[0].iconPath).toEqual(new ThemeIcon('github'));
     expect(children[1].iconPath).toEqual(new ThemeIcon('azure'));
+    expect(children[2].iconPath).toEqual(new ThemeIcon('checklist'));
   });
 
   it('should return empty array when getChildren is called with an unrecognised element', async () => {

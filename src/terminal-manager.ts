@@ -1,11 +1,14 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
 import { CopilotEvents } from './copilot-sdk-types';
 import { buildLaunchCommandForConfig, parseConfigDir } from './copilot-cli-builder';
+
+export const EDITLESS_INSTRUCTIONS_DIR = path.join(os.homedir(), '.copilot', 'editless');
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
@@ -208,7 +211,7 @@ export class TerminalManager implements vscode.Disposable {
 
   // -- Public API -----------------------------------------------------------
 
-  launchTerminal(config: AgentTeamConfig, customName?: string): vscode.Terminal {
+  launchTerminal(config: AgentTeamConfig, customName?: string, extraEnv?: Record<string, string>): vscode.Terminal {
     const index = this._counters.get(config.id) || 1;
     const displayName = customName ?? `${config.icon} ${config.name} #${index}`;
     const id = `${config.id}-${Date.now()}-${index}`;
@@ -232,6 +235,8 @@ export class TerminalManager implements vscode.Disposable {
       isTransient: true,
       iconPath: new vscode.ThemeIcon('terminal'),
       env: {
+        ...extraEnv,
+        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: [process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS, EDITLESS_INSTRUCTIONS_DIR].filter(Boolean).join(path.delimiter),
         EDITLESS_TERMINAL_ID: id,
         EDITLESS_SQUAD_ID: config.id,
         EDITLESS_SQUAD_NAME: config.name,
@@ -447,6 +452,7 @@ export class TerminalManager implements vscode.Disposable {
       iconPath: new vscode.ThemeIcon('terminal'),
       env: {
         ...env,
+        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: [process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS, EDITLESS_INSTRUCTIONS_DIR].filter(Boolean).join(path.delimiter),
         EDITLESS_TERMINAL_ID: entry.id,
         EDITLESS_SQUAD_ID: entry.squadId,
         EDITLESS_SQUAD_NAME: entry.squadName,

@@ -100,6 +100,26 @@ Settings for displaying Azure DevOps work items and pull requests.
 
 ---
 
+## Local Tasks
+
+Settings for tracking file-based tasks alongside GitHub Issues and ADO Work Items. See [`docs/local-tasks.md`](local-tasks.md) for full format documentation.
+
+| Setting | Type | Default | Scope | Description |
+|---------|------|---------|-------|-------------|
+| `editless.local.taskFolders` | `array` | `[]` | resource | Directories containing task `.md` files (with YAML frontmatter) to show in the **Work Items** pane. Each directory is scanned for `.md` files with `state`, `created`, and `session_id` frontmatter fields. |
+
+**Example:**
+
+```jsonc
+{
+  "editless.local.taskFolders": [
+    "C:\\workspace\\my-project\\tasks"
+  ]
+}
+```
+
+---
+
 ## Refresh & Display
 
 Settings for auto-refresh behavior and terminal/panel display.
@@ -160,6 +180,9 @@ Settings for controlling desktop toasts and notifications.
   // Azure DevOps
   "editless.ado.organization": "https://dev.azure.com/mycompany",
   "editless.ado.project": "Core Platform",
+
+  // Local Tasks
+  "editless.local.taskFolders": [],
 
   // Refresh & Display
   "editless.refreshInterval": 5,

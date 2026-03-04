@@ -129,7 +129,7 @@ vi.mock('../agent-settings', () => ({
   })),
   migrateFromRegistry: vi.fn(),
 }));
-vi.mock('../terminal-manager', () => ({ TerminalManager: vi.fn(function () { return { persist: vi.fn(), reconcile: vi.fn(), waitForReconciliation: vi.fn().mockResolvedValue(undefined), setSessionResolver: vi.fn(), setAgentSessionId: vi.fn(), getOrphanedSessions: vi.fn().mockReturnValue([]), onDidChange: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn(), getAllTerminals: vi.fn().mockReturnValue([]), launchTerminal: vi.fn(), closeTerminal: vi.fn(), focusTerminal: vi.fn(), getTerminalInfo: vi.fn(), getLabelKey: vi.fn().mockReturnValue('key'), getDisplayName: vi.fn().mockReturnValue('display'), renameSession: vi.fn(), relaunchSession: vi.fn(), dismissOrphan: vi.fn(), relaunchAllOrphans: vi.fn() }; }), getStateIcon: vi.fn(), getStateDescription: vi.fn() }));
+vi.mock('../terminal-manager', () => ({ TerminalManager: vi.fn(function () { return { persist: vi.fn(), reconcile: vi.fn(), waitForReconciliation: vi.fn().mockResolvedValue(undefined), setSessionResolver: vi.fn(), setAgentSessionId: vi.fn(), getOrphanedSessions: vi.fn().mockReturnValue([]), onDidChange: vi.fn(() => ({ dispose: vi.fn() })), dispose: vi.fn(), getAllTerminals: vi.fn().mockReturnValue([]), launchTerminal: vi.fn(), closeTerminal: vi.fn(), focusTerminal: vi.fn(), getTerminalInfo: vi.fn(), getLabelKey: vi.fn().mockReturnValue('key'), getDisplayName: vi.fn().mockReturnValue('display'), renameSession: vi.fn(), relaunchSession: vi.fn(), dismissOrphan: vi.fn(), relaunchAllOrphans: vi.fn() }; }), EDITLESS_INSTRUCTIONS_DIR: '/mock/editless', getStateIcon: vi.fn(), getStateDescription: vi.fn() }));
 vi.mock('../session-labels', () => ({ SessionLabelManager: vi.fn(function () { return { getLabel: vi.fn(), setLabel: vi.fn(), clearLabel: vi.fn(), onDidChange: vi.fn(() => ({ dispose: vi.fn() })) }; }), promptClearLabel: vi.fn(), promptRenameSession: vi.fn() }));
 vi.mock('../squad-utils', () => ({ checkNpxAvailable: vi.fn().mockResolvedValue(true), promptInstallNode: vi.fn(), isSquadInitialized: vi.fn() }));
 vi.mock('../discovery', () => ({ ensureWorkspaceFolder: vi.fn() }));
@@ -156,6 +156,8 @@ vi.mock('../work-items-tree', () => ({
       setAdoItems: vi.fn(),
       setAdoConfig: mockWorkItemsSetAdoConfig,
       setAdoRefresh: vi.fn(),
+      setLocalFolders: vi.fn(),
+      setLocalTasks: vi.fn(),
       getLevelFilter: vi.fn(),
       setLevelFilter: vi.fn(),
       clearLevelFilter: vi.fn(),
@@ -194,6 +196,7 @@ vi.mock('../github-client', () => ({ fetchLinkedPRs: vi.fn() }));
 vi.mock('../vscode-compat', () => ({ getEdition: vi.fn(() => 'VS Code') }));
 vi.mock('../ado-auth', () => ({ getAdoToken: vi.fn(), promptAdoSignIn: vi.fn(), clearAzTokenCache: vi.fn(), setAdoAuthOutput: vi.fn() }));
 vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn(), fetchAdoMe: vi.fn() }));
+vi.mock('../local-tasks-client', () => ({ fetchLocalTasks: vi.fn().mockResolvedValue([]), mapLocalState: vi.fn().mockReturnValue('open') }));
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn(), openSquadUiDashboard: vi.fn() }));
 vi.mock('../team-dir', () => ({ resolveTeamDir: vi.fn(), resolveTeamMd: vi.fn(), TEAM_DIR_NAMES: ['.squad', '.ai-team'] }));
 vi.mock('../launch-utils', () => ({ launchAndLabel: vi.fn() }));

@@ -1,11 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { createAgentSettings, migrateFromRegistry, type AgentSettings, type AgentSettingsManager } from './agent-settings';
 import { EditlessTreeProvider } from './editless-tree';
-import { TerminalManager } from './terminal-manager';
+import { TerminalManager, EDITLESS_INSTRUCTIONS_DIR } from './terminal-manager';
 import { SessionLabelManager } from './session-labels';
 
 
@@ -22,6 +23,7 @@ import { PRsTreeProvider } from './prs-tree';
 import { getEdition } from './vscode-compat';
 import { getAdoToken, promptAdoSignIn, setAdoAuthOutput } from './ado-auth';
 import { fetchAdoWorkItems, fetchAdoPRs, fetchAdoMe } from './ado-client';
+import { fetchLocalTasks } from './local-tasks-client';
 
 import { register as registerAgentCommands } from './commands/agent-commands';
 import { register as registerSessionCommands } from './commands/session-commands';
@@ -65,7 +67,39 @@ function hydrateSettings(items: DiscoveredItem[], settings: AgentSettingsManager
   settings.hydrateFromDiscovery(entries);
 }
 
+const EDITLESS_INSTRUCTIONS_CONTENT = `\
+---
+applyTo: "**"
+---
+This session may have been launched against a specific work item, issue, or pull request.
+The target URI is stored in the EDITLESS_WORK_ITEM_URI environment variable.
+
+IMPORTANT: When the user says "the task", "the work item", "the issue", "the PR",
+"start working on it", or otherwise refers to a task without specifying which one,
+you MUST first retrieve the URI by running this shell command:
+
+  PowerShell: echo $env:EDITLESS_WORK_ITEM_URI
+  Bash/Zsh:   echo $EDITLESS_WORK_ITEM_URI
+
+If the variable is set (non-empty), use that URI as the target. Fetch details from it
+(e.g. via the GitHub API or gh CLI) and proceed with the user's request.
+If the variable is empty or unset, ask the user which task they mean.
+`;
+
+function ensureEditlessInstructions(): void {
+  const instructionsDir = path.join(EDITLESS_INSTRUCTIONS_DIR, '.github', 'instructions');
+  const filePath = path.join(instructionsDir, 'editless.instructions.md');
+  try {
+    fs.mkdirSync(instructionsDir, { recursive: true });
+    fs.writeFileSync(filePath, EDITLESS_INSTRUCTIONS_CONTENT, 'utf-8');
+  } catch (err) {
+    console.error('[EditLess] Failed to write instructions file:', err);
+  }
+}
+
 export function activate(context: vscode.ExtensionContext): { terminalManager: TerminalManager; context: vscode.ExtensionContext } {
+  ensureEditlessInstructions();
+
   const output = vscode.window.createOutputChannel('EditLess');
   context.subscriptions.push(output);
   setAdoAuthOutput(output);
@@ -278,6 +312,9 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   // --- ADO integration ---
   initAdoIntegration(context, workItemsProvider, prsProvider);
 
+  // --- Local tasks integration ---
+  initLocalTasksIntegration(workItemsProvider);
+
   // Re-initialize ADO when organization or project settings change (#417)
   // Debounced to avoid concurrent API calls from rapid keystroke changes
   let adoDebounceTimer: NodeJS.Timeout | undefined;
@@ -305,6 +342,27 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       }
     }),
   );
+
+  // Re-initialize local tasks when folder config changes
+  let localDebounceTimer: NodeJS.Timeout | undefined;
+  let localWatchers: vscode.Disposable[] = [];
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('editless.local.taskFolders')) {
+        if (localDebounceTimer) clearTimeout(localDebounceTimer);
+        localDebounceTimer = setTimeout(() => {
+          initLocalTasksIntegration(workItemsProvider);
+          const folders = vscode.workspace.getConfiguration('editless')
+            .get<string[]>('local.taskFolders', []).filter(f => f.trim());
+          localWatchers = setupLocalFileWatchers(folders, workItemsProvider, localWatchers, context);
+        }, 500);
+      }
+    }),
+  );
+
+  // Watch local task folders for file changes
+  const localFolders = vscode.workspace.getConfiguration('editless').get<string[]>('local.taskFolders', []);
+  localWatchers = setupLocalFileWatchers(localFolders, workItemsProvider, localWatchers, context);
 
   // --- Auto-refresh for Work Items & PRs ---
   const autoRefresh = initAutoRefresh(workItemsProvider, prsProvider);
@@ -450,4 +508,35 @@ async function initAdoIntegration(
 
   // Initial fetch
   await fetchAdoData();
+}
+
+function initLocalTasksIntegration(workItemsProvider: WorkItemsTreeProvider): void {
+  const config = vscode.workspace.getConfiguration('editless');
+  const folders = config.get<string[]>('local.taskFolders', []).filter(f => f.trim());
+  workItemsProvider.setLocalFolders(folders);
+}
+
+function setupLocalFileWatchers(
+  folders: string[],
+  workItemsProvider: WorkItemsTreeProvider,
+  existing: vscode.Disposable[],
+  context: vscode.ExtensionContext,
+): vscode.Disposable[] {
+  for (const w of existing) w.dispose();
+  const watchers: vscode.Disposable[] = [];
+
+  for (const folder of folders) {
+    const pattern = new vscode.RelativePattern(folder, '*.md');
+    const watcher = vscode.workspace.createFileSystemWatcher(pattern);
+    const refreshLocal = () => {
+      fetchLocalTasks(folder).then(tasks => workItemsProvider.setLocalTasks(folder, tasks));
+    };
+    watcher.onDidChange(refreshLocal);
+    watcher.onDidCreate(refreshLocal);
+    watcher.onDidDelete(refreshLocal);
+    watchers.push(watcher);
+    context.subscriptions.push(watcher);
+  }
+
+  return watchers;
 }

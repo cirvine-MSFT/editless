@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createVscodeMock, ThemeIcon } from './mocks/vscode-mocks';
+import { createVscodeMock, ThemeIcon, CancellationError } from './mocks/vscode-mocks';
 
 // ---------------------------------------------------------------------------
 // Hoisted mocks
@@ -23,6 +23,17 @@ vi.mock('vscode', () => createVscodeMock({
 vi.mock('../github-client', () => ({
   isGhAvailable: (...args: unknown[]) => mockIsGhAvailable(...(args as [])),
   fetchAssignedIssues: (...args: unknown[]) => mockFetchAssignedIssues(...(args as [string])),
+}));
+
+const mockFetchLocalTasks = vi.fn().mockResolvedValue([]);
+
+vi.mock('../local-tasks-client', () => ({
+  fetchLocalTasks: (...args: unknown[]) => mockFetchLocalTasks(...(args as [string])),
+  mapLocalState: (task: { state: string; sessionId: string | null }) => {
+    if (task.state === 'Done') return 'closed';
+    if (task.sessionId !== null) return 'active';
+    return 'open';
+  },
 }));
 
 const mockExistsSync = vi.fn().mockReturnValue(false);
@@ -1407,5 +1418,273 @@ describe('WorkItemsTreeProvider — level filter edge cases', () => {
       const projects = provider.getChildren(root[0]);
       expect(projects[0].contextValue).toBe('ado-project');
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Local Tasks integration
+// ---------------------------------------------------------------------------
+
+function makeLocalTask(overrides: Partial<import('../local-tasks-client').LocalTask> = {}): import('../local-tasks-client').LocalTask {
+  return {
+    id: 'task-1',
+    title: 'Local Task',
+    state: 'Todo',
+    created: '2026-01-15',
+    sessionId: null,
+    filePath: '/projects/repo/.tasks/task-1.md',
+    folderPath: '/projects/repo/.tasks',
+    folderName: '.tasks',
+    parentName: 'repo',
+    body: '# Local Task',
+    ...overrides,
+  };
+}
+
+describe('WorkItemsTreeProvider — local tasks integration', () => {
+  it('should show "Local Tasks" group when local tasks configured alongside GitHub', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+    mockFetchLocalTasks.mockResolvedValue([makeLocalTask()]);
+
+    const provider = new WorkItemsTreeProvider();
+    provider.setLocalFolders(['/projects/repo/.tasks']);
+
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const root = provider.getChildren();
+    const localGroup = root.find(n => n.label === 'Local Tasks');
+    expect(localGroup).toBeDefined();
+    expect(localGroup!.contextValue).toMatch(/^local-backend/);
+  });
+
+  it('should show folder nodes under the Local Tasks group', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+    mockFetchLocalTasks.mockResolvedValue([makeLocalTask()]);
+
+    const provider = new WorkItemsTreeProvider();
+    provider.setLocalFolders(['/projects/repo/.tasks']);
+
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const root = provider.getChildren();
+    const localGroup = root.find(n => n.label === 'Local Tasks');
+    expect(localGroup).toBeDefined();
+
+    const folderNodes = provider.getChildren(localGroup!);
+    expect(folderNodes).toHaveLength(1);
+    expect(folderNodes[0].label).toBe('repo / .tasks');
+    expect(folderNodes[0].contextValue).toMatch(/^local-folder/);
+  });
+
+  it('should show task items under folder nodes', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+    mockFetchLocalTasks.mockResolvedValue([
+      makeLocalTask({ id: 't1', title: 'Task One' }),
+      makeLocalTask({ id: 't2', title: 'Task Two' }),
+    ]);
+
+    const provider = new WorkItemsTreeProvider();
+    provider.setLocalFolders(['/projects/repo/.tasks']);
+
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const root = provider.getChildren();
+    const localGroup = root.find(n => n.label === 'Local Tasks');
+    const folderNodes = provider.getChildren(localGroup!);
+    const tasks = provider.getChildren(folderNodes[0]);
+    expect(tasks).toHaveLength(2);
+    expect(tasks[0].label).toBe('Task One');
+    expect(tasks[1].label).toBe('Task Two');
+  });
+
+  it('should display correct icons for task states', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setLocalFolders(['/tasks']);
+    provider.setLocalTasks('/tasks', [
+      makeLocalTask({ id: 'done', title: 'Done Task', state: 'Done', folderPath: '/tasks', folderName: 'tasks', parentName: '' }),
+      makeLocalTask({ id: 'active', title: 'Active Task', state: 'Todo', sessionId: 'sess-1', folderPath: '/tasks', folderName: 'tasks', parentName: '' }),
+      makeLocalTask({ id: 'open', title: 'Open Task', state: 'Todo', sessionId: null, folderPath: '/tasks', folderName: 'tasks', parentName: '' }),
+    ]);
+
+    // Show all states including closed
+    provider.setFilter({ repos: [], labels: [], states: ['open', 'active', 'closed'], types: [] });
+    const items = provider.getChildren();
+    expect(items).toHaveLength(3);
+
+    const doneItem = items.find(i => i.label === 'Done Task');
+    const activeItem = items.find(i => i.label === 'Active Task');
+    const openItem = items.find(i => i.label === 'Open Task');
+
+    expect((doneItem!.iconPath as ThemeIcon).id).toBe('pass-filled');
+    expect((activeItem!.iconPath as ThemeIcon).id).toBe('debug-start');
+    expect((openItem!.iconPath as ThemeIcon).id).toBe('circle-large-outline');
+  });
+
+  it('should set description to task state and contextValue to local-task', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setLocalFolders(['/tasks']);
+    provider.setLocalTasks('/tasks', [makeLocalTask({ folderPath: '/tasks', folderName: 'tasks', parentName: '' })]);
+
+    const items = provider.getChildren();
+    expect(items).toHaveLength(1);
+    expect(items[0].description).toBe('Todo');
+    expect(items[0].contextValue).toBe('local-task');
+  });
+
+  it('should show all tasks including done by default (no state filter)', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setLocalFolders(['/tasks']);
+    provider.setLocalTasks('/tasks', [
+      makeLocalTask({ id: 'open-task', title: 'Open', state: 'Todo', folderPath: '/tasks', folderName: 'tasks', parentName: '' }),
+      makeLocalTask({ id: 'done-task', title: 'Done', state: 'Done', folderPath: '/tasks', folderName: 'tasks', parentName: '' }),
+    ]);
+
+    const items = provider.getChildren();
+    expect(items).toHaveLength(2);
+  });
+
+  it('should show closed tasks when state filter includes closed', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setLocalFolders(['/tasks']);
+    provider.setLocalTasks('/tasks', [
+      makeLocalTask({ id: 'open-task', title: 'Open', state: 'Todo', folderPath: '/tasks', folderName: 'tasks', parentName: '' }),
+      makeLocalTask({ id: 'done-task', title: 'Done', state: 'Done', folderPath: '/tasks', folderName: 'tasks', parentName: '' }),
+    ]);
+
+    provider.setFilter({ repos: [], labels: [], states: ['open', 'active', 'closed'], types: [] });
+    const items = provider.getChildren();
+    expect(items).toHaveLength(2);
+  });
+
+  it('should hide local tasks when source filter excludes (Local)', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+    mockFetchLocalTasks.mockResolvedValue([makeLocalTask({ folderPath: '/tasks', folderName: 'tasks', parentName: '' })]);
+
+    const provider = new WorkItemsTreeProvider();
+    provider.setLocalFolders(['/tasks']);
+
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    provider.setFilter({ repos: ['owner/repo'], labels: [], states: [], types: [] });
+    const items = provider.getChildren();
+    const localGroup = items.find(n => n.label === 'Local Tasks');
+    expect(localGroup).toBeUndefined();
+  });
+
+  it('should show empty tree message when folder has no tasks', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setLocalFolders(['/tasks']);
+    provider.setLocalTasks('/tasks', []);
+
+    const items = provider.getChildren();
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toBe('No assigned issues found');
+  });
+
+  it('should include (Local) in getAllRepos when local is configured', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setLocalFolders(['/tasks']);
+    expect(provider.getAllRepos()).toContain('(Local)');
+  });
+
+  it('should not include (Local) in getAllRepos when local is not configured', () => {
+    const provider = new WorkItemsTreeProvider();
+    expect(provider.getAllRepos()).not.toContain('(Local)');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CancellationError handling (#456)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — CancellationError handling', () => {
+  it('fetchAll should not fire tree data change event after dispose()', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+
+    provider.dispose();
+    (provider as any)._repos = ['owner/repo'];
+    await (provider as any).fetchAll();
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('fetchAll should silently handle CancellationError', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockRejectedValue(new CancellationError());
+
+    const provider = new WorkItemsTreeProvider();
+    (provider as any)._repos = ['owner/repo'];
+
+    await expect((provider as any).fetchAll()).resolves.toBeUndefined();
+  });
+
+  it('fetchAll should silently handle "Canceled" message errors', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockRejectedValue(new Error('The operation was Canceled by the user'));
+
+    const provider = new WorkItemsTreeProvider();
+    (provider as any)._repos = ['owner/repo'];
+
+    await expect((provider as any).fetchAll()).resolves.toBeUndefined();
+  });
+
+  it('fetchAll should silently handle "Channel has been closed" errors', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockRejectedValue(new Error('Channel has been closed'));
+
+    const provider = new WorkItemsTreeProvider();
+    (provider as any)._repos = ['owner/repo'];
+
+    await expect((provider as any).fetchAll()).resolves.toBeUndefined();
+  });
+
+  it('fetchAll should re-throw non-cancellation errors', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockRejectedValue(new Error('network failure'));
+
+    const provider = new WorkItemsTreeProvider();
+    (provider as any)._repos = ['owner/repo'];
+
+    await expect((provider as any).fetchAll()).rejects.toThrow('network failure');
+  });
+
+  it('fetchAll should reset _loading on error', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockRejectedValue(new CancellationError());
+
+    const provider = new WorkItemsTreeProvider();
+    (provider as any)._repos = ['owner/repo'];
+    await (provider as any).fetchAll();
+
+    expect((provider as any)._loading).toBe(false);
+  });
+
+  it('dispose() should set the provider as disposed', () => {
+    const provider = new WorkItemsTreeProvider();
+    expect((provider as any)._disposed).toBe(false);
+
+    provider.dispose();
+    expect((provider as any)._disposed).toBe(true);
   });
 });
