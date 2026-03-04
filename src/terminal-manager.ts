@@ -6,7 +6,7 @@ import * as path from 'path';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
 import { CopilotEvents } from './copilot-sdk-types';
-import { buildLaunchCommandForConfig, parseConfigDir } from './copilot-cli-builder';
+import { buildLaunchCommandForConfig, parseConfigDir, resolveShellPath } from './copilot-cli-builder';
 
 export const EDITLESS_INSTRUCTIONS_DIR = path.join(os.homedir(), '.copilot', 'editless');
 
@@ -476,6 +476,16 @@ export class TerminalManager implements vscode.Disposable {
       return reconnected;
     }
 
+    // Register custom config dir so isSessionResumable can find the session (#465)
+    // Resolve shell variables in legacy persisted values (#467)
+    if (entry.configDir && this._sessionResolver) {
+      const resolved = resolveShellPath(entry.configDir);
+      if (resolved !== entry.configDir) {
+        entry.configDir = resolved;
+      }
+      this._sessionResolver.addSessionStateDir(path.join(resolved, 'session-state'));
+    }
+
     // Pre-resume validation: check workspace.yaml + events.jsonl
     if (entry.agentSessionId && this._sessionResolver) {
       const check = this._sessionResolver.isSessionResumable(entry.agentSessionId);
@@ -704,6 +714,20 @@ export class TerminalManager implements vscode.Disposable {
       }))
       .filter(entry => entry.rebootCount < TerminalManager.MAX_REBOOT_COUNT)
       .slice(0, 50);
+
+    // Re-register custom config dirs so isSessionResumable works after restart (#465)
+    // Also resolve shell variables in legacy persisted configDir values (#467)
+    if (this._sessionResolver) {
+      for (const entry of this._pendingSaved) {
+        if (entry.configDir) {
+          const resolved = resolveShellPath(entry.configDir);
+          if (resolved !== entry.configDir) {
+            entry.configDir = resolved;
+          }
+          this._sessionResolver.addSessionStateDir(path.join(resolved, 'session-state'));
+        }
+      }
+    }
 
     this._tryMatchTerminals();
 

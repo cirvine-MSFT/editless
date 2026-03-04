@@ -156,21 +156,26 @@ export function parseConfigDir(additionalArgs: string | undefined): string | und
   for (let i = 0; i < tokens.length; i++) {
     const token = tokens[i];
     if (token === '--config-dir' && i + 1 < tokens.length) {
-      const raw = tokens[i + 1];
-      if (raw.startsWith('~')) {
-        return path.resolve(os.homedir(), raw.slice(2));
-      }
-      return path.resolve(raw);
+      return resolveShellPath(tokens[i + 1]);
     }
     if (token.startsWith('--config-dir=')) {
-      const raw = token.slice('--config-dir='.length);
-      if (raw.startsWith('~')) {
-        return path.resolve(os.homedir(), raw.slice(2));
-      }
-      return path.resolve(raw);
+      return resolveShellPath(token.slice('--config-dir='.length));
     }
   }
   return undefined;
+}
+
+/** Strip quotes and expand shell variables ($env:VAR, %VAR%, ~) before resolving. */
+export function resolveShellPath(raw: string): string {
+  let p = raw.replace(/^["']|["']$/g, '');
+  // PowerShell $env:VAR
+  p = p.replace(/\$env:(\w+)/gi, (_, name) => process.env[name] ?? '');
+  // cmd %VAR%
+  p = p.replace(/%(\w+)%/g, (_, name) => process.env[name] ?? '');
+  if (p.startsWith('~')) {
+    return path.resolve(os.homedir(), p.slice(2));
+  }
+  return path.resolve(p);
 }
 
 /**
