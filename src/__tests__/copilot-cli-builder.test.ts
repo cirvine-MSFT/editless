@@ -16,7 +16,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { buildCopilotCommand, buildDefaultLaunchCommand, buildLaunchCommandForConfig, getCliCommand } from '../copilot-cli-builder';
+import { buildCopilotCommand, buildDefaultLaunchCommand, buildLaunchCommandForConfig, getCliCommand, parseConfigDir } from '../copilot-cli-builder';
 import type { CopilotCommandOptions } from '../copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
@@ -452,6 +452,69 @@ describe('copilot-cli-builder', () => {
   describe('legacy config stripping', () => {
     it('getCliCommand returns "copilot" when no override and default setting', () => {
       expect(getCliCommand()).toBe('copilot');
+    });
+  });
+
+  describe('parseConfigDir', () => {
+    it('returns undefined when no additionalArgs', () => {
+      expect(parseConfigDir(undefined)).toBeUndefined();
+      expect(parseConfigDir('')).toBeUndefined();
+    });
+
+    it('parses --config-dir with space-separated path', () => {
+      const result = parseConfigDir('--config-dir /custom/config');
+      expect(result).toContain('custom');
+      expect(result).toContain('config');
+    });
+
+    it('parses --config-dir=path format', () => {
+      const result = parseConfigDir('--config-dir=/custom/config');
+      expect(result).toContain('custom');
+      expect(result).toContain('config');
+    });
+
+    it('strips surrounding quotes from path', () => {
+      const result = parseConfigDir('--config-dir "/custom/config"');
+      expect(result).toContain('custom');
+      expect(result).not.toContain('"');
+    });
+
+    it('expands $env:USERPROFILE in quoted path', () => {
+      const home = process.env.USERPROFILE ?? process.env.HOME ?? '';
+      const result = parseConfigDir('--config-dir "$env:USERPROFILE\\copilot-personal"');
+      expect(result).toBeDefined();
+      expect(result).toContain('copilot-personal');
+      expect(result).not.toContain('$env:');
+      expect(result).toContain(home);
+    });
+
+    it('expands %USERPROFILE% in path', () => {
+      const home = process.env.USERPROFILE ?? process.env.HOME ?? '';
+      const result = parseConfigDir('--config-dir=%USERPROFILE%\\copilot-personal');
+      expect(result).toBeDefined();
+      expect(result).toContain('copilot-personal');
+      expect(result).not.toContain('%');
+      expect(result).toContain(home);
+    });
+
+    it('expands $env: with --config-dir= format', () => {
+      const home = process.env.USERPROFILE ?? process.env.HOME ?? '';
+      const result = parseConfigDir('--config-dir="$env:USERPROFILE\\copilot-personal"');
+      expect(result).toBeDefined();
+      expect(result).toContain('copilot-personal');
+      expect(result).not.toContain('$env:');
+      expect(result).toContain(home);
+    });
+
+    it('handles tilde path', () => {
+      const result = parseConfigDir('--config-dir ~/copilot-personal');
+      expect(result).toBeDefined();
+      expect(result).toContain('copilot-personal');
+      expect(result).not.toContain('~');
+    });
+
+    it('returns undefined when --config-dir is not present', () => {
+      expect(parseConfigDir('--model gpt-5 --yolo')).toBeUndefined();
     });
   });
 });
