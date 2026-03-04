@@ -10,6 +10,8 @@ import { buildLaunchCommandForConfig, parseConfigDir, resolveShellPath } from '.
 
 export const EDITLESS_INSTRUCTIONS_DIR = path.join(os.homedir(), '.copilot', 'editless');
 
+export const EDITLESS_INSTRUCTIONS_DIR = path.join(os.homedir(), '.copilot', 'editless');
+
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
 // ---------------------------------------------------------------------------

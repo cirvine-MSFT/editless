@@ -12,6 +12,7 @@ export abstract class BaseTreeProvider<
 
   protected _repos: string[] = [];
   protected _loading = false;
+  protected _disposed = false;
   private _pendingRefresh = false;
   protected _filterSeq = 0;
   protected _levelFilters = new Map<string, TLevelFilter>();
@@ -383,5 +384,9 @@ export abstract class BaseTreeProvider<
     }
 
     return null;
+  }
+
+  dispose(): void {
+    this._disposed = true;
   }
 }
