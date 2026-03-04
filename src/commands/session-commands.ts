@@ -281,4 +281,31 @@ export function register(context: vscode.ExtensionContext, deps: SessionCommandD
       terminal.show(false);
     }),
   );
+
+  // Diagnostic: dump persisted terminal state for debugging resume issues
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.debugPersistedSessions', () => {
+      const orphans = terminalManager.getOrphanedSessions();
+      const dirs = sessionContextResolver.getSessionStateDirs();
+      const output = vscode.window.createOutputChannel('EditLess Debug');
+      output.clear();
+      output.appendLine('=== Session Resolver Dirs ===');
+      for (const dir of dirs) { output.appendLine(`  ${dir}`); }
+      output.appendLine(`\n=== Orphaned Sessions (${orphans.length}) ===`);
+      for (const o of orphans) {
+        output.appendLine(`  [${o.id}]`);
+        output.appendLine(`    displayName:    ${o.displayName}`);
+        output.appendLine(`    squadId:        ${o.squadId}`);
+        output.appendLine(`    agentSessionId: ${o.agentSessionId ?? '(none)'}`);
+        output.appendLine(`    configDir:      ${o.configDir ?? '(none)'}`);
+        output.appendLine(`    launchCommand:  ${o.launchCommand ?? '(none)'}`);
+        output.appendLine(`    rebootCount:    ${o.rebootCount}`);
+        if (o.agentSessionId) {
+          const check = sessionContextResolver.isSessionResumable(o.agentSessionId);
+          output.appendLine(`    resumable:      ${check.resumable}${check.reason ? ` — ${check.reason}` : ''}`);
+        }
+      }
+      output.show();
+    }),
+  );
 }

@@ -396,6 +396,31 @@ describe('TerminalManager', () => {
 
       expect(mockResolver.addSessionStateDir).not.toHaveBeenCalled();
     });
+
+    it('should resolve shell variables in persisted configDir values (#467)', () => {
+      const userProfile = process.env.USERPROFILE ?? process.env.HOME ?? '/home/test';
+      const saved = [
+        makePersistedEntry({ configDir: '$env:USERPROFILE\\copilot-personal' }),
+      ];
+      const ctx = makeMockContext(saved);
+      const mgr = new TerminalManager(ctx);
+
+      const mockResolver = {
+        addSessionStateDir: vi.fn(),
+        isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+        watchSession: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      };
+      mgr.setSessionResolver(mockResolver as any);
+      mgr.reconcile();
+
+      expect(mockResolver.addSessionStateDir).toHaveBeenCalledTimes(1);
+      const registeredDir = mockResolver.addSessionStateDir.mock.calls[0][0];
+      // Should NOT contain unresolved shell variable
+      expect(registeredDir).not.toContain('$env:');
+      // Should contain the resolved user profile path
+      expect(registeredDir).toContain(userProfile.replace(/\\/g, path.sep === '/' ? '/' : '\\'));
+      expect(registeredDir).toMatch(/session-state$/);
+    });
   });
 
   describe('renameSession preserves icon', () => {
