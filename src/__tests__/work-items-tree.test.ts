@@ -1688,3 +1688,120 @@ describe('WorkItemsTreeProvider — CancellationError handling', () => {
     expect((provider as any)._disposed).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Milestone group parsing (#448)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — milestone group parsing', () => {
+  it('should parse milestone group ID with ms:repo:name:f{seq} format', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      makeIssue({ number: 1, title: 'Issue 1', milestone: 'v1.0', repository: 'owner/repo' }),
+      makeIssue({ number: 2, title: 'Issue 2', milestone: 'v1.0', repository: 'owner/repo' }),
+      makeIssue({ number: 3, title: 'Issue 3', milestone: 'v2.0', repository: 'owner/repo' }),
+    ]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const root = provider.getChildren();
+    // Should get milestone groups
+    expect(root.length).toBeGreaterThan(0);
+    const v1Group = root.find(n => n.label === 'v1.0');
+    expect(v1Group).toBeDefined();
+    
+    // Check ID format: ms:repo:name:f{seq}
+    expect(v1Group!.id).toMatch(/^ms:owner\/repo:v1\.0:f\d+$/);
+    
+    // Get children of milestone group
+    const issues = provider.getChildren(v1Group!);
+    expect(issues).toHaveLength(2);
+    expect(issues[0].label).toContain('Issue 1');
+    expect(issues[1].label).toContain('Issue 2');
+  });
+
+  it('should parse __none__ milestone group for issues without milestone', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      makeIssue({ number: 1, title: 'With MS', milestone: 'v1.0', repository: 'owner/repo' }),
+      makeIssue({ number: 2, title: 'No MS 1', milestone: '', repository: 'owner/repo' }),
+      makeIssue({ number: 3, title: 'No MS 2', milestone: '', repository: 'owner/repo' }),
+    ]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const root = provider.getChildren();
+    const noMsGroup = root.find(n => n.label === 'No Milestone');
+    expect(noMsGroup).toBeDefined();
+    
+    // Check ID format with __none__
+    expect(noMsGroup!.id).toMatch(/^ms:owner\/repo:__none__:f\d+$/);
+    
+    // Get children
+    const issues = provider.getChildren(noMsGroup!);
+    expect(issues).toHaveLength(2);
+    expect(issues[0].label).toContain('No MS 1');
+    expect(issues[1].label).toContain('No MS 2');
+  });
+
+  it('should correctly extract repo and milestone from ID when getting children', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      makeIssue({ number: 1, milestone: 'sprint-42', repository: 'owner/repo' }),
+      makeIssue({ number: 2, milestone: 'sprint-42', repository: 'owner/repo' }),
+    ]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    const root = provider.getChildren();
+    const msGroup = root.find(n => n.label === 'sprint-42');
+    expect(msGroup).toBeDefined();
+
+    // Manually construct a milestone group item to test ID parsing
+    const testItem = new WorkItemsTreeItem('sprint-42', 2);
+    testItem.id = 'ms:owner/repo:sprint-42:f99';
+    testItem.contextValue = 'milestone-group';
+    
+    const children = provider.getChildren(testItem);
+    expect(children).toHaveLength(2);
+  });
+
+  it('should apply level filters when getting milestone group children', async () => {
+    mockIsGhAvailable.mockResolvedValue(true);
+    mockFetchAssignedIssues.mockResolvedValue([
+      makeIssue({ number: 1, milestone: 'v1.0', labels: ['bug'], assignees: ['user'], repository: 'owner/repo' }),
+      makeIssue({ number: 2, milestone: 'v1.0', labels: ['feature'], assignees: [], repository: 'owner/repo' }),
+      makeIssue({ number: 3, milestone: 'v1.0', labels: ['bug'], assignees: [], repository: 'owner/repo' }),
+    ]);
+
+    const provider = new WorkItemsTreeProvider();
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.setRepos(['owner/repo']);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    // Set a level filter on the repo
+    provider.setLevelFilter('github:owner/repo', { states: ['active'] as import('../work-items-tree').UnifiedState[] });
+
+    const root = provider.getChildren();
+    const msGroup = root.find(n => n.label === 'v1.0');
+    expect(msGroup).toBeDefined();
+    
+    // Only active issues (with assignees) should appear
+    const issues = provider.getChildren(msGroup!);
+    expect(issues).toHaveLength(1);
+    expect(issues[0].label).toContain('#1');
+  });
+});
