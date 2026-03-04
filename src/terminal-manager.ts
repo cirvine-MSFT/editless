@@ -304,7 +304,6 @@ export class TerminalManager implements vscode.Disposable {
     };
 
     this._terminals.set(terminal, info);
-    this._setLaunching(terminal);
 
     // Start watching the session for activity
     if (metadata.agentSessionId && this._sessionResolver) {
