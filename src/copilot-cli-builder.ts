@@ -171,7 +171,7 @@ export function parseConfigDir(additionalArgs: string | undefined): string | und
 }
 
 /** Strip quotes and expand shell variables ($env:VAR, %VAR%, ~) before resolving. */
-function resolveShellPath(raw: string): string {
+export function resolveShellPath(raw: string): string {
   let p = raw.replace(/^["']|["']$/g, '');
   // PowerShell $env:VAR
   p = p.replace(/\$env:(\w+)/gi, (_, name) => process.env[name] ?? '');
