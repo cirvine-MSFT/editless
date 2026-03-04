@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as os from 'os';
 import type { AgentTeamConfig } from './types';
 
 // ---------------------------------------------------------------------------
@@ -150,4 +152,28 @@ export function buildLaunchCommandForConfig(config: Pick<AgentTeamConfig, 'id' |
  */
 export function buildDefaultLaunchCommand(): string {
   return buildLaunchCommandForConfig({ id: 'default', universe: 'unknown' });
+}
+
+/** Extract --config-dir value from additionalArgs string (supports both `--config-dir X` and `--config-dir=X`). */
+export function parseConfigDir(additionalArgs: string | undefined): string | undefined {
+  if (!additionalArgs) return undefined;
+  const tokens = additionalArgs.trim().split(/\s+/);
+  for (let i = 0; i < tokens.length; i++) {
+    const token = tokens[i];
+    if (token === '--config-dir' && i + 1 < tokens.length) {
+      const raw = tokens[i + 1];
+      if (raw.startsWith('~')) {
+        return path.resolve(os.homedir(), raw.slice(2));
+      }
+      return path.resolve(raw);
+    }
+    if (token.startsWith('--config-dir=')) {
+      const raw = token.slice('--config-dir='.length);
+      if (raw.startsWith('~')) {
+        return path.resolve(os.homedir(), raw.slice(2));
+      }
+      return path.resolve(raw);
+    }
+  }
+  return undefined;
 }
