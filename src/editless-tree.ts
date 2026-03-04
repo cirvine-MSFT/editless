@@ -377,6 +377,12 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       children.push(item);
     }
 
+    for (const orphan of this.terminalManager.getOrphanedSessions().filter(o => o.squadId === DEFAULT_COPILOT_CLI_ID)) {
+      const orphanItem = this._buildOrphanItem(orphan);
+      orphanItem.parent = parentItem;
+      children.push(orphanItem);
+    }
+
     return children;
   }
 

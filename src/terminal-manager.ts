@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
+import * as path from 'path';
 import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
 import { CopilotEvents } from './copilot-sdk-types';
-import { buildLaunchCommandForConfig } from './copilot-cli-builder';
+import { buildLaunchCommandForConfig, parseConfigDir } from './copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
 // Terminal tracking metadata
@@ -25,6 +26,7 @@ export interface TerminalInfo {
   agentSessionId?: string;
   launchCommand?: string;
   squadPath?: string;
+  configDir?: string;
 }
 
 export interface PersistedTerminalInfo {
@@ -44,6 +46,7 @@ export interface PersistedTerminalInfo {
   agentSessionId?: string;
   launchCommand?: string;
   squadPath?: string;
+  configDir?: string;
 }
 
 const STORAGE_KEY = 'editless.terminalSessions';
@@ -218,6 +221,11 @@ export class TerminalManager implements vscode.Disposable {
     const baseCmd = buildLaunchCommandForConfig(config);
     const launchCmd = `${baseCmd} --resume ${uuid}`;
 
+    // Parse --config-dir from merged additionalArgs so we can register it
+    const mergedArgs = [config.additionalArgs, vscode.workspace.getConfiguration('editless.cli').get<string>('additionalArgs', '')]
+      .filter(Boolean).join(' ');
+    const configDir = parseConfigDir(mergedArgs);
+
     const terminal = vscode.window.createTerminal({
       name: displayName,
       cwd: resolveTerminalCwd(config.path),
@@ -243,10 +251,16 @@ export class TerminalManager implements vscode.Disposable {
       agentSessionId: uuid,
       launchCommand: baseCmd,
       squadPath: config.path,
+      configDir,
     };
 
     this._terminals.set(terminal, info);
     this._setLaunching(terminal);
+
+    // Register custom config dir with the session resolver
+    if (configDir && this._sessionResolver) {
+      this._sessionResolver.addSessionStateDir(path.join(configDir, 'session-state'));
+    }
 
     // Start watching the session for activity (#324)
     if (this._sessionResolver) {
@@ -453,6 +467,11 @@ export class TerminalManager implements vscode.Disposable {
     if (reconnected) {
       reconnected.show();
       return reconnected;
+    }
+
+    // Register custom config dir so isSessionResumable can find the session (#465)
+    if (entry.configDir && this._sessionResolver) {
+      this._sessionResolver.addSessionStateDir(path.join(entry.configDir, 'session-state'));
     }
 
     // Pre-resume validation: check workspace.yaml + events.jsonl
@@ -682,6 +701,15 @@ export class TerminalManager implements vscode.Disposable {
       .filter(entry => entry.rebootCount < TerminalManager.MAX_REBOOT_COUNT)
       .slice(0, 50);
 
+    // Re-register custom config dirs so isSessionResumable works after restart (#465)
+    if (this._sessionResolver) {
+      for (const entry of this._pendingSaved) {
+        if (entry.configDir) {
+          this._sessionResolver.addSessionStateDir(path.join(entry.configDir, 'session-state'));
+        }
+      }
+    }
+
     this._tryMatchTerminals();
 
     // Terminals may not be available yet during activation — retry as they appear.
@@ -731,6 +759,7 @@ export class TerminalManager implements vscode.Disposable {
         agentSessionId: persisted.agentSessionId,
         launchCommand: persisted.launchCommand,
         squadPath: persisted.squadPath,
+        configDir: persisted.configDir,
       });
       // Restore persisted activity time so state reflects actual history
       this._lastActivityAt.set(match, persisted.lastActivityAt ?? persisted.lastSeenAt);

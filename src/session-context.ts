@@ -74,6 +74,7 @@ export class SessionContextResolver {
   private static readonly EVENT_CACHE_TTL_MS = 10_000;
   static readonly STALE_SESSION_DAYS = 14;
   private readonly _sessionStateDir: string;
+  private readonly _additionalSessionStateDirs = new Set<string>();
   private readonly _fileWatchers = new Map<string, fs.FSWatcher>();
   private readonly _watcherPending = new Map<string, ReturnType<typeof setTimeout>>();
 
@@ -85,36 +86,49 @@ export class SessionContextResolver {
     this._sessionStateDir = path.join(os.homedir(), '.copilot', 'session-state');
   }
 
+  /** Register an additional session-state directory (e.g. from --config-dir). */
+  addSessionStateDir(dir: string): void {
+    if (dir === this._sessionStateDir) return;
+    if (this._additionalSessionStateDirs.has(dir)) return;
+    this._additionalSessionStateDirs.add(dir);
+    this._cwdIndex = null;
+    this._indexedDirCount = 0;
+  }
+
+  /** Return all known session-state directories. */
+  getSessionStateDirs(): string[] {
+    return [this._sessionStateDir, ...this._additionalSessionStateDirs];
+  }
+
   /** Check whether a session can be resumed by verifying workspace.yaml + events.jsonl exist and are valid. */
   isSessionResumable(sessionId: string): SessionResumability {
-    const sessionDir = path.join(this._sessionStateDir, sessionId);
-    const workspacePath = path.join(sessionDir, 'workspace.yaml');
-    const eventsPath = path.join(sessionDir, 'events.jsonl');
+    for (const dir of this.getSessionStateDirs()) {
+      const sessionDir = path.join(dir, sessionId);
+      const workspacePath = path.join(sessionDir, 'workspace.yaml');
+      try {
+        fs.accessSync(workspacePath, fs.constants.R_OK);
+      } catch {
+        continue;
+      }
+      // Found workspace.yaml in this dir — check events.jsonl
+      const eventsPath = path.join(sessionDir, 'events.jsonl');
+      try {
+        fs.accessSync(eventsPath, fs.constants.R_OK);
+      } catch {
+        return { resumable: false, reason: `Session ${sessionId} has no events.jsonl — no activity was recorded.`, stale: false };
+      }
 
-    try {
-      fs.accessSync(workspacePath, fs.constants.R_OK);
-    } catch {
-      return { resumable: false, reason: `Session ${sessionId} has no workspace.yaml — session state is missing or corrupted.`, stale: false };
+      let stale = false;
+      try {
+        const stats = fs.statSync(eventsPath);
+        const ageMs = Date.now() - stats.mtimeMs;
+        const ageDays = ageMs / (1000 * 60 * 60 * 24);
+        stale = ageDays > SessionContextResolver.STALE_SESSION_DAYS;
+      } catch { /* stat failed — treat as non-stale */ }
+
+      return { resumable: true, stale };
     }
-
-    try {
-      fs.accessSync(eventsPath, fs.constants.R_OK);
-    } catch {
-      return { resumable: false, reason: `Session ${sessionId} has no events.jsonl — no activity was recorded.`, stale: false };
-    }
-
-    // Stale check: events.jsonl not modified in STALE_SESSION_DAYS
-    let stale = false;
-    try {
-      const stats = fs.statSync(eventsPath);
-      const ageMs = Date.now() - stats.mtimeMs;
-      const ageDays = ageMs / (1000 * 60 * 60 * 24);
-      stale = ageDays > SessionContextResolver.STALE_SESSION_DAYS;
-    } catch {
-      // stat failed — treat as non-stale, we already verified access above
-    }
-
-    return { resumable: true, stale };
+    return { resumable: false, reason: `Session ${sessionId} has no workspace.yaml — session state is missing or corrupted.`, stale: false };
   }
 
   resolveForSquad(squadPath: string): SessionContext | null {
