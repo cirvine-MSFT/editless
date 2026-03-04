@@ -5,15 +5,17 @@ import type { SessionLabelManager } from '../session-labels';
 import { promptClearLabel } from '../session-labels';
 import { SessionContextResolver } from '../session-context';
 import { buildCopilotCommand } from '../copilot-cli-builder';
+import type { AgentSettingsManager } from '../agent-settings';
 
 export interface SessionCommandDeps {
   terminalManager: TerminalManager;
   labelManager: SessionLabelManager;
   sessionContextResolver: SessionContextResolver;
+  agentSettings: AgentSettingsManager;
 }
 
 export function register(context: vscode.ExtensionContext, deps: SessionCommandDeps): void {
-  const { terminalManager, labelManager, sessionContextResolver } = deps;
+  const { terminalManager, labelManager, sessionContextResolver, agentSettings } = deps;
 
   // Helper: context menu passes EditlessTreeItem, not vscode.Terminal
   function resolveTerminal(arg: unknown): vscode.Terminal | undefined {
@@ -234,7 +236,22 @@ export function register(context: vscode.ExtensionContext, deps: SessionCommandD
       const session = allSessions.find(s => s.sessionId === sessionId);
       const cwd = session?.cwd || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '';
 
-      const launchCmd = buildCopilotCommand({ resume: sessionId });
+      // Look up the agent settings for this session
+      // Strategy: check all tracked terminals (live + orphaned) for matching agentSessionId
+      let extraArgs: string[] = [];
+      const allTracked = [
+        ...terminalManager.getAllTerminals().map(t => t.info),
+        ...terminalManager.getOrphanedSessions(),
+      ];
+      const matchingTerminal = allTracked.find(info => info.agentSessionId === sessionId);
+      if (matchingTerminal) {
+        const settings = agentSettings.get(matchingTerminal.squadId);
+        if (settings?.additionalArgs) {
+          extraArgs = settings.additionalArgs.split(/\s+/).filter(Boolean);
+        }
+      }
+
+      const launchCmd = buildCopilotCommand({ resume: sessionId, extraArgs });
       const displayName = session?.summary
         ? `↩ ${session.summary}`.slice(0, 50)
         : `↩ ${sessionId.slice(0, 8)}`;
