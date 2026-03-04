@@ -21,7 +21,6 @@ export abstract class BaseTreeProvider<
   protected _adoOrg: string | undefined;
   protected _adoProject: string | undefined;
   protected _adoConfigured = false;
-  protected _disposed = false;
   protected _adoRefresh?: () => Promise<void>;
 
   /** ID prefix for GitHub nodes (e.g. 'github' or 'github-pr') */
