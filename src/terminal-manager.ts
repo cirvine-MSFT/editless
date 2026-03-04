@@ -476,6 +476,11 @@ export class TerminalManager implements vscode.Disposable {
       return reconnected;
     }
 
+    // Register custom config dir so isSessionResumable can find the session (#465)
+    if (entry.configDir && this._sessionResolver) {
+      this._sessionResolver.addSessionStateDir(path.join(entry.configDir, 'session-state'));
+    }
+
     // Pre-resume validation: check workspace.yaml + events.jsonl
     if (entry.agentSessionId && this._sessionResolver) {
       const check = this._sessionResolver.isSessionResumable(entry.agentSessionId);
@@ -704,6 +709,15 @@ export class TerminalManager implements vscode.Disposable {
       }))
       .filter(entry => entry.rebootCount < TerminalManager.MAX_REBOOT_COUNT)
       .slice(0, 50);
+
+    // Re-register custom config dirs so isSessionResumable works after restart (#465)
+    if (this._sessionResolver) {
+      for (const entry of this._pendingSaved) {
+        if (entry.configDir) {
+          this._sessionResolver.addSessionStateDir(path.join(entry.configDir, 'session-state'));
+        }
+      }
+    }
 
     this._tryMatchTerminals();
 

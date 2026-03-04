@@ -352,6 +352,52 @@ describe('TerminalManager', () => {
     });
   });
 
+  describe('reconcile registers custom config dirs with session resolver (#465)', () => {
+    it('should call addSessionStateDir for entries with configDir', () => {
+      const saved = [
+        makePersistedEntry({ configDir: '/custom/config' }),
+        makePersistedEntry({ id: 'term-2', configDir: '/other/config', terminalName: '🧪 Other #1' }),
+      ];
+      const ctx = makeMockContext(saved);
+      const mgr = new TerminalManager(ctx);
+
+      const mockResolver = {
+        addSessionStateDir: vi.fn(),
+        isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+        watchSession: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      };
+      mgr.setSessionResolver(mockResolver as any);
+      mgr.reconcile();
+
+      expect(mockResolver.addSessionStateDir).toHaveBeenCalledTimes(2);
+      const calls = mockResolver.addSessionStateDir.mock.calls.map((c: string[]) => c[0]);
+      expect(calls).toEqual(expect.arrayContaining([
+        expect.stringContaining('custom'),
+        expect.stringContaining('other'),
+      ]));
+      // Each call ends with 'session-state'
+      for (const call of calls) {
+        expect(call).toMatch(/session-state$/);
+      }
+    });
+
+    it('should skip entries without configDir', () => {
+      const saved = [makePersistedEntry()]; // no configDir
+      const ctx = makeMockContext(saved);
+      const mgr = new TerminalManager(ctx);
+
+      const mockResolver = {
+        addSessionStateDir: vi.fn(),
+        isSessionResumable: vi.fn().mockReturnValue({ resumable: true, stale: false }),
+        watchSession: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      };
+      mgr.setSessionResolver(mockResolver as any);
+      mgr.reconcile();
+
+      expect(mockResolver.addSessionStateDir).not.toHaveBeenCalled();
+    });
+  });
+
   describe('renameSession preserves icon', () => {
     it('should update displayName and persist when renaming', () => {
       const ctx = makeMockContext();
