@@ -1,243 +1,3 @@
-### 2026-03-03: Feature Ideation — Three Feature Sets Proposed by Rick, Morty, and Summer
-
-**Date:** 2026-03-03  
-**Status:** Proposed (awaiting squad review and prioritization)  
-**Scope:** EditLess v0.2.0+ product roadmap
-
----
-
-## Summary
-
-Three squad members completed independent feature ideation analyses converging on session-related features:
-
-- **Rick (Lead):** Proposed 6 features; recommends prioritizing **Session Playback & Replay**, **Work Item ↔ Agent Assignment UI**, and **Quick Action Buttons for Review Tasks** for v0.2.0
-- **Morty (Extension Dev):** Proposed 6 features; recommends **Terminal Color Themes** (quick win, <1 day) and **Session Templates** (high impact) alongside **Agent Action Replay**
-- **Summer (Product Designer):** Proposed 6 features; recommends **Live Session Dashboard Widget**, **Attention Queue**, and **Session Notes & Decision Log**
-
-**Convergence:** All three agents identified session management, work item coordination, and review workflows as high-priority gaps.
-
----
-
-## Rick's Proposal: Session Playback, Assignment UI, Quick Actions
-
-**Top 3 Recommendations:**
-
-1. **Session Playback & Replay** (P0, Medium complexity)
-   - Store session transcript to `.copilot/session-state/{guid}/transcript.json`
-   - New webview: click session → timeline + full log
-   - "Replay Session" command re-launches with saved parameters
-   - Hook into existing TerminalManager; no new patterns needed
-   - **Owned by:** Morty (webview) + Jaguar (SDK integration)
-   - **Unblocks:** Session metrics, learning workflows, auditing
-
-2. **Work Item ↔ Agent Assignment UI** (P1, Low complexity)
-   - Right-click work item → "Assign to Agent" (picker from discovery)
-   - Store assignment in `.squad/assignments.json`
-   - Badge work items; filter by agent; pre-select on launch
-   - No GitHub/ADO writes; purely local state
-   - **Owned by:** Morty or Jaguar
-   - **Unblocks:** Assignment tracking, agent load distribution
-
-3. **Quick Action Buttons for Review Tasks** (P2, Low-Medium complexity)
-   - Right-click PR → "Quick Actions" (Run Tests, Lint, Security Scan, etc.)
-   - Config: `.squad/.editless-actions.json`
-   - Launch agents with pre-written prompts; output to terminal
-   - **Owned by:** Morty
-   - **Unblocks:** CI/CD integration, no editor context switches
-
-**Sequencing:** Playback #1 → Assignment #2 → Quick Actions #3. Playback is prerequisite for metrics later.
-
-**Deferred (Runners-Up):**
-- #4 Session Grouping & Projects (defer 1 cycle; needs tree refactor)
-- #5 Session Metrics & Dashboard (defer 1-2 cycles; needs SQLite + charting)
-- #6 Multi-Repo Parallel Agent Orchestration (defer 2+ cycles; higher risk)
-
-**Timeline:** v0.2.0 by end of sprint (3 weeks)
-
----
-
-## Morty's Proposal: Terminal Themes, Action Replay, Session Templates
-
-**Quick Wins (Ready to ship v0.2.x):**
-
-1. **Terminal Color Themes** (Complexity: Small)
-   - Agent-specific terminal colors for visual distinction
-   - Start with `TerminalOptions.color` in `terminal-manager.ts`
-   - Use `agent-settings.ts` for persistence
-   - Default palette: red, blue, green, yellow, cyan, magenta
-   - Ships in <1 day; immediate UX value
-
-2. **Agent Action Replay** (Complexity: Medium)
-   - Re-run completed agent work with model/flag variations
-   - Extend `SessionContextResolver` to expose completed sessions
-   - Build on `copilot-cli-builder.ts` (replay = CLI rebuild + flag overrides)
-   - QuickPick for model/args variation UX
-
-**Ambitious Feature (High team impact):**
-
-3. **Session Templates** (Complexity: Medium)
-   - Pre-configured launch recipes with reusable context
-   - Lightweight discovery (scan `.github/session-templates/*.md`)
-   - YAML frontmatter (agent, model, cwd, flags) + markdown body
-   - Integrates with `copilot-cli-builder.ts` as flag source
-   - **Why:** Unlocks agent-as-template workflow (agents create/refine templates, users launch from templates)
-
-**Also Proposed (Future phases):**
-- #4 Terminal Session Snapshots (Complexity: Medium)
-- #5 Session Replay Mode (Complexity: Medium)
-- #6 Work Item Dependency Graph (Complexity: Medium)
-
-**Rationale:** Reviewed 28 source files to ensure feasibility. All extend existing TreeView, terminal, and CLI patterns. No breaking changes.
-
----
-
-## Summer's Proposal: Dashboard Widget, Attention Queue, Session Notes
-
-**Top 3 Recommendations for Immediate Implementation:**
-
-1. **Live Session Dashboard Widget** (Medium effort, immediate ROI)
-   - New **Status Widget** in the Agents panel
-   - Per-agent summary: active, waiting-for-input, idle, needs-review
-   - Color-coded: 🟢 active, 🟡 waiting, ⚫ idle
-   - Click agent → expand latest session or jump to terminal
-   - Reuse existing TerminalManager session state + new TreeItem renderer
-   - **Narrative:** "Your team's heartbeat in one glance"
-   - **User Impact:** High — immediate "who needs me" clarity
-
-2. **Attention Queue (Notifications Hub)** (Medium effort, scales to 10+ agents)
-   - New **Attention** sidebar panel above/below agents
-   - Three categories: Needs Input, Ready for Review, Blocked/Error
-   - Quick actions: focus session, skip, snooze (15 min)
-   - Notification badge in activity bar; auto-clear when resolved
-   - New TreeDataProvider; hook to TerminalManager events + GitHub API
-   - **Narrative:** "Never wonder which agent needs you"
-   - **User Impact:** High — reduces context thrashing
-
-3. **Session Notes & Decision Log** (Medium effort, enables team coordination)
-   - Right-click session → **Add Note**
-   - Notes stored in session metadata; persist to `~/.copilot/session-state/{guid}/notes.md`
-   - Notes appear as collapsible sub-item under session
-   - (Optional v0.3) Agents can read notes via CLI context
-   - **Narrative:** "Your agents talk to each other through time"
-   - **User Impact:** Medium now, High in v0.3 (enables knowledge transfer)
-
-**Implementation Roadmap:**
-- v0.2.0: Dashboard Widget + Quick Agent Swap (bonus, Low effort)
-- v0.2.1: Attention Queue
-- v0.2.2: Session Notes & Decision Log
-- v0.3+: Cross-Repo Issue Linking, Smart Work Item Routing
-
-**Also Proposed (Future):**
-- #5 Cross-Repo Issue Linking (High effort)
-- #6 Smart Work Item Routing (High effort, enables true async coordination)
-
-**Design Principles:** One place to see everything, minimal context switching, async-first, tree-native UX, transparent (not magical).
-
----
-
-## Cross-Agent Analysis
-
-| Aspect | Rick | Morty | Summer |
-|--------|------|-------|--------|
-| **Session Focus** | Playback/Replay ✓ | Templates, Replay ✓ | Dashboard, Notes ✓ |
-| **Work Items** | Assignment UI ✓ | — | Linking, Routing |
-| **Quick Wins** | — | Terminal Themes ✓ | Quick Agent Swap ✓ |
-| **Review/Coordination** | Quick Actions ✓ | — | Attention Queue ✓ |
-
-**Alignment:** Strong convergence on session features as v0.2.0 cornerstone.
-
----
-
-## Next Steps
-
-1. Squad review: discuss feature interactions and sequencing
-2. Casey prioritizes: which 3-5 features for v0.2.0 vs. v0.2.1+
-3. Tech lead assigns ownership (likely Morty for UI/terminal work)
-4. Meeseeks schedules testing and validation
-5. Write issues + implementation plans for top features
-
----
-
-## Related Decisions
-
-- `.squad/decisions.md` (2026-03-02): Worktree design decisions
-- Rick's orchestration log: `.squad/orchestration-log/2026-03-03T1601-rick.md`
-- Morty's orchestration log: `.squad/orchestration-log/2026-03-03T1601-morty.md`
-- Summer's orchestration log: `.squad/orchestration-log/2026-03-03T1601-summer.md`
-
----
-
-### 2026-03-02: Worktree Feature — Resolved Design Decisions
-
-**Date:** 2026-03-01  
-**Author:** Casey Irvine (via Copilot)  
-**Status:** Decided  
-**Issue Context:** #422 (clone to worktree), #442 (auto-discover worktrees), #348 (branch labels)
-
----
-
-## Decisions
-
-### 1. Workspace Membership: Hybrid with "already in workspace" awareness
-
-Worktrees are discovered via `git worktree list --porcelain`, NOT via workspace folder scan. A worktree is shown if its path is **under any workspace folder** (not just a top-level workspace folder). No need to "Add Folder to Workspace" separately if the worktree lives under an already-open parent folder.
-
-Setting `editless.discovery.worktreesOutsideWorkspace` (default: false) shows worktrees outside the workspace, rendered dimmed.
-
-### 2. Settings Inheritance: Field-by-field merge
-
-```
-Parent:    { model: "sonnet", additionalArgs: "--yolo", icon: "🔷" }
-Worktree:  { model: "gpt-5.2-codex" }
-Effective: { model: "gpt-5.2-codex", additionalArgs: "--yolo", icon: "🔷" }
-```
-
-Implementation: `{ ...parentSettings, ...worktreeOverrides }` — override one field, inherit the rest.
-
-### 3. Hiding: Cascading + Independent
-
-- Hiding a parent squad hides the parent AND all its worktrees (cascade down)
-- Individual worktrees CAN be hidden independently (without affecting parent or siblings)
-- Example: Hide 🌿 feat/old-experiment → only that worktree disappears
-- Example: Hide 🔷 EditLess (parent) → entire squad + all worktrees disappear
-- Implementation: `isHidden(id)` checks own ID first, then checks parent ID if it's a worktree
-
-### 4. Clone-to-worktree (#422): Create + auto-add to workspace, no auto-session
-
-Right-click → "Clone to Worktree" → prompt branch + path → `git worktree add` → auto-add folder to VS Code workspace. Does NOT auto-launch a session. Discovery handles tree appearance.
-
-### 5. Dedup: Worktree-aware dedup before standard dedup
-
-Detect worktree relationships via `git worktree list` BEFORE running dedup. Main checkout = parent, worktree copies = children with IDs `{parentId}:wt:{branch-kebab}`.
-
-### 6. Branch info source: DiscoveredItem.branch
-
-Terminal labels (#348) use `DiscoveredItem.branch` populated by `enrichWithWorktrees()` via `git worktree list`. Always available, no running session needed.
-
----
-
-### 2026-02-28: Debounce Pattern for TerminalManager Change Events
-
-**Author:** Morty  
-**Date:** 2026-02-28  
-**Issue:** #438  
-**PR:** #439
-
-## Decision
-
-All `TerminalManager._onDidChange.fire()` calls are now routed through a 50ms debounced `_scheduleChange()` method. The `treeView.reveal()` call in `onDidChangeActiveTerminal` is separately debounced at 100ms.
-
-## Rationale
-
-During active terminal sessions, rapid-fire events (shell execution start/end, session watcher callbacks, reconciliation) caused the tree to rebuild multiple times per frame. The `reveal()` call would race with these rebuilds, resulting in stale or missed selections. Batching events into a single 50ms window eliminates redundant rebuilds, and the 100ms reveal delay ensures the tree has settled before selection.
-
-## Impact
-
-- Any new code that needs to signal a tree change in TerminalManager should call `this._scheduleChange()` instead of `this._onDidChange.fire()`.
-- Tests asserting synchronous fire behavior must use `vi.useFakeTimers()` + `vi.advanceTimersByTime(50)`.
-
----
-
 ### 2026-03-01: v0.2 Branching Strategy — release/v0.1.x for Hotfixes, main for v0.2
 
 **Date:** 2026-03-01  
@@ -255,7 +15,8 @@ PR #427 (auto-discover refactor) merged to main on 2026-02-27. This is a signifi
 
 **Branching Model:**
 
-1. **elease/v0.1.x** — Long-lived hotfix branch for v0.1 releases
+1. **
+elease/v0.1.x** — Long-lived hotfix branch for v0.1 releases
    - Branched from 0.1.2 tag
    - Receives v0.1.3, v0.1.4, etc. bug fixes
    - Tagged as 0.1.3, 0.1.4, etc.
@@ -265,8 +26,10 @@ PR #427 (auto-discover refactor) merged to main on 2026-02-27. This is a signifi
    - Eventually tagged as 0.2.0 when ready
 
 3. **Hotfix flow:**
-   - PR targets elease/v0.1.x (e.g., PR #439)
-   - After merge, tag 0.1.3 on elease/v0.1.x
+   - PR targets 
+elease/v0.1.x (e.g., PR #439)
+   - After merge, tag 0.1.3 on 
+elease/v0.1.x
    - Cherry-pick to main if fix is still relevant (not always needed if v0.2 changes eliminate the bug)
 
 4. **Feature flow:**
@@ -275,7 +38,8 @@ PR #427 (auto-discover refactor) merged to main on 2026-02-27. This is a signifi
 
 ## Rationale
 
-**Why elease/v0.1.x instead of keeping main stable?**
+**Why 
+elease/v0.1.x instead of keeping main stable?**
 - Main already contains v0.2 changes (PR #427 merged). Reverting would be messy.
 - Release branches are the standard Git-flow pattern for LTS maintenance.
 
@@ -299,12 +63,15 @@ git push -u origin release/v0.1.x
 \\\
 
 **Update PR #439:**
-- Change base branch from master to elease/v0.1.x
-- After merge, tag 0.1.3 on elease/v0.1.x
+- Change base branch from master to 
+elease/v0.1.x
+- After merge, tag 0.1.3 on 
+elease/v0.1.x
 - Cherry-pick to main if needed: git cherry-pick <commit-sha>
 
 **Tag convention:**
-- v0.1.x releases: 0.1.3, 0.1.4, ... (on elease/v0.1.x)
+- v0.1.x releases: 0.1.3, 0.1.4, ... (on 
+elease/v0.1.x)
 - v0.2 releases: 0.2.0-beta.1, 0.2.0, ... (on main)
 
 ## Two-Sentence Summary
@@ -313,15 +80,19 @@ git push -u origin release/v0.1.x
 
 ## Open Questions
 
-1. Should we update CI workflows to run on elease/v0.1.x pushes?
+1. Should we update CI workflows to run on 
+elease/v0.1.x pushes?
 2. Do we want automated cherry-pick reminders (e.g., a GitHub Action that comments on PRs merged to release/v0.1.x)?
-3. Should we protect the elease/v0.1.x branch with the same rules as main?
+3. Should we protect the 
+elease/v0.1.x branch with the same rules as main?
 
 ## Files Modified (if approved)
 
 - .squad/decisions.md — append this decision
-- .github/workflows/ci.yml — add elease/v0.1.x to branch triggers (if we want CI on hotfix branch)
-- PR #439 — update base branch to elease/v0.1.x
+- .github/workflows/ci.yml — add 
+elease/v0.1.x to branch triggers (if we want CI on hotfix branch)
+- PR #439 — update base branch to 
+elease/v0.1.x
 
 ---
 ### 2026-03-01: v0.2 Milestone Plan — Worktree Integration
@@ -545,7 +316,9 @@ After v0.2 ships, recommend:
 4. Revisit #43 (visual docs) after worktree features ship — better to document working UX
 
 ---
-### 2026-02-26: Encapsulate Settings Persistence
+
+
+### 2026-02-26: Encapsulate Settings Persistence
 
 **Date:** 2026-02-26  
 **Author:** Copilot (as Rick)  
@@ -573,7 +346,8 @@ After v0.2 ships, recommend:
 
 ---
 
-
+
+
 ### 2026-02-26: Eliminate agent-registry.json — Auto-Discover Refactor
 
 **Date:** 2026-02-26  
@@ -6283,13 +6057,15 @@ When launching or relaunching terminals with a command, always call 	erminal.sen
 
 ## Context
 
-The previous elaunchSession() flow called show() then sendText(). On slow machines or under load, the shell process hadn't fully started by the time sendText() fired, causing the resume command to be silently dropped. Users clicked "Resume" and nothing happened — a P0 bug.
+The previous 
+elaunchSession() flow called show() then sendText(). On slow machines or under load, the shell process hadn't fully started by the time sendText() fired, causing the resume command to be silently dropped. Users clicked "Resume" and nothing happened — a P0 bug.
 
 ## Impact
 
 - All terminal launch paths in 	erminal-manager.ts should follow this pattern
 - launchTerminal() already had the correct order (sendText before show at lines 105-106)
-- elaunchSession() was the only violator — now fixed
+- 
+elaunchSession() was the only violator — now fixed
 - Future terminal launch code must maintain this ordering
 
 ---
@@ -8395,7 +8171,9 @@ Existing 18 Phase 2 tests are well-structured but miss critical session watcher 
 - P0: launchTerminal calls watchSession with pre-generated UUID
 - P0: Watcher cleanup on terminal close
 - P0: dispose() clears all session watchers  
-- P0: Watcher wiring in econnectSession and elaunchSession
+- P0: Watcher wiring in 
+econnectSession and 
+elaunchSession
 - P1: Custom config.launchCommand path with --resume UUID append
 - P1: Malformed JSON graceful degradation in watchSession
 
@@ -8468,7 +8246,8 @@ Note: IDLE_THRESHOLD_MS and STALE_THRESHOLD_MS removed in PR #354.
 **Approved:** UUID pre-generation, TerminalOptions, focusTerminal string overload, fs.watch lifecycle, buildCopilotCommand integration
 
 **Advisory (non-blocking):**
-1. Soft validation in elaunchSession — shows error but continues; consider early return
+1. Soft validation in 
+elaunchSession — shows error but continues; consider early return
 2. Unbounded retry in watchSession.setupWatch() — retries 1s forever; recommend max ~30 retries or exponential backoff
 3. watchSessionDir is dead code (not called from production; acceptable as Phase 3 forward-looking API)
 
@@ -8486,7 +8265,8 @@ Three distinct empty states implemented:
 2. **All items hidden:** $(eye-closed) "All agents hidden" (power-user message, never on first launch)
 3. **Squad with zero sessions:** $(info) "No active sessions"
 
-**Icon conventions:** ocket = welcome, dd = create, search = discover, info = hint, ye-closed = hidden (power user)
+**Icon conventions:** 
+ocket = welcome, dd = create, search = discover, info = hint, ye-closed = hidden (power user)
 
 **Rationale:** First-time user sees clear, clickable actions; returning users see appropriate context for their state.
 
@@ -10954,3 +10734,23 @@ This is a UX proposal — implementation is Morty's domain. Suggested phasing:
 
 Worktree copies of a squad nest under their parent with a `$(git-branch)` icon and branch name, keeping the sidebar clean while making every worktree launchable. When the main checkout is absent, the worktree promotes itself to top level with a "worktree of {branch}" annotation so the user always knows what they're looking at.
 
+
+# Debounce Pattern for TerminalManager Change Events
+
+**Author:** Morty  
+**Date:** 2026-02-28  
+**Issue:** #438  
+**PR:** #439
+
+## Decision
+
+All `TerminalManager._onDidChange.fire()` calls are now routed through a 50ms debounced `_scheduleChange()` method. The `treeView.reveal()` call in `onDidChangeActiveTerminal` is separately debounced at 100ms.
+
+## Rationale
+
+During active terminal sessions, rapid-fire events (shell execution start/end, session watcher callbacks, reconciliation) caused the tree to rebuild multiple times per frame. The `reveal()` call would race with these rebuilds, resulting in stale or missed selections. Batching events into a single 50ms window eliminates redundant rebuilds, and the 100ms reveal delay ensures the tree has settled before selection.
+
+## Impact
+
+- Any new code that needs to signal a tree change in TerminalManager should call `this._scheduleChange()` instead of `this._onDidChange.fire()`.
+- Tests asserting synchronous fire behavior must use `vi.useFakeTimers()` + `vi.advanceTimersByTime(50)`.
