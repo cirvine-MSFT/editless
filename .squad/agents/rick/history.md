@@ -11,6 +11,32 @@
 
 ## Learnings
 
+### 2026-03-01: Feature Ideation — Next Release Cycle
+
+**Task:** Propose 6 cool but practical new EditLess features.
+
+**Outcome:** Proposed 6 features; prioritized top 3 for next cycle.
+
+**Key Insights:**
+
+1. **EditLess core strengths:** Session tracking (persistent terminal state), agent discovery (auto-scan workspace + personal agents), work integration (GitHub + ADO pull-through). Roadmap should extend these, not orthogonal features.
+
+2. **Session lifecycle gap:** Sessions disappear after terminal closes. No audit trail, replay, or metrics. Session playback (feature #1) bridges this gap and unblocks metrics + replay workflows downstream.
+
+3. **Planning ↔ Execution loop broken:** EditLess shows work items but can't claim/assign them to agents. Work Item Assignment UI (feature #2) closes this loop with minimal complexity — just local JSON state, no GitHub writes needed.
+
+4. **Review workflow still tied to editor:** PRs visible in sidebar but "run tests/lint" still requires jumping to terminal. Quick Action Buttons (feature #6) keep users in sidebar for review tasks.
+
+5. **Scope discipline:** Multi-repo parallel orchestration and session metrics are valuable but higher-risk. Defer until session stability proven and customer demand emerges. Session grouping (feature #3) is viable but wait — tree provider refactoring should follow, not precede, session playback.
+
+6. **EditLess philosophy alignment:** Core value is *unified view + no context switching*. Every proposed feature should answer: "Does this eliminate a reason to leave the sidebar?" If yes, prioritize.
+
+**Priority 1: Session Playback & Replay** — unblocks metrics, auditability, learning; medium complexity; uses existing infrastructure.
+**Priority 2: Work Item Assignment UI** — closes planning loop; low complexity; high perceived value.
+**Priority 3: Quick Action Buttons** — eliminates review context switch; low-medium complexity; high-frequency use case.
+
+---
+
 ### 2026-02-26: Auto-Discover Refactor Architecture Review (#399)
 
 **Reviewed:** `agent-settings.ts`, `editless-tree.ts`, `extension.ts`, `unified-discovery.ts`, `discovery.ts`, `status-bar.ts`, `package.json`
@@ -615,3 +641,22 @@ Decision document: .squad/decisions/inbox/rick-v013-pr-reviews.md
 - Branch info is always available from discovery, not session context
 - Clone action is deliberately lightweight (no auto-launch)
 - Implementation order: #442 → #422 and #348 (parallel after #442)
+
+### 2026-03-02: PR #460 Review — Resume Session additionalArgs (#458)
+
+**Verdict:** APPROVE with comments
+
+**What it does:** When resuming a Copilot CLI session via `editless.resumeSession`, the command now looks up the original agent's `additionalArgs` from `AgentSettingsManager` and includes them in the `--resume` command. Lookup scans live + orphaned terminals for matching `agentSessionId`, then pulls `squadId` to fetch current settings.
+
+**Architecture assessment:**
+1. **DI is clean** — `agentSettings` added to `SessionCommandDeps` follows existing injection pattern.
+2. **Lookup strategy is sound** — scanning `getAllTerminals()` + `getOrphanedSessions()` covers both live sessions and sessions that survived a VS Code reboot. Silent fallback to `[]` when no match exists is correct degraded behavior.
+3. **`AgentSettingsManager` is the right source** — it's the canonical store for per-agent config. Using current settings (vs. frozen-at-launch) is the right call for the "resume from history" flow.
+
+**Concerns noted (non-blocking):**
+1. **`command` override not forwarded** — `AgentSettings` has a `command` field for custom CLI binaries. If an agent uses a non-default binary, resume will call `copilot` instead. Should forward `settings?.command` to `buildCopilotCommand()`. Filed as follow-up concern.
+2. **Global `editless.cli.additionalArgs` not merged** — `buildLaunchCommandForConfig` merges per-agent + global args on initial launch. This resume path only gets per-agent. Minor inconsistency.
+3. **Two resume paths have different semantics** — `terminalManager.relaunchSession` uses original launch command (frozen at creation). This path uses current settings. Both are valid but worth documenting the intent.
+4. **No tests** — `session-commands.ts` has no test file. Pre-existing gap, not introduced by this PR.
+
+**No blocking issues found.** The core change is correct and minimal.
