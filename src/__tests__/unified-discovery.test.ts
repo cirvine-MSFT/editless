@@ -577,3 +577,180 @@ describe('toAgentTeamConfig', () => {
     expect(cfg.additionalArgs).toBe('--yolo');
   });
 });
+
+// ---------------------------------------------------------------------------
+// enrichWithWorktrees
+// ---------------------------------------------------------------------------
+
+// We need to mock the worktree-discovery functions used by enrichWithWorktrees
+vi.mock('../worktree-discovery', () => ({
+  isGitRepo: vi.fn(() => false),
+  discoverWorktrees: vi.fn(() => []),
+}));
+
+import { enrichWithWorktrees } from '../unified-discovery';
+import { isGitRepo, discoverWorktrees } from '../worktree-discovery';
+
+const mockIsGitRepo = vi.mocked(isGitRepo);
+const mockDiscoverWorktrees = vi.mocked(discoverWorktrees);
+
+describe('enrichWithWorktrees', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsGitRepo.mockReturnValue(false);
+    mockDiscoverWorktrees.mockReturnValue([]);
+  });
+
+  it('returns items unchanged when no git repos', () => {
+    const items: DiscoveredItem[] = [
+      { id: 'my-agent', name: 'My Agent', type: 'agent', source: 'workspace', path: '/ws/agent.md' },
+    ];
+
+    const result = enrichWithWorktrees(items, [wsFolder('/ws')]);
+    expect(result).toEqual(items);
+  });
+
+  it('sets branch and isMainWorktree on parent for main worktree', () => {
+    const items: DiscoveredItem[] = [
+      { id: 'my-squad', name: 'My Squad', type: 'squad', source: 'workspace', path: '/ws/my-squad' },
+    ];
+    mockIsGitRepo.mockReturnValue(true);
+    mockDiscoverWorktrees.mockReturnValue([
+      { path: '/ws/my-squad', branch: 'main', isMain: true, commitHash: 'abc123' },
+      { path: '/ws/my-squad-wt/feat', branch: 'feat/auth', isMain: false, commitHash: 'def456' },
+    ]);
+
+    const result = enrichWithWorktrees(items, [wsFolder('/ws')]);
+
+    const parent = result.find(i => i.id === 'my-squad');
+    expect(parent?.branch).toBe('main');
+    expect(parent?.isMainWorktree).toBe(true);
+  });
+
+  it('creates child items for non-main worktrees inside workspace', () => {
+    const items: DiscoveredItem[] = [
+      { id: 'my-squad', name: 'My Squad', type: 'squad', source: 'workspace', path: '/ws/my-squad', universe: 'dev' },
+    ];
+    mockIsGitRepo.mockReturnValue(true);
+    mockDiscoverWorktrees.mockReturnValue([
+      { path: '/ws/my-squad', branch: 'main', isMain: true, commitHash: 'abc123' },
+      { path: '/ws/my-squad-wt/feat', branch: 'feat/auth', isMain: false, commitHash: 'def456' },
+    ]);
+
+    const result = enrichWithWorktrees(items, [wsFolder('/ws')]);
+
+    const child = result.find(i => i.parentId === 'my-squad');
+    expect(child).toBeDefined();
+    expect(child!.id).toBe('my-squad:wt:feat/auth');
+    expect(child!.name).toBe('feat/auth');
+    expect(child!.branch).toBe('feat/auth');
+    expect(child!.isMainWorktree).toBe(false);
+    expect(child!.type).toBe('squad');
+    expect(child!.source).toBe('workspace');
+    expect(child!.universe).toBe('dev');
+    expect(child!.path).toBe('/ws/my-squad-wt/feat');
+  });
+
+  it('excludes worktrees outside workspace when includeOutsideWorkspace is false', () => {
+    const items: DiscoveredItem[] = [
+      { id: 'my-squad', name: 'My Squad', type: 'squad', source: 'workspace', path: '/ws/my-squad' },
+    ];
+    mockIsGitRepo.mockReturnValue(true);
+    mockDiscoverWorktrees.mockReturnValue([
+      { path: '/ws/my-squad', branch: 'main', isMain: true, commitHash: 'abc123' },
+      { path: '/outside/feat', branch: 'feat/outside', isMain: false, commitHash: 'def456' },
+    ]);
+
+    const result = enrichWithWorktrees(items, [wsFolder('/ws')], false);
+
+    expect(result.find(i => i.parentId === 'my-squad')).toBeUndefined();
+  });
+
+  it('includes worktrees outside workspace when includeOutsideWorkspace is true', () => {
+    const items: DiscoveredItem[] = [
+      { id: 'my-squad', name: 'My Squad', type: 'squad', source: 'workspace', path: '/ws/my-squad' },
+    ];
+    mockIsGitRepo.mockReturnValue(true);
+    mockDiscoverWorktrees.mockReturnValue([
+      { path: '/ws/my-squad', branch: 'main', isMain: true, commitHash: 'abc123' },
+      { path: '/outside/feat', branch: 'feat/outside', isMain: false, commitHash: 'def456' },
+    ]);
+
+    const result = enrichWithWorktrees(items, [wsFolder('/ws')], true);
+
+    const child = result.find(i => i.parentId === 'my-squad');
+    expect(child).toBeDefined();
+    expect(child!.branch).toBe('feat/outside');
+  });
+
+  it('deduplicates: converts existing discovered item to a child', () => {
+    const items: DiscoveredItem[] = [
+      { id: 'my-squad', name: 'My Squad', type: 'squad', source: 'workspace', path: '/ws/my-squad' },
+      { id: 'feat-squad', name: 'Feat Squad', type: 'squad', source: 'workspace', path: '/ws/feat-squad' },
+    ];
+    mockIsGitRepo.mockImplementation((p: string) => p === '/ws/my-squad');
+    mockDiscoverWorktrees.mockReturnValue([
+      { path: '/ws/my-squad', branch: 'main', isMain: true, commitHash: 'abc123' },
+      { path: '/ws/feat-squad', branch: 'feat/auth', isMain: false, commitHash: 'def456' },
+    ]);
+
+    const result = enrichWithWorktrees(items, [wsFolder('/ws')]);
+
+    // feat-squad should be converted to a child, not duplicated
+    const featItems = result.filter(i => i.path.replace(/\\/g, '/').toLowerCase() === '/ws/feat-squad');
+    expect(featItems).toHaveLength(1);
+    expect(featItems[0].parentId).toBe('my-squad');
+    expect(featItems[0].branch).toBe('feat/auth');
+    expect(featItems[0].isMainWorktree).toBe(false);
+  });
+
+  it('handles detached HEAD worktree (empty branch)', () => {
+    const items: DiscoveredItem[] = [
+      { id: 'my-squad', name: 'My Squad', type: 'squad', source: 'workspace', path: '/ws/my-squad' },
+    ];
+    mockIsGitRepo.mockReturnValue(true);
+    mockDiscoverWorktrees.mockReturnValue([
+      { path: '/ws/my-squad', branch: 'main', isMain: true, commitHash: 'abc123' },
+      { path: '/ws/my-squad-wt/detached', branch: '', isMain: false, commitHash: 'deadbeef' },
+    ]);
+
+    const result = enrichWithWorktrees(items, [wsFolder('/ws')]);
+
+    const child = result.find(i => i.parentId === 'my-squad');
+    expect(child).toBeDefined();
+    // For detached, uses first 8 chars of commit hash as slug
+    expect(child!.id).toBe('my-squad:wt:deadbeef');
+    expect(child!.name).toBe('deadbeef');
+    expect(child!.branch).toBe('');
+  });
+
+  it('does not process items that already have a parentId', () => {
+    const items: DiscoveredItem[] = [
+      { id: 'parent', name: 'Parent', type: 'squad', source: 'workspace', path: '/ws/parent' },
+      { id: 'child', name: 'Child', type: 'squad', source: 'workspace', path: '/ws/child', parentId: 'parent' },
+    ];
+    mockIsGitRepo.mockReturnValue(true);
+    mockDiscoverWorktrees.mockReturnValue([]);
+
+    enrichWithWorktrees(items, [wsFolder('/ws')]);
+
+    // discoverWorktrees should only be called for 'parent', not 'child'
+    expect(mockDiscoverWorktrees).toHaveBeenCalledTimes(1);
+    expect(mockDiscoverWorktrees).toHaveBeenCalledWith('/ws/parent');
+  });
+
+  it('does not modify items array when only main worktree exists', () => {
+    const items: DiscoveredItem[] = [
+      { id: 'my-squad', name: 'My Squad', type: 'squad', source: 'workspace', path: '/ws/my-squad' },
+    ];
+    mockIsGitRepo.mockReturnValue(true);
+    mockDiscoverWorktrees.mockReturnValue([
+      { path: '/ws/my-squad', branch: 'main', isMain: true, commitHash: 'abc123' },
+    ]);
+
+    const result = enrichWithWorktrees(items, [wsFolder('/ws')]);
+
+    // Only main worktree → no children added, just returns original length
+    expect(result).toHaveLength(1);
+  });
+});

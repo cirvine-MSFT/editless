@@ -11,7 +11,7 @@ import { TerminalManager, EDITLESS_INSTRUCTIONS_DIR } from './terminal-manager';
 import { SessionLabelManager } from './session-labels';
 
 
-import { discoverAll, type DiscoveredItem } from './unified-discovery';
+import { discoverAll, enrichWithWorktrees, type DiscoveredItem } from './unified-discovery';
 import type { AgentTeamConfig } from './types';
 import { SquadWatcher } from './watcher';
 import { EditlessStatusBar } from './status-bar';
@@ -253,13 +253,17 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
   );
 
   // --- Unified discovery — agents + squads in one pass (#317, #318) ----------
-  let discoveredItems = discoverAll(vscode.workspace.workspaceFolders ?? []);
+  const wsFolders = vscode.workspace.workspaceFolders ?? [];
+  const includeOutsideWs = vscode.workspace.getConfiguration('editless').get<boolean>('discovery.worktreesOutsideWorkspace', false);
+  let discoveredItems = enrichWithWorktrees(discoverAll(wsFolders), wsFolders, includeOutsideWs);
   treeProvider.setDiscoveredItems(discoveredItems);
   hydrateSettings(discoveredItems, agentSettings);
 
   /** Re-run unified discovery and update tree. */
   function refreshDiscovery(): void {
-    discoveredItems = discoverAll(vscode.workspace.workspaceFolders ?? []);
+    const folders = vscode.workspace.workspaceFolders ?? [];
+    const outsideWs = vscode.workspace.getConfiguration('editless').get<boolean>('discovery.worktreesOutsideWorkspace', false);
+    discoveredItems = enrichWithWorktrees(discoverAll(folders), folders, outsideWs);
     treeProvider.setDiscoveredItems(discoveredItems);
     statusBar.setDiscoveredItems(discoveredItems);
     hydrateSettings(discoveredItems, agentSettings);
@@ -336,6 +340,16 @@ export function activate(context: vscode.ExtensionContext): { terminalManager: T
       });
       context.subscriptions.push(teamMdWatcher);
     }
+  }
+
+  // --- Worktree directory watcher — detect new/removed worktrees -----------
+  for (const folder of (vscode.workspace.workspaceFolders ?? [])) {
+    const wtPattern = new vscode.RelativePattern(folder, '.git/worktrees/*');
+    const wtWatcher = vscode.workspace.createFileSystemWatcher(wtPattern);
+    const onWtChange = (): void => { debouncedRefreshDiscovery(); };
+    wtWatcher.onDidCreate(onWtChange);
+    wtWatcher.onDidDelete(onWtChange);
+    context.subscriptions.push(wtWatcher);
   }
 
   // --- Settings file watcher for cross-window sync -------------------------

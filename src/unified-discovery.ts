@@ -3,6 +3,7 @@ import * as path from 'path';
 import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir } from './agent-discovery';
 import { discoverAgentTeams, parseTeamMd, toKebabCase, readUniverseFromRegistry } from './discovery';
 import { resolveTeamMd, resolveTeamDir } from './team-dir';
+import { isGitRepo, discoverWorktrees } from './worktree-discovery';
 import type { AgentTeamConfig, WorkspaceFolderLike } from './types';
 import type { AgentSettings } from './agent-settings';
 
@@ -16,6 +17,12 @@ export interface DiscoveredItem {
   description?: string;
   /** Squad-specific: universe parsed from team.md */
   universe?: string;
+  /** Git branch (from worktree discovery) */
+  branch?: string;
+  /** ID of parent discovered item (for worktree children) */
+  parentId?: string;
+  /** True for primary checkout */
+  isMainWorktree?: boolean;
 }
 
 /**
@@ -163,4 +170,91 @@ export function toAgentTeamConfig(disc: DiscoveredItem, settings?: AgentSettings
     additionalArgs: settings?.additionalArgs || undefined,
     command: settings?.command || undefined,
   };
+}
+
+/** Shorten a branch ref for display (strip common prefixes). */
+function shortenBranch(branch: string): string {
+  return branch
+    .replace(/^refs\/heads\//, '')
+    .replace(/^refs\/remotes\/origin\//, '');
+}
+
+/**
+ * Post-discovery enrichment: for each discovered item that is a git repo,
+ * discover its worktrees and append children to the items array.
+ */
+export function enrichWithWorktrees(
+  items: DiscoveredItem[],
+  workspaceFolders: readonly WorkspaceFolderLike[],
+  includeOutsideWorkspace?: boolean,
+): DiscoveredItem[] {
+  const result = [...items];
+  const existingPaths = new Map<string, number>();
+  for (let i = 0; i < result.length; i++) {
+    existingPaths.set(normPath(result[i].path), i);
+  }
+
+  const folderPaths = workspaceFolders.map(f => normPath(f.uri.fsPath));
+
+  for (const item of items) {
+    // Only enrich items that are at root level (no parentId) and are git repos
+    if (item.parentId) continue;
+    if (!isGitRepo(item.path)) continue;
+
+    const worktrees = discoverWorktrees(item.path);
+    if (worktrees.length <= 1) continue;
+
+    for (const wt of worktrees) {
+      const wtNorm = normPath(wt.path);
+
+      if (wt.isMain) {
+        // Enrich the parent item with branch info
+        item.branch = wt.branch;
+        item.isMainWorktree = true;
+        continue;
+      }
+
+      // Check if worktree is inside any workspace folder
+      if (!includeOutsideWorkspace && !isInsideAny(wtNorm, folderPaths)) {
+        continue;
+      }
+
+      const branchSlug = wt.branch || wt.commitHash.slice(0, 8);
+      const childId = `${item.id}:wt:${toKebabCase(branchSlug)}`;
+
+      // DEDUP: if worktree path matches an already-discovered item, convert it to a child
+      const existingIdx = existingPaths.get(wtNorm);
+      if (existingIdx !== undefined) {
+        const existing = result[existingIdx];
+        existing.parentId = item.id;
+        existing.branch = wt.branch;
+        existing.isMainWorktree = false;
+        continue;
+      }
+
+      const child: DiscoveredItem = {
+        id: childId,
+        name: shortenBranch(branchSlug),
+        type: item.type,
+        source: item.source,
+        path: wt.path,
+        parentId: item.id,
+        branch: wt.branch,
+        isMainWorktree: false,
+        universe: item.universe,
+      };
+      result.push(child);
+      existingPaths.set(wtNorm, result.length - 1);
+    }
+  }
+
+  return result;
+}
+
+function normPath(p: string): string {
+  return p.replace(/\\/g, '/').toLowerCase();
+}
+
+function isInsideAny(testPath: string, folderPaths: string[]): boolean {
+  return folderPaths.some(fp => testPath === fp || testPath.startsWith(fp + '/'));
 }
