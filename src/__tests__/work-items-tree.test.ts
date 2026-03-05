@@ -1014,15 +1014,23 @@ describe('WorkItemsTreeProvider — LevelFilter lifecycle', () => {
   });
 
   it.each([
-    { action: 'setting', method: 'setLevelFilter', setup: (p: any, id: string) => p.setLevelFilter(id, { labels: ['bug'] }), expectedCalls: 1 },
-    { action: 'clearing', method: 'clearLevelFilter', setup: (p: any, id: string) => { p.setLevelFilter(id, { labels: ['bug'] }); p.clearLevelFilter(id); }, expectedCalls: 2 },
-    { action: 'clearing all', method: 'clearAllLevelFilters', setup: (p: any, id: string) => { p.setLevelFilter(id, { labels: ['bug'] }); p.clearAllLevelFilters(); }, expectedCalls: 2 },
-  ])('should fire tree data change when $action level filter', ({ setup, expectedCalls }) => {
+    { action: 'setting', perform: (p: any, id: string) => p.setLevelFilter(id, { labels: ['bug'] }) },
+    { action: 'clearing', perform: (p: any, id: string) => p.clearLevelFilter(id) },
+    { action: 'clearing all', perform: (p: any, _id: string) => p.clearAllLevelFilters() },
+  ])('should fire tree data change when $action level filter', ({ action, perform }) => {
     const provider = new WorkItemsTreeProvider();
+    const id = 'github:owner/repo:f0';
+
+    // Pre-populate a filter so clear/clearAll have something to remove
+    if (action !== 'setting') {
+      provider.setLevelFilter(id, { labels: ['bug'] });
+    }
+
+    // Register listener AFTER setup so we isolate only the action under test
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
-    setup(provider, 'github:owner/repo:f0');
-    expect(listener).toHaveBeenCalledTimes(expectedCalls);
+    perform(provider, id);
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });
 

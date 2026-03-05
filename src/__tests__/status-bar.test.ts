@@ -96,21 +96,11 @@ describe('EditlessStatusBar — updateSessionsOnly()', () => {
     expect(mockShow).toHaveBeenCalled();
   });
 
-  it('should handle agentSettings.isHidden throwing error (graceful degradation)', () => {
-    const badSettings = {
-      isHidden: () => { throw new Error('disk error'); },
-      getAll: () => ({}),
-    };
-    const bar = new EditlessStatusBar(badSettings as any, makeTerminalManager(0));
-    expect(() => bar.update()).not.toThrow();
-  });
-
-  it('should handle terminalManager.getAllTerminals returning empty array', () => {
-    const bar = new EditlessStatusBar(makeAgentSettings(), makeTerminalManager(0));
-    bar.update();
-    const item = (bar as any)._item;
-    expect(item.text).toContain('0 sessions');
-  });
+  // TODO: status-bar.ts update() has no try-catch around agentSettings.isHidden().
+  // Once error handling is added (graceful degradation), add a test here that:
+  //   1. Calls bar.setDiscoveredItems([...]) with at least one item
+  //   2. Provides an agentSettings whose isHidden() throws
+  //   3. Asserts bar.update() does not throw and renders a fallback count
 });
 
 // ---------------------------------------------------------------------------

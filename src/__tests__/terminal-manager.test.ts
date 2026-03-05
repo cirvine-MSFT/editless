@@ -681,10 +681,8 @@ describe('TerminalManager', () => {
         expect.objectContaining({ name: '🧪 Test Squad #1' }),
       );
       
-      // Validate the name pattern logic is correct
       const call = vi.mocked(mockCreateTerminal).mock.calls[0];
       expect(call[0].name).toBe('🧪 Test Squad #1');
-      expect(call[0].name).toMatch(/^🧪 Test Squad #\d+$/);
     });
 
     it('should assign correct squad association from the orphaned entry', () => {
@@ -2641,11 +2639,12 @@ describe('TerminalManager', () => {
       const liveTerminal = makeMockTerminal('completely-different');
       mockTerminals.push(liveTerminal);
 
-      // Manually add the entry to storage and trigger reconciliation
-      // This simulates the scenario where a terminal appears after startup
+      // Manually add the entry to storage and trigger reconciliation.
+      // This test exercises the persistence module's reconcile path rather than
+      // the internal _tryMatchTerminals() directly. Direct unit tests for the
+      // matching algorithm itself belong in terminal-persistence.test.ts.
       ctx.workspaceState.update('editless.terminalSessions', [entry]);
       
-      // Use reflection to access the persistence module and trigger matching
       const persistence = (mgr as any)._persistence;
       const matchContext = (mgr as any)._getMatchContext();
       const disposables = persistence.reconcile(matchContext, (mgr as any)._sessionResolver);
