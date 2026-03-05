@@ -1,9 +1,5 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
-import * as os from 'os';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { EditlessTreeItem, DEFAULT_COPILOT_CLI_ID, buildCopilotCLIConfig } from '../editless-tree';
 import type { EditlessTreeProvider } from '../editless-tree';
 import type { AgentSettingsManager } from '../agent-settings';
@@ -12,9 +8,11 @@ import type { SessionLabelManager } from '../session-labels';
 import type { DiscoveredItem } from '../unified-discovery';
 import { toAgentTeamConfig } from '../unified-discovery';
 import { openSquadUiDashboard } from '../squad-ui-integration';
-import type { AgentTeamConfig } from '../types';
+import { createAgent } from './agent-file-manager';
+import { createWorktree } from './git-worktree-service';
 
-const execFileAsync = promisify(execFile);
+// Re-export for backward compatibility (consumed by clone-to-worktree tests)
+export { isValidBranchName, defaultWorktreePath } from './git-worktree-service';
 
 export interface AgentCommandDeps {
   agentSettings: AgentSettingsManager;
@@ -25,21 +23,6 @@ export interface AgentCommandDeps {
   refreshDiscovery: () => void;
   ensureWorkspaceFolder: (dirPath: string) => void;
   output: vscode.OutputChannel;
-}
-
-/** Validate a git branch name (no spaces, basic ref safety). Exported for testing. */
-export function isValidBranchName(name: string): boolean {
-  if (!name || /\s/.test(name)) return false;
-  if (/[~^:?*\[\\]/.test(name)) return false;
-  if (name.includes('..') || name.startsWith('/') || name.endsWith('/') || name.endsWith('.lock') || name.endsWith('.')) return false;
-  return true;
-}
-
-/** Compute the default worktree path. Exported for testing. */
-export function defaultWorktreePath(repoPath: string, branch: string): string {
-  const repoName = path.basename(repoPath);
-  const slug = branch.replace(/\//g, '-');
-  return path.join(path.dirname(repoPath), `${repoName}.wt`, slug);
 }
 
 const modelChoices = [
@@ -320,85 +303,9 @@ export function register(context: vscode.ExtensionContext, deps: AgentCommandDep
 
   // Add Agent — pick personal vs workspace location, then create
   context.subscriptions.push(
-    vscode.commands.registerCommand('editless.addAgent', async () => {
-      const name = await vscode.window.showInputBox({
-        prompt: 'Agent name',
-        placeHolder: 'my-agent',
-        validateInput: v => {
-          if (!v.trim()) return 'Name cannot be empty';
-          if (!/^[a-zA-Z0-9_-]+$/.test(v.trim())) return 'Use only letters, numbers, hyphens, underscores';
-          return undefined;
-        },
-      });
-      if (!name) return;
-
-      type LocationValue = 'personal' | 'project';
-      const locationItems: { label: string; description: string; value: LocationValue }[] = [
-        { label: '$(account) Personal agent', description: '~/.copilot/agents/', value: 'personal' },
-        { label: '$(root-folder) Project agent', description: '.github/agents/ in a project directory', value: 'project' },
-      ];
-      const locationPick = await vscode.window.showQuickPick(locationItems, {
-        placeHolder: 'Where should the agent live?',
-      });
-      if (!locationPick) return;
-
-      let agentsDir: string;
-      let projectRoot: string | undefined;
-
-      if (locationPick.value === 'personal') {
-        agentsDir = path.join(os.homedir(), '.copilot', 'agents');
-      } else {
-        const picked = await vscode.window.showOpenDialog({
-          canSelectFolders: true,
-          canSelectFiles: false,
-          canSelectMany: false,
-          openLabel: 'Select project root',
-          title: 'Select the project root directory',
-        });
-        if (!picked || picked.length === 0) return;
-        projectRoot = picked[0].fsPath;
-        agentsDir = path.join(projectRoot, '.github', 'agents');
-      }
-
-      await vscode.workspace.fs.createDirectory(vscode.Uri.file(agentsDir));
-
-      const filePath = path.join(agentsDir, `${name.trim()}.agent.md`);
-      if (fs.existsSync(filePath)) {
-        vscode.window.showWarningMessage(`Agent file already exists: ${filePath}`);
-        return;
-      }
-
-      const template = [
-        '---',
-        `description: "${name.trim()} agent"`,
-        '---',
-        '',
-        `# ${name.trim()}`,
-        '',
-        '> Describe what this agent does',
-        '',
-        '## Instructions',
-        '',
-        'Add your agent instructions here.',
-        '',
-      ].join('\n');
-
-      try {
-        fs.writeFileSync(filePath, template, 'utf-8');
-      } catch (err) {
-        vscode.window.showErrorMessage(`Failed to create agent file: ${err instanceof Error ? err.message : err}`);
-        return;
-      }
-      const doc = await vscode.workspace.openTextDocument(filePath);
-      await vscode.window.showTextDocument(doc);
-
-      // Add workspace folder — triggers discovery via onDidChangeWorkspaceFolders
-      if (projectRoot) {
-        ensureWorkspaceFolder(projectRoot);
-      }
-      refreshDiscovery();
-      treeProvider.refresh();
-    }),
+    vscode.commands.registerCommand('editless.addAgent', () =>
+      createAgent({ treeProvider, refreshDiscovery, ensureWorkspaceFolder }),
+    ),
   );
 
   // Add Squad — open a folder picker, git init, and run squad init in a terminal
@@ -451,72 +358,8 @@ export function register(context: vscode.ExtensionContext, deps: AgentCommandDep
 
   // Clone to Worktree (#422)
   context.subscriptions.push(
-    vscode.commands.registerCommand('editless.cloneToWorktree', async (item?: EditlessTreeItem) => {
-      if (!item?.squadId) return;
-      const disc = getDiscoveredItems().find(d => d.id === item.squadId);
-      if (!disc) return;
-      const repoPath = disc.path;
-
-      // 1. Branch selection
-      let branches: string[] = [];
-      try {
-        const { stdout } = await execFileAsync('git', ['branch', '--list', '--format=%(refname:short)'], { cwd: repoPath });
-        branches = stdout.split('\n').map(b => b.trim()).filter(Boolean);
-      } catch { /* ignore – empty list */ }
-
-      const newBranchItem = { label: '$(add) Create new branch', description: '', alwaysShow: true, isNew: true as const };
-      const branchItems = [
-        newBranchItem,
-        ...(branches.length ? [{ label: '', kind: vscode.QuickPickItemKind.Separator } as any] : []),
-        ...branches.map(b => ({ label: b, isNew: false as const })),
-      ];
-
-      const picked = await vscode.window.showQuickPick(branchItems, { placeHolder: 'Select or create a branch for the worktree' });
-      if (!picked) return;
-
-      let branch: string;
-      let isNewBranch: boolean;
-      if ((picked as any).isNew) {
-        const name = await vscode.window.showInputBox({
-          prompt: 'New branch name',
-          validateInput: v => isValidBranchName(v) ? undefined : 'Invalid branch name',
-        });
-        if (!name) return;
-        branch = name;
-        isNewBranch = true;
-      } else {
-        branch = picked.label;
-        isNewBranch = false;
-      }
-
-      // 2. Path selection
-      const defaultPath = defaultWorktreePath(repoPath, branch);
-      const wtPath = await vscode.window.showInputBox({
-        prompt: 'Worktree path',
-        value: defaultPath,
-        validateInput: v => v.trim() ? undefined : 'Path cannot be empty',
-      });
-      if (!wtPath) return;
-
-      // 3. Execute git worktree add
-      try {
-        const args = ['worktree', 'add'];
-        if (isNewBranch) args.push('-b', branch);
-        args.push(wtPath);
-        if (!isNewBranch) args.push(branch);
-        await execFileAsync('git', args, { cwd: repoPath });
-      } catch (err: any) {
-        vscode.window.showErrorMessage(`Git worktree failed: ${err.stderr || err.message}`);
-        return;
-      }
-
-      // 4. Post-create: add to workspace & refresh
-      vscode.workspace.updateWorkspaceFolders(
-        (vscode.workspace.workspaceFolders?.length ?? 0), 0,
-        { uri: vscode.Uri.file(wtPath) },
-      );
-      refreshDiscovery();
-      vscode.window.showInformationMessage(`Worktree created at ${wtPath}`);
-    }),
+    vscode.commands.registerCommand('editless.cloneToWorktree', (item?: EditlessTreeItem) =>
+      createWorktree({ getDiscoveredItems, refreshDiscovery }, item),
+    ),
   );
 }
