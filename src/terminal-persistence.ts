@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { TerminalInfo, PersistedTerminalInfo } from './terminal-types';
 import { resolveShellPath } from './copilot-cli-builder';
-import { stripEmoji } from './string-utils';
+import { stripEmoji } from './emoji-utils';
 
 const STORAGE_KEY = 'editless.terminalSessions';
 export const MAX_REBOOT_COUNT = 5;
@@ -215,6 +215,9 @@ export class TerminalPersistence {
     };
 
     // Multi-signal matching: each stage only considers unclaimed terminals
+    // TODO(pre-existing): Index-based matching (Pass 1) runs before name-based matching,
+    // but index-matching is heuristic and should ideally be the last fallback.
+    // Changing the order is out of scope for this refactor — see #470 review.
     // Pass 1: Index-based — match by agentId + terminal index
     runPass((t, p) => {
       for (const [, info] of matchContext.terminals) {
@@ -237,6 +240,10 @@ export class TerminalPersistence {
     });
 
     this._pendingSaved = unmatched;
+
+    // TODO(pre-existing): Reconciled terminals don't get watchSession() called,
+    // so they won't receive events.jsonl updates until the next relaunch/reconnect.
+    // The original terminal-manager.ts had the same gap. See #470 review.
 
     // Resolve the waitForReconciliation() promise when all entries are matched
     if (this._pendingSaved.length === 0 && this._reconcileResolve) {

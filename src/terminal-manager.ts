@@ -9,10 +9,9 @@ import { CopilotEvents } from './copilot-sdk-types';
 import { buildLaunchCommandForConfig, parseConfigDir, resolveShellPath } from './copilot-cli-builder';
 import { type SessionState, isAttentionEvent, isWorkingEvent, getStateIcon, getStateDescription } from './terminal-state';
 import { resolveTerminalCwd } from './cwd-resolver';
-import { TerminalPersistence, type TerminalMatchContext } from './terminal-persistence';
+import { TerminalPersistence, MAX_REBOOT_COUNT, type TerminalMatchContext } from './terminal-persistence';
 import { SessionRecovery, type SessionRecoveryContext } from './session-recovery';
-import { SessionIdDetector } from './session-id-detector';
-import { stripEmoji } from './string-utils';
+import { detectAndAssignSessionIds } from './session-id-detector';
 import type { TerminalInfo, PersistedTerminalInfo } from './terminal-types';
 
 export const EDITLESS_INSTRUCTIONS_DIR = path.join(os.homedir(), '.copilot', 'editless');
@@ -21,7 +20,7 @@ export const EDITLESS_INSTRUCTIONS_DIR = path.join(os.homedir(), '.copilot', 'ed
 export type { SessionState } from './terminal-state';
 export { getStateIcon, getStateDescription } from './terminal-state';
 export { resolveTerminalCwd } from './cwd-resolver';
-export { stripEmoji } from './string-utils';
+export { stripEmoji } from './emoji-utils';
 export type { TerminalInfo, PersistedTerminalInfo } from './terminal-types';
 
 // ---------------------------------------------------------------------------
@@ -29,7 +28,7 @@ export type { TerminalInfo, PersistedTerminalInfo } from './terminal-types';
 // ---------------------------------------------------------------------------
 
 export class TerminalManager implements vscode.Disposable {
-  static readonly MAX_REBOOT_COUNT = 5;
+  static readonly MAX_REBOOT_COUNT = MAX_REBOOT_COUNT;
   
   private readonly _terminals = new Map<vscode.Terminal, TerminalInfo>();
   private readonly _counters = new Map<string, number>();
@@ -398,7 +397,7 @@ export class TerminalManager implements vscode.Disposable {
   detectSessionIds(): void {
     if (!this._sessionResolver) return;
 
-    const changed = SessionIdDetector.detectAndAssign(this._terminals, this._sessionResolver);
+    const changed = detectAndAssignSessionIds(this._terminals, this._sessionResolver);
     if (changed) {
       this._persist();
       this._scheduleChange();
@@ -463,10 +462,17 @@ export class TerminalManager implements vscode.Disposable {
     }
   }
 
+  // NOTE(pre-existing): _persist() → detectSessionIds() → _persist() is mutually recursive.
+  // It converges because detectAndAssignSessionIds only assigns IDs to terminals that lack one,
+  // so the second _persist() call finds no new changes and doesn't recurse further.
   private _persist(): void {
     this._persistence.persist(this._getMatchContext(), () => this.detectSessionIds());
   }
 
+  /**
+   * Returns a snapshot of internal Maps by reference — callers mutate shared state directly.
+   * This intentional coupling avoids copying large Maps on every reconciliation/persist cycle.
+   */
   private _getMatchContext(): TerminalMatchContext {
     return {
       terminals: this._terminals,
@@ -475,6 +481,10 @@ export class TerminalManager implements vscode.Disposable {
     };
   }
 
+  /**
+   * Returns internal Maps/state by reference — the SessionRecovery module mutates
+   * TerminalManager's state directly through these references (intentional coupling).
+   */
   private _getRecoveryContext(): SessionRecoveryContext {
     return {
       terminals: this._terminals,

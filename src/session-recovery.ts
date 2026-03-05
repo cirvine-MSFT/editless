@@ -1,16 +1,15 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import type { TerminalInfo, PersistedTerminalInfo } from './terminal-types';
-import type { SessionContextResolver } from './session-context';
+import type { SessionContextResolver, SessionEvent } from './session-context';
 import { resolveTerminalCwd } from './cwd-resolver';
 import { resolveShellPath } from './copilot-cli-builder';
-
-const EDITLESS_INSTRUCTIONS_DIR = path.join(require('os').homedir(), '.copilot', 'editless');
+import { EDITLESS_INSTRUCTIONS_DIR } from './terminal-manager';
 
 export interface SessionRecoveryContext {
   terminals: Map<vscode.Terminal, TerminalInfo>;
   lastActivityAt: Map<vscode.Terminal, number>;
-  lastSessionEvent: Map<vscode.Terminal, any>;
+  lastSessionEvent: Map<vscode.Terminal, SessionEvent>;
   sessionWatchers: Map<vscode.Terminal, vscode.Disposable>;
   sessionResolver?: SessionContextResolver;
   setLaunching(terminal: vscode.Terminal): void;
