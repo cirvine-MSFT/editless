@@ -1,4 +1,5 @@
-import type { TerminalManager, PersistedTerminalInfo, SessionState } from './terminal-manager';
+import * as vscode from 'vscode';
+import type { TerminalManager, TerminalInfo, PersistedTerminalInfo, SessionState } from './terminal-manager';
 import type { SessionLabelManager } from './session-labels';
 import type { SessionContextResolver } from './session-context';
 import type { SessionContext } from './types';
@@ -15,8 +16,8 @@ export interface AgentNodeData {
 
 /** Pre-fetched data for rendering a single terminal tree item. */
 export interface TerminalNodeData {
-  terminal: { readonly name: string } & Record<string, unknown>;
-  info: PersistedTerminalInfo;
+  terminal: vscode.Terminal;
+  info: TerminalInfo;
   sessionState: SessionState;
   lastActivityAt?: number;
   relative: string;
