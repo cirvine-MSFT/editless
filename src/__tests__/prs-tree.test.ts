@@ -973,6 +973,7 @@ describe('PRsTreeProvider — CancellationError handling', () => {
     await (provider as any).fetchAll();
 
     expect(listener).not.toHaveBeenCalled();
+    expect((provider as any)._disposed).toBe(true);
   });
 
   it('fetchAll should silently handle CancellationError', async () => {
@@ -984,6 +985,8 @@ describe('PRsTreeProvider — CancellationError handling', () => {
 
     // Should resolve without throwing
     await expect((provider as any).fetchAll()).resolves.toBeUndefined();
+    const children = await provider.getChildren();
+    expect(Array.isArray(children)).toBe(true);
   });
 
   it('fetchAll should silently handle "Canceled" message errors', async () => {
@@ -994,6 +997,7 @@ describe('PRsTreeProvider — CancellationError handling', () => {
     (provider as any)._repos = ['owner/repo'];
 
     await expect((provider as any).fetchAll()).resolves.toBeUndefined();
+    expect((provider as any)._loading).toBe(false);
   });
 
   it('fetchAll should silently handle "Channel has been closed" errors', async () => {
@@ -1004,6 +1008,7 @@ describe('PRsTreeProvider — CancellationError handling', () => {
     (provider as any)._repos = ['owner/repo'];
 
     await expect((provider as any).fetchAll()).resolves.toBeUndefined();
+    expect((provider as any)._loading).toBe(false);
   });
 
   it('fetchAll should re-throw non-cancellation errors', async () => {

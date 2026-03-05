@@ -55,6 +55,9 @@ describe('EditlessStatusBar — update()', () => {
 
     bar.update();
 
+    const item = (bar as any)._item;
+    expect(item.text).toContain('2 agents');
+    expect(item.text).toContain('3 sessions');
     expect(mockShow).toHaveBeenCalled();
   });
 
@@ -82,10 +85,31 @@ describe('EditlessStatusBar — updateSessionsOnly()', () => {
     ]);
 
     bar.update();
+    const item = (bar as any)._item;
+    expect(item.text).toContain('1 agents');
+    expect(item.text).toContain('1 sessions');
 
     bar.updateSessionsOnly();
 
+    expect(item.text).toContain('1 agents');
+    expect(item.text).toContain('1 sessions');
     expect(mockShow).toHaveBeenCalled();
+  });
+
+  it('should handle agentSettings.isHidden throwing error (graceful degradation)', () => {
+    const badSettings = {
+      isHidden: () => { throw new Error('disk error'); },
+      getAll: () => ({}),
+    };
+    const bar = new EditlessStatusBar(badSettings as any, makeTerminalManager(0));
+    expect(() => bar.update()).not.toThrow();
+  });
+
+  it('should handle terminalManager.getAllTerminals returning empty array', () => {
+    const bar = new EditlessStatusBar(makeAgentSettings(), makeTerminalManager(0));
+    bar.update();
+    const item = (bar as any)._item;
+    expect(item.text).toContain('0 sessions');
   });
 });
 
