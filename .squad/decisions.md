@@ -12921,4 +12921,385 @@ Rick's **architecture analysis is sound**, but the **line-by-line breakdown is s
 **Worktree:** `squad/246-247-codebase-review` @ commit `7eafa42`  
 **Uncommitted changes:** terminal-state.ts (68L), cwd-resolver.ts (47L), terminal-manager.ts (-129L)
 
+---
+# Architecture Review — PR #470: Terminal Manager Extraction
+
+**Reviewer:** Rick (Lead)  
+**Date:** 2026-03-05  
+**PR:** #470 — Extract 8 modules from terminal-manager.ts  
+**Branch:** 246-247-codebase-review  
+
+## Summary
+
+This PR extracts terminal-manager.ts (852→444 lines, technically 517 with re-export boilerplate) into 8 new modules: `terminal-state.ts`, `cwd-resolver.ts`, `terminal-persistence.ts`, `session-recovery.ts`, `session-id-detector.ts`, `string-utils.ts`, `terminal-types.ts`, and `backend-provider-interface.ts`. It also fixes 79 test antipatterns across 6 test files.
+
+**Build:** ✅ `tsc --noEmit` clean  
+**Tests:** ✅ 1201/1201 passing  
+
+---
+
+## Issues
+
+### 🔴 Must Fix
+
+**File:** `src/session-recovery.ts`, line 8  
+**Issue:** Duplicate `EDITLESS_INSTRUCTIONS_DIR` constant. The same `path.join(os.homedir(), '.copilot', 'editless')` is defined in both `terminal-manager.ts` (line 18, exported) and `session-recovery.ts` (line 8, private). Additionally, `session-recovery.ts` uses `require('os').homedir()` instead of an `import` — inconsistent with the rest of the codebase and breaks ES module semantics.  
+**Recommendation:** `session-recovery.ts` should import `EDITLESS_INSTRUCTIONS_DIR` from `terminal-manager.ts` (or better: from a new shared constants module to avoid the circular-feel). At minimum, remove the duplicate and import it. Replace `require('os')` with a proper `import`.
+
+---
+
+**File:** `src/backend-provider-interface.ts`, lines 2–5  
+**Issue:** Inverted dependency. The *interface* file imports concrete types from `work-items-tree.ts` (`WorkItemsTreeItem`, `LevelFilter`, `UnifiedState`), and also from `github-client.ts`, `ado-client.ts`, `local-tasks-client.ts`. An interface module should define the contract — consumers depend on it, not the other way around. As written, `IBackendProvider` can't be used without pulling in the entire work-items-tree dependency graph. This defeats the purpose of the Strategy Pattern we decided on (#246).  
+**Recommendation:** Either: (a) move the shared types (`WorkItemsTreeItem`, `LevelFilter`, `UnifiedState`) into `backend-provider-interface.ts` or a separate `work-item-types.ts`, or (b) defer this file to the work-items-tree extraction PR where the dependency direction can be properly established. As-is, this file is dead code (nothing imports it on this branch) and shouldn't ship with incorrect layering.
+
+---
+
+### 🟡 Should Fix
+
+**File:** `src/session-recovery.ts`, line 13  
+**Issue:** `any` type in `SessionRecoveryContext.lastSessionEvent: Map<vscode.Terminal, any>`. The value type should be `SessionEvent` (from `./session-context`). The `any` here erases type safety at the boundary between `TerminalManager` and `SessionRecovery` — a caller could shove anything in and no one would know.  
+**Recommendation:** `import type { SessionEvent } from './session-context'` and type the map as `Map<vscode.Terminal, SessionEvent>`.
+
+---
+
+**File:** `src/terminal-manager.ts`, line 15  
+**Issue:** Unused direct import. `stripEmoji` is imported on line 15 but never called within `terminal-manager.ts` itself — it's only re-exported on line 24. The re-export statement (`export { stripEmoji } from './string-utils'`) already handles the re-export without needing a separate import.  
+**Recommendation:** Remove line 15 (`import { stripEmoji } from './string-utils'`). The `export { ... } from` syntax on line 24 is sufficient.
+
+---
+
+**File:** `src/terminal-persistence.ts` + `src/terminal-manager.ts`  
+**Issue:** `_getMatchContext()` (line 470–476 of terminal-manager.ts) passes internal Maps (`_terminals`, `_lastActivityAt`, `_counters`) by reference to `TerminalPersistence`. This means `TerminalPersistence._tryMatchTerminals()` directly mutates `TerminalManager`'s private state (adding entries to `_terminals`, updating `_counters`). Same pattern with `_getRecoveryContext()` and `SessionRecovery`. The extraction looks like separate modules, but they're still coupled through shared mutable state — the class boundary is cosmetic.  
+**Recommendation:** This is acceptable for a first extraction pass — the alternative (event-based or return-value coordination) is a bigger refactor. Document this intentional design in a code comment on `_getMatchContext()` and `_getRecoveryContext()`: "Returns references to internal maps — persistence/recovery modules mutate these directly." This makes the coupling explicit for the next engineer.
+
+---
+
+### 🟢 Nit
+
+**File:** `src/terminal-manager.ts`, line 32  
+**Issue:** `static readonly MAX_REBOOT_COUNT = 5` is duplicated — also exported as `export const MAX_REBOOT_COUNT = 5` from `terminal-persistence.ts` (line 6). Two sources of truth for the same constant.  
+**Recommendation:** Remove the static from `TerminalManager` and import from `terminal-persistence.ts`, or vice versa. One canonical location.
+
+---
+
+**File:** `src/string-utils.ts`  
+**Issue:** Single-function module (6 lines). Extraction is fine architecturally, but the name `string-utils.ts` is a magnet for future dumping-ground accumulation. Every unrelated string helper will gravitate here.  
+**Recommendation:** Consider naming it `emoji-utils.ts` or `text-sanitize.ts` to keep it cohesive. Alternatively, keep the name but add a module-level comment stating the intended scope.
+
+---
+
+**File:** `src/session-id-detector.ts`  
+**Issue:** `SessionIdDetector` is a class with only a static method. This is effectively a namespace, not a class.  
+**Recommendation:** Export as a plain function (`detectAndAssignSessionIds`) instead of a class with a static. Matches the style of the other extracted modules (`resolveTerminalCwd`, `stripEmoji`, `isAttentionEvent`).
+
+---
+
+## What's Good
+
+1. **Module boundaries are cohesive.** Each extracted file owns a single concern: `terminal-state` = state machine logic, `cwd-resolver` = path resolution, `terminal-persistence` = save/load, `session-recovery` = reconnect/relaunch, `session-id-detector` = session matching, `terminal-types` = data shapes, `string-utils` = text helpers. Clean splits.
+
+2. **Backward compatibility preserved.** All 9 original exports from `terminal-manager.ts` are re-exported: `EDITLESS_INSTRUCTIONS_DIR`, `SessionState`, `TerminalInfo`, `PersistedTerminalInfo`, `stripEmoji`, `resolveTerminalCwd`, `TerminalManager`, `getStateIcon`, `getStateDescription`. No downstream breakage — existing consumers (`editless-tree.ts`, `extension.ts`, `launch-utils.ts`, `status-bar.ts`) continue importing from `terminal-manager` unchanged.
+
+3. **Dependency tree is acyclic.** The new modules form a clean DAG: `terminal-types` ← `terminal-persistence` ← `terminal-manager`, `terminal-types` ← `session-recovery` ← `terminal-manager`, etc. No circular imports.
+
+4. **Test fixes are legitimate.** The 79 test changes replace internal state manipulation (`(mgr as any)._pendingSaved = [...]`) with public API patterns (`persistence.reconcile(matchContext, ...)`). This is the right direction.
+
+5. **Build and tests green.** `tsc --noEmit` clean, 1201/1201 tests passing.
+
+---
+
+## Verdict
+
+**APPROVE WITH NITS**
+
+The two 🔴 items need resolution before merge:
+1. Eliminate the duplicate `EDITLESS_INSTRUCTIONS_DIR` and the `require('os')` in session-recovery.ts.
+2. Either fix `backend-provider-interface.ts` dependency direction or remove it from this PR (it's dead code here — ship it with the work-items-tree extraction where it belongs).
+
+The 🟡 items (`any` type, unused import, mutable reference documentation) should be addressed but aren't blockers. The extraction is architecturally sound and follows the plan from issue #246.
+
+---
+# PR #470 — Test Quality Review
+
+**Reviewer:** Meeseeks (Tester)
+**Date:** 2026-03-04
+**Tests:** 1201 passed, 0 failed (37 test files)
+
+---
+
+## Issue List
+
+### 🔴 Must Fix
+
+**File:** `src/__tests__/status-bar.test.ts`
+**Line(s):** 99–106
+**Severity:** 🔴 Must fix
+**Issue:** The test "should handle agentSettings.isHidden throwing error (graceful degradation)" **passes for the wrong reason**. The StatusBar code has no try-catch around `isHidden()`. The test passes only because `setDiscoveredItems()` is never called, so `_discoveredItems` is an empty array, and the `.filter()` callback that calls `isHidden()` never executes. The throwing mock is never invoked.
+**Recommendation:** Either (a) call `bar.setDiscoveredItems([...])` before `bar.update()` so `isHidden` is actually called (test will then correctly fail, exposing missing error handling), or (b) remove the test and file an issue to add graceful degradation to StatusBar if desired. A test that passes for the wrong reason is worse than no test.
+
+---
+
+### 🟡 Should Fix
+
+**File:** `src/__tests__/work-items-tree.test.ts`
+**Line(s):** 1016–1026 (LevelFilter `it.each`)
+**Severity:** 🟡 Should fix
+**Issue:** The `it.each` consolidation for "fire tree data change" tests subtly changes what's being tested. The **original** "clearing" and "clearing all" tests registered the listener **after** `setLevelFilter()`, isolating only the clear event (`toHaveBeenCalledOnce()`). The **new** `it.each` registers the listener **before** the `setup()` function runs, so both set+clear events are counted (`expectedCalls: 2`). This still validates that clearing fires an event (if it didn't, you'd see 1 instead of 2), but it's testing at coarser granularity and no longer isolates the clear action.
+**Recommendation:** Either (a) restructure the `it.each` so the listener is registered between the set and clear calls (matching original semantics), or (b) add a comment explaining the test now validates total event count rather than isolated clear events, so future readers understand the `expectedCalls: 2` intent.
+
+---
+
+**File:** `src/__tests__/terminal-manager.test.ts`
+**Line(s):** 2629–2651 (index-match reconciliation test)
+**Severity:** 🟡 Should fix
+**Issue:** The test was refactored from using internal methods (`_pendingSaved` + `_tryMatchTerminals()`) to using the extracted `_persistence.reconcile()` API. While more realistic, this changes the code path being tested. The old test directly exercised `_tryMatchTerminals()`'s matching logic; the new test exercises the persistence module's `reconcile()` method, which is a different entry point. If matching logic in the manager diverges from persistence.reconcile(), this test won't catch it.
+**Recommendation:** Document with a comment that this test now exercises the persistence module's reconcile path rather than the manager's internal matching. Consider adding a targeted unit test in a future `terminal-persistence.test.ts` to cover the matching algorithm directly.
+
+---
+
+**File:** New extracted modules (no test files)
+**Line(s):** N/A
+**Severity:** 🟡 Should fix
+**Issue:** 8 new source modules were extracted from terminal-manager.ts. Of these, 6 contain testable logic with no dedicated test files: `cwd-resolver.ts` (path resolution branching), `session-id-detector.ts` (timing/duplication logic), `session-recovery.ts` (reconnection heuristics, 189 lines), `string-utils.ts` (regex transform), `terminal-persistence.ts` (complex multi-pass matching, 258 lines), `terminal-state.ts` (event classification). The 2 pure type/interface files (`backend-provider-interface.ts`, `terminal-types.ts`) don't need tests.
+**Recommendation:** File follow-up issues for test coverage. Priority order: (1) `terminal-persistence.ts` — complex matching algorithm, highest risk; (2) `session-recovery.ts` — session reconnection logic; (3) `terminal-state.ts` — event classification; (4) remaining modules.
+
+---
+
+### 🟢 Nit
+
+**File:** `src/__tests__/terminal-manager.test.ts`
+**Line(s):** 685–687 (relaunch name regex)
+**Severity:** 🟢 Nit
+**Issue:** The new assertion `expect(call[0].name).toMatch(/^🧪 Test Squad #\d+$/)` is redundant with the exact string check on the line immediately before: `expect(call[0].name).toBe('🧪 Test Squad #1')`. The regex cannot catch any bug the exact match wouldn't already catch.
+**Recommendation:** Remove the regex assertion, or replace the exact match with the regex if the intent is to document the pattern format rather than assert an exact value.
+
+---
+
+**File:** `src/__tests__/status-bar.test.ts`
+**Line(s):** 108–113
+**Severity:** 🟢 Nit
+**Issue:** The test "should handle terminalManager.getAllTerminals returning empty array" is not meaningfully an edge case. It tests the normal zero-state, which is already covered by the existing "should handle zero squads" test. No special code path is exercised.
+**Recommendation:** Remove as duplicative, or rename to clarify if there's a specific scenario being targeted.
+
+---
+
+**File:** `src/__tests__/terminal-manager.test.ts`
+**Line(s):** 216–225 (persist data structure validation)
+**Severity:** 🟢 Nit (positive)
+**Issue:** No issue — this is a well-crafted addition. The new assertions validate array length (exactly 1), timestamp presence (`createdAt`), and specific field values via direct property access, complementing the existing `arrayContaining`/`objectContaining` assertion. Good pattern.
+**Recommendation:** None — keep as-is.
+
+---
+
+## Summary of All Changes
+
+| Area | Verdict | Notes |
+|------|---------|-------|
+| **MockEditlessTreeItem constructor** | ✅ Clean | Options parameter is additive; backward-compatible with existing 4-arg calls |
+| **extension-commands.test.ts** | ✅ Good | `hiddenAgents` Set with mock implementations adds real state tracking; result assertions on hide/show/refresh are meaningful |
+| **work-items-tree.test.ts `it.each` (runtime filter)** | ✅ Correct | Parameterization preserves identical test logic, same issues, same filters, same assertions |
+| **work-items-tree.test.ts `it.each` (LevelFilter events)** | ⚠️ Semantics changed | See 🟡 above — tests total event count instead of isolated events |
+| **prs-tree.test.ts** | ✅ Good | `_disposed`, `_loading`, and `getChildren()` assertions add real validation of internal state after error paths |
+| **scanner.test.ts edge cases** | ✅ Good | All 4 new tests are genuine edge cases (malformed refs, unicode, long numbers, mixed valid/invalid). Return order assertion is correct (PR processed before WI). |
+| **status-bar.test.ts** | ⚠️ Mixed | Text-content assertions (✅ good), isHidden error test (🔴 broken), empty-terminals test (🟢 duplicative) |
+| **terminal-manager.test.ts** | ✅ Mostly good | Persist validation and reconcile property checks are strong; index-match refactor is reasonable but changes test path |
+| **Test isolation** | ✅ No issues | No cross-test coupling or order-dependent tests introduced |
+
+---
+
+## Verdict: **APPROVE WITH NITS**
+
+The PR delivers substantial test quality improvements — real result validation replacing mock-only checks, good edge case coverage in scanner, and meaningful state assertions in terminal-manager and prs-tree. The MockEditlessTreeItem constructor enhancement is clean and backward-compatible.
+
+**One blocking concern:** The status-bar `isHidden` error test (🔴) passes vacuously and should be fixed or removed before merge. The remaining items are non-blocking improvements.
+
+**Coverage gap note:** The 6 new testable extracted modules need follow-up test coverage issues filed (especially `terminal-persistence.ts` at 258 lines of complex matching logic).
+
+---
+# Morty — Tier 1 Modularity Extractions
+
+**Date:** 2025-01-03
+**Issues:** #246, #247
+**Branch:** squad/246-247-codebase-review
+
+## Summary
+
+Completed partial Tier 1 extractions per modularity refactor plan.
+
+### ✅ Task 1: Terminal Manager Extractions (Complete)
+
+Successfully extracted two modules from `terminal-manager.ts`:
+
+#### A. `terminal-persistence.ts` (~270 lines)
+- Handles persistence and reconciliation of terminal sessions across VS Code restarts
+- Exports `TerminalPersistence` class and `TerminalMatchContext` interface
+- Contains all matching logic (index-based, name-based, emoji-stripped)
+- Manages orphaned session tracking and reboot count eviction (MAX_REBOOT_COUNT = 5)
+
+#### B. `session-recovery.ts` (~200 lines)
+- Handles reconnection and relaunching of orphaned sessions
+- Exports `SessionRecovery` class and `SessionRecoveryContext` interface
+- Manages session validation, environment setup, and terminal creation
+- Delegates to session resolver for resumability checks
+
+#### Changes to `terminal-manager.ts`
+- Reduced from 744 lines → 506 lines (32% reduction)
+- Now delegates to `TerminalPersistence` and `SessionRecovery`
+- Maintains all existing exports via re-exports for backward compatibility
+- All 1201 tests passing ✓
+
+### ⚠️ Task 2: Work Items Tree Extractions (Partial)
+
+Created backend provider interface foundation:
+
+#### A. `backend-provider-interface.ts` (~60 lines)
+- Defined `IBackendProvider` interface for strategy pattern
+- Specifies contract for GitHub, ADO, and Local providers
+- Documents expected methods: `getRootItems()`, `getChildren()`, `getTreeItem()`, etc.
+
+**Note:** Full extraction of the three provider implementations was not completed due to time constraints.
+
+## Testing
+
+- All 1201 tests passing
+- Fixed test compatibility issues during refactoring
+
+## Backward Compatibility
+
+Maintained through re-exports and unchanged public API signatures.
+
+---
+# Wave 2 Terminal Manager Extraction - Partial Completion
+
+**Date:** 2025-01-XX  
+**Context:** Issues #246, #247 - Codebase Review Wave 2  
+**Agent:** Morty (Extension Dev)
+
+## Summary
+
+Completed partial extraction work on terminal-manager.ts as part of Wave 2 decomposition effort.
+
+## What Was Completed
+
+### Terminal Manager Reduction (506 → 444 lines, -62 lines)
+
+Extracted three new modules from terminal-manager.ts:
+
+1. **session-id-detector.ts** (49 lines)
+   - Extracted `SessionIdDetector` class
+   - Handles detection and assignment of Copilot session IDs to terminals
+   - Matches session-state directories with terminal agent paths
+   - Reduces coupling of session detection logic with terminal management
+
+2. **string-utils.ts** (6 lines)  
+   - Extracted `stripEmoji()` utility function
+   - Pure utility with no dependencies on terminal manager
+
+3. **terminal-types.ts** (41 lines)
+   - Extracted `TerminalInfo` and `PersistedTerminalInfo` interfaces
+   - Shared types now imported by multiple modules (terminal-manager, terminal-persistence, session-recovery, session-id-detector)
+   - Reduces circular dependencies
+
+### Backward Compatibility
+
+All extractions maintain full backward compatibility via re-exports in terminal-manager.ts:
+```typescript
+export type { TerminalInfo, PersistedTerminalInfo } from './terminal-types';
+export { stripEmoji } from './string-utils';
+```
+
+Existing imports continue to work without modification.
+
+### Test Coverage
+
+All 1201 tests continue to pass after extractions.
+
+## What Remains
+
+### Terminal Manager (444 → target ≤300 lines)
+
+Terminal-manager.ts is still above the 300-line target. Additional candidates for extraction:
+
+- **Launch state tracking** (~20 lines): `_setLaunching`, `_clearLaunching`, `LAUNCH_TIMEOUT_MS`
+- **Change batching logic** (~10 lines): `_scheduleChange` and timer management
+- **Context builders** (~18 lines): `_getMatchContext`, `_getRecoveryContext` - however these are tightly coupled
+
+Challenges:
+- The class has cohesive responsibilities (terminal lifecycle, persistence, state)
+- Most remaining code is core orchestration logic
+- Further extractions risk creating fragmented abstractions
+- Diminishing returns on complexity reduction
+
+**Recommendation:** Terminal-manager.ts at 444 lines is a significant improvement from 506. Consider whether the 300-line target is necessary given the cohesive nature of remaining code.
+
+### Work Items Tree Provider Extraction (NOT STARTED)
+
+**Status:** Not started due to complexity  
+**File:** work-items-tree.ts (615 lines → target ≤300)  
+**Created:** backend-provider-interface.ts (72 lines)
+
+Challenges:
+- Deep coupling between GitHub, ADO, and local task logic
+- Shared state management (filters, level filters, child maps)
+- Complex inheritance from BaseTreeProvider
+- Provider pattern implementation would require significant refactoring
+
+**Recommendation:** This extraction requires careful design to avoid breaking the existing provider pattern. Suggest tackling in a dedicated focused session.
+
+### Extension.ts Decomposition (NOT STARTED)
+
+**Status:** Not started  
+**File:** extension.ts (553 lines → target ≤200)
+
+Potential extraction targets:
+- Settings initialization logic
+- Core manager construction
+- Discovery setup
+- Integration setup (GitHub, ADO, local)
+- File watchers and status bar setup
+
+**Recommendation:** This is feasible but requires careful testing of the activate() orchestration flow.
+
+### Tier 2 Files (NOT STARTED)
+
+- work-item-commands.ts (513 lines → target ≤300)
+- editless-tree.ts (504 lines → target ≤300)
+- agent-commands.ts (466 lines → target ≤300)
+
+## Files Modified
+
+- src/terminal-manager.ts (506 → 444 lines)
+- src/terminal-persistence.ts (updated imports)
+- src/session-recovery.ts (updated imports)
+
+## Files Created
+
+- src/session-id-detector.ts (49 lines)
+- src/string-utils.ts (6 lines)
+- src/terminal-types.ts (41 lines)
+
+## Testing
+
+✅ All 1201 tests passing  
+✅ TypeScript compilation successful  
+✅ No breaking changes to public APIs
+
+## Next Steps
+
+1. **Option A - Continue terminal-manager reduction:**  
+   Extract launch state tracking and change batching if 300-line target is firm requirement.
+
+2. **Option B - Tackle extension.ts:**  
+   More straightforward extraction with clear separation of concerns.
+
+3. **Option C - Accept current state:**  
+   Recognize that 444 lines for terminal-manager.ts is a reasonable size for a cohesive orchestrator class.
+
+## Lessons Learned
+
+- Pure utilities and type definitions are easy wins for extraction
+- Orchestrator classes naturally trend toward moderate size (300-500 lines)
+- Strategy pattern extractions (like work-items providers) require more design time
+- Test coverage gives confidence in refactoring
+
 

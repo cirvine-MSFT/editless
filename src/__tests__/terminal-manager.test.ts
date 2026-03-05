@@ -212,6 +212,17 @@ describe('TerminalManager', () => {
           }),
         ]),
       );
+      
+      // Validate the actual persisted data structure
+      const lastCall = vi.mocked(ctx.workspaceState.update).mock.calls.at(-1);
+      expect(lastCall).toBeDefined();
+      expect(lastCall![0]).toBe('editless.terminalSessions');
+      const persistedData = lastCall![1] as any[];
+      expect(persistedData).toHaveLength(1);
+      expect(persistedData[0].agentId).toBe('test-squad');
+      expect(persistedData[0].agentName).toBe('Test Squad');
+      expect(persistedData[0].index).toBe(1);
+      expect(persistedData[0].createdAt).toBeDefined();
     });
   });
 
@@ -250,6 +261,11 @@ describe('TerminalManager', () => {
       expect(all[0].terminal).toBe(liveTerminal);
       expect(all[0].info.agentId).toBe('test-squad');
       expect(all[0].info.index).toBe(1);
+      
+      // Validate manager correctly interpreted persisted data
+      expect(all[0].info.agentName).toBe('Test Squad');
+      expect(all[0].info.agentIcon).toBe('🧪');
+      expect(all[0].info.displayName).toBe('🧪 Test Squad #1');
     });
   });
 
@@ -664,6 +680,9 @@ describe('TerminalManager', () => {
       expect(mockCreateTerminal).toHaveBeenCalledWith(
         expect.objectContaining({ name: '🧪 Test Squad #1' }),
       );
+      
+      const call = vi.mocked(mockCreateTerminal).mock.calls[0];
+      expect(call[0].name).toBe('🧪 Test Squad #1');
     });
 
     it('should assign correct squad association from the orphaned entry', () => {
@@ -2608,7 +2627,7 @@ describe('TerminalManager', () => {
       mockRandomUUID.mockReturnValueOnce('00000000-0000-0000-0000-aaaaaaaaaaaa' as any);
       const t1 = mgr.launchTerminal(config);
 
-      // Simulate a persisted entry with index 2 that has mismatched names
+      // Simulate a persisted entry with index 2 that has mismatched names appearing later
       const entry = makePersistedEntry({
         id: 'idx-match-2',
         agentId: 'idx-squad',
@@ -2620,9 +2639,16 @@ describe('TerminalManager', () => {
       const liveTerminal = makeMockTerminal('completely-different');
       mockTerminals.push(liveTerminal);
 
-      // Load persisted entry manually to trigger matching
-      (mgr as any)._pendingSaved = [entry];
-      (mgr as any)._tryMatchTerminals();
+      // Manually add the entry to storage and trigger reconciliation.
+      // This test exercises the persistence module's reconcile path rather than
+      // the internal _tryMatchTerminals() directly. Direct unit tests for the
+      // matching algorithm itself belong in terminal-persistence.test.ts.
+      ctx.workspaceState.update('editless.terminalSessions', [entry]);
+      
+      const persistence = (mgr as any)._persistence;
+      const matchContext = (mgr as any)._getMatchContext();
+      const disposables = persistence.reconcile(matchContext, (mgr as any)._sessionResolver);
+      disposables.forEach((d: any) => d.dispose());
 
       const all = mgr.getAllTerminals();
       // Should have the launched terminal + the index-matched one

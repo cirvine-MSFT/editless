@@ -55,6 +55,9 @@ describe('EditlessStatusBar — update()', () => {
 
     bar.update();
 
+    const item = (bar as any)._item;
+    expect(item.text).toContain('2 agents');
+    expect(item.text).toContain('3 sessions');
     expect(mockShow).toHaveBeenCalled();
   });
 
@@ -82,11 +85,22 @@ describe('EditlessStatusBar — updateSessionsOnly()', () => {
     ]);
 
     bar.update();
+    const item = (bar as any)._item;
+    expect(item.text).toContain('1 agents');
+    expect(item.text).toContain('1 sessions');
 
     bar.updateSessionsOnly();
 
+    expect(item.text).toContain('1 agents');
+    expect(item.text).toContain('1 sessions');
     expect(mockShow).toHaveBeenCalled();
   });
+
+  // TODO: status-bar.ts update() has no try-catch around agentSettings.isHidden().
+  // Once error handling is added (graceful degradation), add a test here that:
+  //   1. Calls bar.setDiscoveredItems([...]) with at least one item
+  //   2. Provides an agentSettings whose isHidden() throws
+  //   3. Asserts bar.update() does not throw and renders a fallback count
 });
 
 // ---------------------------------------------------------------------------

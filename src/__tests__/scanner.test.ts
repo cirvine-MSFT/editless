@@ -124,6 +124,31 @@ describe('extractReferences', () => {
   it('returns empty array for text with no references', () => {
     expect(extractReferences('Nothing special here')).toEqual([]);
   });
+
+  it('should ignore malformed WI references (WI###)', () => {
+    // Multiple # symbols - should not match
+    const result = extractReferences('Invalid WI### format');
+    expect(result).toEqual([]);
+  });
+
+  it('should handle unicode in reference context', () => {
+    const result = extractReferences('Fixed WI#123 with émojis 🎉 and 中文字符');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ type: 'wi', number: '123', label: 'WI #123' });
+  });
+
+  it('should handle very long reference numbers', () => {
+    const result = extractReferences('See WI#123456789012345 for details');
+    expect(result).toHaveLength(1);
+    expect(result[0].number).toBe('123456789012345');
+  });
+
+  it('should handle mixed valid/invalid references', () => {
+    const result = extractReferences('Valid WI#100, invalid WI###, valid PR#200');
+    expect(result).toHaveLength(2);
+    expect(result.map(r => r.type)).toEqual(['pr', 'wi']);
+    expect(result.map(r => r.number)).toEqual(['200', '100']);
+  });
 });
 
 // ---------------------------------------------------------------------------

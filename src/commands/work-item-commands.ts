@@ -2,17 +2,15 @@ import * as vscode from 'vscode';
 import type { AgentSettingsManager } from '../agent-settings';
 import type { TerminalManager } from '../terminal-manager';
 import type { SessionLabelManager } from '../session-labels';
-import { WorkItemsTreeItem, type UnifiedState, type LevelFilter } from '../work-items-tree';
+import { WorkItemsTreeItem } from '../work-items-tree';
 import type { WorkItemsTreeProvider } from '../work-items-tree';
-import { PRsTreeItem, type PRLevelFilter } from '../prs-tree';
+import { PRsTreeItem } from '../prs-tree';
 import type { PRsTreeProvider } from '../prs-tree';
 import { fetchLinkedPRs } from '../github-client';
-import { toAgentTeamConfig } from '../unified-discovery';
 import type { DiscoveredItem } from '../unified-discovery';
-import { DEFAULT_COPILOT_CLI_ID, buildCopilotCLIConfig } from '../editless-tree';
-import { getAdoToken, promptAdoSignIn } from '../ado-auth';
-import { fetchAdoWorkItems, fetchAdoPRs, fetchAdoMe } from '../ado-client';
-import { launchAndLabel } from '../launch-utils';
+import { promptAdoSignIn } from '../ado-auth';
+import { buildLevelFilterPicker, buildPRLevelFilterPicker } from './level-filter-picker';
+import { launchFromWorkItem, launchFromPR } from './work-item-launcher';
 
 export interface WorkItemCommandDeps {
   agentSettings: AgentSettingsManager;
@@ -66,121 +64,9 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       workItemsProvider.clearAllLevelFilters();
     }),
     // Per-level filtering (#390)
-    vscode.commands.registerCommand('editless.filterLevel', async (item: WorkItemsTreeItem) => {
-      if (!item?.id || !item.contextValue) return;
-      
-      const nodeId = item.id;
-      const contextValue = item.contextValue;
-      const options = workItemsProvider.getAvailableOptions(nodeId, contextValue);
-      const currentFilter = workItemsProvider.getLevelFilter(nodeId) ?? {};
-
-      const quickPickItems: vscode.QuickPickItem[] = [];
-
-      // Owners (GitHub backend)
-      if (options.owners && options.owners.length > 0) {
-        quickPickItems.push({ label: 'Owners', kind: vscode.QuickPickItemKind.Separator });
-        for (const owner of options.owners) {
-          quickPickItems.push({ label: owner, description: 'owner', picked: currentFilter.selectedChildren?.includes(owner) });
-        }
-      }
-
-      // Orgs (ADO backend)
-      if (options.orgs && options.orgs.length > 0) {
-        quickPickItems.push({ label: 'Organizations', kind: vscode.QuickPickItemKind.Separator });
-        for (const org of options.orgs) {
-          quickPickItems.push({ label: org, description: 'org', picked: currentFilter.selectedChildren?.includes(org) });
-        }
-      }
-
-      // Projects (ADO org)
-      if (options.projects && options.projects.length > 0) {
-        quickPickItems.push({ label: 'Projects', kind: vscode.QuickPickItemKind.Separator });
-        for (const project of options.projects) {
-          quickPickItems.push({ label: project, description: 'project', picked: currentFilter.selectedChildren?.includes(project) });
-        }
-      }
-
-      // Repos (GitHub org)
-      if (options.repos && options.repos.length > 0) {
-        quickPickItems.push({ label: 'Repositories', kind: vscode.QuickPickItemKind.Separator });
-        for (const repo of options.repos) {
-          quickPickItems.push({ label: repo, description: 'repo', picked: currentFilter.selectedChildren?.includes(repo) });
-        }
-      }
-
-      // Types (ADO project)
-      if (options.types && options.types.length > 0) {
-        quickPickItems.push({ label: 'Type', kind: vscode.QuickPickItemKind.Separator });
-        for (const type of options.types) {
-          quickPickItems.push({ label: type, description: 'type', picked: currentFilter.types?.includes(type) });
-        }
-      }
-
-      // Labels (GitHub repo)
-      if (options.labels && options.labels.length > 0) {
-        quickPickItems.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
-        for (const label of options.labels) {
-          quickPickItems.push({ label, description: 'label', picked: currentFilter.labels?.includes(label) });
-        }
-      }
-
-      // Tags (ADO project)
-      if (options.tags && options.tags.length > 0) {
-        quickPickItems.push({ label: 'Tags', kind: vscode.QuickPickItemKind.Separator });
-        for (const tag of options.tags) {
-          quickPickItems.push({ label: tag, description: 'tag', picked: currentFilter.tags?.includes(tag) });
-        }
-      }
-
-      // States
-      if (options.states && options.states.length > 0) {
-        quickPickItems.push({ label: 'State', kind: vscode.QuickPickItemKind.Separator });
-        const isLocal = contextValue.replace(/-filtered$/, '').startsWith('local-');
-        const stateLabels = isLocal
-          ? { open: 'Todo', active: 'Active (has session)', closed: 'Done' }
-          : { open: 'Open (New)', active: 'Active / In Progress', closed: 'Closed' };
-        for (const state of options.states) {
-          quickPickItems.push({ label: stateLabels[state], description: 'state', picked: currentFilter.states?.includes(state) });
-        }
-      }
-
-      if (quickPickItems.length === 0) {
-        vscode.window.showInformationMessage('No filter options available for this level');
-        return;
-      }
-
-      const picks = await vscode.window.showQuickPick(quickPickItems, {
-        title: `Filter ${item.label}`,
-        canPickMany: true,
-        placeHolder: 'Select sources to display (leave empty to show all)',
-      });
-      if (picks === undefined) return;
-
-      const filter: LevelFilter = {};
-      filter.selectedChildren = picks.filter(p => p.description === 'owner' || p.description === 'org' || p.description === 'project' || p.description === 'repo').map(p => p.label);
-      filter.types = picks.filter(p => p.description === 'type').map(p => p.label);
-      filter.labels = picks.filter(p => p.description === 'label').map(p => p.label);
-      filter.tags = picks.filter(p => p.description === 'tag').map(p => p.label);
-      const isLocalReverse = contextValue.replace(/-filtered$/, '').startsWith('local-');
-      const stateLabels = isLocalReverse
-        ? { 'Todo': 'open', 'Active (has session)': 'active', 'Done': 'closed' }
-        : { 'Open (New)': 'open', 'Active / In Progress': 'active', 'Closed': 'closed' };
-      filter.states = picks.filter(p => p.description === 'state')
-        .map(p => stateLabels[p.label as keyof typeof stateLabels])
-        .filter((s): s is UnifiedState => s !== undefined);
-
-      if (filter.selectedChildren?.length === 0) delete filter.selectedChildren;
-      if (filter.types?.length === 0) delete filter.types;
-      if (filter.labels?.length === 0) delete filter.labels;
-      if (filter.tags?.length === 0) delete filter.tags;
-      if (filter.states?.length === 0) delete filter.states;
-
-      if (Object.keys(filter).length === 0) {
-        workItemsProvider.clearLevelFilter(nodeId);
-      } else {
-        workItemsProvider.setLevelFilter(nodeId, filter);
-      }
-    }),
+    vscode.commands.registerCommand('editless.filterLevel', (item: WorkItemsTreeItem) =>
+      buildLevelFilterPicker(workItemsProvider, item),
+    ),
     vscode.commands.registerCommand('editless.clearLevelFilter', (item: WorkItemsTreeItem) => {
       if (item?.id) {
         workItemsProvider.clearLevelFilter(item.id);
@@ -222,91 +108,9 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       prsProvider.clearAllLevelFilters();
     }),
     // Per-level filtering (#390)
-    vscode.commands.registerCommand('editless.filterPRLevel', async (item: PRsTreeItem) => {
-      if (!item?.id || !item.contextValue) return;
-
-      const nodeId = item.id;
-      const contextValue = item.contextValue;
-      const options = prsProvider.getAvailableOptions(nodeId, contextValue);
-      const currentFilter = prsProvider.getLevelFilter(nodeId) ?? {};
-
-      const quickPickItems: vscode.QuickPickItem[] = [];
-
-      // Owners (GitHub PR backend)
-      if (options.owners && options.owners.length > 0) {
-        quickPickItems.push({ label: 'Owners', kind: vscode.QuickPickItemKind.Separator });
-        for (const owner of options.owners) {
-          quickPickItems.push({ label: owner, description: 'owner', picked: currentFilter.selectedChildren?.includes(owner) });
-        }
-      }
-
-      // Orgs (ADO PR backend)
-      if (options.orgs && options.orgs.length > 0) {
-        quickPickItems.push({ label: 'Organizations', kind: vscode.QuickPickItemKind.Separator });
-        for (const org of options.orgs) {
-          quickPickItems.push({ label: org, description: 'org', picked: currentFilter.selectedChildren?.includes(org) });
-        }
-      }
-
-      // Projects (ADO PR org)
-      if (options.projects && options.projects.length > 0) {
-        quickPickItems.push({ label: 'Projects', kind: vscode.QuickPickItemKind.Separator });
-        for (const project of options.projects) {
-          quickPickItems.push({ label: project, description: 'project', picked: currentFilter.selectedChildren?.includes(project) });
-        }
-      }
-
-      // Repos (GitHub PR org)
-      if (options.repos && options.repos.length > 0) {
-        quickPickItems.push({ label: 'Repositories', kind: vscode.QuickPickItemKind.Separator });
-        for (const repo of options.repos) {
-          quickPickItems.push({ label: repo, description: 'repo', picked: currentFilter.selectedChildren?.includes(repo) });
-        }
-      }
-
-      // Statuses (project/repo level)
-      if (options.statuses && options.statuses.length > 0) {
-        quickPickItems.push({ label: 'Status', kind: vscode.QuickPickItemKind.Separator });
-        for (const status of options.statuses) {
-          quickPickItems.push({ label: status, description: 'status', picked: currentFilter.statuses?.includes(status) });
-        }
-      }
-
-      // Labels (GitHub repo level)
-      if (options.labels && options.labels.length > 0) {
-        quickPickItems.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
-        for (const label of options.labels) {
-          quickPickItems.push({ label, description: 'label', picked: currentFilter.labels?.includes(label) });
-        }
-      }
-
-      if (quickPickItems.length === 0) {
-        vscode.window.showInformationMessage('No filter options available for this level');
-        return;
-      }
-
-      const picks = await vscode.window.showQuickPick(quickPickItems, {
-        title: `Filter ${item.label}`,
-        canPickMany: true,
-        placeHolder: 'Select filters (leave empty to show all)',
-      });
-      if (picks === undefined) return;
-
-      const filter: PRLevelFilter = {};
-      filter.selectedChildren = picks.filter(p => p.description === 'owner' || p.description === 'org' || p.description === 'project' || p.description === 'repo').map(p => p.label);
-      filter.statuses = picks.filter(p => p.description === 'status').map(p => p.label);
-      filter.labels = picks.filter(p => p.description === 'label').map(p => p.label);
-
-      if (filter.selectedChildren?.length === 0) delete filter.selectedChildren;
-      if (filter.statuses?.length === 0) delete filter.statuses;
-      if (filter.labels?.length === 0) delete filter.labels;
-
-      if (Object.keys(filter).length === 0) {
-        prsProvider.clearLevelFilter(nodeId);
-      } else {
-        prsProvider.setLevelFilter(nodeId, filter);
-      }
-    }),
+    vscode.commands.registerCommand('editless.filterPRLevel', (item: PRsTreeItem) =>
+      buildPRLevelFilterPicker(prsProvider, item),
+    ),
     vscode.commands.registerCommand('editless.clearPRLevelFilter', (item: PRsTreeItem) => {
       if (item?.id) {
         prsProvider.clearLevelFilter(item.id);
@@ -432,58 +236,9 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
 
   // Launch from Work Item (context menu on work items)
   context.subscriptions.push(
-    vscode.commands.registerCommand('editless.launchFromWorkItem', async (item?: WorkItemsTreeItem) => {
-      const issue = item?.issue;
-      const adoItem = item?.adoWorkItem;
-      const localTask = item?.localTask;
-      if (!issue && !adoItem && !localTask) return;
-
-      const discoveredItems = getDiscoveredItems();
-      const visibleItems = discoveredItems.filter(d => !agentSettings.isHidden(d.id));
-
-      const number = issue?.number ?? adoItem?.id;
-      const title = issue?.title ?? adoItem?.title ?? localTask?.title ?? '';
-      const url = issue?.url ?? adoItem?.url ?? '';
-      const displayLabel = localTask ? localTask.title : `#${number} ${title}`;
-
-      const cliItem = {
-        label: '$(terminal) Copilot CLI',
-        description: 'standalone',
-        disc: undefined as DiscoveredItem | undefined,
-      };
-      const discoveredPicks = visibleItems.map(d => {
-        const settings = agentSettings.get(d.id);
-        return {
-          label: `${d.type === 'squad' ? (settings?.icon ?? '🔷') : '🤖'} ${settings?.name ?? d.name}`,
-          description: d.universe ?? d.source,
-          disc: d as DiscoveredItem | undefined,
-        };
-      });
-      const pick = await vscode.window.showQuickPick(
-        [cliItem, ...discoveredPicks],
-        { placeHolder: `Launch agent for ${displayLabel}` },
-      );
-      if (!pick) return;
-
-      const rawName = localTask ? localTask.title : `#${number} ${title}`;
-      const env = url ? { EDITLESS_WORK_ITEM_URI: url } : undefined;
-      if (!pick.disc) {
-        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName, env);
-      } else {
-        const settings = agentSettings.get(pick.disc.id);
-        const cfg = toAgentTeamConfig(pick.disc, settings);
-        launchAndLabel(terminalManager, labelManager, cfg, rawName, env);
-      }
-
-      if (localTask?.filePath) {
-        await vscode.env.clipboard.writeText(localTask.filePath);
-        vscode.window.showInformationMessage(`Copied ${localTask.filePath} to clipboard`);
-      } else if (url) {
-        await vscode.env.clipboard.writeText(url);
-        vscode.window.showInformationMessage(`Copied ${url} to clipboard`);
-      }
-    }),
+    vscode.commands.registerCommand('editless.launchFromWorkItem', (item?: WorkItemsTreeItem) =>
+      launchFromWorkItem({ agentSettings, terminalManager, labelManager, getDiscoveredItems }, item),
+    ),
   );
 
   // Go to PR (context menu on work items)
@@ -519,53 +274,9 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
 
   // Launch from PR (context menu on PRs)
   context.subscriptions.push(
-    vscode.commands.registerCommand('editless.launchFromPR', async (item?: PRsTreeItem) => {
-      const pr = item?.pr;
-      const adoPR = item?.adoPR;
-      if (!pr && !adoPR) return;
-
-      const discoveredItems = getDiscoveredItems();
-      const visibleItems = discoveredItems.filter(d => !agentSettings.isHidden(d.id));
-
-      const number = pr?.number ?? adoPR?.id;
-      const title = pr?.title ?? adoPR?.title ?? '';
-      const url = pr?.url ?? adoPR?.url ?? '';
-
-      const cliItem = {
-        label: '$(terminal) Copilot CLI',
-        description: 'standalone',
-        disc: undefined as DiscoveredItem | undefined,
-      };
-      const discoveredPicks = visibleItems.map(d => {
-        const settings = agentSettings.get(d.id);
-        return {
-          label: `${d.type === 'squad' ? (settings?.icon ?? '🔷') : '🤖'} ${settings?.name ?? d.name}`,
-          description: d.universe ?? d.source,
-          disc: d as DiscoveredItem | undefined,
-        };
-      });
-      const pick = await vscode.window.showQuickPick(
-        [cliItem, ...discoveredPicks],
-        { placeHolder: `Launch agent for PR #${number} ${title}` },
-      );
-      if (!pick) return;
-
-      const rawName = `PR #${number} ${title}`;
-      const env = url ? { EDITLESS_WORK_ITEM_URI: url } : undefined;
-      if (!pick.disc) {
-        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-        launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName, env);
-      } else {
-        const settings = agentSettings.get(pick.disc.id);
-        const cfg = toAgentTeamConfig(pick.disc, settings);
-        launchAndLabel(terminalManager, labelManager, cfg, rawName, env);
-      }
-
-      if (url) {
-        await vscode.env.clipboard.writeText(url);
-        vscode.window.showInformationMessage(`Copied ${url} to clipboard`);
-      }
-    }),
+    vscode.commands.registerCommand('editless.launchFromPR', (item?: PRsTreeItem) =>
+      launchFromPR({ agentSettings, terminalManager, labelManager, getDiscoveredItems }, item),
+    ),
   );
 
   // Go to PR in Browser (context menu on PRs)

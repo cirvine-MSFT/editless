@@ -7,121 +7,29 @@ import type { AgentTeamConfig } from './types';
 import type { SessionContextResolver, SessionEvent, SessionResumability } from './session-context';
 import { CopilotEvents } from './copilot-sdk-types';
 import { buildLaunchCommandForConfig, parseConfigDir, resolveShellPath } from './copilot-cli-builder';
+import { type SessionState, isAttentionEvent, isWorkingEvent, getStateIcon, getStateDescription } from './terminal-state';
+import { resolveTerminalCwd } from './cwd-resolver';
+import { TerminalPersistence, MAX_REBOOT_COUNT, type TerminalMatchContext } from './terminal-persistence';
+import { SessionRecovery, type SessionRecoveryContext } from './session-recovery';
+import { detectAndAssignSessionIds } from './session-id-detector';
+import type { TerminalInfo, PersistedTerminalInfo } from './terminal-types';
 
 export const EDITLESS_INSTRUCTIONS_DIR = path.join(os.homedir(), '.copilot', 'editless');
 
-// ---------------------------------------------------------------------------
-// Terminal tracking metadata
-// ---------------------------------------------------------------------------
-
-export type SessionState = 'launching' | 'active' | 'inactive' | 'attention' | 'orphaned';
-
-export interface TerminalInfo {
-  id: string;
-  labelKey: string;
-  displayName: string;
-  originalName: string;
-  agentId: string;
-  agentName: string;
-  agentIcon: string;
-  index: number;
-  createdAt: Date;
-  agentSessionId?: string;
-  launchCommand?: string;
-  agentPath?: string;
-  configDir?: string;
-}
-
-export interface PersistedTerminalInfo {
-  id: string;
-  labelKey: string;
-  displayName: string;
-  originalName?: string;
-  agentId: string;
-  agentName: string;
-  agentIcon: string;
-  index: number;
-  createdAt: string;
-  terminalName: string;
-  lastSeenAt: number;
-  lastActivityAt?: number;
-  rebootCount: number;
-  agentSessionId?: string;
-  launchCommand?: string;
-  agentPath?: string;
-  configDir?: string;
-}
-
-const STORAGE_KEY= 'editless.terminalSessions';
-
-/** Strip Unicode emoji (and variation selectors / ZWJ sequences) from a string. */
-export function stripEmoji(str: string): string {
-  return str
-    .replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]\uFE0F?(\u200D[\p{Emoji_Presentation}\p{Extended_Pictographic}]\uFE0F?)*/gu, '')
-    .trim();
-}
-
-// ---------------------------------------------------------------------------
-// CWD resolution for agents (#403)
-// ---------------------------------------------------------------------------
-
-/** Normalise path separators to forward-slash for comparison. */
-function normSep(p: string): string {
-  return p.replace(/\\/g, '/');
-}
-
-/**
- * Determines the correct CWD for a terminal based on the agent type:
- *
- * 1. **Personal agents** (`~/.copilot/agents/`) → first workspace folder
- * 2. **Repo agents** (path inside a workspace folder under `.github/agents/`
- *    or `.copilot/agents/`) → that workspace folder root (≈ repo root)
- * 3. **Workspace-dir agents** (path inside any workspace folder) → that
- *    workspace folder root
- * 4. Otherwise → return the original path unchanged.
- */
-export function resolveTerminalCwd(agentPath: string | undefined): string | undefined {
-  if (!agentPath) return agentPath;
-
-  const norm = normSep(agentPath);
-
-  // 1. Personal agent — path under user home .copilot/agents
-  //    These live outside any workspace folder (e.g. ~/.copilot/agents/foo).
-  //    Match only when the .copilot segment is NOT inside a workspace folder,
-  //    which we detect by checking workspace folders first.
-  const folders = vscode.workspace.workspaceFolders;
-
-  // 2 & 3: Check if agentPath is inside a workspace folder
-  if (folders) {
-    for (const folder of folders) {
-      const folderPath = normSep(folder.uri.fsPath);
-      if (norm.startsWith(folderPath + '/') || norm === folderPath) {
-        // Squad directories should use their own path as CWD so the
-        // Copilot CLI can discover .squad/ or squad.agent.md at the root.
-        // Agent files use the workspace folder root.
-        try {
-          if (fs.statSync(agentPath).isDirectory()) {
-            return agentPath;
-          }
-        } catch { /* path doesn't exist — fall through to workspace root */ }
-        return folder.uri.fsPath;
-      }
-    }
-  }
-
-  // 1. Personal agent fallback — .copilot/agents outside any workspace folder
-  if (/\.copilot[\\/]agents/.test(agentPath)) {
-    return folders?.[0]?.uri.fsPath ?? agentPath;
-  }
-
-  return agentPath;
-}
+// Re-exports for backward compatibility
+export type { SessionState } from './terminal-state';
+export { getStateIcon, getStateDescription } from './terminal-state';
+export { resolveTerminalCwd } from './cwd-resolver';
+export { stripEmoji } from './emoji-utils';
+export type { TerminalInfo, PersistedTerminalInfo } from './terminal-types';
 
 // ---------------------------------------------------------------------------
 // TerminalManager
 // ---------------------------------------------------------------------------
 
 export class TerminalManager implements vscode.Disposable {
+  static readonly MAX_REBOOT_COUNT = MAX_REBOOT_COUNT;
+  
   private readonly _terminals = new Map<vscode.Terminal, TerminalInfo>();
   private readonly _counters = new Map<string, number>();
   private readonly _shellExecutionActive = new Map<vscode.Terminal, boolean>();
@@ -130,12 +38,12 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _lastSessionEvent = new Map<vscode.Terminal, SessionEvent>();
   private readonly _launchingTerminals = new Set<vscode.Terminal>();
   private readonly _launchTimers = new Map<vscode.Terminal, ReturnType<typeof setTimeout>>();
-  private _matchTimer: ReturnType<typeof setTimeout> | undefined;
   private _changeTimer: ReturnType<typeof setTimeout> | undefined;
   private _persistTimer: ReturnType<typeof setInterval> | undefined;
   private _sessionResolver?: SessionContextResolver;
-  private _reconcileResolve?: () => void;
-  private _reconcileTimer?: ReturnType<typeof setTimeout>;
+
+  private readonly _persistence: TerminalPersistence;
+  private readonly _recovery: SessionRecovery;
 
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange: vscode.Event<void> = this._onDidChange.event;
@@ -143,6 +51,9 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _disposables: vscode.Disposable[] = [];
 
   constructor(private readonly context: vscode.ExtensionContext) {
+    this._persistence = new TerminalPersistence(context);
+    this._recovery = new SessionRecovery();
+    
     // Crash-safe periodic persist (30s)
     this._persistTimer = setInterval(() => this._persist(), 30_000);
 
@@ -418,51 +329,16 @@ export class TerminalManager implements vscode.Disposable {
   // -- Public API: orphan management ----------------------------------------
 
   getOrphanedSessions(): PersistedTerminalInfo[] {
-    return [...this._pendingSaved];
+    return this._persistence.getOrphanedSessions();
   }
 
   reconnectSession(entry: PersistedTerminalInfo): vscode.Terminal | undefined {
-    const liveTerminals = vscode.window.terminals;
-    const orig = entry.originalName ?? entry.displayName;
-
-    const unclaimed = (t: vscode.Terminal): boolean => !this._terminals.has(t);
-    const match = liveTerminals.find(t => unclaimed(t) && t.name === entry.terminalName)
-      ?? liveTerminals.find(t => unclaimed(t) && t.name === orig)
-      ?? liveTerminals.find(t => unclaimed(t) && t.name === entry.displayName)
-      ?? liveTerminals.find(t => unclaimed(t) && (t.name.includes(orig) || entry.terminalName.includes(t.name)));
-
-    if (!match) return undefined;
-
-    this._terminals.set(match, {
-      id: entry.id,
-      labelKey: entry.labelKey,
-      displayName: entry.displayName,
-      originalName: orig,
-      agentId: entry.agentId,
-      agentName: entry.agentName,
-      agentIcon: entry.agentIcon,
-      index: entry.index,
-      createdAt: new Date(entry.createdAt),
-      agentSessionId: entry.agentSessionId,
-      launchCommand: entry.launchCommand,
-      agentPath: entry.agentPath,
-      configDir: entry.configDir,
-    });
-
-    // Start watching the reconnected session for activity
-    if (entry.agentSessionId && this._sessionResolver) {
-      const watcher = this._sessionResolver.watchSession(entry.agentSessionId, event => {
-        this._lastSessionEvent.set(match, event);
-        this._lastActivityAt.set(match, Date.now());
-        this._scheduleChange();
-      });
-      this._sessionWatchers.set(match, watcher);
+    const terminal = this._recovery.reconnectSession(entry, this._getRecoveryContext());
+    if (terminal) {
+      this._persistence.markAsMatched(entry.id);
+      this._persist();
     }
-
-    this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
-    this._persist();
-    this._scheduleChange();
-    return match;
+    return terminal;
   }
 
   /**
@@ -470,113 +346,23 @@ export class TerminalManager implements vscode.Disposable {
    * @param continueLatest When true, uses `--continue` instead of `--resume <id>`.
    */
   relaunchSession(entry: PersistedTerminalInfo, continueLatest = false): vscode.Terminal | undefined {
-    const reconnected = this.reconnectSession(entry);
-    if (reconnected) {
-      reconnected.show();
-      return reconnected;
+    const terminal = this._recovery.relaunchSession(entry, this._getRecoveryContext(), continueLatest);
+    if (terminal) {
+      this._persistence.markAsMatched(entry.id);
+      this._persist();
     }
-
-    // Register custom config dir so isSessionResumable can find the session (#465)
-    // Resolve shell variables in legacy persisted values (#467)
-    if (entry.configDir && this._sessionResolver) {
-      const resolved = resolveShellPath(entry.configDir);
-      if (resolved !== entry.configDir) {
-        entry.configDir = resolved;
-      }
-      this._sessionResolver.addSessionStateDir(path.join(resolved, 'session-state'));
-    }
-
-    // Pre-resume validation: check workspace.yaml + events.jsonl
-    if (entry.agentSessionId && this._sessionResolver) {
-      const check = this._sessionResolver.isSessionResumable(entry.agentSessionId);
-      if (!check.resumable) {
-        vscode.window.showErrorMessage(`Cannot resume session: ${check.reason}`);
-        return undefined;
-      }
-      if (check.stale) {
-        vscode.window.showWarningMessage(
-          `Session ${entry.agentSessionId} has not been updated in over 7 days. It may be outdated.`,
-        );
-      }
-    }
-
-    // Build env vars for the new terminal
-    const env: Record<string, string> = {};
-    if (entry.agentSessionId) {
-      env['EDITLESS_SESSION_ID'] = entry.id;
-      env['EDITLESS_AGENT_SESSION_ID'] = entry.agentSessionId;
-    }
-
-    const terminal = vscode.window.createTerminal({
-      name: entry.displayName,
-      cwd: resolveTerminalCwd(entry.agentPath),
-      isTransient: true,
-      iconPath: new vscode.ThemeIcon('terminal'),
-      env: {
-        ...env,
-        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: [process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS, EDITLESS_INSTRUCTIONS_DIR].filter(Boolean).join(path.delimiter),
-        EDITLESS_TERMINAL_ID: entry.id,
-        EDITLESS_SQUAD_ID: entry.agentId,
-        EDITLESS_SQUAD_NAME: entry.agentName,
-      },
-    });
-
-    // Queue sendText BEFORE show() to avoid race condition where shell
-    // isn't ready when the terminal becomes visible (#322)
-    if (entry.launchCommand) {
-      if (continueLatest) {
-        terminal.sendText(`${entry.launchCommand} --continue`);
-      } else if (entry.agentSessionId) {
-        terminal.sendText(`${entry.launchCommand} --resume ${entry.agentSessionId}`);
-      } else {
-        terminal.sendText(entry.launchCommand);
-      }
-    }
-    terminal.show(false);
-
-    this._terminals.set(terminal, {
-      id: entry.id,
-      labelKey: entry.labelKey,
-      displayName: entry.displayName,
-      originalName: entry.originalName ?? entry.displayName,
-      agentId: entry.agentId,
-      agentName: entry.agentName,
-      agentIcon: entry.agentIcon,
-      index: entry.index,
-      createdAt: new Date(),
-      agentSessionId: entry.agentSessionId,
-      launchCommand: entry.launchCommand,
-      agentPath: entry.agentPath,
-      configDir: entry.configDir,
-    });
-    this._setLaunching(terminal);
-
-    // Start watching the relaunched session for activity
-    if (entry.agentSessionId && this._sessionResolver) {
-      const watcher = this._sessionResolver.watchSession(entry.agentSessionId, event => {
-        this._clearLaunching(terminal);
-        this._lastSessionEvent.set(terminal, event);
-        this._lastActivityAt.set(terminal, Date.now());
-        this._scheduleChange();
-      });
-      this._sessionWatchers.set(terminal, watcher);
-    }
-
-    this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
-    this._persist();
-    this._scheduleChange();
     return terminal;
   }
 
   dismissOrphan(entry: PersistedTerminalInfo): void {
-    this._pendingSaved = this._pendingSaved.filter(e => e.id !== entry.id);
+    this._persistence.dismissOrphan(entry);
     this._persist();
     this._scheduleChange();
   }
 
   relaunchAllOrphans(): vscode.Terminal[] {
-    const orphans = [...this._pendingSaved];
-    return orphans.map(entry => this.relaunchSession(entry)).filter((t): t is vscode.Terminal => t !== undefined);
+    const orphans = this._persistence.getOrphanedSessions();
+    return this._recovery.relaunchAllOrphans(orphans, this._getRecoveryContext());
   }
 
   persist(): void {
@@ -593,14 +379,7 @@ export class TerminalManager implements vscode.Disposable {
    * Has a max timeout (2 s) so the caller never waits forever.
    */
   waitForReconciliation(): Promise<void> {
-    if (this._pendingSaved.length === 0) { return Promise.resolve(); }
-    return new Promise<void>(resolve => {
-      this._reconcileResolve = resolve;
-      this._reconcileTimer = setTimeout(() => {
-        this._reconcileResolve = undefined;
-        resolve();
-      }, 2000);
-    });
+    return this._persistence.waitForReconciliation();
   }
 
   setAgentSessionId(terminal: vscode.Terminal, sessionId: string): void {
@@ -618,36 +397,7 @@ export class TerminalManager implements vscode.Disposable {
   detectSessionIds(): void {
     if (!this._sessionResolver) return;
 
-    const agentPaths: string[] = [];
-    for (const info of this._terminals.values()) {
-      if (!info.agentSessionId && info.agentPath) {
-        agentPaths.push(info.agentPath);
-      }
-    }
-    if (agentPaths.length === 0) return;
-
-    const sessions = this._sessionResolver.resolveAll(agentPaths);
-    let changed = false;
-
-    for (const [terminal, info] of this._terminals) {
-      if (info.agentSessionId || !info.agentPath) continue;
-      const ctx = sessions.get(info.agentPath);
-      if (!ctx) continue;
-
-      // Only claim sessions created after the terminal was launched
-      const sessionCreated = new Date(ctx.createdAt).getTime();
-      if (sessionCreated < info.createdAt.getTime()) continue;
-
-      // Check this session ID isn't already claimed by another terminal
-      const alreadyClaimed = [...this._terminals.values()].some(
-        other => other !== info && other.agentSessionId === ctx.sessionId,
-      );
-      if (alreadyClaimed) continue;
-
-      info.agentSessionId = ctx.sessionId;
-      changed = true;
-    }
-
+    const changed = detectAndAssignSessionIds(this._terminals, this._sessionResolver);
     if (changed) {
       this._persist();
       this._scheduleChange();
@@ -658,7 +408,7 @@ export class TerminalManager implements vscode.Disposable {
 
   getSessionState(terminalOrId: vscode.Terminal | string): SessionState | undefined {
     if (typeof terminalOrId === 'string') {
-      const orphan = this._pendingSaved.find(e => e.id === terminalOrId);
+      const orphan = this._persistence.getOrphanedSessions().find(e => e.id === terminalOrId);
       return orphan ? 'orphaned' : undefined;
     }
 
@@ -699,190 +449,60 @@ export class TerminalManager implements vscode.Disposable {
 
   // -- Persistence & reconciliation -----------------------------------------
 
-  private static readonly MAX_REBOOT_COUNT = 5;
-
   reconcile(): void {
-    const saved = this.context.workspaceState.get<PersistedTerminalInfo[]>(STORAGE_KEY, []);
-    if (saved.length === 0) return;
-
-    // Increment rebootCount for unmatched entries; evict entries that exceeded TTL
-    this._pendingSaved = saved
-      .map(entry => ({
-        ...entry,
-        lastSeenAt: entry.lastSeenAt ?? Date.now(),
-        rebootCount: (entry.rebootCount ?? 0) + 1,
-      }))
-      .filter(entry => entry.rebootCount < TerminalManager.MAX_REBOOT_COUNT)
-      .slice(0, 50);
-
-    // Re-register custom config dirs so isSessionResumable works after restart (#465)
-    // Also resolve shell variables in legacy persisted configDir values (#467)
-    if (this._sessionResolver) {
-      for (const entry of this._pendingSaved) {
-        if (entry.configDir) {
-          const resolved = resolveShellPath(entry.configDir);
-          if (resolved !== entry.configDir) {
-            entry.configDir = resolved;
-          }
-          this._sessionResolver.addSessionStateDir(path.join(resolved, 'session-state'));
-        }
-      }
-    }
-
-    this._tryMatchTerminals();
-
-    // Terminals may not be available yet during activation — retry as they appear.
-    // Debounce to batch rapid terminal arrivals and avoid off-by-one mismatches
-    // when multiple terminals share the same shell-modified name (#148).
-    this._disposables.push(
-      vscode.window.onDidOpenTerminal(() => this._scheduleMatch()),
+    const disposables = this._persistence.reconcile(
+      this._getMatchContext(),
+      this._sessionResolver,
     );
-  }
-
-  private _pendingSaved: PersistedTerminalInfo[] = [];
-
-  private _scheduleMatch(): void {
-    if (this._matchTimer !== undefined) {
-      clearTimeout(this._matchTimer);
-    }
-    this._matchTimer = setTimeout(() => {
-      this._matchTimer = undefined;
-      this._tryMatchTerminals();
-    }, 200);
-  }
-
-  private _tryMatchTerminals(): void {
-    if (this._pendingSaved.length === 0) return;
-
-    const liveTerminals = vscode.window.terminals;
-    const claimed = new Set<vscode.Terminal>();
-    // Sort by creation time so positional matching aligns with
-    // vscode.window.terminals creation order — prevents off-by-one
-    // when terminal names are non-unique (e.g., shell-modified to "pwsh").
-    let unmatched = [...this._pendingSaved].sort((a, b) =>
-      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
-    );
-
-    const claimMatch = (match: vscode.Terminal, persisted: PersistedTerminalInfo): void => {
-      claimed.add(match);
-      this._terminals.set(match, {
-        id: persisted.id,
-        labelKey: persisted.labelKey,
-        displayName: persisted.displayName,
-        originalName: persisted.originalName ?? persisted.displayName,
-        agentId: persisted.agentId,
-        agentName: persisted.agentName,
-        agentIcon: persisted.agentIcon,
-        index: persisted.index,
-        createdAt: new Date(persisted.createdAt),
-        agentSessionId: persisted.agentSessionId,
-        launchCommand: persisted.launchCommand,
-        agentPath: persisted.agentPath,
-        configDir: persisted.configDir,
-      });
-      this._lastActivityAt.set(match, persisted.lastActivityAt ?? persisted.lastSeenAt);
-    };
-
-    const runPass = (matcher: (t: vscode.Terminal, p: PersistedTerminalInfo) => boolean): void => {
-      const stillUnmatched: PersistedTerminalInfo[] = [];
-      for (const persisted of unmatched) {
-        const match = liveTerminals.find(t => !claimed.has(t) && !this._terminals.has(t) && matcher(t, persisted));
-        if (!match) {
-          stillUnmatched.push(persisted);
-          continue;
-        }
-        claimMatch(match, persisted);
-      }
-      unmatched = stillUnmatched;
-    };
-
-    // Multi-signal matching: each stage only considers unclaimed terminals
-    // Pass 1: Index-based — match by agentId + terminal index
-    runPass((t, p) => {
-      for (const [, info] of this._terminals) {
-        if (info.agentId === p.agentId && info.index === p.index - 1) return true;
-        if (info.agentId === p.agentId && info.index === p.index + 1) return true;
-      }
-      return false;
-    });
-    // Pass 2–4: Name-based matching
-    runPass((t, p) => t.name === p.terminalName);
-    runPass((t, p) => t.name === (p.originalName ?? p.displayName));
-    runPass((t, p) => t.name === p.displayName);
-    // Pass 5: Emoji-stripped name comparison
-    runPass((t, p) => {
-      const stripped = stripEmoji(t.name);
-      if (stripped.length === 0) return false;
-      return stripped === stripEmoji(p.terminalName)
-        || stripped === stripEmoji(p.originalName ?? p.displayName)
-        || stripped === stripEmoji(p.displayName);
-    });
-
-    this._pendingSaved = unmatched;
-
-    // Resolve the waitForReconciliation() promise when all entries are matched
-    if (this._pendingSaved.length === 0 && this._reconcileResolve) {
-      clearTimeout(this._reconcileTimer);
-      const resolve = this._reconcileResolve;
-      this._reconcileResolve = undefined;
-      this._reconcileTimer = undefined;
-      resolve();
-    }
-
-    for (const info of this._terminals.values()) {
-      const current = this._counters.get(info.agentId) || 0;
-      if (info.index >= current) {
-        this._counters.set(info.agentId, info.index + 1);
-      }
-    }
-
+    this._disposables.push(...disposables);
+    
     if (this._terminals.size > 0) {
       this._persist();
       this._scheduleChange();
     }
   }
 
+  // NOTE(pre-existing): _persist() → detectSessionIds() → _persist() is mutually recursive.
+  // It converges because detectAndAssignSessionIds only assigns IDs to terminals that lack one,
+  // so the second _persist() call finds no new changes and doesn't recurse further.
   private _persist(): void {
-    // Run session ID detection before persisting
-    this.detectSessionIds();
+    this._persistence.persist(this._getMatchContext(), () => this.detectSessionIds());
+  }
 
-    const now = Date.now();
-    const entries: PersistedTerminalInfo[] = [];
-    for (const [terminal, info] of this._terminals) {
-      entries.push({
-        ...info,
-        createdAt: info.createdAt.toISOString(),
-        terminalName: terminal.name,
-        lastSeenAt: now,
-        lastActivityAt: this._lastActivityAt.get(terminal),
-        rebootCount: 0,
-        agentSessionId: info.agentSessionId,
-        launchCommand: info.launchCommand,
-        agentPath: info.agentPath,
-      });
-    }
-    // Preserve unmatched saved entries so they aren't lost during timing races
-    for (const pending of this._pendingSaved) {
-      if (!entries.some(e => e.id === pending.id)) {
-        entries.push(pending);
-      }
-    }
-    this.context.workspaceState.update(STORAGE_KEY, entries);
+  /**
+   * Returns a snapshot of internal Maps by reference — callers mutate shared state directly.
+   * This intentional coupling avoids copying large Maps on every reconciliation/persist cycle.
+   */
+  private _getMatchContext(): TerminalMatchContext {
+    return {
+      terminals: this._terminals,
+      lastActivityAt: this._lastActivityAt,
+      counters: this._counters,
+    };
+  }
+
+  /**
+   * Returns internal Maps/state by reference — the SessionRecovery module mutates
+   * TerminalManager's state directly through these references (intentional coupling).
+   */
+  private _getRecoveryContext(): SessionRecoveryContext {
+    return {
+      terminals: this._terminals,
+      lastActivityAt: this._lastActivityAt,
+      lastSessionEvent: this._lastSessionEvent,
+      sessionWatchers: this._sessionWatchers,
+      sessionResolver: this._sessionResolver,
+      setLaunching: (terminal: vscode.Terminal) => this._setLaunching(terminal),
+      clearLaunching: (terminal: vscode.Terminal) => this._clearLaunching(terminal),
+      scheduleChange: () => this._scheduleChange(),
+    };
   }
 
   // -- Disposable -----------------------------------------------------------
 
   dispose(): void {
-    if (this._matchTimer !== undefined) {
-      clearTimeout(this._matchTimer);
-    }
     if (this._changeTimer !== undefined) {
       clearTimeout(this._changeTimer);
-    }
-    if (this._reconcileTimer !== undefined) {
-      clearTimeout(this._reconcileTimer);
-      this._reconcileResolve = undefined;
-      this._reconcileTimer = undefined;
     }
     if (this._persistTimer !== undefined) {
       clearInterval(this._persistTimer);
@@ -896,80 +516,11 @@ export class TerminalManager implements vscode.Disposable {
       w.dispose();
     }
     this._sessionWatchers.clear();
+    this._persistence.dispose();
     for (const d of this._disposables) {
       d.dispose();
     }
     this._onDidChange.dispose();
-  }
-}
-
-// -- Exported helpers for tree view and testability -------------------------
-
-/** Returns true if the event indicates the agent is waiting for user input. */
-function isAttentionEvent(event: SessionEvent): boolean {
-  return event.hasOpenAskUser === true;
-}
-
-/** Returns true if the event type indicates the agent is actively working. */
-function isWorkingEvent(eventType: string): boolean {
-  switch (eventType) {
-    case CopilotEvents.AssistantTurnStart:
-    case CopilotEvents.AssistantMessage:
-    case CopilotEvents.AssistantThinking:
-    case CopilotEvents.ToolExecutionStart:
-    case CopilotEvents.ToolExecutionComplete:
-    case CopilotEvents.UserMessage:
-    case CopilotEvents.SessionResume:
-      return true;
-    default:
-      return false;
-  }
-}
-
-export function getStateIcon(state: SessionState, resumable = false): vscode.ThemeIcon {
-  switch (state) {
-    case 'launching':
-    case 'active':
-      return new vscode.ThemeIcon('loading~spin');
-    case 'attention':
-      return new vscode.ThemeIcon('comment-discussion');
-    case 'inactive':
-      return new vscode.ThemeIcon('circle-outline');
-    case 'orphaned':
-      return resumable
-        ? new vscode.ThemeIcon('history')
-        : new vscode.ThemeIcon('circle-outline');
-    default:
-      return new vscode.ThemeIcon('terminal');
-  }
-}
-
-export function getStateDescription(state: SessionState, lastActivityAt?: number, resumable = false): string {
-  switch (state) {
-    case 'launching':
-      return 'launching…';
-    case 'attention':
-      return 'waiting for input';
-    case 'orphaned':
-      return resumable ? 'previous session — resume' : 'session ended';
-    case 'active':
-    case 'inactive': {
-      if (!lastActivityAt) {
-        return '';
-      }
-      const ageMs = Date.now() - lastActivityAt;
-      const mins = Math.floor(ageMs / 60_000);
-      if (mins < 1) {
-        return 'just now';
-      }
-      if (mins < 60) {
-        return `${mins}m`;
-      }
-      const hours = Math.floor(mins / 60);
-      return `${hours}h`;
-    }
-    default:
-      return '';
   }
 }
 

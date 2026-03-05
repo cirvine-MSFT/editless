@@ -516,13 +516,18 @@ function getHandler(id: string): Function {
 // ----- Tests ----------------------------------------------------------------
 
 describe('extension command handlers', () => {
+  let hiddenAgents: Set<string>;
+
   beforeEach(() => {
     vi.clearAllMocks();
     commandHandlers.clear();
     mockActiveTerminalRef.current = undefined;
     mockGetAllTerminals.mockReturnValue([]);
+    hiddenAgents = new Set();
     mockAgentSettingsGetHiddenIds.mockReturnValue([]);
-    mockAgentSettingsIsHidden.mockReturnValue(false);
+    mockAgentSettingsIsHidden.mockImplementation((id: string) => hiddenAgents.has(id));
+    mockAgentSettingsHide.mockImplementation((id: string) => hiddenAgents.add(id));
+    mockAgentSettingsShow.mockImplementation((id: string) => hiddenAgents.delete(id));
     mockAgentSettingsGet.mockReturnValue(undefined);
     mockGetLabel.mockReturnValue(undefined);
     mockDiscoverAll.mockReturnValue([]);
@@ -601,8 +606,7 @@ describe('extension command handlers', () => {
 
     it('should resolve terminal from EditlessTreeItem', () => {
       const terminal = { show: vi.fn(), name: 'test' };
-      const item = new MockEditlessTreeItem('test', 'session', 0, 'squad-1');
-      item.terminal = terminal;
+      const item = new MockEditlessTreeItem('test', 'session', 0, 'squad-1', { terminal });
 
       getHandler('editless.focusTerminal')(item);
       expect(mockFocusTerminal).toHaveBeenCalledWith(terminal);
@@ -625,8 +629,7 @@ describe('extension command handlers', () => {
 
     it('should resolve terminal from tree item and close it', () => {
       const terminal = { show: vi.fn(), name: 'test', dispose: vi.fn() };
-      const item = new MockEditlessTreeItem('test', 'session', 0, 'squad-1');
-      item.terminal = terminal;
+      const item = new MockEditlessTreeItem('test', 'session', 0, 'squad-1', { terminal });
 
       getHandler('editless.closeTerminal')(item);
       expect(mockCloseTerminal).toHaveBeenCalledWith(terminal);
@@ -646,27 +649,30 @@ describe('extension command handlers', () => {
       getHandler('editless.hideAgent')(item);
       expect(mockAgentSettingsHide).toHaveBeenCalledWith('squad-1');
       expect(mockTreeRefresh).toHaveBeenCalled();
+      expect(mockAgentSettingsIsHidden('squad-1')).toBe(true);
     });
 
     it('should hide agent by item.id when no squadId', () => {
-      const item = new MockEditlessTreeItem('Bot', 'agent', 0);
-      item.id = 'agent-42';
+      const item = new MockEditlessTreeItem('Bot', 'agent', 0, undefined, { id: 'agent-42' });
       getHandler('editless.hideAgent')(item);
       expect(mockAgentSettingsHide).toHaveBeenCalledWith('agent-42');
+      expect(mockAgentSettingsIsHidden('agent-42')).toBe(true);
     });
 
     it('should strip discovered: prefix when hiding discovered agent', () => {
-      const item = new MockEditlessTreeItem('My Agent', 'squad', 0);
-      item.id = 'discovered:my-agent';
+      const item = new MockEditlessTreeItem('My Agent', 'squad', 0, undefined, { id: 'discovered:my-agent' });
       getHandler('editless.hideAgent')(item);
       expect(mockAgentSettingsHide).toHaveBeenCalledWith('my-agent');
+      expect(mockAgentSettingsIsHidden('my-agent')).toBe(true);
     });
 
     it('should show agent when item type is agent-hidden (toggle)', () => {
       const item = new MockEditlessTreeItem('Alpha', 'agent-hidden', 0, 'squad-1');
+      hiddenAgents.add('squad-1'); // Pre-hide the agent
       getHandler('editless.hideAgent')(item);
       expect(mockAgentSettingsShow).toHaveBeenCalledWith('squad-1');
       expect(mockTreeRefresh).toHaveBeenCalled();
+      expect(mockAgentSettingsIsHidden('squad-1')).toBe(false);
     });
 
     it('should no-op when item is undefined', () => {
@@ -707,6 +713,7 @@ describe('extension command handlers', () => {
       expect(mockShowQuickPick).toHaveBeenCalled();
       expect(mockAgentSettingsShow).toHaveBeenCalledWith('squad-1');
       expect(mockTreeRefresh).toHaveBeenCalled();
+      expect(mockAgentSettingsIsHidden('squad-1')).toBe(false);
     });
 
     it('should unhide multiple agents when multi-selected', async () => {
@@ -720,6 +727,8 @@ describe('extension command handlers', () => {
 
       expect(mockAgentSettingsShow).toHaveBeenCalledWith('squad-1');
       expect(mockAgentSettingsShow).toHaveBeenCalledWith('squad-2');
+      expect(mockAgentSettingsIsHidden('squad-1')).toBe(false);
+      expect(mockAgentSettingsIsHidden('squad-2')).toBe(false);
     });
 
     it('should no-op when user cancels QuickPick', async () => {
@@ -756,11 +765,13 @@ describe('extension command handlers', () => {
   describe('editless.relaunchSession', () => {
     it('should relaunch from persisted entry on tree item', () => {
       const entry = { id: 't-1', agentId: 'squad-1', displayName: 'Agent' };
-      const item = new MockEditlessTreeItem('Orphan', 'orphan', 0);
-      item.persistedEntry = entry;
+      const item = new MockEditlessTreeItem('Orphan', 'orphan', 0, undefined, { persistedEntry: entry });
 
       getHandler('editless.relaunchSession')(item);
       expect(mockRelaunchSession).toHaveBeenCalledWith(entry);
+      const callArgs = mockRelaunchSession.mock.calls[0];
+      expect(callArgs[0].id).toBe('t-1');
+      expect(callArgs[0].agentId).toBe('squad-1');
     });
 
     it('should no-op when item has no persisted entry', () => {
@@ -780,11 +791,12 @@ describe('extension command handlers', () => {
   describe('editless.dismissOrphan', () => {
     it('should dismiss orphan from persisted entry', () => {
       const entry = { id: 't-1', agentId: 'squad-1', displayName: 'Dead' };
-      const item = new MockEditlessTreeItem('Orphan', 'orphan', 0);
-      item.persistedEntry = entry;
+      const item = new MockEditlessTreeItem('Orphan', 'orphan', 0, undefined, { persistedEntry: entry });
 
       getHandler('editless.dismissOrphan')(item);
       expect(mockDismissOrphan).toHaveBeenCalledWith(entry);
+      const callArgs = mockDismissOrphan.mock.calls[0];
+      expect(callArgs[0].id).toBe('t-1');
     });
 
     it('should no-op when item has no persisted entry', () => {
@@ -812,15 +824,22 @@ describe('extension command handlers', () => {
 
   describe('editless.refresh', () => {
     it('should refresh tree provider', () => {
+      const initialCallCount = mockTreeRefresh.mock.calls.length;
       getHandler('editless.refresh')();
       expect(mockTreeRefresh).toHaveBeenCalled();
+      expect(mockTreeRefresh.mock.calls.length).toBe(initialCallCount + 1);
     });
 
     it('should re-scan discovered items on refresh', () => {
       mockDiscoverAll.mockClear();
+      const newAgent = { id: 'new-agent', name: 'New', type: 'squad' as const, source: 'workspace' as const, path: '/a' };
+      mockDiscoverAll.mockReturnValue([newAgent]);
       getHandler('editless.refresh')();
       expect(mockDiscoverAll).toHaveBeenCalled();
       expect(mockTreeSetDiscoveredItems).toHaveBeenCalled();
+      const callArgs = mockTreeSetDiscoveredItems.mock.calls.slice(-1)[0];
+      expect(callArgs[0]).toHaveLength(1);
+      expect(callArgs[0][0].id).toBe('new-agent');
     });
   });
 
@@ -828,15 +847,19 @@ describe('extension command handlers', () => {
 
   describe('editless.refreshWorkItems', () => {
     it('should refresh work items provider', () => {
+      const initialCallCount = mockWorkItemsRefresh.mock.calls.length;
       getHandler('editless.refreshWorkItems')();
       expect(mockWorkItemsRefresh).toHaveBeenCalled();
+      expect(mockWorkItemsRefresh.mock.calls.length).toBe(initialCallCount + 1);
     });
   });
 
   describe('editless.refreshPRs', () => {
     it('should refresh PRs provider', () => {
+      const initialCallCount = mockPRsRefresh.mock.calls.length;
       getHandler('editless.refreshPRs')();
       expect(mockPRsRefresh).toHaveBeenCalled();
+      expect(mockPRsRefresh.mock.calls.length).toBe(initialCallCount + 1);
     });
   });
 
@@ -845,8 +868,7 @@ describe('extension command handlers', () => {
   describe('editless.renameSession', () => {
     it('should rename when called with a tree item arg', async () => {
       const terminal = { show: vi.fn(), name: 'Agent' };
-      const item = new MockEditlessTreeItem('Agent', 'session', 0, 'squad-1');
-      item.terminal = terminal;
+      const item = new MockEditlessTreeItem('Agent', 'session', 0, 'squad-1', { terminal });
 
       mockGetLabelKey.mockReturnValue('squad-1:0');
       mockGetLabel.mockReturnValue(undefined);
@@ -865,8 +887,7 @@ describe('extension command handlers', () => {
 
     it('should prepend squad icon to terminal tab name', async () => {
       const terminal = { show: vi.fn(), name: 'Agent' };
-      const item = new MockEditlessTreeItem('Agent', 'session', 0, 'squad-1');
-      item.terminal = terminal;
+      const item = new MockEditlessTreeItem('Agent', 'session', 0, 'squad-1', { terminal });
 
       mockGetLabelKey.mockReturnValue('squad-1:0');
       mockGetTerminalInfo.mockReturnValue({ agentIcon: '🚀' });
@@ -931,8 +952,7 @@ describe('extension command handlers', () => {
 
     it('should no-op when user cancels input box', async () => {
       const terminal = { show: vi.fn(), name: 'Agent' };
-      const item = new MockEditlessTreeItem('Agent', 'session', 0, 'squad-1');
-      item.terminal = terminal;
+      const item = new MockEditlessTreeItem('Agent', 'session', 0, 'squad-1', { terminal });
 
       mockGetLabelKey.mockReturnValue('squad-1:0');
       mockShowInputBox.mockResolvedValue(undefined);
@@ -945,8 +965,7 @@ describe('extension command handlers', () => {
 
     it('should no-op when user enters empty string', async () => {
       const terminal = { show: vi.fn(), name: 'Agent' };
-      const item = new MockEditlessTreeItem('Agent', 'session', 0, 'squad-1');
-      item.terminal = terminal;
+      const item = new MockEditlessTreeItem('Agent', 'session', 0, 'squad-1', { terminal });
 
       mockGetLabelKey.mockReturnValue('squad-1:0');
       mockShowInputBox.mockResolvedValue('');
@@ -1012,8 +1031,7 @@ describe('extension command handlers', () => {
   describe('editless.clearSessionLabel', () => {
     it('should delegate to promptClearLabel with resolved terminal', async () => {
       const terminal = { show: vi.fn(), name: 'test' };
-      const item = new MockEditlessTreeItem('test', 'session', 0);
-      item.terminal = terminal;
+      const item = new MockEditlessTreeItem('test', 'session', 0, undefined, { terminal });
       mockGetLabelKey.mockReturnValue('squad-1:0');
 
       await getHandler('editless.clearSessionLabel')(item);

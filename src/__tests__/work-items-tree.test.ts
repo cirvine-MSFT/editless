@@ -152,31 +152,14 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     return provider.getChildren();
   }
 
-  it('should filter by label', async () => {
-    const items = await getFilteredItems(
-      [makeIssue({ number: 1, labels: ['bug'] }), makeIssue({ number: 2, labels: ['feature'] })],
-      { labels: ['bug'] },
-    );
+  it.each([
+    { filterName: 'label', filter: { labels: ['bug'] }, expectedIssue: 1, testIssues: [makeIssue({ number: 1, labels: ['bug'] }), makeIssue({ number: 2, labels: ['feature'] })] },
+    { filterName: 'state (active = assigned)', filter: { states: ['active'] as UnifiedState[] }, expectedIssue: 1, testIssues: [makeIssue({ number: 1, assignees: ['user'] }), makeIssue({ number: 2, assignees: [] })] },
+    { filterName: 'state (open = unassigned)', filter: { states: ['open'] as UnifiedState[] }, expectedIssue: 2, testIssues: [makeIssue({ number: 1, assignees: ['user'] }), makeIssue({ number: 2, assignees: [] })] },
+  ])('should filter by $filterName', async ({ filter, expectedIssue, testIssues }) => {
+    const items = await getFilteredItems(testIssues, filter);
     expect(items).toHaveLength(1);
-    expect(items[0].label).toContain('#1');
-  });
-
-  it('should filter by state (active = assigned)', async () => {
-    const items = await getFilteredItems(
-      [makeIssue({ number: 1, assignees: ['user'] }), makeIssue({ number: 2, assignees: [] })],
-      { states: ['active'] },
-    );
-    expect(items).toHaveLength(1);
-    expect(items[0].label).toContain('#1');
-  });
-
-  it('should filter by state (open = unassigned)', async () => {
-    const items = await getFilteredItems(
-      [makeIssue({ number: 1, assignees: ['user'] }), makeIssue({ number: 2, assignees: [] })],
-      { states: ['open'] },
-    );
-    expect(items).toHaveLength(1);
-    expect(items[0].label).toContain('#2');
+    expect(items[0].label).toContain(`#${expectedIssue}`);
   });
 
   it('should show empty state message when filter excludes all items', async () => {
@@ -1014,28 +997,11 @@ describe('WorkItemsTreeProvider — LevelFilter lifecycle', () => {
     expect(provider.getLevelFilter('github:owner/repo:f0')).toEqual(filter);
   });
 
-  it('should fire tree data change when setting level filter', () => {
-    const provider = new WorkItemsTreeProvider();
-    const listener = vi.fn();
-    provider.onDidChangeTreeData(listener);
-    provider.setLevelFilter('github:owner/repo:f0', { labels: ['bug'] });
-    expect(listener).toHaveBeenCalledOnce();
-  });
-
   it('should clear level filter by nodeId', () => {
     const provider = new WorkItemsTreeProvider();
     provider.setLevelFilter('github:owner/repo:f0', { labels: ['bug'] });
     provider.clearLevelFilter('github:owner/repo:f0');
     expect(provider.getLevelFilter('github:owner/repo:f0')).toBeUndefined();
-  });
-
-  it('should fire tree data change when clearing level filter', () => {
-    const provider = new WorkItemsTreeProvider();
-    provider.setLevelFilter('github:owner/repo:f0', { labels: ['bug'] });
-    const listener = vi.fn();
-    provider.onDidChangeTreeData(listener);
-    provider.clearLevelFilter('github:owner/repo:f0');
-    expect(listener).toHaveBeenCalledOnce();
   });
 
   it('should clear all level filters', () => {
@@ -1047,13 +1013,24 @@ describe('WorkItemsTreeProvider — LevelFilter lifecycle', () => {
     expect(provider.getLevelFilter('ado:org:project:f0')).toBeUndefined();
   });
 
-  it('should fire tree data change when clearing all level filters', () => {
+  it.each([
+    { action: 'setting', perform: (p: any, id: string) => p.setLevelFilter(id, { labels: ['bug'] }) },
+    { action: 'clearing', perform: (p: any, id: string) => p.clearLevelFilter(id) },
+    { action: 'clearing all', perform: (p: any, _id: string) => p.clearAllLevelFilters() },
+  ])('should fire tree data change when $action level filter', ({ action, perform }) => {
     const provider = new WorkItemsTreeProvider();
-    provider.setLevelFilter('github:owner/repo:f0', { labels: ['bug'] });
+    const id = 'github:owner/repo:f0';
+
+    // Pre-populate a filter so clear/clearAll have something to remove
+    if (action !== 'setting') {
+      provider.setLevelFilter(id, { labels: ['bug'] });
+    }
+
+    // Register listener AFTER setup so we isolate only the action under test
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
-    provider.clearAllLevelFilters();
-    expect(listener).toHaveBeenCalledOnce();
+    perform(provider, id);
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });
 
