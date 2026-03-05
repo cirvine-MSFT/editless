@@ -123,9 +123,9 @@ function makePersistedEntry(overrides: Partial<PersistedTerminalInfo> = {}): Per
     id: 'test-squad-1234-1',
     labelKey: 'terminal:test-squad-1234-1',
     displayName: '🧪 Test Squad #1',
-    squadId: 'test-squad',
-    squadName: 'Test Squad',
-    squadIcon: '🧪',
+    agentId: 'test-squad',
+    agentName: 'Test Squad',
+    agentIcon: '🧪',
     index: 1,
     createdAt: '2026-02-16T00:00:00.000Z',
     terminalName: '🧪 Test Squad #1',
@@ -204,9 +204,9 @@ describe('TerminalManager', () => {
         'editless.terminalSessions',
         expect.arrayContaining([
           expect.objectContaining({
-            squadId: 'test-squad',
-            squadName: 'Test Squad',
-            squadIcon: '🧪',
+            agentId: 'test-squad',
+            agentName: 'Test Squad',
+            agentIcon: '🧪',
             index: 1,
             terminalName: '🧪 Test Squad #1',
           }),
@@ -248,7 +248,7 @@ describe('TerminalManager', () => {
       const all = mgr.getAllTerminals();
       expect(all).toHaveLength(1);
       expect(all[0].terminal).toBe(liveTerminal);
-      expect(all[0].info.squadId).toBe('test-squad');
+      expect(all[0].info.agentId).toBe('test-squad');
       expect(all[0].info.index).toBe(1);
     });
   });
@@ -440,14 +440,14 @@ describe('TerminalManager', () => {
       expect(info).toBeDefined();
       expect(info!.displayName).toBe('My Custom Name');
       // squadIcon must be preserved
-      expect(info!.squadIcon).toBe('🧪');
+      expect(info!.agentIcon).toBe('🧪');
 
       expect(ctx.workspaceState.update).toHaveBeenCalledWith(
         'editless.terminalSessions',
         expect.arrayContaining([
           expect.objectContaining({
             displayName: 'My Custom Name',
-            squadIcon: '🧪',
+            agentIcon: '🧪',
           }),
         ]),
       );
@@ -497,7 +497,7 @@ describe('TerminalManager', () => {
 
       mgr.reconcile();
 
-      const forSquad = mgr.getTerminalsForSquad('test-squad');
+      const forSquad = mgr.getTerminalsForAgent('test-squad');
       expect(forSquad).toHaveLength(2);
 
       const indices = forSquad.map(t => t.info.index).sort();
@@ -610,7 +610,7 @@ describe('TerminalManager', () => {
 
       const info = mgr.getTerminalInfo(liveTerminal);
       expect(info).toBeDefined();
-      expect(info!.squadId).toBe('test-squad');
+      expect(info!.agentId).toBe('test-squad');
 
       const orphans = mgr.getOrphanedSessions();
       expect(orphans.find(e => e.id === 'orphan-rematch-1')).toBeUndefined();
@@ -669,9 +669,9 @@ describe('TerminalManager', () => {
     it('should assign correct squad association from the orphaned entry', () => {
       const orphanEntry = makePersistedEntry({
         id: 'orphan-relaunch-2',
-        squadId: 'my-squad',
-        squadName: 'My Squad',
-        squadIcon: '🚀',
+        agentId: 'my-squad',
+        agentName: 'My Squad',
+        agentIcon: '🚀',
         terminalName: '🚀 My Squad #1',
         displayName: '🚀 My Squad #1',
       });
@@ -684,9 +684,9 @@ describe('TerminalManager', () => {
       expect(terminal).toBeDefined();
       const info = mgr.getTerminalInfo(terminal!);
       expect(info).toBeDefined();
-      expect(info!.squadId).toBe('my-squad');
-      expect(info!.squadName).toBe('My Squad');
-      expect(info!.squadIcon).toBe('🚀');
+      expect(info!.agentId).toBe('my-squad');
+      expect(info!.agentName).toBe('My Squad');
+      expect(info!.agentIcon).toBe('🚀');
     });
 
     it('should remove the orphaned entry from orphan list after re-launch', () => {
@@ -1725,11 +1725,11 @@ describe('TerminalManager', () => {
     it('should restore multiple squads with correct association after reload', () => {
       // Pre-seed saved state with two squads
       const alphaEntry = makePersistedEntry({
-        id: 'alpha-1', squadId: 'squad-alpha', squadName: 'Alpha', squadIcon: '🅰️',
+        id: 'alpha-1', agentId: 'squad-alpha', agentName: 'Alpha', agentIcon: '🅰️',
         terminalName: '🅰️ Alpha #1', displayName: '🅰️ Alpha #1', originalName: '🅰️ Alpha #1',
       });
       const betaEntry = makePersistedEntry({
-        id: 'beta-1', squadId: 'squad-beta', squadName: 'Beta', squadIcon: '🅱️',
+        id: 'beta-1', agentId: 'squad-beta', agentName: 'Beta', agentIcon: '🅱️',
         terminalName: '🅱️ Beta #1', displayName: '🅱️ Beta #1', originalName: '🅱️ Beta #1',
       });
       // Simulate live terminals that survived the reload
@@ -1741,7 +1741,7 @@ describe('TerminalManager', () => {
 
       const all = mgr.getAllTerminals();
       expect(all).toHaveLength(2);
-      expect(all.map(t => t.info.squadId).sort()).toEqual(['squad-alpha', 'squad-beta']);
+      expect(all.map(t => t.info.agentId).sort()).toEqual(['squad-alpha', 'squad-beta']);
     });
 
     it('should mark entries as orphaned when terminals are gone (close/reopen)', () => {
@@ -1753,13 +1753,13 @@ describe('TerminalManager', () => {
 
       const orphans = mgr.getOrphanedSessions();
       expect(orphans).toHaveLength(1);
-      expect(orphans[0].squadId).toBe('test-squad');
+      expect(orphans[0].agentId).toBe('test-squad');
     });
 
     it('should persist squadPath from config and carry it through reconcile', () => {
       const entry = makePersistedEntry({
         terminalName: '🧪 Test Squad #1',
-        squadPath: '/home/user/project',
+        agentPath: '/home/user/project',
       });
       const liveTerminal = makeMockTerminal('🧪 Test Squad #1');
       mockTerminals.push(liveTerminal);
@@ -1769,7 +1769,7 @@ describe('TerminalManager', () => {
       mgr.reconcile();
 
       const all = mgr.getAllTerminals();
-      expect(all[0].info.squadPath).toBe('/home/user/project');
+      expect(all[0].info.agentPath).toBe('/home/user/project');
     });
 
     it('should recover session ID through persist/orphan/relaunch cycle', () => {
@@ -1797,7 +1797,7 @@ describe('TerminalManager', () => {
         id: 'relaunch-cwd-1',
         terminalName: '🧪 No Match',
         displayName: '🧪 Test Squad #1',
-        squadPath: '/project/dir',
+        agentPath: '/project/dir',
         launchCommand: 'copilot chat',
       });
       const ctx = makeMockContext([orphanEntry]);
@@ -2500,12 +2500,12 @@ describe('TerminalManager', () => {
         labelKey: 'terminal:legacy-1',
         displayName: 'Legacy Terminal',
         originalName: 'Legacy Terminal',
-        squadId: config.id,
-        squadName: config.name,
-        squadIcon: config.icon,
+        agentId: config.id,
+        agentName: config.name,
+        agentIcon: config.icon,
         index: 1,
         createdAt: new Date(),
-        squadPath: config.path,
+        agentPath: config.path,
       };
       (mgr as any)._terminals.set(terminal, info);
 
@@ -2611,7 +2611,7 @@ describe('TerminalManager', () => {
       // Simulate a persisted entry with index 2 that has mismatched names
       const entry = makePersistedEntry({
         id: 'idx-match-2',
-        squadId: 'idx-squad',
+        agentId: 'idx-squad',
         index: 2,
         terminalName: 'shell-mangled-name',
         displayName: 'shell-mangled-name',
@@ -3021,7 +3021,7 @@ describe('TerminalManager', () => {
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
       const entry = makePersistedEntry({
-        squadPath: '/home/user/.copilot/agents/my-agent',
+        agentPath: '/home/user/.copilot/agents/my-agent',
         launchCommand: 'copilot --agent my-agent',
         agentSessionId: 'session-123',
       });
@@ -3076,12 +3076,12 @@ describe('TerminalManager', () => {
 
   describe('registerExternalTerminal', () => {
     const defaultMetadata = {
-      squadId: 'ext-squad',
-      squadName: 'External Squad',
-      squadIcon: '🔌',
+      agentId: 'ext-squad',
+      agentName: 'External Squad',
+      agentIcon: '🔌',
       agentSessionId: 'session-abc-123',
       launchCommand: 'copilot-agent --resume session-abc-123',
-      squadPath: '/tmp/ext-squad',
+      agentPath: '/tmp/ext-squad',
     };
 
     it('should register terminal with correct metadata', () => {
@@ -3093,14 +3093,14 @@ describe('TerminalManager', () => {
 
       const info = mgr.getTerminalInfo(terminal);
       expect(info).toBeDefined();
-      expect(info!.squadId).toBe('ext-squad');
-      expect(info!.squadName).toBe('External Squad');
-      expect(info!.squadIcon).toBe('🔌');
+      expect(info!.agentId).toBe('ext-squad');
+      expect(info!.agentName).toBe('External Squad');
+      expect(info!.agentIcon).toBe('🔌');
       expect(info!.displayName).toBe('🔌 External Squad #1');
       expect(info!.originalName).toBe('🔌 External Squad #1');
       expect(info!.agentSessionId).toBe('session-abc-123');
       expect(info!.launchCommand).toBe('copilot-agent --resume session-abc-123');
-      expect(info!.squadPath).toBe('/tmp/ext-squad');
+      expect(info!.agentPath).toBe('/tmp/ext-squad');
       expect(info!.index).toBe(1);
       expect(info!.createdAt).toBeInstanceOf(Date);
     });
@@ -3140,7 +3140,7 @@ describe('TerminalManager', () => {
 
       const info = mgr.getTerminalInfo(terminal);
       expect(info).toBeDefined();
-      expect(info!.squadId).toBe('ext-squad');
+      expect(info!.agentId).toBe('ext-squad');
     });
 
     it('should not create session watcher when agentSessionId is undefined', () => {
@@ -3212,9 +3212,9 @@ describe('TerminalManager', () => {
         'editless.terminalSessions',
         expect.arrayContaining([
           expect.objectContaining({
-            squadId: 'ext-squad',
-            squadName: 'External Squad',
-            squadIcon: '🔌',
+            agentId: 'ext-squad',
+            agentName: 'External Squad',
+            agentIcon: '🔌',
           }),
         ]),
       );
