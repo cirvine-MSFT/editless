@@ -11,6 +11,45 @@
 
 ## Learnings
 
+### 2025-01-26: Architecture Review — Issue #246 Modularity & God Objects
+
+**God Objects Identified:**
+- **terminal-manager.ts (852 lines)**: 7 concerns mixed—terminal lifecycle, persistence, orphan recovery, CWD resolution, state detection. HIGHEST coupling (4 dependents).
+- **work-items-tree.ts (615 lines)**: GitHub/ADO/local providers interleaved. Violates strategy pattern—should use IBackendProvider interface.
+- **extension.ts (553 lines)**: Monolithic activate() with 33 imports. Entry point should orchestrate, not implement.
+- **commands/work-item-commands.ts (513 lines)**: QuickPick builders duplicated 3x. God-object launchers handle GitHub/ADO/local polymorphically.
+
+**Key Patterns:**
+1. **Strategy Pattern Missing:** Backend providers (GitHub/ADO/local) should implement common interface, not conditionals.
+2. **Data/UI Coupling:** editless-tree.ts mixes data fetching with rendering (lines 215-222, 273-280, 314-322).
+3. **Command Bloat:** Commands handle file I/O, git operations, terminal spawning—should delegate to services.
+
+**File Paths:**
+- Core managers: `src/terminal-manager.ts`, `src/session-context.ts`, `src/editless-tree.ts`
+- Tree providers: `src/work-items-tree.ts`, `src/prs-tree.ts`, `src/base-tree-provider.ts`
+- Commands: `src/commands/agent-commands.ts`, `src/commands/work-item-commands.ts`, `src/commands/session-commands.ts`
+- Extension entry: `src/extension.ts`
+
+**Extraction Priorities (Tier 1):**
+1. terminal-manager → 4 modules (terminal-state, terminal-persistence, session-recovery, cwd-resolver)
+2. work-items-tree → 3 backend providers + interface
+3. extension → 6 init modules (settings, core, discovery, integrations, watchers, session-commands)
+
+**Architecture Principles:**
+- Single Responsibility: One file = one concern
+- Import Limit: ≤8 dependencies per module
+- Line Limit: <300 lines per file
+- Strategy Pattern: Backend providers implement IBackendProvider
+- API Stability: Maintain public exports during extractions
+
+**Testing Strategy:**
+- Run full test suite before/after each extraction
+- Integration tests for terminal lifecycle, tree rendering
+- Manual testing for QuickPicks, filters, git worktree operations
+- Coverage gaps: file watchers, ADO integration, QuickPick UI flows
+
+---
+
 ### 2026-03-01: Feature Ideation — Next Release Cycle
 
 **Task:** Propose 6 cool but practical new EditLess features.
