@@ -4,6 +4,7 @@ import type { AdoWorkItem } from './ado-client';
 import type { LocalTask } from './local-tasks-client';
 import { mapLocalState } from './local-tasks-client';
 import { fetchLocalTasks } from './local-tasks-client';
+import { BaseTreeProvider } from './base-tree-provider';
 
 interface IssueFilter {
   includeLabels?: string[];
@@ -39,8 +40,6 @@ export interface LevelFilter {
   tags?: string[];              // ADO tags (project level only)
 }
 
-
-
 export class WorkItemsTreeItem extends vscode.TreeItem {
   public issue?: GitHubIssue;
   public adoWorkItem?: AdoWorkItem;
@@ -54,48 +53,24 @@ export class WorkItemsTreeItem extends vscode.TreeItem {
   }
 }
 
-export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsTreeItem> {
-  private _onDidChangeTreeData = new vscode.EventEmitter<WorkItemsTreeItem | undefined | void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWorkItem, WorkItemsTreeItem, LevelFilter> {
+  protected readonly _ghIdPrefix = 'github';
+  protected readonly _adoIdPrefix = 'ado';
+  protected readonly _itemCountSuffix: [string, string] = ['item', 'items'];
+  protected readonly _emptyMessage = 'No assigned issues found';
 
-  private _repos: string[] = [];
   private _issues = new Map<string, GitHubIssue[]>();
   private _adoItems: AdoWorkItem[] = [];
   private _adoChildMap = new Map<number, number[]>();
-  private _adoConfigured = false;
-  private _loading = false;
   private _filter: WorkItemsFilter = { repos: [], labels: [], states: [], types: [] };
-  private _levelFilters = new Map<string, LevelFilter>();
-  private _filterSeq = 0;
-  private _treeView?: vscode.TreeView<WorkItemsTreeItem>;
-  private _allLabels = new Set<string>();
-  private _adoOrg: string | undefined;
-  private _adoProject: string | undefined;
   private _localTasks = new Map<string, LocalTask[]>();
   private _localConfigured = false;
   private _localFolders: string[] = [];
-
-  setRepos(repos: string[]): void {
-    this._repos = repos;
-    this.fetchAll();
-  }
-
-  setAdoConfig(org: string | undefined, project: string | undefined): void {
-    this._adoOrg = org;
-    this._adoProject = project;
-  }
 
   setAdoItems(items: AdoWorkItem[]): void {
     this._adoItems = items;
     this._adoConfigured = true;
     this._buildAdoChildMap();
-    this._onDidChangeTreeData.fire();
-  }
-
-  clearAdo(): void {
-    this._adoItems = [];
-    this._adoChildMap.clear();
-    this._adoConfigured = false;
     this._onDidChangeTreeData.fire();
   }
 
@@ -115,11 +90,6 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     this._localFolders = [];
     this._localConfigured = false;
     this._onDidChangeTreeData.fire();
-  }
-
-  setTreeView(view: vscode.TreeView<WorkItemsTreeItem>): void {
-    this._treeView = view;
-    this._updateDescription();
   }
 
   get filter(): WorkItemsFilter {
@@ -142,7 +112,7 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     this.setFilter({ repos: [], labels: [], states: [], types: [] });
   }
 
-  private _updateDescription(): void {
+  protected _updateDescription(): void {
     if (!this._treeView) return;
     if (!this.isFiltered) {
       this._treeView.description = undefined;
@@ -165,87 +135,32 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   }
 
   getAllRepos(): string[] {
-    const repos = [...this._repos];
-    if (this._adoConfigured) repos.push('(ADO)');
+    const repos = super.getAllRepos();
     if (this._localConfigured) repos.push('(Local)');
     return repos;
   }
 
-  private _cleanNodeId(id: string): string { return id.replace(/:f\d+$/, ''); }
-
-  getLevelFilter(nodeId: string): LevelFilter | undefined {
-    return this._levelFilters.get(this._cleanNodeId(nodeId));
-  }
-
-  setLevelFilter(nodeId: string, filter: LevelFilter): void {
-    this._levelFilters.set(this._cleanNodeId(nodeId), filter);
-    this._filterSeq++;
-    this._onDidChangeTreeData.fire();
-  }
-
-  clearLevelFilter(nodeId: string): void {
-    this._levelFilters.delete(this._cleanNodeId(nodeId));
-    this._filterSeq++;
-    this._onDidChangeTreeData.fire();
-  }
-
-  clearAllLevelFilters(): void {
-    this._levelFilters.clear();
-    this._filterSeq++;
-    this._onDidChangeTreeData.fire();
-  }
-
-  private _contextWithFilter(base: string, nodeId: string): string {
-    return this._levelFilters.has(this._cleanNodeId(nodeId)) ? `${base}-filtered` : base;
-  }
-
   getAvailableOptions(nodeId: string, contextValue: string): { owners?: string[]; repos?: string[]; orgs?: string[]; projects?: string[]; types?: string[]; labels?: string[]; states?: UnifiedState[]; tags?: string[] } {
-    // Strip :f{seq} suffix from node IDs and -filtered from contextValue before data lookup
+    const base = this._getAvailableOptionsBase(nodeId, contextValue);
+    if (base) return base;
+
     const cleanId = nodeId.replace(/:f\d+$/, '');
     const baseContext = contextValue.replace(/-filtered$/, '');
-    if (baseContext === 'github-backend') {
-      // Extract unique owners from repo names
-      const owners = new Set<string>();
-      for (const repo of this._repos) {
-        const owner = repo.split('/')[0];
-        if (owner) owners.add(owner);
-      }
-      return { owners: [...owners].sort() };
-    }
-
-    if (baseContext === 'github-org') {
-      // Extract repos for this owner
-      const owner = cleanId.replace('github:', '');
-      const repos = this._repos.filter(r => r.startsWith(owner + '/'));
-      return { repos };
-    }
 
     if (baseContext === 'github-repo') {
-      // Labels, states, milestones for this repo
       const repoName = cleanId.replace('github:', '');
       const issues = this._issues.get(repoName) ?? [];
       const labels = new Set<string>();
       for (const issue of issues) {
         for (const label of issue.labels) labels.add(label);
       }
-      return { 
-        labels: [...labels].sort(), 
-        states: ['open', 'active', 'closed'] as UnifiedState[]
+      return {
+        states: ['open', 'active', 'closed'],
+        labels: [...labels].sort(),
       };
     }
 
-    if (baseContext === 'ado-backend') {
-      // Return configured org
-      return { orgs: this._adoOrg ? [this._adoOrg] : [] };
-    }
-
-    if (baseContext === 'ado-org') {
-      // Return configured project
-      return { projects: this._adoProject ? [this._adoProject] : [] };
-    }
-
     if (baseContext === 'ado-project') {
-      // Types, states, tags for ADO items
       const types = new Set<string>();
       const tags = new Set<string>();
       for (const wi of this._adoItems) {
@@ -253,9 +168,15 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         for (const tag of wi.tags) tags.add(tag);
       }
       return {
+        states: ['open', 'active', 'closed'],
         types: [...types].sort(),
-        states: ['open', 'active', 'closed'] as UnifiedState[],
-        tags: [...tags].sort()
+        tags: [...tags].sort(),
+      };
+    }
+
+    if (baseContext === 'local-backend' || baseContext === 'local-folder') {
+      return {
+        states: ['open', 'active', 'closed'],
       };
     }
 
@@ -268,26 +189,52 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     return {};
   }
 
-  private _adoRefresh?: () => Promise<void>;
-  private _disposed = false;
-
-  setAdoRefresh(fn: () => Promise<void>): void {
-    this._adoRefresh = fn;
+  protected _createTreeItem(label: string, collapsible?: vscode.TreeItemCollapsibleState): WorkItemsTreeItem {
+    return new WorkItemsTreeItem(label, collapsible);
   }
 
-  refresh(): void {
-    this.fetchAll();
+  protected _getLevelFilterParts(filter: LevelFilter): string[] {
+    const parts: string[] = [];
+    if (filter.types && filter.types.length > 0) parts.push(filter.types.join(', '));
+    if (filter.labels && filter.labels.length > 0) parts.push(filter.labels.join(', '));
+    if (filter.states && filter.states.length > 0) parts.push(filter.states.join(', '));
+    if (filter.tags && filter.tags.length > 0) parts.push(filter.tags.join(', '));
+    return parts;
   }
 
-  private _pendingRefresh = false;
+  protected _getGitHubItemsMap(): Map<string, GitHubIssue[]> {
+    return this._issues;
+  }
 
-  private async fetchAll(): Promise<void> {
-    if (this._loading) {
-      this._pendingRefresh = true;
-      return;
-    }
-    this._loading = true;
+  protected _getAdoItemsList(): AdoWorkItem[] {
+    return this._adoItems;
+  }
 
+  protected applyRuntimeFilter(issues: GitHubIssue[]): GitHubIssue[] {
+    return issues.filter(issue => {
+      // Default exclusion: hide closed items unless user explicitly includes 'closed'
+      if (this._filter.states.length === 0 && mapGitHubState(issue) === 'closed') return false;
+      if (this._filter.repos.length > 0 && !this._filter.repos.includes(issue.repository)) return false;
+      if (this._filter.labels.length > 0 && !this.matchesLabelFilter(issue.labels, this._filter.labels)) return false;
+      if (this._filter.states.length > 0 && !this._filter.states.includes(mapGitHubState(issue))) return false;
+      if (this._filter.types.length > 0 && !this.matchesTypeFilter(issue.labels, this._filter.types)) return false;
+      return true;
+    });
+  }
+
+  protected applyAdoRuntimeFilter(items: AdoWorkItem[]): AdoWorkItem[] {
+    return items.filter(wi => {
+      // Default exclusion: hide closed items unless user explicitly includes 'closed'
+      if (this._filter.states.length === 0 && mapAdoState(wi.state) === 'closed') return false;
+      if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
+      if (this._filter.labels.length > 0 && !this.matchesLabelFilter(wi.tags, this._filter.labels)) return false;
+      if (this._filter.states.length > 0 && !this._filter.states.includes(mapAdoState(wi.state))) return false;
+      if (this._filter.types.length > 0 && !this._filter.types.includes(wi.type)) return false;
+      return true;
+    });
+  }
+
+  protected async _doFetchAll(): Promise<void> {
     const nextIssues = new Map<string, GitHubIssue[]>();
     const nextLabels = new Set<string>();
     const fetches: Promise<void>[] = [];
@@ -325,176 +272,135 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       );
     }
 
-    try {
-      await Promise.all(fetches);
+    await Promise.all(fetches);
 
-      this._issues = nextIssues;
-      this._allLabels = nextLabels;
-      this._loading = false;
-      if (!this._disposed) {
-        this._onDidChangeTreeData.fire();
-      }
-      if (this._pendingRefresh) {
-        this._pendingRefresh = false;
-        this.fetchAll();
-      }
-    } catch (err) {
-      this._loading = false;
-      if (err instanceof vscode.CancellationError) {
-        return;
-      }
-      if (err instanceof Error && (err.message.includes('Canceled') || err.message.includes('Channel has been closed'))) {
-        return;
-      }
-      throw err;
+    this._issues = nextIssues;
+    this._allLabels = nextLabels;
+  }
+
+  protected _getRootGitHubSingleBackend(filteredItems: Map<string, GitHubIssue[]>): WorkItemsTreeItem[] {
+    // Collapse if single repo
+    if (filteredItems.size === 1) {
+      const [repoName, issues] = [...filteredItems.entries()][0];
+      // Check for milestone grouping
+      const milestoneGroups = this._buildMilestoneGroupsForIssues(issues);
+      if (milestoneGroups) return milestoneGroups;
+      // Return issues directly
+      return issues.map((i) => this.buildIssueItem(i));
+    } else {
+      // Multiple repos - show owner level
+      return this._getGitHubOwnerNodes(filteredItems);
     }
   }
 
-  getTreeItem(element: WorkItemsTreeItem): vscode.TreeItem {
-    return element;
+  protected _getRootChildren(): WorkItemsTreeItem[] {
+    const ghMap = this._getGitHubItemsMap();
+    const adoList = this._getAdoItemsList();
+    const allLocalTasks = this._getAllFilteredLocalTasks();
+
+    if (this._loading && ghMap.size === 0 && adoList.length === 0 && allLocalTasks.length === 0) {
+      const item = this._createTreeItem('Loading...');
+      item.iconPath = new vscode.ThemeIcon('loading~spin');
+      return [item];
+    }
+
+    if (this._repos.length === 0 && !this._adoConfigured && !this._localConfigured) {
+      const ghItem = this._createTreeItem('Configure in GitHub');
+      ghItem.iconPath = new vscode.ThemeIcon('github');
+      ghItem.command = {
+        command: 'editless.configureRepos',
+        title: 'Configure GitHub Repos',
+      };
+
+      const adoItem = this._createTreeItem('Configure in ADO');
+      adoItem.iconPath = new vscode.ThemeIcon('azure');
+      adoItem.command = {
+        command: 'editless.configureAdo',
+        title: 'Configure Azure DevOps',
+      };
+
+      const localItem = this._createTreeItem('Configure Local Tasks');
+      localItem.iconPath = new vscode.ThemeIcon('checklist');
+      localItem.command = {
+        command: 'editless.configureLocalTasks',
+        title: 'Configure Local Tasks',
+      };
+
+      return [ghItem, adoItem, localItem];
+    }
+
+    // Apply runtime filters
+    const filteredGitHub = this._getFilteredGitHubMap();
+    const filteredAdo = this.applyAdoRuntimeFilter(adoList);
+    const filteredLocal = allLocalTasks;
+
+    const hasGitHub = filteredGitHub.size > 0;
+    const hasAdo = filteredAdo.length > 0;
+    const hasLocal = filteredLocal.length > 0;
+
+    if (!hasGitHub && !hasAdo && !hasLocal) {
+      const msg = this.isFiltered ? `No ${this._itemCountSuffix[1]} match current filter` : this._emptyMessage;
+      const icon = this.isFiltered ? 'filter' : 'check';
+      const item = this._createTreeItem(msg);
+      item.iconPath = new vscode.ThemeIcon(icon);
+      return [item];
+    }
+
+    const items: WorkItemsTreeItem[] = [];
+    const fseq = this._filterSeq;
+    const backendCount = (hasGitHub ? 1 : 0) + (hasAdo ? 1 : 0) + (hasLocal ? 1 : 0);
+
+    // ADO backend group
+    if (hasAdo) {
+      if (backendCount > 1) {
+        const adoGroup = this._createTreeItem('Azure DevOps', vscode.TreeItemCollapsibleState.Expanded);
+        adoGroup.iconPath = new vscode.ThemeIcon('azure');
+        adoGroup.description = this._getFilterDescription(`${this._adoIdPrefix}:`, filteredAdo.length);
+        adoGroup.contextValue = this._contextWithFilter(`${this._adoIdPrefix}-backend`, `${this._adoIdPrefix}:`);
+        adoGroup.id = `${this._adoIdPrefix}::f${fseq}`;
+        items.push(adoGroup);
+      } else {
+        return this._getAdoOrgNodes(filteredAdo.length);
+      }
+    }
+
+    // GitHub backend group
+    if (hasGitHub) {
+      if (backendCount > 1) {
+        const ghGroup = this._createTreeItem('GitHub', vscode.TreeItemCollapsibleState.Expanded);
+        ghGroup.iconPath = new vscode.ThemeIcon('github');
+        const totalCount = [...filteredGitHub.values()].flat().length;
+        ghGroup.description = this._getFilterDescription(`${this._ghIdPrefix}:`, totalCount);
+        ghGroup.contextValue = this._contextWithFilter(`${this._ghIdPrefix}-backend`, `${this._ghIdPrefix}:`);
+        ghGroup.id = `${this._ghIdPrefix}::f${fseq}`;
+        items.push(ghGroup);
+      } else {
+        return this._getRootGitHubSingleBackend(filteredGitHub);
+      }
+    }
+
+    // Local Tasks backend group
+    if (hasLocal) {
+      if (backendCount > 1) {
+        const localGroup = this._createTreeItem('Local Tasks', vscode.TreeItemCollapsibleState.Expanded);
+        localGroup.iconPath = new vscode.ThemeIcon('checklist');
+        localGroup.description = this._getFilterDescription('local:', filteredLocal.length);
+        localGroup.contextValue = this._contextWithFilter('local-backend', 'local:');
+        localGroup.id = `local::f${fseq}`;
+        items.push(localGroup);
+      } else {
+        if (this._localFolders.length === 1) {
+          return filteredLocal.map(t => this._buildLocalTaskItem(t));
+        }
+        return this._getLocalFolderNodes(filteredLocal);
+      }
+    }
+
+    return items;
   }
 
-  getChildren(element?: WorkItemsTreeItem): WorkItemsTreeItem[] {
-    if (!element) {
-      // Root level - show backend groups or configure options
-      if (this._loading && this._issues.size === 0 && this._adoItems.length === 0) {
-        const item = new WorkItemsTreeItem('Loading...');
-        item.iconPath = new vscode.ThemeIcon('loading~spin');
-        return [item];
-      }
-
-      if (this._repos.length === 0 && !this._adoConfigured && !this._localConfigured) {
-        const ghItem = new WorkItemsTreeItem('Configure in GitHub');
-        ghItem.iconPath = new vscode.ThemeIcon('github');
-        ghItem.command = {
-          command: 'editless.configureRepos',
-          title: 'Configure GitHub Repos',
-        };
-
-        const adoItem = new WorkItemsTreeItem('Configure in ADO');
-        adoItem.iconPath = new vscode.ThemeIcon('azure');
-        adoItem.command = {
-          command: 'editless.configureAdo',
-          title: 'Configure Azure DevOps',
-        };
-
-        const localItem = new WorkItemsTreeItem('Configure Local Tasks');
-        localItem.iconPath = new vscode.ThemeIcon('checklist');
-        localItem.command = {
-          command: 'editless.configureLocalTasks',
-          title: 'Configure Local Tasks',
-        };
-
-        return [ghItem, adoItem, localItem];
-      }
-
-      // Apply runtime filters
-      const filteredIssues = new Map<string, GitHubIssue[]>();
-      for (const [repo, issues] of this._issues.entries()) {
-        const filtered = this.applyRuntimeFilter(issues);
-        if (filtered.length > 0) filteredIssues.set(repo, filtered);
-      }
-      const filteredAdo = this.applyAdoRuntimeFilter(this._adoItems);
-      const filteredLocal = this._getAllFilteredLocalTasks();
-
-      const hasGitHub = filteredIssues.size > 0;
-      const hasAdo = filteredAdo.length > 0;
-      const hasLocal = filteredLocal.length > 0;
-
-      if (!hasGitHub && !hasAdo && !hasLocal) {
-        const msg = this.isFiltered ? 'No items match current filter' : 'No assigned issues found';
-        const icon = this.isFiltered ? 'filter' : 'check';
-        const item = new WorkItemsTreeItem(msg);
-        item.iconPath = new vscode.ThemeIcon(icon);
-        return [item];
-      }
-
-      const items: WorkItemsTreeItem[] = [];
-      const fseq = this._filterSeq;
-
-      // Check if we have only one backend configured
-      const backendCount = (hasGitHub ? 1 : 0) + (hasAdo ? 1 : 0) + (hasLocal ? 1 : 0);
-
-      // ADO backend group
-      if (hasAdo) {
-        if (backendCount > 1) {
-          const adoGroup = new WorkItemsTreeItem('Azure DevOps', vscode.TreeItemCollapsibleState.Expanded);
-          adoGroup.iconPath = new vscode.ThemeIcon('azure');
-          const totalCount = filteredAdo.length;
-          adoGroup.description = this._getFilterDescription('ado:', totalCount);
-          adoGroup.contextValue = this._contextWithFilter('ado-backend', `ado:`);
-          adoGroup.id = `ado::f${fseq}`;
-          items.push(adoGroup);
-        } else {
-          // Only ADO configured - preserve org→project hierarchy
-          return this._getAdoOrgNodes(filteredAdo);
-        }
-      }
-
-      // GitHub backend group
-      if (hasGitHub) {
-        if (backendCount > 1) {
-          const ghGroup = new WorkItemsTreeItem('GitHub', vscode.TreeItemCollapsibleState.Expanded);
-          ghGroup.iconPath = new vscode.ThemeIcon('github');
-          const totalCount = [...filteredIssues.values()].flat().length;
-          ghGroup.description = this._getFilterDescription('github:', totalCount);
-          ghGroup.contextValue = this._contextWithFilter('github-backend', `github:`);
-          ghGroup.id = `github::f${fseq}`;
-          items.push(ghGroup);
-        } else {
-          // Only GitHub configured - collapse if single repo
-          if (filteredIssues.size === 1) {
-            const [repoName, issues] = [...filteredIssues.entries()][0];
-            // Check for milestone grouping
-            const milestoneGroups = this._buildMilestoneGroupsForIssues(issues);
-            if (milestoneGroups) return milestoneGroups;
-            // Return issues directly
-            return issues.map((i) => this.buildIssueItem(i));
-          } else {
-            // Multiple repos - show owner level
-            return this._getGitHubOwnerNodes(filteredIssues);
-          }
-        }
-      }
-
-      // Local Tasks backend group
-      if (hasLocal) {
-        if (backendCount > 1) {
-          const localGroup = new WorkItemsTreeItem('Local Tasks', vscode.TreeItemCollapsibleState.Expanded);
-          localGroup.iconPath = new vscode.ThemeIcon('checklist');
-          localGroup.description = this._getFilterDescription('local:', filteredLocal.length);
-          localGroup.contextValue = this._contextWithFilter('local-backend', `local:`);
-          localGroup.id = `local::f${fseq}`;
-          items.push(localGroup);
-        } else {
-          // Only local configured — collapse to folder→tasks if single folder
-          if (this._localFolders.length === 1) {
-            return filteredLocal.map(t => this._buildLocalTaskItem(t));
-          }
-          return this._getLocalFolderNodes(filteredLocal);
-        }
-      }
-
-      return items;
-    }
-
-    // Strip -filtered suffix for dispatch
-    const ctx = element.contextValue?.replace(/-filtered$/, '') ?? '';
-
-    // Handle backend group expansions
-    if (ctx === 'ado-backend') {
-      return this._getAdoOrgNodes(this.applyAdoRuntimeFilter(this._adoItems));
-    }
-
-    if (ctx === 'github-backend') {
-      const filteredIssues = new Map<string, GitHubIssue[]>();
-      for (const [repo, issues] of this._issues.entries()) {
-        const filtered = this.applyRuntimeFilter(issues);
-        if (filtered.length > 0) filteredIssues.set(repo, filtered);
-      }
-      return this._getGitHubOwnerNodes(filteredIssues);
-    }
-
+  protected _getChildrenForContext(element: WorkItemsTreeItem, ctx: string): WorkItemsTreeItem[] {
+    // Local Tasks backend
     if (ctx === 'local-backend') {
       const backendFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       let tasks = this._getAllFilteredLocalTasks();
@@ -504,38 +410,33 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
       return this._getLocalFolderNodes(tasks);
     }
 
+    // Local folder
     if (ctx === 'local-folder') {
       const folderPath = element.id?.replace(/^local:|:f\d+$/g, '') ?? '';
       const tasks = this._localTasks.get(folderPath) ?? [];
       const folderFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       const effectiveFilter = folderFilter ?? this._levelFilters.get('local:');
       if (effectiveFilter?.states && effectiveFilter.states.length > 0) {
-        let filtered = tasks;
         if (this._filter.repos.length > 0 && !this._filter.repos.includes('(Local)')) return [];
-        return this._applyLocalLevelFilter(filtered, effectiveFilter).map(t => this._buildLocalTaskItem(t));
+        return this._applyLocalLevelFilter(tasks, effectiveFilter).map(t => this._buildLocalTaskItem(t));
       }
       const filtered = this._applyLocalRuntimeFilter(tasks);
       const levelFiltered = effectiveFilter ? this._applyLocalLevelFilter(filtered, effectiveFilter) : filtered;
       return levelFiltered.map(t => this._buildLocalTaskItem(t));
     }
 
-    // ADO org node
-    if (ctx === 'ado-org') {
-      return this._getAdoProjectNodes(this.applyAdoRuntimeFilter(this._adoItems));
-    }
-
     // ADO project node
-    if (ctx === 'ado-project') {
-      const filteredAdo = this.applyAdoRuntimeFilter(this._adoItems);
+    if (ctx === `${this._adoIdPrefix}-project`) {
+      let filtered = this.applyAdoRuntimeFilter(this._adoItems);
       const projectFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
-      let filtered = filteredAdo;
       if (projectFilter) {
-        filtered = this._applyAdoLevelFilter(filteredAdo, projectFilter);
+        filtered = this._applyAdoLevelFilter(filtered, projectFilter);
       }
-      return this._getAdoRootItems(filtered).map(wi => this.buildAdoItem(wi));
+      const rootItems = this._getAdoRootItems(filtered);
+      return rootItems.map(wi => this.buildAdoItem(wi));
     }
 
-    // ADO parent item
+    // ADO parent item → child items
     if (ctx === 'ado-parent-item' && element.adoWorkItem) {
       const childIds = this._adoChildMap.get(element.adoWorkItem.id) ?? [];
       const filtered = this.applyAdoRuntimeFilter(this._adoItems);
@@ -545,38 +446,21 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
         .map(id => this.buildAdoItem(filtered.find(wi => wi.id === id)!));
     }
 
-    // GitHub owner node
-    if (ctx === 'github-org') {
-      const owner = element.id?.replace(/^github:|:f\d+$/g, '') ?? '';
-      const filteredIssues = new Map<string, GitHubIssue[]>();
-      for (const [repo, issues] of this._issues.entries()) {
-        if (repo.startsWith(owner + '/')) {
-          const filtered = this.applyRuntimeFilter(issues);
-          if (filtered.length > 0) filteredIssues.set(repo, filtered);
-        }
-      }
-      return this._getGitHubRepoNodes(filteredIssues, owner);
-    }
-
-    // GitHub repo node
-    if (ctx === 'github-repo') {
-      const repoName = element.id?.replace(/^github:|:f\d+$/g, '') ?? '';
-      const issues = this._issues.get(repoName) ?? [];
-      let filtered = this.applyRuntimeFilter(issues);
-      
+    // GitHub repo → issues or milestone groups
+    if (ctx === `${this._ghIdPrefix}-repo`) {
+      const repoName = element.id?.replace(new RegExp(`^${this._ghIdPrefix}:|:f\\d+$`, 'g'), '') ?? '';
+      let filtered = this.applyRuntimeFilter(this._issues.get(repoName) ?? []);
       const repoFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       if (repoFilter) {
         filtered = this._applyGitHubLevelFilter(filtered, repoFilter);
       }
-
       // Check for milestone grouping
       const milestoneGroups = this._buildMilestoneGroupsForIssues(filtered);
       if (milestoneGroups) return milestoneGroups;
-
       return filtered.map((i) => this.buildIssueItem(i));
     }
 
-    // Milestone group
+    // Milestone group → issues
     if (ctx === 'milestone-group') {
       const parts = element.id?.split(':') ?? [];
       // Format: ms:repoName:milestoneName:f{seq}
@@ -596,6 +480,11 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     return [];
   }
 
+  protected _clearAdoData(): void {
+    this._adoItems = [];
+    this._adoChildMap.clear();
+  }
+
   private filterIssues(issues: GitHubIssue[]): GitHubIssue[] {
     const config = vscode.workspace.getConfiguration('editless');
     const filter = config.get<IssueFilter>('github.issueFilter', {});
@@ -610,59 +499,9 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
     });
   }
 
-  /**
-   * Group filters by their label prefix (everything before the colon).
-   * Within each group, use OR logic (item matches if it has ANY label from that group).
-   * Across groups, use AND logic (item must match at least one label from EACH group).
-   */
-  private matchesLabelFilter(itemLabels: string[], activeFilters: string[]): boolean {
-    const grouped = new Map<string, string[]>();
-    for (const filter of activeFilters) {
-      const colonIndex = filter.indexOf(':');
-      const prefix = colonIndex > 0 ? filter.slice(0, colonIndex) : '';
-      const existing = grouped.get(prefix) ?? [];
-      existing.push(filter);
-      grouped.set(prefix, existing);
-    }
-
-    for (const [, group] of grouped) {
-      const matchesAny = group.some(f => itemLabels.includes(f));
-      if (!matchesAny) return false;
-    }
-    return true;
-  }
-
-  /**
-   * Match GitHub issues by type filter.
-   * Maps ADO-style types (e.g. "Bug") to GitHub's `type:bug` label convention.
-   */
   private matchesTypeFilter(issueLabels: string[], types: string[]): boolean {
     const typeLabelPatterns = types.map(t => `type:${t.toLowerCase().replace(/\s+/g, '-')}`);
     return issueLabels.some(l => typeLabelPatterns.includes(l.toLowerCase()));
-  }
-
-  private applyRuntimeFilter(issues: GitHubIssue[]): GitHubIssue[] {
-    return issues.filter(issue => {
-      // Default exclusion: hide closed items unless user explicitly includes 'closed'
-      if (this._filter.states.length === 0 && mapGitHubState(issue) === 'closed') return false;
-      if (this._filter.repos.length > 0 && !this._filter.repos.includes(issue.repository)) return false;
-      if (this._filter.labels.length > 0 && !this.matchesLabelFilter(issue.labels, this._filter.labels)) return false;
-      if (this._filter.states.length > 0 && !this._filter.states.includes(mapGitHubState(issue))) return false;
-      if (this._filter.types.length > 0 && !this.matchesTypeFilter(issue.labels, this._filter.types)) return false;
-      return true;
-    });
-  }
-
-  private applyAdoRuntimeFilter(items: AdoWorkItem[]): AdoWorkItem[] {
-    return items.filter(wi => {
-      // Default exclusion: hide closed items unless user explicitly includes 'closed'
-      if (this._filter.states.length === 0 && mapAdoState(wi.state) === 'closed') return false;
-      if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
-      if (this._filter.labels.length > 0 && !this.matchesLabelFilter(wi.tags, this._filter.labels)) return false;
-      if (this._filter.states.length > 0 && !this._filter.states.includes(mapAdoState(wi.state))) return false;
-      if (this._filter.types.length > 0 && !this._filter.types.includes(wi.type)) return false;
-      return true;
-    });
   }
 
   private buildIssueItem(issue: GitHubIssue): WorkItemsTreeItem {
@@ -725,91 +564,6 @@ export class WorkItemsTreeProvider implements vscode.TreeDataProvider<WorkItemsT
   private _getAdoRootItems(items: AdoWorkItem[]): AdoWorkItem[] {
     const idSet = new Set(items.map(wi => wi.id));
     return items.filter(wi => wi.parentId == null || !idSet.has(wi.parentId));
-  }
-
-  private _getFilterDescription(nodeId: string, itemCount: number): string {
-    const filter = this._levelFilters.get(this._cleanNodeId(nodeId));
-    const parts: string[] = [];
-    
-    if (filter?.types && filter.types.length > 0) {
-      parts.push(filter.types.join(', '));
-    }
-    if (filter?.labels && filter.labels.length > 0) {
-      parts.push(filter.labels.join(', '));
-    }
-    if (filter?.states && filter.states.length > 0) {
-      parts.push(filter.states.join(', '));
-    }
-    if (filter?.tags && filter.tags.length > 0) {
-      parts.push(filter.tags.join(', '));
-    }
-
-    const countStr = `${itemCount} item${itemCount === 1 ? '' : 's'}`;
-    return parts.length > 0 ? `${countStr} · ${parts.join(' · ')}` : countStr;
-  }
-
-  private _getAdoOrgNodes(filteredAdo: AdoWorkItem[]): WorkItemsTreeItem[] {
-    if (!this._adoOrg) return [];
-    
-    const fseq = this._filterSeq;
-    const orgItem = new WorkItemsTreeItem(this._adoOrg, vscode.TreeItemCollapsibleState.Expanded);
-    orgItem.iconPath = new vscode.ThemeIcon('organization');
-    orgItem.description = this._getFilterDescription(`ado:${this._adoOrg}`, filteredAdo.length);
-    orgItem.contextValue = this._contextWithFilter('ado-org', `ado:${this._adoOrg}`);
-    orgItem.id = `ado:${this._adoOrg}:f${fseq}`;
-    return [orgItem];
-  }
-
-  private _getAdoProjectNodes(filteredAdo: AdoWorkItem[]): WorkItemsTreeItem[] {
-    if (!this._adoProject) return [];
-    
-    const fseq = this._filterSeq;
-    const projectItem = new WorkItemsTreeItem(this._adoProject, vscode.TreeItemCollapsibleState.Expanded);
-    projectItem.iconPath = new vscode.ThemeIcon('folder');
-    projectItem.description = this._getFilterDescription(`ado:${this._adoOrg}:${this._adoProject}`, filteredAdo.length);
-    projectItem.contextValue = this._contextWithFilter('ado-project', `ado:${this._adoOrg}:${this._adoProject}`);
-    projectItem.id = `ado:${this._adoOrg}:${this._adoProject}:f${fseq}`;
-    return [projectItem];
-  }
-
-  private _getGitHubOwnerNodes(filteredIssues: Map<string, GitHubIssue[]>): WorkItemsTreeItem[] {
-    const owners = new Map<string, GitHubIssue[]>();
-    for (const [repo, issues] of filteredIssues.entries()) {
-      const owner = repo.split('/')[0];
-      if (owner) {
-        const existing = owners.get(owner) ?? [];
-        existing.push(...issues);
-        owners.set(owner, existing);
-      }
-    }
-
-    const fseq = this._filterSeq;
-    const items: WorkItemsTreeItem[] = [];
-    for (const [owner, issues] of owners) {
-      const ownerItem = new WorkItemsTreeItem(owner, vscode.TreeItemCollapsibleState.Expanded);
-      ownerItem.iconPath = new vscode.ThemeIcon('organization');
-      ownerItem.description = this._getFilterDescription(`github:${owner}`, issues.length);
-      ownerItem.contextValue = this._contextWithFilter('github-org', `github:${owner}`);
-      ownerItem.id = `github:${owner}:f${fseq}`;
-      items.push(ownerItem);
-    }
-    return items;
-  }
-
-  private _getGitHubRepoNodes(filteredIssues: Map<string, GitHubIssue[]>, owner: string): WorkItemsTreeItem[] {
-    const fseq = this._filterSeq;
-    const items: WorkItemsTreeItem[] = [];
-    for (const [repo, issues] of filteredIssues.entries()) {
-      if (repo.startsWith(owner + '/')) {
-        const repoItem = new WorkItemsTreeItem(repo, vscode.TreeItemCollapsibleState.Expanded);
-        repoItem.iconPath = new vscode.ThemeIcon('repo');
-        repoItem.description = this._getFilterDescription(`github:${repo}`, issues.length);
-        repoItem.contextValue = this._contextWithFilter('github-repo', `github:${repo}`);
-        repoItem.id = `github:${repo}:f${fseq}`;
-        items.push(repoItem);
-      }
-    }
-    return items;
   }
 
   private _applyAdoLevelFilter(items: AdoWorkItem[], filter: LevelFilter): AdoWorkItem[] {

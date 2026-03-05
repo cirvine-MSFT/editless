@@ -8,11 +8,11 @@ export const TreeItemCollapsibleState = { None: 0, Collapsed: 1, Expanded: 2 };
 export class TreeItem {
   label: string;
   collapsibleState: number;
-  iconPath?: unknown;
+  iconPath?: string | ThemeIcon;
   description?: string;
   contextValue?: string;
-  tooltip?: unknown;
-  command?: unknown;
+  tooltip?: string | MarkdownString;
+  command?: { command: string; title: string; arguments?: any[] };
   id?: string;
   constructor(label: string, collapsibleState: number = TreeItemCollapsibleState.None) {
     this.label = label;
@@ -22,8 +22,8 @@ export class TreeItem {
 
 export class ThemeIcon {
   id: string;
-  color?: unknown;
-  constructor(id: string, color?: unknown) {
+  color?: ThemeColor;
+  constructor(id: string, color?: ThemeColor) {
     this.id = id;
     this.color = color;
   }
@@ -41,6 +41,9 @@ export class MarkdownString {
   constructor(value: string) {
     this.value = value;
   }
+  appendText(text: string): MarkdownString { this.value += text; return this; }
+  appendMarkdown(markdown: string): MarkdownString { this.value += markdown; return this; }
+  appendCodeblock(code: string, _language?: string): MarkdownString { this.value += code; return this; }
 }
 
 export class EventEmitter {

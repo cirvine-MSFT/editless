@@ -1,3 +1,188 @@
+### 2026-03-04: BaseTreeProvider Integration Pattern for Third Backends
+
+**Date:** 2026-03-04  
+**Author:** Morty  
+**Status:** Decided  
+**Context:** PR #448 merge resolution
+
+## Decision
+
+When adding a third backend (Local Tasks) to a refactored tree provider using `BaseTreeProvider`, use protected method overrides rather than reverting the refactor to accommodate new features.
+
+## Pattern
+
+```typescript
+// WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWorkItem, ...>
+
+// 1. Add backend-specific fields as private (not in base class)
+private _localTasks = new Map<string, LocalTask[]>();
+private _localConfigured = false;
+private _localFolders: string[] = [];
+
+// 2. Override _getRootChildren() to handle N backends
+protected _getRootChildren(): WorkItemsTreeItem[] {
+  const ghMap = this._getFilteredGitHubMap();
+  const adoList = this.applyAdoRuntimeFilter(this._getAdoItemsList());
+  const localTasks = this._getAllFilteredLocalTasks();
+  
+  const backendCount = (ghMap.size > 0 ? 1 : 0) + (adoList.length > 0 ? 1 : 0) + (localTasks.length > 0 ? 1 : 0);
+  
+  // Render 1, 2, or 3 backend groups...
+}
+
+// 3. Override getChildren() to intercept new contexts
+getChildren(element?: TTreeItem): TTreeItem[] {
+  if (!element) return this._getRootChildren();
+  
+  const ctx = element.contextValue?.replace(/-filtered$/, '') ?? '';
+  
+  // Handle new backend contexts first
+  if (ctx === 'local-backend') return this._getLocalFolderNodes(...);
+  if (ctx === 'local-folder') return this._getLocalTaskItems(...);
+  
+  // Delegate to base class for GitHub/ADO
+  return super.getChildren(element);
+}
+
+// 4. Override getAllRepos() to include new backend
+getAllRepos(): string[] {
+  const repos = [...this._repos];
+  if (this._adoConfigured) repos.push('(ADO)');
+  if (this._localConfigured) repos.push('(Local)');
+  return repos;
+}
+
+// 5. Update _doFetchAll() to fetch third backend
+protected async _doFetchAll(): Promise<void> {
+  // GitHub + ADO fetches...
+  for (const folder of this._localFolders) {
+    fetches.push(fetchLocalTasks(folder).then(...));
+  }
+  // ...
+}
+```
+
+## Rationale
+
+- **Preserves refactor:** BaseTreeProvider structure remains clean (2-backend abstraction)
+- **Extends cleanly:** Third backend added via inheritance, not mutation
+- **Type safe:** Compiler enforces abstract method implementations
+- **Testable:** New backend behavior isolated in overrides, existing tests unaffected
+- **Scalable:** Pattern works for 4th, 5th backends (e.g., Jira, Linear)
+
+## Alternatives Considered
+
+1. **Revert refactor:** Make BaseTreeProvider handle 3+ backends generically → rejected (over-abstraction)
+2. **Duplicate code:** Copy BaseTreeProvider logic into WorkItemsTreeProvider → rejected (loses refactor value)
+3. **Conditional base class:** Use template parameter for backend count → rejected (complexity)
+
+## Consequences
+
+- ✅ All 1112 tests pass after merge
+- ✅ BaseTreeProvider remains reusable for PRsTreeProvider (2 backends only)
+- ✅ Local Tasks feature works identically to master implementation
+- ⚠️ `_getRootChildren()` override is ~80 lines (complex but unavoidable for 3-backend rendering)
+
+---
+
+### 2026-03-02: v0.1.4 Release — Triage & Branch Strategy
+
+**Date:** 2026-03-02  
+**Author:** Rick (Lead)  
+**Status:** Decided  
+**Issue Context:** v0.1.4 release (3 critical bugs: #456, #458, #457)
+
+## Decision Summary
+
+Three critical bugs triaged and prioritized for v0.1.4 release:
+
+1. **#456 (P1):** CancellationError during tree refresh on extension shutdown — runtime crash, needs immediate fix
+2. **#458 (P2):** Resume session ignores agent additionalArgs — functional loss for power users  
+3. **#457 (P3):** Resume session doesn't register with terminal manager — UI organization issue
+
+**Branch Strategy:** Create hotfix branches directly from `release/v0.1.x` (stable base), NOT cherry-pick from master. Avoids shipping 4 master-only commits (features, docs, auto-icon, decision merge) into the v0.1.4 release.
+
+**Implementation Routing:**
+- #456 → @copilot (squad:copilot) — good fit, isolated error handling
+- #457–#458 → Morty (squad:morty) — extension dev expertise required, flagged for review
+
+**Execution Order:** #456 (independent, low risk) → #458–#457 (in parallel once metadata story is clear)
+
+**Status:** Decided. Morty executing fixes.
+
+---
+
+### 2026-03-02: Worktree Feature — Resolved Design Decisions
+
+**Date:** 2026-03-01  
+**Author:** Casey Irvine (via Copilot)  
+**Status:** Decided  
+**Issue Context:** #422 (clone to worktree), #442 (auto-discover worktrees), #348 (branch labels)
+
+---
+
+## Decisions
+
+### 1. Workspace Membership: Hybrid with "already in workspace" awareness
+
+Worktrees are discovered via `git worktree list --porcelain`, NOT via workspace folder scan. A worktree is shown if its path is **under any workspace folder** (not just a top-level workspace folder). No need to "Add Folder to Workspace" separately if the worktree lives under an already-open parent folder.
+
+Setting `editless.discovery.worktreesOutsideWorkspace` (default: false) shows worktrees outside the workspace, rendered dimmed.
+
+### 2. Settings Inheritance: Field-by-field merge
+
+```
+Parent:    { model: "sonnet", additionalArgs: "--yolo", icon: "🔷" }
+Worktree:  { model: "gpt-5.2-codex" }
+Effective: { model: "gpt-5.2-codex", additionalArgs: "--yolo", icon: "🔷" }
+```
+
+Implementation: `{ ...parentSettings, ...worktreeOverrides }` — override one field, inherit the rest.
+
+### 3. Hiding: Cascading + Independent
+
+- Hiding a parent squad hides the parent AND all its worktrees (cascade down)
+- Individual worktrees CAN be hidden independently (without affecting parent or siblings)
+- Example: Hide 🌿 feat/old-experiment → only that worktree disappears
+- Example: Hide 🔷 EditLess (parent) → entire squad + all worktrees disappear
+- Implementation: `isHidden(id)` checks own ID first, then checks parent ID if it's a worktree
+
+### 4. Clone-to-worktree (#422): Create + auto-add to workspace, no auto-session
+
+Right-click → "Clone to Worktree" → prompt branch + path → `git worktree add` → auto-add folder to VS Code workspace. Does NOT auto-launch a session. Discovery handles tree appearance.
+
+### 5. Dedup: Worktree-aware dedup before standard dedup
+
+Detect worktree relationships via `git worktree list` BEFORE running dedup. Main checkout = parent, worktree copies = children with IDs `{parentId}:wt:{branch-kebab}`.
+
+### 6. Branch info source: DiscoveredItem.branch
+
+Terminal labels (#348) use `DiscoveredItem.branch` populated by `enrichWithWorktrees()` via `git worktree list`. Always available, no running session needed.
+
+---
+
+### 2026-02-28: Debounce Pattern for TerminalManager Change Events
+
+**Author:** Morty  
+**Date:** 2026-02-28  
+**Issue:** #438  
+**PR:** #439
+
+## Decision
+
+All `TerminalManager._onDidChange.fire()` calls are now routed through a 50ms debounced `_scheduleChange()` method. The `treeView.reveal()` call in `onDidChangeActiveTerminal` is separately debounced at 100ms.
+
+## Rationale
+
+During active terminal sessions, rapid-fire events (shell execution start/end, session watcher callbacks, reconciliation) caused the tree to rebuild multiple times per frame. The `reveal()` call would race with these rebuilds, resulting in stale or missed selections. Batching events into a single 50ms window eliminates redundant rebuilds, and the 100ms reveal delay ensures the tree has settled before selection.
+
+## Impact
+
+- Any new code that needs to signal a tree change in TerminalManager should call `this._scheduleChange()` instead of `this._onDidChange.fire()`.
+- Tests asserting synchronous fire behavior must use `vi.useFakeTimers()` + `vi.advanceTimersByTime(50)`.
+
+---
+
 ### 2026-03-01: v0.2 Branching Strategy — release/v0.1.x for Hotfixes, main for v0.2
 
 **Date:** 2026-03-01  
