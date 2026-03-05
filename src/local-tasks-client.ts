@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type { UnifiedState } from './work-items-tree';
+import type { UnifiedState } from './work-item-types';
 
 export interface LocalTask {
   id: string;

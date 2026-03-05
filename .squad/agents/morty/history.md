@@ -333,3 +333,15 @@
 
 
 📌 **BaseTreeProvider merge with Local Tasks (PR #448, 2026-03-05):** Successfully merged master's Local Tasks feature (#459) with the BaseTreeProvider refactor (#394). **Conflicts resolved:** (1) Added CancellationError handling + _disposed flag to BaseTreeProvider.fetchAll() with try/catch wrapper (from #456 fix). (2) Added dispose() method to BaseTreeProvider. (3) Integrated Local Tasks third backend into WorkItemsTreeProvider by overriding _getRootChildren() for 3-backend support (GitHub + ADO + Local) and getChildren() to intercept local-backend/local-folder contexts. (4) Added local task fields (_localTasks, _localConfigured, _localFolders) and methods (setLocalFolders, setLocalTasks, clearLocal, _getAllFilteredLocalTasks, _applyLocalRuntimeFilter, _applyLocalLevelFilter, _getLocalFolderNodes, _buildLocalTaskItem). (5) Override getAllRepos() to include (Local). **Pattern:** When merging features into refactored base classes, preserve the refactor structure by using protected method overrides rather than reverting to monolithic implementations. All 1108 tests pass. Commit: 7f043a8. — Morty
+## Learnings
+
+**2025-01-03 — Terminal Manager Modularization (#246, #247)**
+Completed extraction of terminal-persistence.ts and session-recovery.ts from terminal-manager.ts, reducing it from 744 → 506 lines. Key challenges: (1) maintaining backward compatibility through re-exports and static properties, (2) preserving exact matching logic including index-based passes, (3) refactoring tests to use public API. Important pattern: when extracting tightly-coupled logic, context objects (TerminalMatchContext, SessionRecoveryContext) allow clean separation while maintaining access to necessary state. All 1201 tests passing.
+
+## Wave 2 Extraction Work — Partial Completion
+
+**2025-01-03 — Terminal Manager Additional Extractions (#246, #247)**  
+Completed additional extraction of 3 modules from terminal-manager.ts: session-id-detector.ts (session ID detection logic), string-utils.ts (stripEmoji utility), and terminal-types.ts (TerminalInfo/PersistedTerminalInfo interfaces). Reduced terminal-manager.ts from 506 → 444 lines (-62 lines). Updated imports across 4 dependent files (terminal-persistence.ts, session-recovery.ts, session-id-detector.ts). All 1201 tests passing. Backward compatibility maintained via re-exports. 
+
+**Key decision:** Did not attempt work-items-tree.ts provider extraction or extension.ts decomposition due to complexity and time constraints. These require more design time to implement the strategy pattern correctly without breaking existing functionality. Terminal-manager.ts at 444 lines is a reasonable size for a cohesive orchestrator class — further extractions risk fragmentation. See .squad/decisions/inbox/morty-wave2-partial-completion.md for detailed analysis.
+

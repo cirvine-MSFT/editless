@@ -80,8 +80,17 @@ export class MockEditlessTreeItem {
     public type: string,
     public collapsibleState: number,
     squadId?: string,
+    options?: { terminal?: unknown; persistedEntry?: unknown; parent?: unknown; id?: string },
   ) {
     this.squadId = squadId;
+    if (options) {
+      this.terminal = options.terminal;
+      this.persistedEntry = options.persistedEntry;
+      this.parent = options.parent;
+      if (options.id !== undefined) {
+        this.id = options.id;
+      }
+    }
   }
 }
 
