@@ -116,6 +116,7 @@ vi.mock('../ado-auth', () => ({ setAdoAuthOutput: vi.fn() }));
 vi.mock('../ado-client', () => ({}));
 vi.mock('../local-tasks-client', () => ({ fetchLocalTasks: vi.fn().mockResolvedValue([]), mapLocalState: vi.fn().mockReturnValue('open') }));
 vi.mock('../launch-utils', () => ({}));
+vi.mock('../copilot-sessions-provider', () => ({ CopilotSessionsProvider: vi.fn(function () { return { refresh: vi.fn(), setTreeView: vi.fn(), filter: {}, dismiss: vi.fn(), onDidChangeTreeData: vi.fn(() => ({ dispose: vi.fn() })) }; }), SessionTreeItem: class { constructor(public label: string) {} } }));
 
 import { createAgentSettings } from '../agent-settings';
 import { EditlessTreeProvider } from '../editless-tree';
