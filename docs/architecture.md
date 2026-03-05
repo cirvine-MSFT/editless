@@ -198,7 +198,8 @@ export function activate(context: vscode.ExtensionContext) {
   const terminalManager = new TerminalManager(context);
 
   // 6. Tree providers
-  const editlessTree = new EditlessTreeProvider(registry, terminalManager, ...);
+  const agentStateManager = new AgentStateManager(agentSettings);
+  const editlessTree = new EditlessTreeProvider(agentStateManager, agentSettings, terminalManager, ...);
   vscode.window.registerTreeDataProvider('editlessTree', editlessTree);
 
   const workItems = new WorkItemsTreeProvider(...);
