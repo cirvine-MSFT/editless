@@ -158,6 +158,12 @@
         "icon": "$(organization)"
       },
       {
+        "command": "editless.cloneToWorktree",
+        "title": "Clone to Worktree",
+        "category": "EditLess",
+        "icon": "$(git-branch)"
+      },
+      {
         "command": "editless.refreshWorkItems",
         "title": "Refresh Work Items",
         "category": "EditLess",
@@ -488,6 +494,11 @@
           "group": "squad@4"
         },
         {
+          "command": "editless.cloneToWorktree",
+          "when": "view == editlessTree && viewItem =~ /^(squad|agent|default-agent)$/",
+          "group": "squad@4.5"
+        },
+        {
           "command": "editless.hideAgent",
           "when": "view == editlessTree && viewItem == squad",
           "group": "squad@5"
@@ -784,6 +795,10 @@
         },
         {
           "command": "editless.clearSessionsFilter",
+          "when": "false"
+        },
+        {
+          "command": "editless.cloneToWorktree",
           "when": "false"
         }
       ]
