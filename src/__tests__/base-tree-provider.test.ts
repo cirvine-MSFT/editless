@@ -289,7 +289,7 @@ describe('fetchAll debouncing', () => {
     let resolveFirst: () => void;
     let firstCallDone = false;
     const orig = provider.doFetchCalled;
-    provider._doFetchAll = async () => {
+    (provider as any)._doFetchAll = async () => {
       provider.doFetchCalled++;
       if (!firstCallDone) {
         firstCallDone = true;
