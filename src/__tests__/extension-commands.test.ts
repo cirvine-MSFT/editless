@@ -1600,6 +1600,20 @@ describe('extension command handlers', () => {
       await getHandler('editless.launchFromWorkItem')(item);
       expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
+
+    it('should set EDITLESS_WORK_ITEM_URI to filePath for local tasks', async () => {
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+
+      const item = { localTask: { id: 'task-1', title: 'Local fix', filePath: '/tasks/task-1.md', state: 'open', created: '2025-01-01', sessionId: null, folderPath: '/tasks', folderName: 'tasks', parentName: 'root', body: '# Local fix' } };
+      mockShowQuickPick.mockResolvedValue({ label: '🔷 Alpha Squad', description: 'test', disc });
+
+      await getHandler('editless.launchFromWorkItem')(item);
+
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'Local fix', { EDITLESS_WORK_ITEM_URI: '/tasks/task-1.md' });
+    });
   });
 
   // --- editless.goToPR -------------------------------------------------------
