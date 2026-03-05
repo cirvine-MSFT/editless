@@ -245,7 +245,7 @@ export function register(context: vscode.ExtensionContext, deps: SessionCommandD
       ];
       const matchingTerminal = allTracked.find(info => info.agentSessionId === sessionId);
       if (matchingTerminal) {
-        const settings = agentSettings.get(matchingTerminal.squadId);
+        const settings = agentSettings.get(matchingTerminal.agentId);
         if (settings?.additionalArgs) {
           extraArgs = settings.additionalArgs.split(/\s+/).filter(Boolean);
         }
@@ -295,7 +295,7 @@ export function register(context: vscode.ExtensionContext, deps: SessionCommandD
       for (const o of orphans) {
         output.appendLine(`  [${o.id}]`);
         output.appendLine(`    displayName:    ${o.displayName}`);
-        output.appendLine(`    squadId:        ${o.squadId}`);
+        output.appendLine(`    agentId:        ${o.agentId}`);
         output.appendLine(`    agentSessionId: ${o.agentSessionId ?? '(none)'}`);
         output.appendLine(`    configDir:      ${o.configDir ?? '(none)'}`);
         output.appendLine(`    launchCommand:  ${o.launchCommand ?? '(none)'}`);

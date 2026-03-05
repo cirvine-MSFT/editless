@@ -1341,7 +1341,7 @@ describe('EditlessTreeProvider — resumable session count at tree level', () =>
 
   it('default agent children include orphaned sessions', () => {
     const orphans = [
-      { id: 'o1', squadId: 'builtin:copilot-cli', agentSessionId: 'sess-1', displayName: 'CLI #1', labelKey: 'k', squadName: 'CLI', squadIcon: '', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'CLI', lastSeenAt: Date.now(), rebootCount: 0 },
+      { id: 'o1', agentId: 'builtin:copilot-cli', agentSessionId: 'sess-1', displayName: 'CLI #1', labelKey: 'k', agentName: 'CLI', agentIcon: '', index: 1, createdAt: '2026-01-01T00:00:00.000Z', terminalName: 'CLI', lastSeenAt: Date.now(), rebootCount: 0 },
     ];
     const tm = makeTerminalManager([], orphans);
     const provider = new EditlessTreeProvider(new AgentStateManager(createMockAgentSettings([]) as never), createMockAgentSettings([]) as never, tm as never);

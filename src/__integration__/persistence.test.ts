@@ -25,8 +25,8 @@ interface TestSquadConfig {
 const STORAGE_KEY = 'editless.terminalSessions';
 
 const PERSISTED_FIELDS = [
-  'id', 'labelKey', 'displayName', 'squadId', 'squadName',
-  'squadIcon', 'index', 'createdAt', 'terminalName',
+  'id', 'labelKey', 'displayName', 'agentId', 'agentName',
+  'agentIcon', 'index', 'createdAt', 'terminalName',
   'lastSeenAt', 'rebootCount',
 ] as const;
 

@@ -377,7 +377,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
       children.push(item);
     }
 
-    for (const orphan of this.terminalManager.getOrphanedSessions().filter(o => o.squadId === DEFAULT_COPILOT_CLI_ID)) {
+    for (const orphan of this.terminalManager.getOrphanedSessions().filter(o => o.agentId === DEFAULT_COPILOT_CLI_ID)) {
       const orphanItem = this._buildOrphanItem(orphan);
       orphanItem.parent = parentItem;
       children.push(orphanItem);
@@ -464,7 +464,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     for (const wt of worktreeChildren) {
       const label = wt.branch || wt.name;
       const wtTerminalCount = this.terminalManager
-        ? this.terminalManager.getTerminalsForSquad(wt.id).length
+        ? this.terminalManager.getTerminalsForAgent(wt.id).length
         : 0;
       const wtItem = new EditlessTreeItem(
         label,
