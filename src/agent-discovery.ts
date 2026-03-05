@@ -3,6 +3,9 @@ import * as path from 'path';
 import * as os from 'os';
 import type { WorkspaceFolderLike } from './types';
 
+/** Source of agent discovery. */
+export type AgentSource = 'workspace' | 'copilot-dir' | 'installed-plugin';
+
 /** A discovered standalone agent (not part of a squad). */
 export interface DiscoveredAgent {
   /** Unique ID derived from file path */
@@ -11,8 +14,8 @@ export interface DiscoveredAgent {
   name: string;
   /** File path to the agent definition */
   filePath: string;
-  /** Source of discovery: 'workspace' | 'copilot-dir' */
-  source: 'workspace' | 'copilot-dir';
+  /** Source of discovery */
+  source: AgentSource;
   /** Brief description parsed from the agent file */
   description?: string;
 }
@@ -47,6 +50,28 @@ function collectAgentMdFiles(dirPath: string): string[] {
     return fs.readdirSync(dirPath)
       .filter(f => f.endsWith('.agent.md'))
       .map(f => path.join(dirPath, f));
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Recursively collect *.agent.md files from a directory and all subdirectories.
+ * Used for installed-plugins/ where each plugin lives in its own subdirectory.
+ */
+function collectAgentMdFilesRecursive(dirPath: string): string[] {
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const results: string[] = [];
+    for (const entry of entries) {
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        results.push(...collectAgentMdFilesRecursive(fullPath));
+      } else if (entry.name.endsWith('.agent.md')) {
+        results.push(fullPath);
+      }
+    }
+    return results;
   } catch {
     return [];
   }
@@ -95,13 +120,23 @@ export function getCopilotAgentDirs(): string[] {
   ];
 }
 
-/** Scan all Copilot local directories for agent configs. */
-export function discoverAgentsInCopilotDir(): DiscoveredAgent[] {
+/**
+ * Scan all Copilot local directories for agent configs.
+ * When configDirOverride is provided, scans that directory instead of the
+ * default copilot dirs — this supports the CLI's --config-dir flag.
+ */
+export function discoverAgentsInCopilotDir(configDirOverride?: string): DiscoveredAgent[] {
   const agents: DiscoveredAgent[] = [];
   const seen = new Set<string>();
-  for (const copilotDir of getCopilotAgentDirs()) {
+  const dirs = configDirOverride ? [configDirOverride] : getCopilotAgentDirs();
+  for (const copilotDir of dirs) {
     for (const fp of collectAgentMdFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
     for (const fp of collectAgentMdFiles(copilotDir)) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
+    // Scan installed-plugins/ recursively for marketplace-installed agents
+    const installedPluginsDir = path.join(copilotDir, 'installed-plugins');
+    for (const fp of collectAgentMdFilesRecursive(installedPluginsDir)) {
+      readAndPushAgent(fp, 'installed-plugin', seen, agents);
+    }
   }
   return agents;
 }
