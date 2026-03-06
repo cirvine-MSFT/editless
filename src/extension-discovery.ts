@@ -96,6 +96,7 @@ export function setupDiscovery(
     statusBar?.update();
   });
   context.subscriptions.push(squadWatcher);
+  context.subscriptions.push({ dispose() { clearTimeout(discoveryTimer); } });
 
   return {
     getDiscoveredItems: () => discoveredItems,
