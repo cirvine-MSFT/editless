@@ -314,6 +314,21 @@ describe('integration config refresh (#417)', () => {
     vi.useRealTimers();
   });
 
+  it('should re-init ADO integration when ado.projects changes (#498)', () => {
+    vi.useFakeTimers();
+    const handlers = findConfigHandlers('editless.ado.projects');
+    expect(handlers.length).toBeGreaterThanOrEqual(1);
+
+    handlers.forEach(h => h({ affectsConfiguration: (k: string) => k === 'editless.ado.projects' }));
+
+    // Advance time to trigger debounced handler
+    vi.advanceTimersByTime(500);
+
+    expect(mockWorkItemsSetAdoConfig).toHaveBeenCalled();
+    expect(mockPRsSetAdoConfig).toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
   it('should re-init GitHub integration when github.repos changes', () => {
     vi.useFakeTimers();
     const handlers = findConfigHandlers('editless.github.repos');

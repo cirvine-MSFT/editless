@@ -730,3 +730,97 @@ describe('runtime filter integration', () => {
     expect(children[0].label).toBe('filtered-item');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Multi-project ADO tree rendering (#487, #498)
+// ---------------------------------------------------------------------------
+
+describe('multi-project ADO tree rendering', () => {
+  it('_getAdoProjectNodes renders TWO project nodes for two configured projects', () => {
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    provider.adoItems = [
+      { id: 1, name: 'projA' },
+      { id: 2, name: 'projA' },
+      { id: 3, name: 'projB' },
+    ];
+    const nodes = provider.testGetAdoProjectNodes(3);
+    expect(nodes).toHaveLength(2);
+    const labels = nodes.map(n => n.label);
+    expect(labels).toContain('projA');
+    expect(labels).toContain('projB');
+  });
+
+  it('_getAdoProjectNodes shows correct per-project item counts', () => {
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    provider.adoItems = [
+      { id: 1, name: 'projA' },
+      { id: 2, name: 'projA' },
+      { id: 3, name: 'projB' },
+    ];
+    const nodes = provider.testGetAdoProjectNodes(3);
+    const projA = nodes.find(n => n.label === 'projA')!;
+    const projB = nodes.find(n => n.label === 'projB')!;
+    expect(projA.description).toBe('2 items');
+    expect(projB.description).toBe('1 item');
+  });
+
+  it('empty project is suppressed — zero-item project hidden, non-empty shown', () => {
+    provider.setAdoConfig('org', ['projA', 'emptyProj']);
+    provider.adoItems = [
+      { id: 1, name: 'projA' },
+    ];
+    const nodes = provider.testGetAdoProjectNodes(1);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].label).toBe('projA');
+  });
+
+  it('all projects empty returns no project nodes', () => {
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    provider.adoItems = [];
+    const nodes = provider.testGetAdoProjectNodes(0);
+    expect(nodes).toHaveLength(0);
+  });
+
+  it('project nodes have correct contextValue and id format', () => {
+    provider.setAdoConfig('org', ['projA']);
+    provider.adoItems = [{ id: 1, name: 'projA' }];
+    const nodes = provider.testGetAdoProjectNodes(1);
+    expect(nodes[0].contextValue).toBe('test-ado-project');
+    expect(nodes[0].id).toMatch(/^test-ado:org:projA:f\d+$/);
+  });
+
+  it('runtime filter is applied before counting per-project items', () => {
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    provider.adoItems = [
+      { id: 1, name: 'projA' },
+      { id: 2, name: 'projA' },
+      { id: 3, name: 'projB' },
+    ];
+    // Filter out all projA items
+    provider.adoRuntimeFilterFn = items => items.filter(i => i.name === 'projB');
+    const nodes = provider.testGetAdoProjectNodes(1);
+    expect(nodes).toHaveLength(1);
+    expect(nodes[0].label).toBe('projB');
+    expect(nodes[0].description).toBe('1 item');
+  });
+
+  it('full tree traversal: root → org → project nodes for two projects', () => {
+    (provider as any)._adoConfigured = true;
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    provider.adoItems = [
+      { id: 1, name: 'projA' },
+      { id: 2, name: 'projB' },
+    ];
+
+    // Root → single backend → org node
+    const root = provider.testGetRootChildren();
+    expect(root).toHaveLength(1);
+    expect(root[0].label).toBe('org');
+    expect(root[0].contextValue).toBe('test-ado-org');
+
+    // Org → project nodes
+    const projectNodes = provider.getChildren(root[0] as any);
+    expect(projectNodes).toHaveLength(2);
+    expect(projectNodes.map(n => n.label).sort()).toEqual(['projA', 'projB']);
+  });
+});
