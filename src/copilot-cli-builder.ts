@@ -12,8 +12,11 @@ import type { AgentTeamConfig } from './types';
 
 /** Quote an argument if it contains shell metacharacters, so shell parsing won't split or interpret it. */
 function shellQuote(arg: string): string {
-  if (!/[\s"'`$!#&|;(){}]/.test(arg)) return arg;
-  return `"${arg.replace(/["$`]/g, '\\$&')}"`;
+  if (!/[\s"'`$!#&|;(){}\\]/.test(arg)) return arg;
+  // On Unix shells, backslash is an escape char in double quotes — must be escaped.
+  // On Windows (PowerShell/cmd), backslash is the path separator — leave it alone.
+  const escape = process.platform === 'win32' ? /["$`]/g : /["$`\\]/g;
+  return `"${arg.replace(escape, '\\$&')}"`;
 }
 
 export interface CopilotCommandOptions {
