@@ -13303,3 +13303,29 @@ Potential extraction targets:
 - Test coverage gives confidence in refactoring
 
 
+
+## Installed-Plugin Agent Source Tag
+
+**Date:** 2026-03-05  
+**Author:** Morty  
+**Status:** Accepted  
+**Context:** PR #471 (Closes #469)
+
+### Decision
+
+Agents discovered from {copilotDir}/installed-plugins/ are tagged with source 'installed-plugin' — a new third value in the AgentSource type union alongside 'workspace' and 'copilot-dir'.
+
+### Rationale
+
+Marketplace-installed plugins live in a different directory structure than manually placed agents. Distinguishing them by source lets us:
+1. Show appropriate labels in the tree view (e.g., "installed-plugin" vs "copilot-dir")
+2. Apply different dedup priority rules if needed in the future
+3. Potentially offer plugin-specific actions (update, uninstall) later
+
+### Dedup Priority
+
+gents/ and root-level .agent.md files are scanned before installed-plugins/, so 'copilot-dir' wins on ID collision. This matches the CLI's behavior where explicit agents take precedence over plugin defaults.
+
+### Config-Dir Awareness
+
+discoverAgentsInCopilotDir(configDirOverride?) now accepts an optional override path. When provided, only that directory is scanned (not the default ~/.copilot and ~/.config/copilot). This aligns with the CLI's --config-dir flag behavior.
