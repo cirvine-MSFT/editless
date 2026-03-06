@@ -468,6 +468,8 @@ export class TerminalManager implements vscode.Disposable {
     this._persisting = true;
     try {
       this._persistence.persist(this._getMatchContext(), () => this.detectSessionIds());
+    } catch (err) {
+      console.error('[editless] persist failed:', err);
     } finally {
       this._persisting = false;
     }
