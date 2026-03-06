@@ -362,6 +362,39 @@ describe('copilot-cli-builder', () => {
       const cmd = buildCopilotCommand({ extraArgs: ['--flag', 'val;rm -rf /'] });
       expect(cmd).toBe('copilot --flag "val;rm -rf /"');
     });
+
+    it('escapes dollar-sign command substitution', () => {
+      const cmd = buildCopilotCommand({ extraArgs: ['$(rm -rf /)'] });
+      expect(cmd).toContain('"');
+      expect(cmd).toContain('\\$');
+      expect(cmd).not.toBe('copilot $(rm -rf /)');
+    });
+
+    it('escapes backtick command substitution', () => {
+      const cmd = buildCopilotCommand({ extraArgs: ['`cat /etc/passwd`'] });
+      expect(cmd).toContain('"');
+      expect(cmd).toContain('\\`');
+    });
+
+    it('quotes semicolons without spaces', () => {
+      const cmd = buildCopilotCommand({ extraArgs: ['arg;evil'] });
+      expect(cmd).toContain('"arg;evil"');
+    });
+
+    it('quotes pipe characters without spaces', () => {
+      const cmd = buildCopilotCommand({ extraArgs: ['arg|evil'] });
+      expect(cmd).toContain('"arg|evil"');
+    });
+
+    it('quotes ampersand characters', () => {
+      const cmd = buildCopilotCommand({ extraArgs: ['arg&&evil'] });
+      expect(cmd).toContain('"arg&&evil"');
+    });
+
+    it('escapes double quotes inside values', () => {
+      const cmd = buildCopilotCommand({ extraArgs: ['say "hello"'] });
+      expect(cmd).toContain('\\"hello\\"');
+    });
   });
 
   describe('dedup edge cases', () => {
