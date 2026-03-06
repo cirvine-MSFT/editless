@@ -161,7 +161,7 @@ vi.mock('vscode', async () => {
     RelativePattern: class { constructor(public base: unknown, public pattern: string) {} },
     Uri: {
       parse: (s: string) => ({ toString: () => s, fsPath: s }),
-      file: (p: string) => ({ fsPath: p, toString: () => p }),
+      file: (p: string) => ({ fsPath: p, toString: () => `file://${p}` }),
     },
     Range: class { constructor(public start: unknown, public end: unknown) {} },
     Selection: class { constructor(public anchor: unknown, public active: unknown) {} },
@@ -1612,7 +1612,7 @@ describe('extension command handlers', () => {
 
       await getHandler('editless.launchFromWorkItem')(item);
 
-      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'Local fix', { EDITLESS_WORK_ITEM_URI: '/tasks/task-1.md' });
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'Local fix', { EDITLESS_WORK_ITEM_URI: 'file:///tasks/task-1.md' });
     });
   });
 
