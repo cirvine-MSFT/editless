@@ -161,7 +161,7 @@ vi.mock('vscode', async () => {
     RelativePattern: class { constructor(public base: unknown, public pattern: string) {} },
     Uri: {
       parse: (s: string) => ({ toString: () => s, fsPath: s }),
-      file: (p: string) => ({ fsPath: p, toString: () => p }),
+      file: (p: string) => ({ fsPath: p, toString: () => `file://${p}` }),
     },
     Range: class { constructor(public start: unknown, public end: unknown) {} },
     Selection: class { constructor(public anchor: unknown, public active: unknown) {} },
@@ -1600,9 +1600,21 @@ describe('extension command handlers', () => {
       await getHandler('editless.launchFromWorkItem')(item);
       expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
-  });
 
-  // --- editless.goToPR -------------------------------------------------------
+    it('should set EDITLESS_WORK_ITEM_URI to file URI for local tasks', async () => {
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+
+      const item = { localTask: { id: 'task-1', title: 'Local fix', filePath: '/tasks/task-1.md', state: 'open', created: '2025-01-01', sessionId: null, folderPath: '/tasks', folderName: 'tasks', parentName: 'root', body: '# Local fix' } };
+      mockShowQuickPick.mockResolvedValue({ label: '🔷 Alpha Squad', description: 'test', disc });
+
+      await getHandler('editless.launchFromWorkItem')(item);
+
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'Local fix', { EDITLESS_WORK_ITEM_URI: 'file:///tasks/task-1.md' });
+    });
+  });
 
   describe('editless.goToPR', () => {
     it('should show info when no linked PRs found', async () => {
