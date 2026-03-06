@@ -580,4 +580,25 @@ export class SessionContextResolver {
 
     return result;
   }
+
+  /** Clean up all file watchers and pending timers. */
+  dispose(): void {
+    // Close all file watchers
+    for (const watcher of this._fileWatchers.values()) {
+      watcher.close();
+    }
+    this._fileWatchers.clear();
+
+    // Clear all pending timers
+    for (const timer of this._watcherPending.values()) {
+      clearTimeout(timer);
+    }
+    this._watcherPending.clear();
+
+    // Clear caches
+    this._cache = null;
+    this._eventCache.clear();
+    this._cwdIndex = null;
+    this._indexedDirCount = 0;
+  }
 }

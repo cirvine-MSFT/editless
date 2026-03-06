@@ -41,6 +41,7 @@ export class TerminalManager implements vscode.Disposable {
   private _changeTimer: ReturnType<typeof setTimeout> | undefined;
   private _persistTimer: ReturnType<typeof setInterval> | undefined;
   private _sessionResolver?: SessionContextResolver;
+  private _persisting = false;
 
   private readonly _persistence: TerminalPersistence;
   private readonly _recovery: SessionRecovery;
@@ -462,11 +463,16 @@ export class TerminalManager implements vscode.Disposable {
     }
   }
 
-  // NOTE(pre-existing): _persist() → detectSessionIds() → _persist() is mutually recursive.
-  // It converges because detectAndAssignSessionIds only assigns IDs to terminals that lack one,
-  // so the second _persist() call finds no new changes and doesn't recurse further.
   private _persist(): void {
-    this._persistence.persist(this._getMatchContext(), () => this.detectSessionIds());
+    if (this._persisting) return;
+    this._persisting = true;
+    try {
+      this._persistence.persist(this._getMatchContext(), () => this.detectSessionIds());
+    } catch (err) {
+      console.error('[editless] persist failed:', err);
+    } finally {
+      this._persisting = false;
+    }
   }
 
   /**
