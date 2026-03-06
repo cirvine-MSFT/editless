@@ -16,6 +16,7 @@ export interface PRsFilter {
   statuses: string[];
   author: string;
   reviewStatus?: string; // '', 'approved-by-me', 'not-reviewed-by-me', 'changes-requested-by-me'
+  projects: string[];
 }
 
 export interface PRLevelFilter {
@@ -45,7 +46,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
 
   private _prs = new Map<string, GitHubPR[]>();
   private _adoPRs: AdoPR[] = [];
-  private _filter: PRsFilter = { repos: [], labels: [], statuses: [], author: '', reviewStatus: '' };
+  private _filter: PRsFilter = { repos: [], labels: [], statuses: [], author: '', reviewStatus: '', projects: [] };
   private _adoMe: string | undefined;
 
   setAdoMe(me: string): void {
@@ -63,12 +64,12 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
   }
 
   get isFiltered(): boolean {
-    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.statuses.length > 0 || this._filter.author !== '' || (this._filter.reviewStatus ?? '') !== '';
+    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.statuses.length > 0 || this._filter.author !== '' || (this._filter.reviewStatus ?? '') !== '' || this._filter.projects.length > 0;
   }
 
   setFilter(filter: PRsFilter): void {
     const authorChanged = this._filter.author !== filter.author;
-    this._filter = { reviewStatus: '', ...filter };
+    this._filter = { reviewStatus: '', ...filter, projects: filter.projects ?? [] };
     this._filterSeq++;
     vscode.commands.executeCommand('setContext', 'editless.prsFiltered', this.isFiltered);
     vscode.commands.executeCommand('setContext', 'editless.prsMyOnly', filter.author !== '');
@@ -81,7 +82,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
   }
 
   clearFilter(): void {
-    this.setFilter({ repos: [], labels: [], statuses: [], author: '', reviewStatus: '' });
+    this.setFilter({ repos: [], labels: [], statuses: [], author: '', reviewStatus: '', projects: [] });
   }
 
   getFilterDescription(): string {
@@ -98,6 +99,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
     if (this._filter.repos.length > 0) parts.push(`repo:${this._filter.repos.join(',')}`);
     if (this._filter.statuses.length > 0) parts.push(`status:${this._filter.statuses.join(',')}`);
     if (this._filter.labels.length > 0) parts.push(`label:${this._filter.labels.join(',')}`);
+    if (this._filter.projects.length > 0) parts.push(`project:${this._filter.projects.join(',')}`);
     return parts.join(' · ');
   }
 
@@ -131,8 +133,10 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
     }
 
     if (baseContext === `${this._adoIdPrefix}-project`) {
+      const project = this._extractProjectFromNodeId(cleanId);
+      const projectPRs = project ? this._adoPRs.filter(pr => pr.project === project) : this._adoPRs;
       const adoRepos = new Set<string>();
-      for (const pr of this._adoPRs) {
+      for (const pr of projectPRs) {
         adoRepos.add(pr.repository);
       }
       return {
@@ -172,6 +176,10 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
     return this._adoPRs;
   }
 
+  protected _getAdoItemProject(item: AdoPR): string {
+    return item.project;
+  }
+
   applyRuntimeFilter(prs: GitHubPR[]): GitHubPR[] {
     return prs.filter(pr => {
       const state = this.derivePRState(pr);
@@ -192,6 +200,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
       if (this._filter.repos.length > 0 && !this._filter.repos.includes(pr.repository)) return false;
       if (this._filter.statuses.length > 0 && !this._filter.statuses.includes(state)) return false;
       if (this._filter.author && this._adoMe && pr.createdBy.toLowerCase() !== this._adoMe.toLowerCase()) return false;
+      if (this._filter.projects.length > 0 && !this._filter.projects.includes(pr.project)) return false;
       
       // Review status filtering
       if (this._filter.reviewStatus && this._adoMe) {
@@ -254,9 +263,11 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
   }
 
   protected _getChildrenForContext(element: PRsTreeItem, ctx: string): PRsTreeItem[] {
-    // ADO project → PR items
+    // ADO project → PR items (scoped to the specific project)
     if (ctx === `${this._adoIdPrefix}-project`) {
-      let filtered = this.applyAdoRuntimeFilter(this._adoPRs);
+      const project = this._extractProjectFromNodeId(element.id ?? '');
+      const projectPRs = project ? this._adoPRs.filter(pr => pr.project === project) : this._adoPRs;
+      let filtered = this.applyAdoRuntimeFilter(projectPRs);
       const projectFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
       if (projectFilter) {
         filtered = this._applyAdoLevelFilter(filtered, projectFilter);

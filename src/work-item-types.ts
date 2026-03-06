@@ -24,6 +24,7 @@ export interface WorkItemsFilter {
   labels: string[];
   states: UnifiedState[];
   types: string[];
+  projects: string[];
 }
 
 export interface LevelFilter {

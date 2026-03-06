@@ -21,7 +21,7 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
   protected readonly _itemCountSuffix: [string, string] = ['item', 'items'];
   protected readonly _emptyMessage = 'No assigned issues found';
 
-  private _filter: WorkItemsFilter = { repos: [], labels: [], states: [], types: [] };
+  private _filter: WorkItemsFilter = { repos: [], labels: [], states: [], types: [], projects: [] };
   private readonly _githubProvider = new GitHubWorkItemsProvider();
   private readonly _adoProvider = new AdoWorkItemsProvider();
   private readonly _localProvider = new LocalTasksProvider();
@@ -54,9 +54,9 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
     this._onDidChangeTreeData.fire();
   }
 
-  override setAdoConfig(org: string | undefined, project: string | undefined): void {
-    this._adoProvider.setConfig(org, project);
-    super.setAdoConfig(org, project);
+  override setAdoConfig(org: string | undefined, projects: string[]): void {
+    this._adoProvider.setConfig(org, projects);
+    super.setAdoConfig(org, projects);
   }
 
   setLocalFolders(folders: string[]): void {
@@ -80,7 +80,8 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
 
   get isFiltered(): boolean {
     return this._filter.repos.length > 0 || this._filter.labels.length > 0
-      || this._filter.states.length > 0 || this._filter.types.length > 0;
+      || this._filter.states.length > 0 || this._filter.types.length > 0
+      || this._filter.projects.length > 0;
   }
 
   setFilter(filter: WorkItemsFilter): void {
@@ -92,7 +93,7 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
   }
 
   clearFilter(): void {
-    this.setFilter({ repos: [], labels: [], states: [], types: [] });
+    this.setFilter({ repos: [], labels: [], states: [], types: [], projects: [] });
   }
 
   protected _updateDescription(): void {
@@ -103,6 +104,7 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
     if (this._filter.labels.length > 0) parts.push(`label:${this._filter.labels.join(',')}`);
     if (this._filter.states.length > 0) parts.push(`state:${this._filter.states.join(',')}`);
     if (this._filter.types.length > 0) parts.push(`type:${this._filter.types.join(',')}`);
+    if (this._filter.projects.length > 0) parts.push(`project:${this._filter.projects.join(',')}`);
     this._treeView.description = parts.join(' · ');
   }
 
@@ -156,6 +158,10 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
 
   protected _getAdoItemsList(): AdoWorkItem[] {
     return this._adoProvider.getItems();
+  }
+
+  protected _getAdoItemProject(item: AdoWorkItem): string {
+    return item.project;
   }
 
   protected applyRuntimeFilter(issues: GitHubIssue[]): GitHubIssue[] {

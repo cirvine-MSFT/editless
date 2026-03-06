@@ -4,7 +4,7 @@ import { promisify } from 'util';
 import type { WorkItemsTreeProvider } from './work-items-tree';
 import type { PRsTreeProvider } from './prs-tree';
 import { getAdoToken, promptAdoSignIn } from './ado-auth';
-import { fetchAdoWorkItems, fetchAdoPRs, fetchAdoMe } from './ado-client';
+import { fetchAdoWorkItems, fetchAdoPRs, fetchAdoMe, type AdoProjectConfig } from './ado-client';
 import { fetchLocalTasks } from './local-tasks-client';
 
 const execFileAsync = promisify(execFile);
@@ -41,7 +41,7 @@ export function setupIntegrations(
   let adoDebounceTimer: NodeJS.Timeout | undefined;
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('editless.ado.organization') || e.affectsConfiguration('editless.ado.project')) {
+      if (e.affectsConfiguration('editless.ado.organization') || e.affectsConfiguration('editless.ado.project') || e.affectsConfiguration('editless.ado.projects')) {
         if (adoDebounceTimer) clearTimeout(adoDebounceTimer);
         adoDebounceTimer = setTimeout(() => {
           initAdoIntegration(context, workItemsProvider, prsProvider);
@@ -128,16 +128,27 @@ export async function initAdoIntegration(
 ): Promise<void> {
   const config = vscode.workspace.getConfiguration('editless');
   const org = String(config.get<string>('ado.organization') ?? '').trim();
-  const project = String(config.get<string>('ado.project') ?? '').trim();
 
-  if (!org || !project) {
-    workItemsProvider.setAdoConfig(undefined, undefined);
-    prsProvider.setAdoConfig(undefined, undefined);
+  // Read multi-project config, fall back to legacy single project
+  const projectsConfig = config.get<AdoProjectConfig[]>('ado.projects', []);
+  const projects = projectsConfig
+    .filter(p => p.enabled !== false)
+    .map(p => p.name)
+    .filter(name => name.trim() !== '');
+
+  if (projects.length === 0) {
+    const legacyProject = String(config.get<string>('ado.project') ?? '').trim();
+    if (legacyProject) projects.push(legacyProject);
+  }
+
+  if (!org || projects.length === 0) {
+    workItemsProvider.setAdoConfig(undefined, []);
+    prsProvider.setAdoConfig(undefined, []);
     return;
   }
 
-  workItemsProvider.setAdoConfig(org, project);
-  prsProvider.setAdoConfig(org, project);
+  workItemsProvider.setAdoConfig(org, projects);
+  prsProvider.setAdoConfig(org, projects);
 
   async function fetchAdoData(): Promise<void> {
     let token = await getAdoToken(context.secrets);
@@ -158,14 +169,34 @@ export async function initAdoIntegration(
 
     try {
       const limit = vscode.workspace.getConfiguration('editless').get<number>('ado.workItemLimit', 200);
-      const [workItems, prs, adoMe] = await Promise.all([
-        fetchAdoWorkItems(org, project, token, limit),
-        fetchAdoPRs(org, project, token),
-        fetchAdoMe(org, token),
-      ]);
-      workItemsProvider.setAdoItems(workItems);
+
+      // Fetch from all projects in parallel, gracefully handle per-project failures
+      const workItemResults = await Promise.all(
+        projects.map(proj =>
+          fetchAdoWorkItems(org, proj, token!, limit)
+            .catch(err => {
+              console.error(`[EditLess] ADO fetch failed for project ${proj} (work items):`, err);
+              return [] as import('./ado-client').AdoWorkItem[];
+            }),
+        ),
+      );
+      const prResults = await Promise.all(
+        projects.map(proj =>
+          fetchAdoPRs(org, proj, token!)
+            .catch(err => {
+              console.error(`[EditLess] ADO fetch failed for project ${proj} (PRs):`, err);
+              return [] as import('./ado-client').AdoPR[];
+            }),
+        ),
+      );
+
+      const allWorkItems = workItemResults.flat();
+      const allPRs = prResults.flat();
+      const adoMe = await fetchAdoMe(org, token!);
+
+      workItemsProvider.setAdoItems(allWorkItems);
       if (adoMe) prsProvider.setAdoMe(adoMe);
-      prsProvider.setAdoPRs(prs);
+      prsProvider.setAdoPRs(allPRs);
     } catch (err) {
       console.error('[EditLess] ADO fetch failed:', err);
       vscode.window.showWarningMessage(

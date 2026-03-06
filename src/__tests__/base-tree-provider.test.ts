@@ -77,6 +77,10 @@ class TestTreeProvider extends BaseTreeProvider<
     return this.childrenForContextResult ?? [];
   }
 
+  protected _getAdoItemProject(item: { id: number; name: string }): string {
+    return item.name;
+  }
+
   protected _clearAdoData(): void {
     this.adoItems = [];
   }
@@ -311,7 +315,7 @@ describe('fetchAll debouncing', () => {
 
 describe('ADO configuration', () => {
   it('setAdoConfig stores org and project', () => {
-    provider.setAdoConfig('my-org', 'my-proj');
+    provider.setAdoConfig('my-org', ['my-proj']);
     expect(provider.getAllRepos()).not.toContain('(ADO)'); // not configured yet
   });
 
@@ -478,7 +482,7 @@ describe('_getRootChildren', () => {
 
   it('shows ADO org directly for ADO-only single backend', () => {
     (provider as any)._adoConfigured = true;
-    provider.setAdoConfig('my-org', 'my-proj');
+    provider.setAdoConfig('my-org', ['my-proj']);
     provider.adoItems = [{ id: 1, name: 'wi' }];
     const children = provider.testGetRootChildren();
     expect(children).toHaveLength(1);
@@ -499,7 +503,7 @@ describe('getChildren routing', () => {
   });
 
   it('routes ado-backend to _getAdoOrgNodes', () => {
-    provider.setAdoConfig('org', 'proj');
+    provider.setAdoConfig('org', ['proj']);
     provider.adoItems = [{ id: 1, name: 'wi' }];
     const element = new TestTreeItem('ADO');
     element.contextValue = 'test-ado-backend';
@@ -509,8 +513,8 @@ describe('getChildren routing', () => {
   });
 
   it('routes ado-org to _getAdoProjectNodes', () => {
-    provider.setAdoConfig('org', 'proj');
-    provider.adoItems = [{ id: 1, name: 'wi' }];
+    provider.setAdoConfig('org', ['proj']);
+    provider.adoItems = [{ id: 1, name: 'proj' }];
     const element = new TestTreeItem('org');
     element.contextValue = 'test-ado-org';
     const children = provider.getChildren(element as any);
@@ -540,8 +544,8 @@ describe('getChildren routing', () => {
   });
 
   it('routes filtered context by stripping -filtered suffix', () => {
-    provider.setAdoConfig('org', 'proj');
-    provider.adoItems = [{ id: 1, name: 'wi' }];
+    provider.setAdoConfig('org', ['proj']);
+    provider.adoItems = [{ id: 1, name: 'proj' }];
     const element = new TestTreeItem('ADO');
     element.contextValue = 'test-ado-backend-filtered';
     const children = provider.getChildren(element as any);
@@ -569,7 +573,7 @@ describe('ADO node builders', () => {
   });
 
   it('_getAdoOrgNodes returns org node with description', () => {
-    provider.setAdoConfig('my-org', 'proj');
+    provider.setAdoConfig('my-org', ['proj']);
     const nodes = provider.testGetAdoOrgNodes(3);
     expect(nodes).toHaveLength(1);
     expect(nodes[0].label).toBe('my-org');
@@ -579,16 +583,17 @@ describe('ADO node builders', () => {
   });
 
   it('_getAdoProjectNodes returns empty when no project', () => {
-    provider.setAdoConfig('org', undefined);
+    provider.setAdoConfig('org', []);
     expect(provider.testGetAdoProjectNodes(5)).toEqual([]);
   });
 
   it('_getAdoProjectNodes returns project node', () => {
-    provider.setAdoConfig('org', 'proj');
+    provider.setAdoConfig('org', ['proj']);
+    provider.adoItems = [{ id: 1, name: 'proj' }];
     const nodes = provider.testGetAdoProjectNodes(7);
     expect(nodes).toHaveLength(1);
     expect(nodes[0].label).toBe('proj');
-    expect(nodes[0].description).toBe('7 items');
+    expect(nodes[0].description).toBe('1 item');
     expect(nodes[0].contextValue).toBe('test-ado-project');
   });
 });
@@ -633,7 +638,7 @@ describe('GitHub node builders', () => {
 describe('_getAvailableOptionsBase', () => {
   beforeEach(() => {
     (provider as any)._repos = ['alice/repo1', 'alice/repo2', 'bob/repo3'];
-    provider.setAdoConfig('my-org', 'my-proj');
+    provider.setAdoConfig('my-org', ['my-proj']);
   });
 
   it('returns owners for gh-backend', () => {
@@ -703,7 +708,7 @@ describe('backend group filter descriptions', () => {
 describe('runtime filter integration', () => {
   it('ADO runtime filter applied in root children', () => {
     (provider as any)._adoConfigured = true;
-    provider.setAdoConfig('org', 'proj');
+    provider.setAdoConfig('org', ['proj']);
     provider.adoItems = [{ id: 1, name: 'a' }, { id: 2, name: 'b' }];
     provider.adoRuntimeFilterFn = items => items.filter(i => i.id === 1);
     const children = provider.testGetRootChildren();

@@ -1435,6 +1435,7 @@ describe('extension command handlers', () => {
         labels: [],
         states: [],
         types: [],
+        projects: [],
       });
     });
 
@@ -1447,7 +1448,7 @@ describe('extension command handlers', () => {
     it('should set empty filter when no items selected', async () => {
       mockShowQuickPick.mockResolvedValue([]);
       await getHandler('editless.filterWorkItems')();
-      expect(mockSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], states: [], types: [] });
+      expect(mockSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], states: [], types: [], projects: [] });
     });
   });
 
@@ -1491,6 +1492,7 @@ describe('extension command handlers', () => {
         labels: [],
         statuses: [],
         author: '',
+        projects: [],
       });
     });
 
@@ -1503,7 +1505,7 @@ describe('extension command handlers', () => {
     it('should set empty filter when no items selected', async () => {
       mockShowQuickPick.mockResolvedValue([]);
       await getHandler('editless.filterPRs')();
-      expect(mockPRsSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], statuses: [], author: '' });
+      expect(mockPRsSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], statuses: [], author: '', projects: [] });
     });
   });
 
