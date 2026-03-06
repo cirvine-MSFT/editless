@@ -42,6 +42,7 @@ export class TerminalManager implements vscode.Disposable {
   private _persistTimer: ReturnType<typeof setInterval> | undefined;
   private _sessionResolver?: SessionContextResolver;
   private _persisting = false;
+  private _disposed = false;
 
   private readonly _persistence: TerminalPersistence;
   private readonly _recovery: SessionRecovery;
@@ -95,6 +96,7 @@ export class TerminalManager implements vscode.Disposable {
     }
     this._changeTimer = setTimeout(() => {
       this._changeTimer = undefined;
+      if (this._disposed) return;
       this._onDidChange.fire();
     }, 50);
   }
@@ -507,6 +509,7 @@ export class TerminalManager implements vscode.Disposable {
   // -- Disposable -----------------------------------------------------------
 
   dispose(): void {
+    this._disposed = true;
     if (this._changeTimer !== undefined) {
       clearTimeout(this._changeTimer);
     }

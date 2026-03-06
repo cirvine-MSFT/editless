@@ -54,6 +54,7 @@ function adoFetch<T>(apiUrl: string, token: string): Promise<T> {
       },
       res => {
         if (res.statusCode !== 200) {
+          res.resume(); // drain response to free socket
           reject(new Error(`ADO API returned ${res.statusCode}`));
           return;
         }

@@ -149,16 +149,10 @@ export abstract class BaseTreeProvider<
     this._loading = true;
     try {
       await this._doFetchAll();
-      this._loading = false;
       if (!this._disposed) {
         this._onDidChangeTreeData.fire();
       }
-      if (this._pendingRefresh) {
-        this._pendingRefresh = false;
-        this.fetchAll();
-      }
     } catch (err) {
-      this._loading = false;
       if (err instanceof vscode.CancellationError) {
         return;
       }
@@ -166,6 +160,12 @@ export abstract class BaseTreeProvider<
         return;
       }
       throw err;
+    } finally {
+      this._loading = false;
+      if (this._pendingRefresh) {
+        this._pendingRefresh = false;
+        this.fetchAll();
+      }
     }
   }
 

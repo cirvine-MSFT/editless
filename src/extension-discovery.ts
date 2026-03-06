@@ -66,9 +66,22 @@ export function setupDiscovery(
   }
 
   let discoveryTimer: NodeJS.Timeout | undefined;
+  let discoveryMaxTimer: NodeJS.Timeout | undefined;
   function debouncedRefreshDiscovery(): void {
     clearTimeout(discoveryTimer);
-    discoveryTimer = setTimeout(() => refreshDiscovery(), 300);
+    discoveryTimer = setTimeout(() => {
+      clearTimeout(discoveryMaxTimer);
+      discoveryMaxTimer = undefined;
+      refreshDiscovery();
+    }, 300);
+    // Force execution after 3s even if events keep firing
+    if (!discoveryMaxTimer) {
+      discoveryMaxTimer = setTimeout(() => {
+        clearTimeout(discoveryTimer);
+        discoveryMaxTimer = undefined;
+        refreshDiscovery();
+      }, 3000);
+    }
   }
 
   // --- ensureWorkspaceFolder -----------------------------------------------
@@ -96,7 +109,7 @@ export function setupDiscovery(
     statusBar?.update();
   });
   context.subscriptions.push(squadWatcher);
-  context.subscriptions.push({ dispose() { clearTimeout(discoveryTimer); } });
+  context.subscriptions.push({ dispose() { clearTimeout(discoveryTimer); clearTimeout(discoveryMaxTimer); } });
 
   return {
     getDiscoveredItems: () => discoveredItems,
