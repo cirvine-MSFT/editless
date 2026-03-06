@@ -15,12 +15,14 @@ export interface PRsFilter {
   labels: string[];
   statuses: string[];
   author: string;
+  reviewStatus: string; // '', 'approved-by-me', 'not-reviewed-by-me', 'changes-requested-by-me'
 }
 
 export interface PRLevelFilter {
   selectedChildren?: string[];
   statuses?: string[];
   labels?: string[];
+  reviewStatus?: string; // For ADO: '', 'approved-by-me', 'not-reviewed-by-me', 'changes-requested-by-me'
 }
 
 export class PRsTreeItem extends vscode.TreeItem {
@@ -43,7 +45,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
 
   private _prs = new Map<string, GitHubPR[]>();
   private _adoPRs: AdoPR[] = [];
-  private _filter: PRsFilter = { repos: [], labels: [], statuses: [], author: '' };
+  private _filter: PRsFilter = { repos: [], labels: [], statuses: [], author: '', reviewStatus: '' };
   private _adoMe: string | undefined;
 
   setAdoMe(me: string): void {
@@ -61,7 +63,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
   }
 
   get isFiltered(): boolean {
-    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.statuses.length > 0 || this._filter.author !== '';
+    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.statuses.length > 0 || this._filter.author !== '' || this._filter.reviewStatus !== '';
   }
 
   setFilter(filter: PRsFilter): void {
@@ -79,12 +81,20 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
   }
 
   clearFilter(): void {
-    this.setFilter({ repos: [], labels: [], statuses: [], author: '' });
+    this.setFilter({ repos: [], labels: [], statuses: [], author: '', reviewStatus: '' });
   }
 
   getFilterDescription(): string {
     const parts: string[] = [];
     if (this._filter.author) parts.push('author:me');
+    if (this._filter.reviewStatus) {
+      const statusMap: Record<string, string> = {
+        'approved-by-me': 'review:approved',
+        'not-reviewed-by-me': 'review:not-reviewed',
+        'changes-requested-by-me': 'review:changes-requested',
+      };
+      parts.push(statusMap[this._filter.reviewStatus] ?? this._filter.reviewStatus);
+    }
     if (this._filter.repos.length > 0) parts.push(`repo:${this._filter.repos.join(',')}`);
     if (this._filter.statuses.length > 0) parts.push(`status:${this._filter.statuses.join(',')}`);
     if (this._filter.labels.length > 0) parts.push(`label:${this._filter.labels.join(',')}`);
@@ -100,7 +110,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
     this._treeView.description = this.getFilterDescription();
   }
 
-  getAvailableOptions(nodeId: string, contextValue: string): { owners?: string[]; repos?: string[]; orgs?: string[]; projects?: string[]; statuses?: string[]; labels?: string[] } {
+  getAvailableOptions(nodeId: string, contextValue: string): { owners?: string[]; repos?: string[]; orgs?: string[]; projects?: string[]; statuses?: string[]; labels?: string[]; reviewStatus?: string[] } {
     const base = this._getAvailableOptionsBase(nodeId, contextValue);
     if (base) return base;
 
@@ -121,8 +131,14 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
     }
 
     if (baseContext === `${this._adoIdPrefix}-project`) {
+      const adoRepos = new Set<string>();
+      for (const pr of this._adoPRs) {
+        adoRepos.add(pr.repository);
+      }
       return {
+        repos: [...adoRepos].sort(),
         statuses: ['draft', 'open', 'merged'],
+        reviewStatus: ['approved-by-me', 'not-reviewed-by-me', 'changes-requested-by-me'],
       };
     }
 
@@ -137,6 +153,14 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
     const parts: string[] = [];
     if (filter.statuses && filter.statuses.length > 0) parts.push(filter.statuses.join(', '));
     if (filter.labels && filter.labels.length > 0) parts.push(filter.labels.join(', '));
+    if (filter.reviewStatus) {
+      const statusMap: Record<string, string> = {
+        'approved-by-me': 'approved',
+        'not-reviewed-by-me': 'not reviewed',
+        'changes-requested-by-me': 'changes requested',
+      };
+      parts.push(statusMap[filter.reviewStatus] ?? filter.reviewStatus);
+    }
     return parts;
   }
 
@@ -165,9 +189,26 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
       const state = deriveAdoState(pr);
       // Default exclusion: hide merged/closed unless user explicitly includes them
       if (this._filter.statuses.length === 0 && (state === 'merged' || state === 'closed')) return false;
-      if (this._filter.repos.length > 0 && !this._filter.repos.includes('(ADO)')) return false;
+      if (this._filter.repos.length > 0 && !this._filter.repos.includes(pr.repository)) return false;
       if (this._filter.statuses.length > 0 && !this._filter.statuses.includes(state)) return false;
       if (this._filter.author && this._adoMe && pr.createdBy.toLowerCase() !== this._adoMe.toLowerCase()) return false;
+      
+      // Review status filtering
+      if (this._filter.reviewStatus && this._adoMe) {
+        const myVote = pr.reviewerVotes.get(this._adoMe.toLowerCase()) ?? 
+                       pr.reviewerVotes.get(this._adoMe) ?? 0;
+        
+        if (this._filter.reviewStatus === 'approved-by-me' && myVote !== 10 && myVote !== 5) {
+          return false;
+        }
+        if (this._filter.reviewStatus === 'not-reviewed-by-me' && myVote !== 0) {
+          return false;
+        }
+        if (this._filter.reviewStatus === 'changes-requested-by-me' && myVote !== -5 && myVote !== -10) {
+          return false;
+        }
+      }
+      
       return true;
     });
   }
@@ -327,6 +368,23 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
       const state = deriveAdoState(pr);
       if ((!filter.statuses || filter.statuses.length === 0) && (state === 'merged' || state === 'closed')) return false;
       if (filter.statuses && filter.statuses.length > 0 && !filter.statuses.includes(state)) return false;
+      
+      // Review status level filter
+      if (filter.reviewStatus && this._adoMe) {
+        const myVote = pr.reviewerVotes.get(this._adoMe.toLowerCase()) ?? 
+                       pr.reviewerVotes.get(this._adoMe) ?? 0;
+        
+        if (filter.reviewStatus === 'approved-by-me' && myVote !== 10 && myVote !== 5) {
+          return false;
+        }
+        if (filter.reviewStatus === 'not-reviewed-by-me' && myVote !== 0) {
+          return false;
+        }
+        if (filter.reviewStatus === 'changes-requested-by-me' && myVote !== -5 && myVote !== -10) {
+          return false;
+        }
+      }
+      
       return true;
     });
   }

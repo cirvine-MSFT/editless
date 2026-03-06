@@ -186,6 +186,23 @@ export async function buildPRLevelFilterPicker(
     }
   }
 
+  // Review Status (ADO project level)
+  if (options.reviewStatus && options.reviewStatus.length > 0) {
+    quickPickItems.push({ label: 'Review Status', kind: vscode.QuickPickItemKind.Separator });
+    const reviewStatusLabels: Record<string, string> = {
+      'approved-by-me': "I've approved",
+      'not-reviewed-by-me': "I haven't reviewed yet",
+      'changes-requested-by-me': 'I requested changes',
+    };
+    for (const status of options.reviewStatus) {
+      quickPickItems.push({ 
+        label: reviewStatusLabels[status] ?? status, 
+        description: 'review-status', 
+        picked: currentFilter.reviewStatus === status,
+      });
+    }
+  }
+
   // Labels (GitHub repo level)
   if (options.labels && options.labels.length > 0) {
     quickPickItems.push({ label: 'Labels', kind: vscode.QuickPickItemKind.Separator });
@@ -210,6 +227,17 @@ export async function buildPRLevelFilterPicker(
   filter.selectedChildren = picks.filter(p => p.description === 'owner' || p.description === 'org' || p.description === 'project' || p.description === 'repo').map(p => p.label);
   filter.statuses = picks.filter(p => p.description === 'status').map(p => p.label);
   filter.labels = picks.filter(p => p.description === 'label').map(p => p.label);
+  
+  // Handle review status (single selection)
+  const reviewStatusPicks = picks.filter(p => p.description === 'review-status');
+  if (reviewStatusPicks.length > 0) {
+    const reviewStatusLabelsReverse: Record<string, string> = {
+      "I've approved": 'approved-by-me',
+      "I haven't reviewed yet": 'not-reviewed-by-me',
+      'I requested changes': 'changes-requested-by-me',
+    };
+    filter.reviewStatus = reviewStatusLabelsReverse[reviewStatusPicks[0].label];
+  }
 
   if (filter.selectedChildren?.length === 0) delete filter.selectedChildren;
   if (filter.statuses?.length === 0) delete filter.statuses;
