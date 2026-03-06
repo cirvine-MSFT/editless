@@ -177,12 +177,3 @@ export function resolveShellPath(raw: string): string {
   }
   return path.resolve(p);
 }
-
-/**
- * @deprecated Use `buildLaunchCommandForConfig()` instead.
- * Build a default launch command with hardcoded agent type "squad".
- * Reads `editless.cli.additionalArgs` and appends them as extraArgs.
- */
-export function buildDefaultLaunchCommand(): string {
-  return buildLaunchCommandForConfig({ id: 'default', universe: 'unknown' });
-}

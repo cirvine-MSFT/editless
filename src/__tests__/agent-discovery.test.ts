@@ -217,4 +217,151 @@ describe('discoverAgentsInCopilotDir', () => {
 
     expect(result.find(a => a.id === 'bar')).toBeDefined();
   });
+
+  it('should discover agents in ~/.copilot/installed-plugins/ subdirectories', () => {
+    const fakeHome = process.env.HOME!;
+    const pluginDir = path.join(fakeHome, '.copilot', 'installed-plugins', 'dev-team');
+    fs.mkdirSync(pluginDir, { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, 'dev-team.agent.md'), '# Dev Team\n> A dev team agent\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir();
+
+    const agent = result.find(a => a.id === 'dev-team');
+    expect(agent).toBeDefined();
+    expect(agent!.source).toBe('installed-plugin');
+    expect(agent!.name).toBe('Dev Team');
+    expect(agent!.description).toBe('A dev team agent');
+  });
+
+  it('should discover agents nested deeply inside installed-plugins/', () => {
+    const fakeHome = process.env.HOME!;
+    const nestedDir = path.join(fakeHome, '.copilot', 'installed-plugins', 'org', 'sub-plugin');
+    fs.mkdirSync(nestedDir, { recursive: true });
+    fs.writeFileSync(path.join(nestedDir, 'nested.agent.md'), '# Nested Agent\n> Deep plugin\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir();
+
+    const agent = result.find(a => a.id === 'nested');
+    expect(agent).toBeDefined();
+    expect(agent!.source).toBe('installed-plugin');
+  });
+
+  it('should return empty when installed-plugins/ directory does not exist', () => {
+    const fakeHome = process.env.HOME!;
+    // Ensure .copilot exists but installed-plugins/ does not
+    fs.mkdirSync(path.join(fakeHome, '.copilot'), { recursive: true });
+
+    const result = discoverAgentsInCopilotDir();
+
+    const pluginAgents = result.filter(a => a.source === 'installed-plugin');
+    expect(pluginAgents).toHaveLength(0);
+  });
+
+  it('should deduplicate installed-plugin agents with copilot-dir agents', () => {
+    const fakeHome = process.env.HOME!;
+    // Same agent ID in both agents/ and installed-plugins/
+    const agentsDir = path.join(fakeHome, '.copilot', 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, 'dupe.agent.md'), '# Dupe From Agents\n', 'utf-8');
+
+    const pluginDir = path.join(fakeHome, '.copilot', 'installed-plugins', 'dupe-plugin');
+    fs.mkdirSync(pluginDir, { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, 'dupe.agent.md'), '# Dupe From Plugin\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir();
+
+    const dupes = result.filter(a => a.id === 'dupe');
+    expect(dupes).toHaveLength(1);
+    // agents/ is scanned first, so copilot-dir wins
+    expect(dupes[0].source).toBe('copilot-dir');
+  });
+
+  it('should discover installed-plugins inside a configDirOverride', () => {
+    const customConfig = path.join(tmpDir, 'custom-config');
+    const pluginDir = path.join(customConfig, 'installed-plugins', 'my-plugin');
+    fs.mkdirSync(pluginDir, { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, 'custom.agent.md'), '# Custom Plugin\n> From config dir\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir(customConfig);
+
+    const agent = result.find(a => a.id === 'custom');
+    expect(agent).toBeDefined();
+    expect(agent!.source).toBe('installed-plugin');
+    expect(agent!.description).toBe('From config dir');
+  });
+
+  it('should scan configDirOverride agents/ AND installed-plugins/', () => {
+    const customConfig = path.join(tmpDir, 'custom-config');
+    const agentsDir = path.join(customConfig, 'agents');
+    const pluginDir = path.join(customConfig, 'installed-plugins', 'plugin-a');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.mkdirSync(pluginDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, 'local.agent.md'), '# Local Agent\n', 'utf-8');
+    fs.writeFileSync(path.join(pluginDir, 'plugin.agent.md'), '# Plugin Agent\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir(customConfig);
+
+    expect(result.find(a => a.id === 'local' && a.source === 'copilot-dir')).toBeDefined();
+    expect(result.find(a => a.id === 'plugin' && a.source === 'installed-plugin')).toBeDefined();
+  });
+
+  it('should skip symlinks in installed-plugins/ to prevent cycles', () => {
+    const customConfig = path.join(tmpDir, 'symlink-config');
+    const pluginDir = path.join(customConfig, 'installed-plugins', 'real-plugin');
+    const symlinkTarget = path.join(tmpDir, 'symlink-target');
+    fs.mkdirSync(pluginDir, { recursive: true });
+    fs.mkdirSync(symlinkTarget, { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, 'real.agent.md'), '# Real Agent\n', 'utf-8');
+    fs.writeFileSync(path.join(symlinkTarget, 'ghost.agent.md'), '# Ghost Agent\n', 'utf-8');
+
+    const symlinkPath = path.join(customConfig, 'installed-plugins', 'linked-plugin');
+    let symlinkCreated = false;
+    try {
+      fs.symlinkSync(symlinkTarget, symlinkPath, 'junction');
+      symlinkCreated = true;
+    } catch {
+      // Symlinks may require elevated privileges on Windows — skip assertion
+    }
+
+    const result = discoverAgentsInCopilotDir(customConfig);
+
+    expect(result.find(a => a.id === 'real')).toBeDefined();
+    if (symlinkCreated) {
+      expect(result.find(a => a.id === 'ghost')).toBeUndefined();
+    }
+  });
+
+  it('should enforce max depth limit and ignore agents nested too deeply', () => {
+    const customConfig = path.join(tmpDir, 'deep-config');
+    // Build a 12-level deep directory inside installed-plugins/
+    let deepDir = path.join(customConfig, 'installed-plugins');
+    for (let i = 0; i < 12; i++) {
+      deepDir = path.join(deepDir, `level-${i}`);
+    }
+    fs.mkdirSync(deepDir, { recursive: true });
+    fs.writeFileSync(path.join(deepDir, 'too-deep.agent.md'), '# Too Deep\n', 'utf-8');
+
+    // Also place an agent within the depth limit (level 2)
+    const shallowDir = path.join(customConfig, 'installed-plugins', 'shallow-plugin');
+    fs.mkdirSync(shallowDir, { recursive: true });
+    fs.writeFileSync(path.join(shallowDir, 'shallow.agent.md'), '# Shallow Agent\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir(customConfig);
+
+    expect(result.find(a => a.id === 'shallow')).toBeDefined();
+    expect(result.find(a => a.id === 'too-deep')).toBeUndefined();
+  });
+
+  it('should discover agent files at installed-plugins/ root level', () => {
+    const customConfig = path.join(tmpDir, 'root-level-config');
+    const pluginsDir = path.join(customConfig, 'installed-plugins');
+    fs.mkdirSync(pluginsDir, { recursive: true });
+    fs.writeFileSync(path.join(pluginsDir, 'root-agent.agent.md'), '# Root Agent\n> At root of installed-plugins\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir(customConfig);
+
+    const agent = result.find(a => a.id === 'root-agent');
+    expect(agent).toBeDefined();
+    expect(agent!.source).toBe('installed-plugin');
+  });
 });
