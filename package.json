@@ -519,7 +519,7 @@
         },
         {
           "command": "editless.renameSession",
-          "when": "viewItem == terminal",
+          "when": "viewItem == terminal || viewItem == orphanedSession",
           "group": "inline@1"
         },
         {
