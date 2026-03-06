@@ -83,15 +83,15 @@ function collectAgentMdFilesRecursive(dirPath: string, depth = 0, maxDepth = 10)
 function readAndPushAgent(
   filePath: string,
   source: DiscoveredAgent['source'],
-  seen: Set<string>,
+  seen: Map<string, string>,
   out: DiscoveredAgent[],
 ): void {
   const id = toKebabId(path.basename(filePath));
   if (seen.has(id)) {
-    console.warn('[editless] Agent ID collision — skipping duplicate:', id, 'from', filePath);
+    console.warn('[editless] Agent ID collision — skipping duplicate:', id, 'from', filePath, '(keeping', seen.get(id) + ')');
     return;
   }
-  seen.add(id);
+  seen.set(id, filePath);
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
     const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '');
@@ -105,7 +105,7 @@ function readAndPushAgent(
 /** Scan workspace folders for agent files. Returns discovered agents. */
 export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFolderLike[]): DiscoveredAgent[] {
   const agents: DiscoveredAgent[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, string>();
 
   for (const folder of workspaceFolders) {
     const root = folder.uri.fsPath;
@@ -137,7 +137,7 @@ export function getCopilotAgentDirs(): string[] {
  */
 export function discoverAgentsInCopilotDir(configDirOverride?: string): DiscoveredAgent[] {
   const agents: DiscoveredAgent[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, string>();
   const dirs = configDirOverride ? [configDirOverride] : getCopilotAgentDirs();
   for (const copilotDir of dirs) {
     for (const fp of collectAgentMdFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }

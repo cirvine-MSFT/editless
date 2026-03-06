@@ -203,8 +203,8 @@ describe('discoverAgentsInWorkspace', () => {
 
     // Create two files that will produce the same ID
     // .github/agents/ is scanned first, so it will be kept
-    writeFixture('ws/.github/agents/helper.agent.md', '# Helper From Agents Dir\n');
-    writeFixture('ws/helper.agent.md', '# Helper From Root\n');
+    const keptPath = writeFixture('ws/.github/agents/helper.agent.md', '# Helper From Agents Dir\n');
+    const skippedPath = writeFixture('ws/helper.agent.md', '# Helper From Root\n');
 
     const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
 
@@ -213,12 +213,14 @@ describe('discoverAgentsInWorkspace', () => {
     expect(result[0].name).toBe('Helper From Agents Dir');
     expect(result[0].id).toBe('helper');
 
-    // Should have logged a warning about the collision
+    // Should have logged a warning about the collision including both file paths
     expect(consoleWarnSpy).toHaveBeenCalledWith(
       '[editless] Agent ID collision — skipping duplicate:',
       'helper',
       'from',
-      expect.stringContaining('helper.agent.md')
+      skippedPath,
+      '(keeping',
+      keptPath + ')'
     );
 
     consoleWarnSpy.mockRestore();
