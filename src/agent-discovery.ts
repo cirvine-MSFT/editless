@@ -58,15 +58,18 @@ function collectAgentMdFiles(dirPath: string): string[] {
 /**
  * Recursively collect *.agent.md files from a directory and all subdirectories.
  * Used for installed-plugins/ where each plugin lives in its own subdirectory.
+ * Includes symlink cycle protection and depth limits.
  */
-function collectAgentMdFilesRecursive(dirPath: string): string[] {
+function collectAgentMdFilesRecursive(dirPath: string, depth = 0, maxDepth = 10): string[] {
+  if (depth > maxDepth) return [];
   try {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
     const results: string[] = [];
     for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
       const fullPath = path.join(dirPath, entry.name);
       if (entry.isDirectory()) {
-        results.push(...collectAgentMdFilesRecursive(fullPath));
+        results.push(...collectAgentMdFilesRecursive(fullPath, depth + 1, maxDepth));
       } else if (entry.name.endsWith('.agent.md')) {
         results.push(fullPath);
       }
