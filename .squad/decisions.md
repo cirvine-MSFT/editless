@@ -13329,3 +13329,128 @@ Marketplace-installed plugins live in a different directory structure than manua
 ### Config-Dir Awareness
 
 discoverAgentsInCopilotDir(configDirOverride?) now accepts an optional override path. When provided, only that directory is scanned (not the default ~/.copilot and ~/.config/copilot). This aligns with the CLI's --config-dir flag behavior.
+
+
+---
+
+# v0.2 Issue Triage
+
+**Date:** 2026-03-06  
+**Triaged by:** Rick (Lead)  
+**Requested by:** Casey Irvine  
+**Context:** 14 open issues, 5 already shipped in v0.2  
+**Criteria:** High-impact AND/OR not too destabilizing
+
+## Triaged Issues
+
+### ✅ v0.2 — Core Quality (Bugs)
+
+**#474 — Try-catch in readAndPushAgent to prevent discovery crash on corrupt files**
+- **Impact:** High — extension crashes if any `.agent.md` file is corrupted; silent failure in production
+- **Risk:** Low — single try/catch wrapper in `agent-discovery.ts`, existing console.warn pattern
+- **Rationale:** Production reliability. Users can't control 3rd-party agent files. Must-ship.
+
+**#475 — Warn on silent agent ID collision in installed-plugins discovery**
+- **Impact:** Medium — agents silently disappear when IDs collide; hard to diagnose
+- **Risk:** Low — add console.warn in existing collision path; behavior unchanged, just visible
+- **Rationale:** Pair with #474 for discovery robustness. Trivial change, high debuggability value.
+
+### ✅ v0.2 — Power User Workflow (High ROI, Low Risk)
+
+**#476 — Pass work item context to "Launch with Agent"**
+- **Impact:** High — agents currently blind to which bug/issue they're working on; breaks task delegation workflow
+- **Risk:** Low — env var already exists (`EDITLESS_WORK_ITEM_URI`), just need to pass it; 2-line change in launcher
+- **Rationale:** Makes "launch from work item" actually useful. Core workflow gap.
+
+**#479 — Don't truncate session titles from work item names**
+- **Impact:** Medium — users complained session names cut off at 50 chars; hard to identify sessions
+- **Risk:** Low — `MAX_SESSION_NAME` already exists (250), just remove premature truncation in launcher
+- **Rationale:** Low-hanging fruit. Existing users explicitly requested. Pairs with #476 for work item launch quality.
+
+**#480 — Inline rename icon button for sessions**
+- **Impact:** Medium — current rename requires right-click menu; friction for common action
+- **Risk:** Low — add inline icon to `contextValue == 'terminal'`, command already exists
+- **Rationale:** UX polish for session management. VSCode pattern (seen in tabs). One-liner in package.json.
+
+**#481 — Show 'waiting for input' icon instead of spinner when CLI needs user approval**
+- **Impact:** High — users can't tell spinner = working vs. spinner = blocked; leads to confusion/abandonment
+- **Risk:** Low — `isAttentionEvent()` already detects `ask_user`; just change icon from spinner to `comment-discussion`
+- **Rationale:** Session state clarity. Already implemented in `terminal-state.ts` (line 28-44), just needs wiring.
+
+### 🟡 v0.2-Stretch — ADO Power Features (Medium Risk, High Value for ADO Users)
+
+**#477 — ADO PR filtering (assigned/created by me, review status)**
+- **Impact:** High — ADO projects have 1000s of PRs; current view unusable without filtering
+- **Risk:** Medium — requires ADO API changes + filter UI updates; needs testing with real ADO projects
+- **Rationale:** Stretches ADO integration. High value for Microsoft users, but riskier than core bugs. Ship if time allows.
+
+**#478 — ADO work items limit configurable (capped at 50)**
+- **Impact:** Medium — some teams need >50 items visible; others want <50 for performance
+- **Risk:** Low — add config setting + pass to `fetchAdoWorkItems()`; UI already handles paging
+- **Rationale:** Config change only. No architectural risk. Pairs with #477 for ADO polish.
+
+### ❌ Backlog — Lower Priority / Higher Risk
+
+**#486 — Work item launch with mode selection and default prompt generation**
+- **Impact:** High — would auto-generate prompts like "Fix bug #{number}: {title}" on launch
+- **Risk:** High — new QuickPick flow + prompt generation logic; undefined UX for "mode selection"
+- **Rationale:** Feature creep. Work item launch already functional (#476 fixes context gap). Defer for user feedback on what "mode" means.
+
+**#487 — Scope PR and Work Item views to current repo (not entire ADO project)**
+- **Impact:** Medium — reduces noise in multi-repo projects
+- **Risk:** Medium — requires git detection + filtering logic; unclear how to handle mono-repos
+- **Rationale:** Nice-to-have. Users can filter manually. Needs design for edge cases (no git, detached workspace).
+
+**#488 — Open EditLess sessions as editor tabs instead of terminal panel**
+- **Impact:** Medium — panel real estate problem for multi-session users
+- **Risk:** High — VS Code API doesn't support "terminal in editor tab" directly; would need custom webview or Terminal API hacks
+- **Rationale:** Significant architectural change. Needs spike to validate feasibility. Not v0.2 material.
+
+**#489 — Sticky maximize for terminal panel**
+- **Impact:** Low — convenience feature; users can manually toggle maximize
+- **Risk:** Medium — VS Code layout API is finicky; state persistence adds complexity
+- **Rationale:** Marginal value. Defer until session tab solution (#488) investigated.
+
+**#282 — Investigate telemetry or logging**
+- **Impact:** Low — diagnostic feature; no user-facing value yet
+- **Risk:** Medium — privacy considerations + infrastructure setup
+- **Rationale:** Research task, not a feature. Backlog until we have a specific diagnostic problem to solve.
+
+**#43 — Visual workflow documentation with UI demos**
+- **Impact:** Low — helps onboarding but not blocking adoption
+- **Risk:** Low — documentation only
+- **Rationale:** Documentation tasks don't block releases. Defer to post-v0.2 polish cycle.
+
+## v0.2 Theme
+
+**"Reliable work delegation"** — Fix discovery crashes, make work item launch actually work, clarify session state.
+
+Core pillars:
+1. **Robustness:** Discovery doesn't crash, collisions visible (#474, #475)
+2. **Context-aware launch:** Agents know what they're working on (#476, #479)
+3. **Session clarity:** Users know when agents are blocked vs. working (#481)
+4. **UX polish:** Inline rename, no truncation (#480, #479)
+
+Stretch goal: ADO filtering for large-project users (#477, #478).
+
+## Natural Groupings
+
+- **Discovery robustness:** #474 + #475 (both in `agent-discovery.ts`, test together)
+- **Work item launch quality:** #476 + #479 (both touch `work-item-launcher.ts`)
+- **Session UX:** #480 + #481 (inline buttons + state icons, both touch tree rendering)
+- **ADO filtering:** #477 + #478 (both ADO client changes, test with real project)
+
+## Recommended Order
+
+1. **Week 1:** Discovery bugs (#474, #475) — unblock users with corrupt configs
+2. **Week 2:** Work item launch (#476, #479) — core workflow improvement
+3. **Week 3:** Session UX (#480, #481) — polish session management
+4. **Week 4 (stretch):** ADO filtering (#477, #478) — if time allows
+
+---
+
+**Final v0.2 Scope:**
+- **Committed:** 6 issues (#474, #475, #476, #479, #480, #481)
+- **Stretch:** 2 issues (#477, #478)
+- **Backlog:** 6 issues (#486, #487, #488, #489, #282, #43)
+

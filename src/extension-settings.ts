@@ -25,8 +25,10 @@ you MUST first retrieve the URI by running this shell command:
   PowerShell: echo $env:EDITLESS_WORK_ITEM_URI
   Bash/Zsh:   echo $EDITLESS_WORK_ITEM_URI
 
-If the variable is set (non-empty), use that URI as the target. Fetch details from it
-(e.g. via the GitHub API or gh CLI) and proceed with the user's request.
+If the variable is set (non-empty), use that URI as the target:
+- If it starts with file:/// it is a local task file. Read the file directly to get the task details.
+- Otherwise it is a web URL (GitHub issue, ADO work item, or PR). Fetch details from it
+  (e.g. via the GitHub API or gh CLI) and proceed with the user's request.
 If the variable is empty or unset, ask the user which task they mean.
 `;
 

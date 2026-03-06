@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -162,6 +162,68 @@ describe('discoverAgentsInWorkspace', () => {
     const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
 
     expect(result[0].filePath).toBe(written);
+  });
+
+  it('should skip unreadable agent file without crashing (#474)', () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Create a valid agent file
+    writeFixture('ws/.github/agents/good.agent.md', '# Good Agent\n> Works fine.\n');
+    
+    // Create a file that will be unreadable (we'll delete it to simulate corruption)
+    const badFile = writeFixture('ws/.github/agents/bad.agent.md', '# Bad Agent\n');
+    
+    // Another valid agent file to verify discovery continues
+    writeFixture('ws/.github/agents/another.agent.md', '# Another Agent\n> Also works.\n');
+    
+    // Make the file unreadable by deleting it and creating a directory with the same name
+    // This will cause fs.readFileSync to throw EISDIR error
+    fs.unlinkSync(badFile);
+    fs.mkdirSync(badFile);
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    // Should have discovered the two valid agents, skipped the bad one
+    expect(result).toHaveLength(2);
+    expect(result.map(a => a.id)).toContain('good');
+    expect(result.map(a => a.id)).toContain('another');
+    expect(result.map(a => a.id)).not.toContain('bad');
+
+    // Should have logged a warning about the unreadable file
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[editless] Skipping unreadable agent file:',
+      badFile
+    );
+
+    consoleWarnSpy.mockRestore();
+  });
+
+  it('should warn and skip duplicate agent ID from different files (#475)', () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // Create two files that will produce the same ID
+    // .github/agents/ is scanned first, so it will be kept
+    const keptPath = writeFixture('ws/.github/agents/helper.agent.md', '# Helper From Agents Dir\n');
+    const skippedPath = writeFixture('ws/helper.agent.md', '# Helper From Root\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    // Should only have one agent (the first one encountered)
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Helper From Agents Dir');
+    expect(result[0].id).toBe('helper');
+
+    // Should have logged a warning about the collision including both file paths
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[editless] Agent ID collision — skipping duplicate:',
+      'helper',
+      'from',
+      skippedPath,
+      '(keeping',
+      keptPath + ')'
+    );
+
+    consoleWarnSpy.mockRestore();
   });
 });
 
