@@ -59,12 +59,19 @@ function readAndPushAgent(
   out: DiscoveredAgent[],
 ): void {
   const id = toKebabId(path.basename(filePath));
-  if (seen.has(id)) { return; }
+  if (seen.has(id)) {
+    console.warn('[editless] Agent ID collision — skipping duplicate:', id, 'from', filePath);
+    return;
+  }
   seen.add(id);
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '');
-  const parsed = parseAgentFile(content, fallback);
-  out.push({ id, name: parsed.name, filePath, source, description: parsed.description });
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '');
+    const parsed = parseAgentFile(content, fallback);
+    out.push({ id, name: parsed.name, filePath, source, description: parsed.description });
+  } catch {
+    console.warn('[editless] Skipping unreadable agent file:', filePath);
+  }
 }
 
 /** Scan workspace folders for agent files. Returns discovered agents. */
