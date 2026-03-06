@@ -5,8 +5,10 @@ import type { AgentTeamConfig } from './types';
 
 /**
  * Maximum allowed length for session names before truncation.
+ * Set high — VS Code terminal titles ellipsize naturally in the UI,
+ * and tooltips already show the full title.
  */
-export const MAX_SESSION_NAME = 50;
+export const MAX_SESSION_NAME = 250;
 
 /**
  * Builds a session name from a raw name, truncating at word boundaries if needed.
