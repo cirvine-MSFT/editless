@@ -157,8 +157,9 @@ export async function initAdoIntegration(
     }
 
     try {
+      const limit = vscode.workspace.getConfiguration('editless').get<number>('ado.workItemLimit', 200);
       const [workItems, prs, adoMe] = await Promise.all([
-        fetchAdoWorkItems(org, project, token),
+        fetchAdoWorkItems(org, project, token, limit),
         fetchAdoPRs(org, project, token),
         fetchAdoMe(org, token),
       ]);

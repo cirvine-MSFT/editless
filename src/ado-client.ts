@@ -24,6 +24,7 @@ export interface AdoPR {
   repository: string;
   reviewers: string[];
   createdBy: string;
+  reviewerVotes?: Map<string, number>; // uniqueName -> vote (-10=rejected, -5=waiting, 0=no vote, 5=approved with suggestions, 10=approved)
 }
 
 function adoFetch<T>(apiUrl: string, token: string): Promise<T> {
@@ -70,13 +71,14 @@ export async function fetchAdoWorkItems(
   org: string,
   project: string,
   token: string,
+  limit: number = 200,
 ): Promise<AdoWorkItem[]> {
   const orgName = normalizeOrg(org);
   const wiqlUrl = `https://dev.azure.com/${orgName}/${encodeURIComponent(project)}/_apis/wit/wiql?api-version=7.1`;
 
   interface WiqlResponse { workItems: Array<{ id: number; url: string }> }
   const wiql = await adoFetch<WiqlResponse>(
-    wiqlUrl + '&$top=50',
+    wiqlUrl + `&$top=${limit}`,
     token,
   ).catch(() => null);
 
@@ -138,33 +140,40 @@ export async function fetchAdoWorkItems(
 
   if (ids.length === 0) return [];
 
-  // Fetch work item details in batch (max 200)
-  const batchIds = ids.slice(0, 50);
-  const detailsUrl = `https://dev.azure.com/${orgName}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Id,System.Title,System.State,System.WorkItemType,System.AssignedTo,System.AreaPath,System.Tags,System.Parent&api-version=7.1`;
+  // Fetch work item details in batches (ADO API supports max 200 per batch)
+  const batchSize = 200;
+  const allWorkItems: AdoWorkItem[] = [];
+  
+  for (let i = 0; i < ids.length && i < limit; i += batchSize) {
+    const batchIds = ids.slice(i, Math.min(i + batchSize, limit));
+    const detailsUrl = `https://dev.azure.com/${orgName}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Id,System.Title,System.State,System.WorkItemType,System.AssignedTo,System.AreaPath,System.Tags,System.Parent&api-version=7.1`;
 
-  interface WorkItemDetail {
-    id: number;
-    fields: Record<string, unknown>;
-    _links: { html: { href: string } };
-  }
-  interface BatchResponse { value: WorkItemDetail[] }
+    interface WorkItemDetail {
+      id: number;
+      fields: Record<string, unknown>;
+      _links: { html: { href: string } };
+    }
+    interface BatchResponse { value: WorkItemDetail[] }
 
-  try {
-    const batch = await adoFetch<BatchResponse>(detailsUrl, token);
-    return batch.value.map(wi => ({
-      id: wi.id,
-      title: (wi.fields['System.Title'] as string) ?? '',
-      state: (wi.fields['System.State'] as string) ?? '',
-      type: (wi.fields['System.WorkItemType'] as string) ?? '',
-      url: wi._links?.html?.href ?? `https://dev.azure.com/${orgName}/${encodeURIComponent(project)}/_workitems/edit/${wi.id}`,
-      assignedTo: ((wi.fields['System.AssignedTo'] as { displayName?: string })?.displayName) ?? '',
-      areaPath: (wi.fields['System.AreaPath'] as string) ?? '',
-      tags: ((wi.fields['System.Tags'] as string) ?? '').split(';').map(t => t.trim()).filter(Boolean),
-      parentId: (wi.fields['System.Parent'] as number) ?? undefined,
-    }));
-  } catch {
-    return [];
+    try {
+      const batch = await adoFetch<BatchResponse>(detailsUrl, token);
+      allWorkItems.push(...batch.value.map(wi => ({
+        id: wi.id,
+        title: (wi.fields['System.Title'] as string) ?? '',
+        state: (wi.fields['System.State'] as string) ?? '',
+        type: (wi.fields['System.WorkItemType'] as string) ?? '',
+        url: wi._links?.html?.href ?? `https://dev.azure.com/${orgName}/${encodeURIComponent(project)}/_workitems/edit/${wi.id}`,
+        assignedTo: ((wi.fields['System.AssignedTo'] as { displayName?: string })?.displayName) ?? '',
+        areaPath: (wi.fields['System.AreaPath'] as string) ?? '',
+        tags: ((wi.fields['System.Tags'] as string) ?? '').split(';').map(t => t.trim()).filter(Boolean),
+        parentId: (wi.fields['System.Parent'] as number) ?? undefined,
+      })));
+    } catch {
+      // Continue with next batch on error
+    }
   }
+  
+  return allWorkItems;
 }
 
 export async function fetchAdoPRs(
@@ -201,7 +210,7 @@ export async function fetchAdoPRs(
         sourceRefName: string;
         targetRefName: string;
         url: string;
-        reviewers: Array<{ displayName: string }>;
+        reviewers: Array<{ displayName: string; uniqueName: string; vote: number }>;
         repository: { name: string };
         createdBy: { displayName: string; uniqueName: string };
       }
@@ -210,6 +219,12 @@ export async function fetchAdoPRs(
       const result = await adoFetch<PRsResponse>(prsUrl, token);
       for (const pr of result.value ?? []) {
         const webUrl = `https://dev.azure.com/${orgName}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repo.name)}/pullrequest/${pr.pullRequestId}`;
+        const reviewerVotes = new Map<string, number>();
+        for (const reviewer of pr.reviewers ?? []) {
+          if (reviewer.uniqueName) {
+            reviewerVotes.set((reviewer.uniqueName || '').toLowerCase(), reviewer.vote ?? 0);
+          }
+        }
         allPRs.push({
           id: pr.pullRequestId,
           title: pr.title,
@@ -221,6 +236,7 @@ export async function fetchAdoPRs(
           repository: repo.name,
           reviewers: (pr.reviewers ?? []).map(r => r.displayName),
           createdBy: pr.createdBy?.uniqueName ?? '',
+          reviewerVotes,
         });
       }
     } catch {

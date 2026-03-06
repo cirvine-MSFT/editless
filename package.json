@@ -889,6 +889,16 @@
           "scope": "resource",
           "order": 33
         },
+        "editless.ado.workItemLimit": {
+          "type": "number",
+          "default": 200,
+          "minimum": 10,
+          "maximum": 1000,
+          "description": "Maximum number of ADO work items to fetch",
+          "markdownDescription": "Maximum number of work items to fetch from Azure DevOps.\n\nDefault: `200` (was hardcoded at 50 before v0.2).\n\nNote: ADO batch API supports up to 200 items per request; higher limits will use multiple batches.",
+          "scope": "resource",
+          "order": 33.5
+        },
         "editless.local.taskFolders": {
           "type": "array",
           "default": [],
