@@ -44,10 +44,13 @@ export function setupIntegrations(
       if (e.affectsConfiguration('editless.ado.organization') || e.affectsConfiguration('editless.ado.project')) {
         if (adoDebounceTimer) clearTimeout(adoDebounceTimer);
         adoDebounceTimer = setTimeout(() => {
-          initAdoIntegration(context, workItemsProvider, prsProvider);
+          initAdoIntegration(context, workItemsProvider, prsProvider).catch(err => {
+            console.error('[EditLess] ADO integration failed on config change:', err);
+          });
         }, 500);
       }
     }),
+    { dispose() { if (adoDebounceTimer) clearTimeout(adoDebounceTimer); } },
   );
 
   // --- Config change debounce: GitHub ---
@@ -57,10 +60,13 @@ export function setupIntegrations(
       if (e.affectsConfiguration('editless.github.repos')) {
         if (githubDebounceTimer) clearTimeout(githubDebounceTimer);
         githubDebounceTimer = setTimeout(() => {
-          initGitHubIntegration(workItemsProvider, prsProvider);
+          initGitHubIntegration(workItemsProvider, prsProvider).catch(err => {
+            console.error('[EditLess] GitHub integration failed on config change:', err);
+          });
         }, 500);
       }
     }),
+    { dispose() { if (githubDebounceTimer) clearTimeout(githubDebounceTimer); } },
   );
 
   // --- Config change debounce: Local tasks ---
@@ -78,6 +84,7 @@ export function setupIntegrations(
         }, 500);
       }
     }),
+    { dispose() { if (localDebounceTimer) clearTimeout(localDebounceTimer); } },
   );
 
   // Watch local task folders for file changes

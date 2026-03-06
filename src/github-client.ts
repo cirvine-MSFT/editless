@@ -53,7 +53,8 @@ export async function fetchAssignedIssues(repo: string): Promise<GitHubIssue[]> 
         repository: repo,
       };
     });
-  } catch {
+  } catch (err) {
+    console.warn('[EditLess] Failed to fetch GitHub issues:', err instanceof Error ? err.message : String(err));
     return [];
   }
 }
@@ -78,10 +79,12 @@ export async function fetchMyPRs(repo: string, author?: string): Promise<GitHubP
         const { stdout } = await execFileAsync('gh', args);
         const raw: unknown[] = JSON.parse(stdout);
         return raw.map((p) => parsePR(p, repo));
-      } catch {
+      } catch (retryErr) {
+        console.warn('[EditLess] Failed to fetch GitHub PRs (retry):', retryErr instanceof Error ? retryErr.message : String(retryErr));
         return [];
       }
     }
+    console.warn('[EditLess] Failed to fetch GitHub PRs:', err instanceof Error ? err.message : String(err));
     return [];
   }
 }
@@ -123,10 +126,12 @@ export async function fetchLinkedPRs(repo: string, issueNumber: number): Promise
         ]);
         const raw: unknown[] = JSON.parse(stdout);
         return raw.map((p) => parsePR(p, repo));
-      } catch {
+      } catch (retryErr) {
+        console.warn('[EditLess] Failed to fetch linked PRs (retry):', retryErr instanceof Error ? retryErr.message : String(retryErr));
         return [];
       }
     }
+    console.warn('[EditLess] Failed to fetch linked PRs:', err instanceof Error ? err.message : String(err));
     return [];
   }
 }

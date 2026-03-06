@@ -10,9 +10,10 @@ import type { AgentTeamConfig } from './types';
 // Replaces $(agent) variable interpolation with direct string construction.
 // ---------------------------------------------------------------------------
 
-/** Quote an argument if it contains spaces, so shell parsing won't split it. */
+/** Quote an argument if it contains shell metacharacters, so shell parsing won't split or interpret it. */
 function shellQuote(arg: string): string {
-  return arg.includes(' ') ? `"${arg}"` : arg;
+  if (!/[\s"'`$!#&|;(){}]/.test(arg)) return arg;
+  return `"${arg.replace(/["$`]/g, '\\$&')}"`;
 }
 
 export interface CopilotCommandOptions {
