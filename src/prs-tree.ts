@@ -15,7 +15,7 @@ export interface PRsFilter {
   labels: string[];
   statuses: string[];
   author: string;
-  reviewStatus: string; // '', 'approved-by-me', 'not-reviewed-by-me', 'changes-requested-by-me'
+  reviewStatus?: string; // '', 'approved-by-me', 'not-reviewed-by-me', 'changes-requested-by-me'
 }
 
 export interface PRLevelFilter {
@@ -63,12 +63,12 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
   }
 
   get isFiltered(): boolean {
-    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.statuses.length > 0 || this._filter.author !== '' || this._filter.reviewStatus !== '';
+    return this._filter.repos.length > 0 || this._filter.labels.length > 0 || this._filter.statuses.length > 0 || this._filter.author !== '' || (this._filter.reviewStatus ?? '') !== '';
   }
 
   setFilter(filter: PRsFilter): void {
     const authorChanged = this._filter.author !== filter.author;
-    this._filter = { ...filter };
+    this._filter = { reviewStatus: '', ...filter };
     this._filterSeq++;
     vscode.commands.executeCommand('setContext', 'editless.prsFiltered', this.isFiltered);
     vscode.commands.executeCommand('setContext', 'editless.prsMyOnly', filter.author !== '');
@@ -195,8 +195,8 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
       
       // Review status filtering
       if (this._filter.reviewStatus && this._adoMe) {
-        const myVote = pr.reviewerVotes.get(this._adoMe.toLowerCase()) ?? 
-                       pr.reviewerVotes.get(this._adoMe) ?? 0;
+        const myVote = pr.reviewerVotes?.get(this._adoMe.toLowerCase()) ?? 
+                       pr.reviewerVotes?.get(this._adoMe) ?? 0;
         
         if (this._filter.reviewStatus === 'approved-by-me' && myVote !== 10 && myVote !== 5) {
           return false;
@@ -371,8 +371,8 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
       
       // Review status level filter
       if (filter.reviewStatus && this._adoMe) {
-        const myVote = pr.reviewerVotes.get(this._adoMe.toLowerCase()) ?? 
-                       pr.reviewerVotes.get(this._adoMe) ?? 0;
+        const myVote = pr.reviewerVotes?.get(this._adoMe.toLowerCase()) ?? 
+                       pr.reviewerVotes?.get(this._adoMe) ?? 0;
         
         if (filter.reviewStatus === 'approved-by-me' && myVote !== 10 && myVote !== 5) {
           return false;

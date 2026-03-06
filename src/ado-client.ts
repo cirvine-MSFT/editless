@@ -24,7 +24,7 @@ export interface AdoPR {
   repository: string;
   reviewers: string[];
   createdBy: string;
-  reviewerVotes: Map<string, number>; // uniqueName -> vote (-10=rejected, -5=waiting, 0=no vote, 5=approved with suggestions, 10=approved)
+  reviewerVotes?: Map<string, number>; // uniqueName -> vote (-10=rejected, -5=waiting, 0=no vote, 5=approved with suggestions, 10=approved)
 }
 
 function adoFetch<T>(apiUrl: string, token: string): Promise<T> {
@@ -222,7 +222,7 @@ export async function fetchAdoPRs(
         const reviewerVotes = new Map<string, number>();
         for (const reviewer of pr.reviewers ?? []) {
           if (reviewer.uniqueName) {
-            reviewerVotes.set(reviewer.uniqueName, reviewer.vote ?? 0);
+            reviewerVotes.set((reviewer.uniqueName || '').toLowerCase(), reviewer.vote ?? 0);
           }
         }
         allPRs.push({
