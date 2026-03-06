@@ -1,3 +1,11 @@
+### 2026-03-06: 3x review requirement for all PRs
+**By:** Casey Irvine (via Copilot)
+**What:** All PRs must have 3x review and fixes before merging. CI gates must pass before merge.
+**Why:** User request — captured for team memory
+
+
+---
+
 ### 2026-03-04: BaseTreeProvider Integration Pattern for Third Backends
 
 **Date:** 2026-03-04  
@@ -13453,4 +13461,5 @@ Stretch goal: ADO filtering for large-project users (#477, #478).
 - **Committed:** 6 issues (#474, #475, #476, #479, #480, #481)
 - **Stretch:** 2 issues (#477, #478)
 - **Backlog:** 6 issues (#486, #487, #488, #489, #282, #43)
+
 
