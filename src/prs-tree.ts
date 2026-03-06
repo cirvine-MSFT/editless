@@ -195,8 +195,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
       
       // Review status filtering
       if (this._filter.reviewStatus && this._adoMe) {
-        const myVote = pr.reviewerVotes?.get(this._adoMe.toLowerCase()) ?? 
-                       pr.reviewerVotes?.get(this._adoMe) ?? 0;
+        const myVote = pr.reviewerVotes?.get(this._adoMe.toLowerCase() ?? '') ?? 0;
         
         if (this._filter.reviewStatus === 'approved-by-me' && myVote !== 10 && myVote !== 5) {
           return false;
@@ -371,8 +370,7 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
       
       // Review status level filter
       if (filter.reviewStatus && this._adoMe) {
-        const myVote = pr.reviewerVotes?.get(this._adoMe.toLowerCase()) ?? 
-                       pr.reviewerVotes?.get(this._adoMe) ?? 0;
+        const myVote = pr.reviewerVotes?.get(this._adoMe.toLowerCase() ?? '') ?? 0;
         
         if (filter.reviewStatus === 'approved-by-me' && myVote !== 10 && myVote !== 5) {
           return false;

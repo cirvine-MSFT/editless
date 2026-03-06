@@ -169,7 +169,7 @@ export async function fetchAdoWorkItems(
         parentId: (wi.fields['System.Parent'] as number) ?? undefined,
       })));
     } catch {
-      // Continue with next batch on error
+      console.warn(`[editless] Failed to fetch ADO work items batch starting at index ${i}`);
     }
   }
   

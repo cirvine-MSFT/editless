@@ -955,6 +955,95 @@ describe('PRsTreeProvider — ADO author filter', () => {
   });
 });
 
+describe('PRsTreeProvider — ADO review status filter', () => {
+  function makeAdoPRsWithVotes() {
+    return [
+      {
+        id: 1, title: 'Approved PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'feature', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'other@example.com',
+        reviewerVotes: new Map([['me@example.com', 10]]),
+      },
+      {
+        id: 2, title: 'Not reviewed PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'fix', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'other@example.com',
+        reviewerVotes: new Map([['me@example.com', 0]]),
+      },
+      {
+        id: 3, title: 'Changes requested PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'bug', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'other@example.com',
+        reviewerVotes: new Map([['me@example.com', -5]]),
+      },
+      {
+        id: 4, title: 'Rejected PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'reject', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'other@example.com',
+        reviewerVotes: new Map([['me@example.com', -10]]),
+      },
+      {
+        id: 5, title: 'Approved with suggestions PR', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'suggest', targetRef: 'main',
+        repository: 'repo', reviewers: [], createdBy: 'other@example.com',
+        reviewerVotes: new Map([['me@example.com', 5]]),
+      },
+    ];
+  }
+
+  it('should filter ADO PRs by approved-by-me status', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoMe('me@example.com');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '', reviewStatus: 'approved-by-me' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRsWithVotes());
+    // Should include PRs with vote 10 and 5
+    expect(filtered).toHaveLength(2);
+    expect(filtered.map(pr => pr.id).sort()).toEqual([1, 5]);
+  });
+
+  it('should filter ADO PRs by not-reviewed-by-me status', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoMe('me@example.com');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '', reviewStatus: 'not-reviewed-by-me' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRsWithVotes());
+    // Should include PRs with vote 0
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0].id).toBe(2);
+  });
+
+  it('should filter ADO PRs by changes-requested-by-me status', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoMe('me@example.com');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '', reviewStatus: 'changes-requested-by-me' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRsWithVotes());
+    // Should include PRs with vote -5 and -10
+    expect(filtered).toHaveLength(2);
+    expect(filtered.map(pr => pr.id).sort()).toEqual([3, 4]);
+  });
+
+  it('should show all PRs when no review status filter is active', () => {
+    const provider = new PRsTreeProvider();
+    provider.setAdoMe('me@example.com');
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '', reviewStatus: '' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRsWithVotes());
+    expect(filtered).toHaveLength(5);
+  });
+
+  it('should not filter by review status when adoMe is not set', () => {
+    const provider = new PRsTreeProvider();
+    // No setAdoMe call
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '', reviewStatus: 'approved-by-me' });
+
+    const filtered = provider.applyAdoRuntimeFilter(makeAdoPRsWithVotes());
+    // Should show all since we can't determine "me"
+    expect(filtered).toHaveLength(5);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // CancellationError handling (#456)
 // ---------------------------------------------------------------------------
