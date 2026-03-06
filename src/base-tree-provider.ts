@@ -387,5 +387,6 @@ export abstract class BaseTreeProvider<
 
   dispose(): void {
     this._disposed = true;
+    this._onDidChangeTreeData.dispose();
   }
 }
