@@ -8,7 +8,7 @@ import type { AgentSettingsManager } from './agent-settings';
  * Owns discovered-item state and the per-squad scan cache.
  * Fires `onDidChange` whenever the data changes so consumers (tree, status bar, etc.) can react.
  */
-export class AgentStateManager {
+export class AgentStateManager implements vscode.Disposable {
   private _cache = new Map<string, SquadState>();
   private _discoveredItems: DiscoveredItem[] = [];
 
