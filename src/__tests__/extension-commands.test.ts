@@ -1601,7 +1601,7 @@ describe('extension command handlers', () => {
       expect(mockLaunchAndLabel).not.toHaveBeenCalled();
     });
 
-    it('should set EDITLESS_WORK_ITEM_URI to filePath for local tasks', async () => {
+    it('should set EDITLESS_WORK_ITEM_URI to file URI for local tasks', async () => {
       const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
       mockDiscoverAll.mockReturnValue([disc]);
       commandHandlers.clear();
@@ -1615,8 +1615,6 @@ describe('extension command handlers', () => {
       expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'Local fix', { EDITLESS_WORK_ITEM_URI: 'file:///tasks/task-1.md' });
     });
   });
-
-  // --- editless.goToPR -------------------------------------------------------
 
   describe('editless.goToPR', () => {
     it('should show info when no linked PRs found', async () => {
