@@ -340,6 +340,8 @@
 **2025-01-03 — Terminal Manager Modularization (#246, #247)**
 Completed extraction of terminal-persistence.ts and session-recovery.ts from terminal-manager.ts, reducing it from 744 → 506 lines. Key challenges: (1) maintaining backward compatibility through re-exports and static properties, (2) preserving exact matching logic including index-based passes, (3) refactoring tests to use public API. Important pattern: when extracting tightly-coupled logic, context objects (TerminalMatchContext, SessionRecoveryContext) allow clean separation while maintaining access to necessary state. All 1201 tests passing.
 
+📌 **readAndPushAgent hardening (#474, #475):** Added try-catch around `fs.readFileSync` + `parseAgentFile` in `readAndPushAgent()` so a corrupt/vanished `.agent.md` file logs a warning and skips instead of crashing the entire discovery chain. Also added `console.warn` on agent ID collision (duplicate filename-derived IDs from different plugins) — previously the second agent was silently dropped. Both fixes are in `src/agent-discovery.ts`, function `readAndPushAgent()`. Build verified. — Morty
+
 ## Wave 2 Extraction Work — Partial Completion
 
 **2025-01-03 — Terminal Manager Additional Extractions (#246, #247)**  
