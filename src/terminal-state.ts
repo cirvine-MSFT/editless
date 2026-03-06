@@ -31,7 +31,7 @@ export function getStateIcon(state: SessionState, resumable = false): vscode.The
     case 'active':
       return new vscode.ThemeIcon('loading~spin');
     case 'attention':
-      return new vscode.ThemeIcon('comment-discussion');
+      return new vscode.ThemeIcon('bell', new vscode.ThemeColor('list.warningForeground'));
     case 'inactive':
       return new vscode.ThemeIcon('circle-outline');
     case 'orphaned':

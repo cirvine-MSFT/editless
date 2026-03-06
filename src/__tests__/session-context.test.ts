@@ -507,15 +507,15 @@ summary: Modified`,
     });
 
     describe('turn-boundary guard on hasOpenAskUser', () => {
-      it('clears stale ask_user when last event is assistant.turn_end', () => {
-        writeEvents('stale-turn-end', [
-          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'STALE' } },
+      it('preserves ask_user when last event is assistant.turn_end and ask_user is still open', () => {
+        writeEvents('open-ask-turn-end', [
+          { type: 'tool.execution_start', timestamp: '2026-01-01T00:00:00Z', data: { toolName: 'ask_user', toolCallId: 'PENDING' } },
           { type: 'assistant.turn_end', timestamp: '2026-01-01T00:01:00Z', data: {} },
         ]);
 
-        const event = resolver.getLastEvent('stale-turn-end');
+        const event = resolver.getLastEvent('open-ask-turn-end');
         expect(event?.type).toBe('assistant.turn_end');
-        expect(event?.hasOpenAskUser).toBe(false);
+        expect(event?.hasOpenAskUser).toBe(true);
       });
 
       it('clears stale ask_user when last event is user.message', () => {
@@ -895,9 +895,10 @@ summary: Modified`,
       await new Promise(resolve => setTimeout(resolve, 300));
 
       expect(callback).toHaveBeenCalled();
+      // With the fix, assistant.turn_end should NOT clear hasOpenAskUser when ask_user is still open
       expect(callback.mock.calls[0][0]).toEqual(expect.objectContaining({
         type: 'assistant.turn_end',
-        hasOpenAskUser: false,
+        hasOpenAskUser: true,
       }));
 
       disposable.dispose();
