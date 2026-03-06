@@ -253,7 +253,7 @@ export function register(context: vscode.ExtensionContext, deps: SessionCommandD
 
       const launchCmd = buildCopilotCommand({ resume: sessionId, extraArgs });
       const displayName = session?.summary
-        ? `↩ ${session.summary}`.slice(0, 50)
+        ? `↩ ${session.summary}`
         : `↩ ${sessionId.slice(0, 8)}`;
 
       const terminal = vscode.window.createTerminal({
