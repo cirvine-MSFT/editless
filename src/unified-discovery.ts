@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir } from './agent-discovery';
+import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir, type AgentSource } from './agent-discovery';
 import { discoverAgentTeams, parseTeamMd, toKebabCase, readUniverseFromRegistry } from './discovery';
 import { resolveTeamMd, resolveTeamDir } from './team-dir';
 import { isGitRepo, discoverWorktrees } from './worktree-discovery';
@@ -12,7 +12,7 @@ export interface DiscoveredItem {
   id: string;
   name: string;
   type: 'agent' | 'squad';
-  source: 'workspace' | 'copilot-dir';
+  source: AgentSource;
   path: string;
   description?: string;
   /** Squad-specific: universe parsed from team.md */
