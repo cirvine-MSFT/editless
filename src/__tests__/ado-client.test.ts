@@ -308,7 +308,7 @@ describe('fetchAdoPRs', () => {
     const result = await fetchAdoPRs('myorg', 'myproject', 'test-pat');
     expect(result).toHaveLength(1);
     // Verify votes are stored with lowercase keys
-    expect(result[0].reviewerVotes.get('alice@company.com')).toBe(10);
-    expect(result[0].reviewerVotes.get('bob@company.com')).toBe(-5);
+    expect(result[0]!.reviewerVotes.get('alice@company.com')).toBe(10);
+    expect(result[0]!.reviewerVotes.get('bob@company.com')).toBe(-5);
   });
 });
