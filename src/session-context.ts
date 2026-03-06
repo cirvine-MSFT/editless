@@ -203,7 +203,7 @@ export class SessionContextResolver {
           }
 
           if (lastParsed) {
-            const turnBoundary = lastParsed.type === 'assistant.turn_end'
+            const turnBoundary = (lastParsed.type === 'assistant.turn_end' && openAskUserIds.size === 0)
               || lastParsed.type === 'user.message'
               || lastParsed.type === 'session.idle'
               || lastParsed.type === 'session.start'
@@ -288,7 +288,7 @@ export class SessionContextResolver {
           }
 
           if (lastParsed) {
-            const turnBoundary = lastParsed.type === 'assistant.turn_end'
+            const turnBoundary = (lastParsed.type === 'assistant.turn_end' && openAskUserIds.size === 0)
               || lastParsed.type === 'user.message'
               || lastParsed.type === 'session.idle'
               || lastParsed.type === 'session.start'
