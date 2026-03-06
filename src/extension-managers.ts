@@ -118,7 +118,7 @@ function registerSessionTreeCommands(
       }
       const { buildCopilotCommand } = await import('./copilot-cli-builder');
       const launchCmd = buildCopilotCommand({ resume: entry.sessionId });
-      const displayName = entry.summary ? `↩ ${entry.summary}`.slice(0, 50) : `↩ ${entry.sessionId.slice(0, 8)}`;
+      const displayName = entry.summary ? `↩ ${entry.summary}` : `↩ ${entry.sessionId.slice(0, 8)}`;
       const terminal = vscode.window.createTerminal({
         name: displayName,
         cwd: entry.cwd || vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || '',

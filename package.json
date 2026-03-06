@@ -79,7 +79,8 @@
       {
         "command": "editless.renameSession",
         "title": "Rename Session",
-        "category": "EditLess"
+        "category": "EditLess",
+        "icon": "$(edit)"
       },
       {
         "command": "editless.refresh",
@@ -515,6 +516,11 @@
         {
           "command": "editless.renameSession",
           "when": "viewItem == terminal"
+        },
+        {
+          "command": "editless.renameSession",
+          "when": "viewItem == terminal || viewItem == orphanedSession",
+          "group": "inline@1"
         },
         {
           "command": "editless.clearSessionLabel",

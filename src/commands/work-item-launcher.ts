@@ -29,7 +29,8 @@ export async function launchFromWorkItem(deps: LauncherDeps, item?: WorkItemsTre
 
   const number = issue?.number ?? adoItem?.id;
   const title = issue?.title ?? adoItem?.title ?? localTask?.title ?? '';
-  const url = issue?.url ?? adoItem?.url ?? '';
+  const localPath = localTask?.filePath;
+  const url = issue?.url ?? adoItem?.url ?? (localPath ? vscode.Uri.file(localPath).toString() : '');
   const displayLabel = localTask ? localTask.title : `#${number} ${title}`;
 
   const cliItem = {
