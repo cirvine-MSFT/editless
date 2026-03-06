@@ -69,6 +69,9 @@ vi.mock('vscode', () => ({
     dispose() { this.listeners = []; }
   },
   ThemeIcon: class {
+    constructor(public id: string, public color?: any) {}
+  },
+  ThemeColor: class {
     constructor(public id: string) {}
   },
 }));
@@ -1436,7 +1439,7 @@ describe('TerminalManager', () => {
 
         const attentionIcon = mgr.getStateIcon('attention');
         expect(attentionIcon).toBeDefined();
-        expect(attentionIcon.id).toBe('comment-discussion');
+        expect(attentionIcon.id).toBe('bell');
 
         const nonResumableInfo = makePersistedEntry();
         const orphanedIcon = mgr.getStateIcon('orphaned', nonResumableInfo);
