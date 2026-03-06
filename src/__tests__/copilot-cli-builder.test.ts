@@ -341,7 +341,11 @@ describe('copilot-cli-builder', () => {
   describe('shell quoting', () => {
     it('quotes addDirs paths that contain spaces', () => {
       const cmd = buildCopilotCommand({ addDirs: ['C:\\Program Files\\MyApp'] });
-      expect(cmd).toBe('copilot --add-dir "C:\\Program Files\\MyApp"');
+      // On Unix, backslashes are escaped inside quotes; on Windows they're preserved
+      const expected = process.platform === 'win32'
+        ? 'copilot --add-dir "C:\\Program Files\\MyApp"'
+        : 'copilot --add-dir "C:\\\\Program Files\\\\MyApp"';
+      expect(cmd).toBe(expected);
     });
 
     it('does not quote addDirs paths without spaces', () => {
