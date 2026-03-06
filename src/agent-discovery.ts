@@ -3,6 +3,9 @@ import * as path from 'path';
 import * as os from 'os';
 import type { WorkspaceFolderLike } from './types';
 
+/** Source of agent discovery. */
+export type AgentSource = 'workspace' | 'copilot-dir' | 'installed-plugin';
+
 /** A discovered standalone agent (not part of a squad). */
 export interface DiscoveredAgent {
   /** Unique ID derived from file path */
@@ -11,8 +14,8 @@ export interface DiscoveredAgent {
   name: string;
   /** File path to the agent definition */
   filePath: string;
-  /** Source of discovery: 'workspace' | 'copilot-dir' */
-  source: 'workspace' | 'copilot-dir';
+  /** Source of discovery */
+  source: AgentSource;
   /** Brief description parsed from the agent file */
   description?: string;
 }
@@ -52,25 +55,57 @@ function collectAgentMdFiles(dirPath: string): string[] {
   }
 }
 
+/**
+ * Recursively collect *.agent.md files from a directory and all subdirectories.
+ * Used for installed-plugins/ where each plugin lives in its own subdirectory.
+ * Includes symlink cycle protection and depth limits.
+ */
+function collectAgentMdFilesRecursive(dirPath: string, depth = 0, maxDepth = 10): string[] {
+  if (depth > maxDepth) return [];
+  try {
+    const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    const results: string[] = [];
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        results.push(...collectAgentMdFilesRecursive(fullPath, depth + 1, maxDepth));
+      } else if (entry.name.endsWith('.agent.md')) {
+        results.push(fullPath);
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
 function readAndPushAgent(
   filePath: string,
   source: DiscoveredAgent['source'],
-  seen: Set<string>,
+  seen: Map<string, string>,
   out: DiscoveredAgent[],
 ): void {
   const id = toKebabId(path.basename(filePath));
-  if (seen.has(id)) { return; }
-  seen.add(id);
-  const content = fs.readFileSync(filePath, 'utf-8');
-  const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '');
-  const parsed = parseAgentFile(content, fallback);
-  out.push({ id, name: parsed.name, filePath, source, description: parsed.description });
+  if (seen.has(id)) {
+    console.warn('[editless] Agent ID collision — skipping duplicate:', id, 'from', filePath, '(keeping', seen.get(id) + ')');
+    return;
+  }
+  seen.set(id, filePath);
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '');
+    const parsed = parseAgentFile(content, fallback);
+    out.push({ id, name: parsed.name, filePath, source, description: parsed.description });
+  } catch {
+    console.warn('[editless] Skipping unreadable agent file:', filePath);
+  }
 }
 
 /** Scan workspace folders for agent files. Returns discovered agents. */
 export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFolderLike[]): DiscoveredAgent[] {
   const agents: DiscoveredAgent[] = [];
-  const seen = new Set<string>();
+  const seen = new Map<string, string>();
 
   for (const folder of workspaceFolders) {
     const root = folder.uri.fsPath;
@@ -95,13 +130,23 @@ export function getCopilotAgentDirs(): string[] {
   ];
 }
 
-/** Scan all Copilot local directories for agent configs. */
-export function discoverAgentsInCopilotDir(): DiscoveredAgent[] {
+/**
+ * Scan all Copilot local directories for agent configs.
+ * When configDirOverride is provided, scans that directory instead of the
+ * default copilot dirs — this supports the CLI's --config-dir flag.
+ */
+export function discoverAgentsInCopilotDir(configDirOverride?: string): DiscoveredAgent[] {
   const agents: DiscoveredAgent[] = [];
-  const seen = new Set<string>();
-  for (const copilotDir of getCopilotAgentDirs()) {
+  const seen = new Map<string, string>();
+  const dirs = configDirOverride ? [configDirOverride] : getCopilotAgentDirs();
+  for (const copilotDir of dirs) {
     for (const fp of collectAgentMdFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
     for (const fp of collectAgentMdFiles(copilotDir)) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
+    // Scan installed-plugins/ recursively for marketplace-installed agents
+    const installedPluginsDir = path.join(copilotDir, 'installed-plugins');
+    for (const fp of collectAgentMdFilesRecursive(installedPluginsDir)) {
+      readAndPushAgent(fp, 'installed-plugin', seen, agents);
+    }
   }
   return agents;
 }

@@ -16,7 +16,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { buildCopilotCommand, buildDefaultLaunchCommand, buildLaunchCommandForConfig, getCliCommand, parseConfigDir } from '../copilot-cli-builder';
+import { buildCopilotCommand, buildLaunchCommandForConfig, getCliCommand, parseConfigDir } from '../copilot-cli-builder';
 import type { CopilotCommandOptions } from '../copilot-cli-builder';
 
 // ---------------------------------------------------------------------------
@@ -186,51 +186,6 @@ describe('copilot-cli-builder', () => {
     it('appends after typed flags', () => {
       const cmd = buildCopilotCommand({ agent: 'squad', extraArgs: ['--yolo'] });
       expect(cmd).toBe('copilot --agent squad --yolo');
-    });
-  });
-
-  describe('buildDefaultLaunchCommand', () => {
-    it('builds command with hardcoded agent "squad"', () => {
-      expect(buildDefaultLaunchCommand()).toBe('copilot --agent squad');
-    });
-
-    it('appends additionalArgs from settings', () => {
-      mockGet.mockImplementation((key: string, def?: unknown) => {
-        if (key === 'additionalArgs') return '--yolo --model gpt-5';
-        return def;
-      });
-      expect(buildDefaultLaunchCommand()).toBe('copilot --agent squad --yolo --model gpt-5');
-    });
-
-    it('handles empty additionalArgs', () => {
-      mockGet.mockImplementation((key: string, def?: unknown) => {
-        if (key === 'additionalArgs') return '';
-        return def;
-      });
-      expect(buildDefaultLaunchCommand()).toBe('copilot --agent squad');
-    });
-
-    it('handles whitespace-only additionalArgs', () => {
-      mockGet.mockImplementation((key: string, def?: unknown) => {
-        if (key === 'additionalArgs') return '   ';
-        return def;
-      });
-      expect(buildDefaultLaunchCommand()).toBe('copilot --agent squad');
-    });
-
-    it('never produces $(agent) interpolation tokens', () => {
-      const cmd = buildDefaultLaunchCommand();
-      expect(cmd).not.toContain('$(');
-      expect(cmd).not.toContain('${');
-    });
-
-    it('uses global editless.cli.command setting', () => {
-      mockGet.mockImplementation((key: string, def?: unknown) => {
-        if (key === 'command') return 'custom-copilot';
-        if (key === 'additionalArgs') return '';
-        return def;
-      });
-      expect(buildDefaultLaunchCommand()).toBe('custom-copilot --agent squad');
     });
   });
 
