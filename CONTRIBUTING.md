@@ -6,9 +6,9 @@ Thank you for your interest in helping EditLess improve! We welcome contribution
 
 EditLess is built by **specialized AI agents** (Rick, Morty, Summer, and team). We've found that detailed problem specs are more valuable to us than pull requests — our agents use specs to implement, test, and verify changes end-to-end.
 
-That said, there are **three levels of contribution**, each equally valuable:
+We welcome contributions at all levels. These form a **progression of impact**:
 
-### Level 1: File Issues (Easiest)
+### Level 1: File Issues (Entry Point)
 
 **What:** File an issue describing a feature you want or a bug you found.
 
@@ -20,15 +20,15 @@ That said, there are **three levels of contribution**, each equally valuable:
 
 **Example:** "Dark mode isn't working in the tree view on Windows" or "I'd like to see agent status in the status bar"
 
-**Why it matters:** We prioritize based on user feedback. Your issue helps us understand what's important.
+**Impact:** Community feedback helps us prioritize. Issues are the foundation—we read every one, and your observations help shape the roadmap.
 
 ---
 
-### Level 2: Write a Detailed Spec (Medium Effort)
+### Level 2: Write a Detailed Spec (Higher Impact)
 
 **What:** File an issue with a **detailed specification** that describes the feature, use cases, and expected behavior. Ideally, work with another AI agent or person to develop the spec.
 
-**Why:** Detailed specs let our AI agents implement features faster, with fewer iterations. A well-written spec is worth more than a pull request.
+**Why:** Detailed specs let our AI agents implement features directly without repeated iterations. A well-written spec often saves us days of work compared to a pull request.
 
 **What to include:**
 - **Problem:** What's the user problem you're solving?
@@ -55,20 +55,36 @@ Update it every 5 seconds by pinging the agent's health endpoint.
 - [ ] No performance impact
 ```
 
-**Why it matters:** Detailed specs let our agents do their best work. This is often more helpful than a PR because we get a clean, verified implementation without context-switching.
+**Impact:** A detailed spec moves much faster than a PR because our agents implement end-to-end with no context-switching. This is genuinely more valuable than code contributions.
 
 ---
 
-### Level 3: Dogfood on Master (Highest Value)
+### Level 3: Dogfood on Master (Most Valuable)
 
 **What:** Use the latest code from `master` in your own work, file issues for bugs or friction you find, and tag them with `dogfood` + the commit SHA.
 
-**Why:** Master moves fast. Dogfooding catches real-world issues before we release them. This is the fastest feedback loop.
+**Why:** Master moves fast. Dogfooding catches real-world issues before we release them. This is the fastest, most actionable feedback loop.
 
-**How:**
-1. **Install the latest dogfood build** (ask for it or build locally)
-2. **Use EditLess in your actual workflow**
-3. **Find a bug or friction?** File an issue with:
+**How to Install:**
+
+Choose one of these approaches:
+
+**Option A: Build locally yourself**
+```bash
+git clone https://github.com/cirvine-MSFT/editless.git
+cd editless
+npm install
+npm run package
+code --install-extension editless-*.vsix
+```
+
+**Option B: Use your AI assistant** (Preferred for AI-first workflow)
+Give your AI assistant this prompt:
+> Clone the EditLess repo from https://github.com/cirvine-MSFT/editless, install dependencies with npm, build and package it as a .vsix file, then install it in VS Code. Keep me on the master branch throughout.
+
+Then:
+1. **Use EditLess in your actual workflow**
+2. **Find a bug or friction?** File an issue with:
    - The `dogfood` label
    - The commit SHA where you found it: `master@abc123ef`
    - Steps to reproduce
@@ -89,13 +105,13 @@ Expected: Full line shown (scroll or wrap)
 Actual: Text ends abruptly
 ```
 
-**Important:** Master is not stable. Dogfooding is incredibly helpful but comes with risk. If you choose this path, understand that you may hit bugs. That's the point — help us find them early.
+> ⚠️ **Warning:** `master` is not stable. Dogfooding is invaluable but comes with risk. You may hit bugs—that's expected. Your reports help us fix them before release.
 
 ---
 
-## For Dogfooders & Explorers: Development Setup
+## For Developers: Development Setup
 
-If you're exploring the codebase or dogfooding locally, here's how to set up:
+If you're exploring the codebase or contributing code, here's how to set up:
 
 ### Prerequisites
 
@@ -104,34 +120,21 @@ If you're exploring the codebase or dogfooding locally, here's how to set up:
 - **npm** (bundled with Node.js)
 - **git**
 
-### 1. Clone the Repository
+### Getting Started
 
-```bash
-git clone https://github.com/cirvine-MSFT/editless.git
-cd editless
-```
+**To build and test locally**, follow **Option A** from Level 3 above, then:
 
-### 2. Install Dependencies
+### Development Workflow
 
-```bash
-npm install
-```
+Once you have the repo cloned and dependencies installed:
 
-### 3. Build the Extension
-
-```bash
-npm run build
-```
-
-To watch for changes during development:
-
+**Watch mode** (rebuilds on file changes):
 ```bash
 npm run watch
 ```
 
-### 4. Test in VS Code
-
-Press **F5** in VS Code to launch the Extension Development Host with your local build.
+**Debug in VS Code** (with watch mode running):
+Press **F5** to launch the Extension Development Host with your local build.
 
 ## Development Commands
 
