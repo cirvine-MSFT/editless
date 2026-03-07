@@ -19,7 +19,7 @@ export abstract class BaseTreeProvider<
   protected _treeView?: vscode.TreeView<TTreeItem>;
   protected _allLabels = new Set<string>();
   protected _adoOrg: string | undefined;
-  protected _adoProject: string | undefined;
+  protected _adoProjects: string[] = [];
   protected _adoConfigured = false;
   protected _adoRefresh?: () => Promise<void>;
 
@@ -37,6 +37,7 @@ export abstract class BaseTreeProvider<
   protected abstract _updateDescription(): void;
   protected abstract _getGitHubItemsMap(): Map<string, TGitHub[]>;
   protected abstract _getAdoItemsList(): TAdo[];
+  protected abstract _getAdoItemProject(item: TAdo): string;
   protected abstract applyRuntimeFilter(items: TGitHub[]): TGitHub[];
   protected abstract applyAdoRuntimeFilter(items: TAdo[]): TAdo[];
   protected abstract _doFetchAll(): Promise<void>;
@@ -50,9 +51,9 @@ export abstract class BaseTreeProvider<
     this.fetchAll();
   }
 
-  setAdoConfig(org: string | undefined, project: string | undefined): void {
+  setAdoConfig(org: string | undefined, projects: string[]): void {
     this._adoOrg = org;
-    this._adoProject = project;
+    this._adoProjects = projects;
   }
 
   clearAdo(): void {
@@ -78,6 +79,15 @@ export abstract class BaseTreeProvider<
 
   protected _cleanNodeId(id: string): string {
     return id.replace(/:f\d+$/, '');
+  }
+
+  protected _extractProjectFromNodeId(nodeId: string): string | undefined {
+    const cleanId = this._cleanNodeId(nodeId);
+    const prefix = `${this._adoIdPrefix}:${this._adoOrg}:`;
+    if (cleanId.startsWith(prefix)) {
+      return cleanId.slice(prefix.length);
+    }
+    return undefined;
   }
 
   getLevelFilter(nodeId: string): TLevelFilter | undefined {
@@ -139,16 +149,10 @@ export abstract class BaseTreeProvider<
     this._loading = true;
     try {
       await this._doFetchAll();
-      this._loading = false;
       if (!this._disposed) {
         this._onDidChangeTreeData.fire();
       }
-      if (this._pendingRefresh) {
-        this._pendingRefresh = false;
-        this.fetchAll();
-      }
     } catch (err) {
-      this._loading = false;
       if (err instanceof vscode.CancellationError) {
         return;
       }
@@ -156,6 +160,12 @@ export abstract class BaseTreeProvider<
         return;
       }
       throw err;
+    } finally {
+      this._loading = false;
+      if (this._pendingRefresh) {
+        this._pendingRefresh = false;
+        this.fetchAll();
+      }
     }
   }
 
@@ -305,15 +315,24 @@ export abstract class BaseTreeProvider<
     return [orgItem];
   }
 
-  protected _getAdoProjectNodes(adoCount: number): TTreeItem[] {
-    if (!this._adoProject) return [];
+  protected _getAdoProjectNodes(_totalCount: number): TTreeItem[] {
+    if (this._adoProjects.length === 0) return [];
+    const allFiltered = this.applyAdoRuntimeFilter(this._getAdoItemsList());
     const fseq = this._filterSeq;
-    const projectItem = this._createTreeItem(this._adoProject, vscode.TreeItemCollapsibleState.Expanded);
-    projectItem.iconPath = new vscode.ThemeIcon('folder');
-    projectItem.description = this._getFilterDescription(`${this._adoIdPrefix}:${this._adoOrg}:${this._adoProject}`, adoCount);
-    projectItem.contextValue = this._contextWithFilter(`${this._adoIdPrefix}-project`, `${this._adoIdPrefix}:${this._adoOrg}:${this._adoProject}`);
-    projectItem.id = `${this._adoIdPrefix}:${this._adoOrg}:${this._adoProject}:f${fseq}`;
-    return [projectItem];
+    const nodes: TTreeItem[] = [];
+
+    for (const project of this._adoProjects) {
+      const count = allFiltered.filter(item => this._getAdoItemProject(item) === project).length;
+      if (count === 0) continue;
+      const nodeId = `${this._adoIdPrefix}:${this._adoOrg}:${project}`;
+      const projectItem = this._createTreeItem(project, vscode.TreeItemCollapsibleState.Expanded);
+      projectItem.iconPath = new vscode.ThemeIcon('folder');
+      projectItem.description = this._getFilterDescription(nodeId, count);
+      projectItem.contextValue = this._contextWithFilter(`${this._adoIdPrefix}-project`, nodeId);
+      projectItem.id = `${nodeId}:f${fseq}`;
+      nodes.push(projectItem);
+    }
+    return nodes;
   }
 
   protected _getGitHubOwnerNodes(filteredItems: Map<string, TGitHub[]>): TTreeItem[] {
@@ -379,7 +398,7 @@ export abstract class BaseTreeProvider<
     }
 
     if (baseContext === `${this._adoIdPrefix}-org`) {
-      return { projects: this._adoProject ? [this._adoProject] : [] };
+      return { projects: [...this._adoProjects] };
     }
 
     return null;

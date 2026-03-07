@@ -146,8 +146,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
       repos: filter.repos ?? [],
       labels: filter.labels ?? [],
       states: filter.states ?? [],
-      types: filter.types ?? [],
-    });
+      types: filter.types ?? [], projects: [] });
 
     return provider.getChildren();
   }
@@ -181,7 +180,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: [] });
     const items = provider.getChildren();
     expect(items).toHaveLength(2);
   });
@@ -196,7 +195,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: [], labels: ['bug'], states: [], types: [] });
+    provider.setFilter({ repos: [], labels: ['bug'], states: [], types: [], projects: [] });
     expect(provider.getChildren()).toHaveLength(1);
 
     provider.clearFilter();
@@ -206,7 +205,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
   it('should report isFiltered correctly', () => {
     const provider = new WorkItemsTreeProvider();
     expect(provider.isFiltered).toBe(false);
-    provider.setFilter({ repos: ['test'], labels: [], states: [], types: [] });
+    provider.setFilter({ repos: ['test'], labels: [], states: [], types: [], projects: [] });
     expect(provider.isFiltered).toBe(true);
     provider.clearFilter();
     expect(provider.isFiltered).toBe(false);
@@ -361,7 +360,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: ['owner/repo'], labels: ['type:bug'], states: ['open'], types: [] });
+    provider.setFilter({ repos: ['owner/repo'], labels: ['type:bug'], states: ['open'], types: [], projects: [] });
 
     expect(mockTreeView.description).toBe('repo:owner/repo · label:type:bug · state:open');
   });
@@ -379,7 +378,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: ['owner/repo'], labels: [], states: [], types: [] });
+    provider.setFilter({ repos: ['owner/repo'], labels: [], states: [], types: [], projects: [] });
     expect(mockTreeView.description).toBeDefined();
 
     provider.clearFilter();
@@ -413,7 +412,7 @@ describe('WorkItemsTreeProvider — icon paths', () => {
 
   it('should set "azure" icon for ADO work items', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     const adoItem = {
       id: 123,
       title: 'ADO Item',
@@ -423,6 +422,7 @@ describe('WorkItemsTreeProvider — icon paths', () => {
       assignedTo: 'user',
       areaPath: 'Project\\Area',
       tags: [],
+      project: 'project',
     };
     provider.setAdoItems([adoItem]);
 
@@ -451,13 +451,14 @@ describe('WorkItemsTreeProvider — ADO hierarchy', () => {
       assignedTo: 'user',
       areaPath: 'Project\\Area',
       tags: [],
+      project: 'project',
       ...overrides,
     };
   }
 
   it('should show parent items at root with children nested', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     const parent = makeAdoItem({ id: 10, title: 'Epic' });
     const child1 = makeAdoItem({ id: 11, title: 'Story A', parentId: 10 });
     const child2 = makeAdoItem({ id: 12, title: 'Story B', parentId: 10 });
@@ -482,7 +483,7 @@ describe('WorkItemsTreeProvider — ADO hierarchy', () => {
 
   it('should show items at root when parent is not in result set', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     const child = makeAdoItem({ id: 20, title: 'Orphan', parentId: 999 });
     provider.setAdoItems([child]);
 
@@ -497,7 +498,7 @@ describe('WorkItemsTreeProvider — ADO hierarchy', () => {
 
   it('should show items without parentId at root', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     const item = makeAdoItem({ id: 30, title: 'Top Level' });
     provider.setAdoItems([item]);
 
@@ -511,7 +512,7 @@ describe('WorkItemsTreeProvider — ADO hierarchy', () => {
 
   it('should set ado-parent-item context for parents', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     const parent = makeAdoItem({ id: 40, title: 'Parent' });
     const child = makeAdoItem({ id: 41, title: 'Child', parentId: 40 });
     provider.setAdoItems([parent, child]);
@@ -555,20 +556,21 @@ describe('WorkItemsTreeProvider — type filter', () => {
       assignedTo: 'user',
       areaPath: 'Project\\Area',
       tags: [],
+      project: 'project',
       ...overrides,
     };
   }
 
   it('should filter ADO items by type', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
       makeAdoItem({ id: 1, type: 'Bug', title: 'Fix crash' }),
       makeAdoItem({ id: 2, type: 'Task', title: 'Write docs' }),
       makeAdoItem({ id: 3, type: 'Bug', title: 'Fix typo' }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'], projects: [] });
     // Navigate through org→project hierarchy
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -579,14 +581,14 @@ describe('WorkItemsTreeProvider — type filter', () => {
 
   it('should show all types when types filter is empty', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
       makeAdoItem({ id: 1, type: 'Bug' }),
       makeAdoItem({ id: 2, type: 'Task' }),
       makeAdoItem({ id: 3, type: 'Feature' }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: [] });
     // Navigate through org→project hierarchy
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -596,14 +598,14 @@ describe('WorkItemsTreeProvider — type filter', () => {
 
   it('should allow multiple types', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
       makeAdoItem({ id: 1, type: 'Bug' }),
       makeAdoItem({ id: 2, type: 'Task' }),
       makeAdoItem({ id: 3, type: 'Feature' }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug', 'Feature'] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug', 'Feature'], projects: [] });
     // Navigate through org→project hierarchy
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -613,14 +615,14 @@ describe('WorkItemsTreeProvider — type filter', () => {
 
   it('should promote children to root when parent is filtered out by type', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
       makeAdoItem({ id: 10, type: 'User Story', title: 'Story' }),
       makeAdoItem({ id: 11, type: 'Task', title: 'Task A', parentId: 10 }),
       makeAdoItem({ id: 12, type: 'Task', title: 'Task B', parentId: 10 }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Task'] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Task'], projects: [] });
     // Navigate through org→project hierarchy
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -635,7 +637,7 @@ describe('WorkItemsTreeProvider — type filter', () => {
   it('should report isFiltered when types are set', () => {
     const provider = new WorkItemsTreeProvider();
     expect(provider.isFiltered).toBe(false);
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'], projects: [] });
     expect(provider.isFiltered).toBe(true);
     provider.clearFilter();
     expect(provider.isFiltered).toBe(false);
@@ -643,14 +645,14 @@ describe('WorkItemsTreeProvider — type filter', () => {
 
   it('should show parent as leaf when all children are filtered out', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
       makeAdoItem({ id: 60, type: 'Epic', title: 'Big Epic' }),
       makeAdoItem({ id: 61, type: 'Bug', title: 'Bug Child', parentId: 60 }),
     ]);
 
     // Filter to only Epic type — parent has children in the map but filter removes them
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Epic'] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Epic'], projects: [] });
     // Navigate through org→project hierarchy
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -686,8 +688,7 @@ describe('WorkItemsTreeProvider — unified type filter on GitHub issues', () =>
       repos: filter.repos ?? [],
       labels: filter.labels ?? [],
       states: filter.states ?? [],
-      types: filter.types ?? [],
-    });
+      types: filter.types ?? [], projects: [] });
 
     return provider.getChildren();
   }
@@ -777,13 +778,14 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
       assignedTo: 'user',
       areaPath: 'Project\\Area',
       tags: [],
+      project: 'project',
       ...overrides,
     };
   }
 
   it('should use "Labels" instead of "Tags" in ADO tooltips', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([makeAdoItem({ tags: ['frontend', 'urgent'] })]);
 
     // Navigate through org→project hierarchy
@@ -798,7 +800,7 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
 
   it('should omit Labels line when ADO item has no tags', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([makeAdoItem({ tags: [] })]);
 
     // Navigate through org→project hierarchy
@@ -815,7 +817,7 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
     const mockTreeView = { description: undefined as string | undefined };
     provider.setTreeView(mockTreeView as any);
 
-    provider.setFilter({ repos: [], labels: ['frontend'], states: [], types: [] });
+    provider.setFilter({ repos: [], labels: ['frontend'], states: [], types: [], projects: [] });
     expect(mockTreeView.description).toContain('label:frontend');
   });
 
@@ -824,7 +826,7 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
     const mockTreeView = { description: undefined as string | undefined };
     provider.setTreeView(mockTreeView as any);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'], projects: [] });
     expect(mockTreeView.description).toContain('type:Bug');
   });
 
@@ -833,7 +835,7 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
     const mockTreeView = { description: undefined as string | undefined };
     provider.setTreeView(mockTreeView as any);
 
-    provider.setFilter({ repos: ['owner/repo'], labels: ['urgent'], states: ['open'], types: ['Bug'] });
+    provider.setFilter({ repos: ['owner/repo'], labels: ['urgent'], states: ['open'], types: ['Bug'], projects: [] });
     expect(mockTreeView.description).toContain('repo:owner/repo');
     expect(mockTreeView.description).toContain('label:urgent');
     expect(mockTreeView.description).toContain('state:open');
@@ -846,7 +848,7 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
     const mockTreeView = { description: undefined as string | undefined };
     provider.setTreeView(mockTreeView as any);
 
-    provider.setFilter({ repos: [], labels: ['bug'], states: [], types: ['Bug'] });
+    provider.setFilter({ repos: [], labels: ['bug'], states: [], types: ['Bug'], projects: [] });
     expect(mockTreeView.description).toBeDefined();
 
     provider.clearFilter();
@@ -897,8 +899,7 @@ describe('WorkItemsTreeProvider — combined type + label/state filters', () => 
       repos: filter.repos ?? [],
       labels: filter.labels ?? [],
       states: filter.states ?? [],
-      types: filter.types ?? [],
-    });
+      types: filter.types ?? [], projects: [] });
 
     return provider.getChildren();
   }
@@ -953,6 +954,7 @@ describe('WorkItemsTreeProvider — getAllRepos with ADO', () => {
       id: 1, title: 'Item', state: 'Active', type: 'Bug',
       url: 'https://dev.azure.com/org/project/_workitems/edit/1',
       assignedTo: 'user', areaPath: 'Area', tags: [],
+      project: 'project',
       ...overrides,
     };
   }
@@ -1044,6 +1046,7 @@ describe('WorkItemsTreeProvider — getAvailableOptions', () => {
       id: 1, title: 'Item', state: 'Active', type: 'Bug',
       url: 'https://dev.azure.com/org/project/_workitems/edit/1',
       assignedTo: 'user', areaPath: 'Area', tags: [],
+      project: 'project',
       ...overrides,
     };
   }
@@ -1093,14 +1096,14 @@ describe('WorkItemsTreeProvider — getAvailableOptions', () => {
 
   it('should return orgs for ado-backend', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('my-org', 'my-project');
+    provider.setAdoConfig('my-org', ['my-project']);
     const options = provider.getAvailableOptions('ado:', 'ado-backend');
     expect(options.orgs).toEqual(['my-org']);
   });
 
   it('should return projects for ado-org', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('my-org', 'my-project');
+    provider.setAdoConfig('my-org', ['my-project']);
     const options = provider.getAvailableOptions('ado:my-org', 'ado-org');
     expect(options.projects).toEqual(['my-project']);
   });
@@ -1134,6 +1137,7 @@ describe('WorkItemsTreeProvider — hierarchy rendering with level filters', () 
       id: 1, title: 'Item', state: 'Active', type: 'Bug',
       url: 'https://dev.azure.com/org/project/_workitems/edit/1',
       assignedTo: 'user', areaPath: 'Area', tags: [],
+      project: 'project',
       ...overrides,
     };
   }
@@ -1174,7 +1178,7 @@ describe('WorkItemsTreeProvider — hierarchy rendering with level filters', () 
 
   it('should apply level filter to ADO project node', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
       makeAdoItem({ id: 1, type: 'Bug' }),
       makeAdoItem({ id: 2, type: 'User Story' }),
@@ -1239,7 +1243,7 @@ describe('WorkItemsTreeProvider — hierarchy rendering with level filters', () 
 
   it('should apply tags filter in ADO level filter', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
       makeAdoItem({ id: 1, tags: ['frontend'] }),
       makeAdoItem({ id: 2, tags: ['backend'] }),
@@ -1257,7 +1261,7 @@ describe('WorkItemsTreeProvider — hierarchy rendering with level filters', () 
 
   it('should apply combined type, tags, and state filter in ADO level filter', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
       makeAdoItem({ id: 1, type: 'Bug', state: 'Active', tags: ['frontend'] }),
       makeAdoItem({ id: 2, type: 'Bug', state: 'Active', tags: ['backend'] }),
@@ -1322,9 +1326,9 @@ describe('WorkItemsTreeProvider — level filter edge cases', () => {
 
   it('should handle single backend ADO-only configuration with org→project hierarchy', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
-      { id: 1, title: 'Item', state: 'Active', type: 'Bug', url: 'url', assignedTo: 'user', areaPath: 'Area', tags: [] },
+      { id: 1, title: 'Item', state: 'Active', type: 'Bug', url: 'url', assignedTo: 'user', areaPath: 'Area', tags: [], project: 'project' },
     ]);
 
     // Single backend, ADO → still shows org→project hierarchy
@@ -1350,9 +1354,9 @@ describe('WorkItemsTreeProvider — level filter edge cases', () => {
     mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
 
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
-      { id: 1, title: 'Item', state: 'Active', type: 'Bug', url: 'url', assignedTo: 'user', areaPath: 'Area', tags: [] },
+      { id: 1, title: 'Item', state: 'Active', type: 'Bug', url: 'url', assignedTo: 'user', areaPath: 'Area', tags: [], project: 'project' },
     ]);
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
@@ -1370,9 +1374,9 @@ describe('WorkItemsTreeProvider — level filter edge cases', () => {
     mockFetchAssignedIssues.mockResolvedValue([makeIssue()]);
 
     const provider = new WorkItemsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoItems([
-      { id: 1, title: 'Item', state: 'Active', type: 'Bug', url: 'url', assignedTo: 'user', areaPath: 'Area', tags: [] },
+      { id: 1, title: 'Item', state: 'Active', type: 'Bug', url: 'url', assignedTo: 'user', areaPath: 'Area', tags: [], project: 'project' },
     ]);
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
@@ -1384,7 +1388,7 @@ describe('WorkItemsTreeProvider — level filter edge cases', () => {
     expect(root).toHaveLength(2);
 
     // Apply a filter that excludes all GitHub issues (state filter that only ADO items match)
-    provider.setFilter({ repos: [], labels: [], states: ['active'], types: [] });
+    provider.setFilter({ repos: [], labels: [], states: ['active'], types: [], projects: [] });
     root = provider.getChildren();
     // ADO items with "Active" state map to "active", GitHub issues may or may not match
     // The key assertion: if only ADO items remain, we get org hierarchy not flat items
@@ -1496,7 +1500,7 @@ describe('WorkItemsTreeProvider — local tasks integration', () => {
     ]);
 
     // Show all states including closed
-    provider.setFilter({ repos: [], labels: [], states: ['open', 'active', 'closed'], types: [] });
+    provider.setFilter({ repos: [], labels: [], states: ['open', 'active', 'closed'], types: [], projects: [] });
     const items = provider.getChildren();
     expect(items).toHaveLength(3);
 
@@ -1540,7 +1544,7 @@ describe('WorkItemsTreeProvider — local tasks integration', () => {
       makeLocalTask({ id: 'done-task', title: 'Done', state: 'Done', folderPath: '/tasks', folderName: 'tasks', parentName: '' }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: ['open', 'active', 'closed'], types: [] });
+    provider.setFilter({ repos: [], labels: [], states: ['open', 'active', 'closed'], types: [], projects: [] });
     const items = provider.getChildren();
     expect(items).toHaveLength(2);
   });
@@ -1558,7 +1562,7 @@ describe('WorkItemsTreeProvider — local tasks integration', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: ['owner/repo'], labels: [], states: [], types: [] });
+    provider.setFilter({ repos: ['owner/repo'], labels: [], states: [], types: [], projects: [] });
     const items = provider.getChildren();
     const localGroup = items.find(n => n.label === 'Local Tasks');
     expect(localGroup).toBeUndefined();
@@ -1780,5 +1784,282 @@ describe('WorkItemsTreeProvider — milestone group parsing', () => {
     const issues = provider.getChildren(msGroup!);
     expect(issues).toHaveLength(1);
     expect(issues[0].label).toContain('#1');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Multi-project ADO tree rendering (#487, #498)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — multi-project tree rendering', () => {
+  function makeAdoItem(overrides: Partial<import('../ado-client').AdoWorkItem> = {}): import('../ado-client').AdoWorkItem {
+    return {
+      id: 1, title: 'Item', state: 'Active', type: 'Bug',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/1',
+      assignedTo: 'user', areaPath: 'Area', tags: [],
+      project: 'projA',
+      ...overrides,
+    };
+  }
+
+  it('should render TWO project nodes for two configured projects with correct counts', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, project: 'projA' }),
+      makeAdoItem({ id: 2, project: 'projA' }),
+      makeAdoItem({ id: 3, project: 'projA' }),
+      makeAdoItem({ id: 4, project: 'projB' }),
+      makeAdoItem({ id: 5, project: 'projB' }),
+    ]);
+
+    // Root → org node (single backend)
+    const orgNodes = provider.getChildren();
+    expect(orgNodes).toHaveLength(1);
+    expect(orgNodes[0].label).toBe('org');
+
+    // Org → project nodes
+    const projectNodes = provider.getChildren(orgNodes[0]);
+    expect(projectNodes).toHaveLength(2);
+
+    const projA = projectNodes.find(n => n.label === 'projA')!;
+    const projB = projectNodes.find(n => n.label === 'projB')!;
+    expect(projA).toBeDefined();
+    expect(projB).toBeDefined();
+    expect(projA.description).toContain('3');
+    expect(projB.description).toContain('2');
+  });
+
+  it('project node children route only that projects items — not other projects', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, title: 'A-Item', project: 'projA' }),
+      makeAdoItem({ id: 2, title: 'B-Item', project: 'projB' }),
+    ]);
+
+    const orgNodes = provider.getChildren();
+    const projectNodes = provider.getChildren(orgNodes[0]);
+
+    // Navigate to projA children
+    const projANode = projectNodes.find(n => n.label === 'projA')!;
+    const projAItems = provider.getChildren(projANode);
+    expect(projAItems).toHaveLength(1);
+    expect(projAItems[0].label).toContain('#1');
+    expect(projAItems[0].label).toContain('A-Item');
+
+    // Navigate to projB children
+    const projBNode = projectNodes.find(n => n.label === 'projB')!;
+    const projBItems = provider.getChildren(projBNode);
+    expect(projBItems).toHaveLength(1);
+    expect(projBItems[0].label).toContain('#2');
+    expect(projBItems[0].label).toContain('B-Item');
+  });
+
+  it('empty project is suppressed — project with zero items hidden', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', ['projA', 'projEmpty']);
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, project: 'projA' }),
+      makeAdoItem({ id: 2, project: 'projA' }),
+    ]);
+
+    const orgNodes = provider.getChildren();
+    const projectNodes = provider.getChildren(orgNodes[0]);
+    expect(projectNodes).toHaveLength(1);
+    expect(projectNodes[0].label).toBe('projA');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Projects filter (#487, #498)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — projects filter', () => {
+  function makeAdoItem(overrides: Partial<import('../ado-client').AdoWorkItem> = {}): import('../ado-client').AdoWorkItem {
+    return {
+      id: 1, title: 'Item', state: 'Active', type: 'Bug',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/1',
+      assignedTo: 'user', areaPath: 'Area', tags: [],
+      project: 'projA',
+      ...overrides,
+    };
+  }
+
+  it('projects: [projA] filters items to only projA', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, project: 'projA' }),
+      makeAdoItem({ id: 2, project: 'projB' }),
+    ]);
+
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA'] });
+
+    // Only projA project node should appear
+    const orgNodes = provider.getChildren();
+    const projectNodes = provider.getChildren(orgNodes[0]);
+    expect(projectNodes).toHaveLength(1);
+    expect(projectNodes[0].label).toBe('projA');
+
+    const items = provider.getChildren(projectNodes[0]);
+    expect(items).toHaveLength(1);
+    expect(items[0].label).toContain('#1');
+  });
+
+  it('projects: [projA, projB] includes both projects', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, project: 'projA' }),
+      makeAdoItem({ id: 2, project: 'projB' }),
+    ]);
+
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA', 'projB'] });
+
+    const orgNodes = provider.getChildren();
+    const projectNodes = provider.getChildren(orgNodes[0]);
+    expect(projectNodes).toHaveLength(2);
+    expect(projectNodes.map(n => n.label).sort()).toEqual(['projA', 'projB']);
+  });
+
+  it('isFiltered returns true when only projects is non-empty', () => {
+    const provider = new WorkItemsTreeProvider();
+    expect(provider.isFiltered).toBe(false);
+
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA'] });
+    expect(provider.isFiltered).toBe(true);
+  });
+
+  it('isFiltered returns false when all filter arrays are empty', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: [] });
+    expect(provider.isFiltered).toBe(false);
+  });
+
+  it('project filter description includes project names', () => {
+    const provider = new WorkItemsTreeProvider();
+    const mockTreeView = { description: undefined as string | undefined };
+    provider.setTreeView(mockTreeView as any);
+
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA', 'projB'] });
+    expect(mockTreeView.description).toContain('project:projA,projB');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Per-project failure isolation (#487, #498)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — per-project failure isolation', () => {
+  function makeAdoItem(overrides: Partial<import('../ado-client').AdoWorkItem> = {}): import('../ado-client').AdoWorkItem {
+    return {
+      id: 1, title: 'Item', state: 'Active', type: 'Bug',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/1',
+      assignedTo: 'user', areaPath: 'Area', tags: [],
+      project: 'projA',
+      ...overrides,
+    };
+  }
+
+  it('if one project has zero items while another has items, only non-empty project shows', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    // Simulate projA fetch returned items, projB returned empty (failure or no results)
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, project: 'projB' }),
+      makeAdoItem({ id: 2, project: 'projB' }),
+    ]);
+
+    const orgNodes = provider.getChildren();
+    const projectNodes = provider.getChildren(orgNodes[0]);
+    // projA had zero items → suppressed; projB has items → shown
+    expect(projectNodes).toHaveLength(1);
+    expect(projectNodes[0].label).toBe('projB');
+
+    const items = provider.getChildren(projectNodes[0]);
+    expect(items).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Backward-compatibility: ado.projects vs ado.project (#487, #498)
+// ---------------------------------------------------------------------------
+
+describe('WorkItemsTreeProvider — backward-compatibility config behavior', () => {
+  function makeAdoItem(overrides: Partial<import('../ado-client').AdoWorkItem> = {}): import('../ado-client').AdoWorkItem {
+    return {
+      id: 1, title: 'Item', state: 'Active', type: 'Bug',
+      url: 'https://dev.azure.com/org/project/_workitems/edit/1',
+      assignedTo: 'user', areaPath: 'Area', tags: [],
+      project: 'legacyProj',
+      ...overrides,
+    };
+  }
+
+  it('empty ado.projects + populated ado.project → falls back to single project', () => {
+    // Simulate what initAdoIntegration does when ado.projects is empty
+    // and ado.project has "legacyProj": setAdoConfig('org', ['legacyProj'])
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', ['legacyProj']);
+    provider.setAdoItems([makeAdoItem({ id: 1, project: 'legacyProj' })]);
+
+    const orgNodes = provider.getChildren();
+    expect(orgNodes).toHaveLength(1);
+    expect(orgNodes[0].label).toBe('org');
+
+    const projectNodes = provider.getChildren(orgNodes[0]);
+    expect(projectNodes).toHaveLength(1);
+    expect(projectNodes[0].label).toBe('legacyProj');
+
+    const items = provider.getChildren(projectNodes[0]);
+    expect(items).toHaveLength(1);
+  });
+
+  it('populated ado.projects → multiple projects rendered (ignores legacy ado.project)', () => {
+    // Simulate what initAdoIntegration does when ado.projects has entries:
+    // setAdoConfig('org', ['projA', 'projB']) — legacy ado.project is ignored
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', ['projA', 'projB']);
+    provider.setAdoItems([
+      makeAdoItem({ id: 1, project: 'projA' }),
+      makeAdoItem({ id: 2, project: 'projB' }),
+    ]);
+
+    const orgNodes = provider.getChildren();
+    const projectNodes = provider.getChildren(orgNodes[0]);
+    expect(projectNodes).toHaveLength(2);
+    expect(projectNodes.map(n => n.label).sort()).toEqual(['projA', 'projB']);
+  });
+
+  it('ado.projects with all entries enabled: false → falls back to empty (no projects)', () => {
+    // Simulate what initAdoIntegration does when all entries have enabled: false
+    // → projects array is empty after filtering → falls back to legacy, which may also be empty
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', []);
+
+    // No items, no config → should show configure prompt, not crash
+    const root = provider.getChildren();
+    // Verify no org nodes (since projects list is empty)
+    const orgNodes = root.filter(n => n.contextValue?.startsWith('ado-'));
+    expect(orgNodes).toHaveLength(0);
+  });
+
+  it('setAdoConfig with undefined org clears ADO from the tree', () => {
+    const provider = new WorkItemsTreeProvider();
+    provider.setAdoConfig('org', ['proj']);
+    provider.setAdoItems([makeAdoItem({ project: 'proj' })]);
+
+    // Verify items are present
+    let orgNodes = provider.getChildren();
+    expect(orgNodes).toHaveLength(1);
+    expect(orgNodes[0].contextValue).toBe('ado-org');
+
+    // Clear ADO config
+    provider.setAdoConfig(undefined, []);
+    provider.clearAdo();
+    orgNodes = provider.getChildren();
+    const adoNodes = orgNodes.filter(n => n.contextValue?.startsWith('ado-'));
+    expect(adoNodes).toHaveLength(0);
   });
 });

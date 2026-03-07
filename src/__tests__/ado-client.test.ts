@@ -23,6 +23,7 @@ function setupGetResponse(statusCode: number, body: string) {
     const res = {
       statusCode,
       on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+      resume: vi.fn(),
     };
     // Schedule callback + events on next microtask so listeners are registered first
     Promise.resolve().then(() => {
@@ -45,6 +46,7 @@ function setupRequestResponse(statusCode: number, body: string) {
     const res = {
       statusCode,
       on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+      resume: vi.fn(),
     };
     const reqListeners = new Map<string, Function>();
     const req = {

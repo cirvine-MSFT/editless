@@ -14,17 +14,17 @@ export class AdoWorkItemsProvider implements IWorkItemBackendProvider {
   private _childMap = new Map<number, number[]>();
   private _configured = false;
   private _org: string | undefined;
-  private _project: string | undefined;
+  private _projects: string[] = [];
 
   get configured(): boolean { return this._configured; }
   set configured(value: boolean) { this._configured = value; }
 
   get org(): string | undefined { return this._org; }
-  get project(): string | undefined { return this._project; }
+  get projects(): string[] { return this._projects; }
 
-  setConfig(org: string | undefined, project: string | undefined): void {
+  setConfig(org: string | undefined, projects: string[]): void {
     this._org = org;
-    this._project = project;
+    this._projects = projects;
   }
 
   getItems(): AdoWorkItem[] { return this._items; }
@@ -53,6 +53,7 @@ export class AdoWorkItemsProvider implements IWorkItemBackendProvider {
       if (filter.labels.length > 0 && !ctx.matchesLabelFilter(wi.tags, filter.labels)) return false;
       if (filter.states.length > 0 && !filter.states.includes(mapAdoState(wi.state))) return false;
       if (filter.types.length > 0 && !filter.types.includes(wi.type)) return false;
+      if (filter.projects.length > 0 && !filter.projects.includes(wi.project)) return false;
       return true;
     });
   }
@@ -103,11 +104,13 @@ export class AdoWorkItemsProvider implements IWorkItemBackendProvider {
     return [];
   }
 
-  getAvailableOptions(_nodeId: string, baseContext: string): AvailableFilterOptions | null {
+  getAvailableOptions(nodeId: string, baseContext: string): AvailableFilterOptions | null {
     if (baseContext === 'ado-project') {
+      const project = this._extractProjectFromNodeId(nodeId);
+      const items = project ? this._items.filter(wi => wi.project === project) : this._items;
       const types = new Set<string>();
       const tags = new Set<string>();
-      for (const wi of this._items) {
+      for (const wi of items) {
         types.add(wi.type);
         for (const tag of wi.tags) tags.add(tag);
       }
@@ -182,7 +185,9 @@ export class AdoWorkItemsProvider implements IWorkItemBackendProvider {
   }
 
   private _getProjectChildren(element: WorkItemsTreeItem, ctx: TreeRenderContext): WorkItemsTreeItem[] {
-    let filtered = this.applyRuntimeFilter(this._items, ctx);
+    const project = this._extractProjectFromNodeId(element.id ?? '');
+    const projectItems = project ? this._items.filter(wi => wi.project === project) : this._items;
+    let filtered = this.applyRuntimeFilter(projectItems, ctx);
     const projectFilter = ctx.getLevelFilter(ctx.cleanNodeId(element.id ?? ''));
     if (projectFilter) filtered = this.applyLevelFilter(filtered, projectFilter, ctx);
     return this._getRootItems(filtered).map(wi => this.buildAdoItem(wi));
@@ -205,5 +210,14 @@ export class AdoWorkItemsProvider implements IWorkItemBackendProvider {
     orgItem.contextValue = ctx.contextWithFilter(`${this.backendId}-org`, `${this.backendId}:${this._org}`);
     orgItem.id = `${this.backendId}:${this._org}:f${ctx.filterSeq}`;
     return [orgItem];
+  }
+
+  private _extractProjectFromNodeId(nodeId: string): string | undefined {
+    const cleanId = nodeId.replace(/:f\d+$/, '');
+    const prefix = `${this.backendId}:${this._org}:`;
+    if (cleanId.startsWith(prefix)) {
+      return cleanId.slice(prefix.length);
+    }
+    return undefined;
   }
 }

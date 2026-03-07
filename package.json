@@ -884,10 +884,33 @@
         "editless.ado.project": {
           "type": "string",
           "default": "",
-          "description": "Azure DevOps project name",
-          "markdownDescription": "Azure DevOps project to show in the **Work Items** and **Pull Requests** panes.",
+          "description": "(Deprecated — use editless.ado.projects) Azure DevOps project name",
+          "markdownDescription": "**Deprecated:** Use `editless.ado.projects` instead.\n\nSingle Azure DevOps project name. Kept for backward compatibility — if `editless.ado.projects` is empty, this value is used as a fallback.",
           "scope": "resource",
           "order": 33
+        },
+        "editless.ado.projects": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Azure DevOps project name"
+              },
+              "enabled": {
+                "type": "boolean",
+                "default": true,
+                "description": "Whether to include this project"
+              }
+            },
+            "required": ["name"]
+          },
+          "description": "Azure DevOps projects to display in Work Items and Pull Requests panes",
+          "markdownDescription": "List of ADO projects to show in the **Work Items** and **Pull Requests** panes.\n\nExample:\n```json\n[\n  { \"name\": \"ProjectA\", \"enabled\": true },\n  { \"name\": \"ProjectB\", \"enabled\": true }\n]\n```\n\nIf empty, falls back to `editless.ado.project` (singular) for backward compatibility.",
+          "scope": "resource",
+          "order": 33.1
         },
         "editless.ado.workItemLimit": {
           "type": "number",

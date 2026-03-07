@@ -57,7 +57,7 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       if (picks === undefined) return;
 
       const repos = picks.map(p => p.label);
-      workItemsProvider.setFilter({ repos, labels: [], states: [], types: [] });
+      workItemsProvider.setFilter({ repos, labels: [], states: [], types: [], projects: [] });
     }),
     vscode.commands.registerCommand('editless.clearWorkItemsFilter', () => {
       workItemsProvider.clearFilter();
@@ -101,7 +101,7 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       if (picks === undefined) return;
 
       const repos = picks.map(p => p.label);
-      prsProvider.setFilter({ repos, labels: [], statuses: [], author: prsProvider.filter.author });
+      prsProvider.setFilter({ repos, labels: [], statuses: [], author: prsProvider.filter.author, projects: [] });
     }),
     vscode.commands.registerCommand('editless.clearPRsFilter', () => {
       prsProvider.clearFilter();

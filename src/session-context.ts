@@ -333,6 +333,8 @@ export class SessionContextResolver {
       }
     };
 
+    let watchDirRetries = 0;
+
     const watchDir = () => {
       const sessionDir = path.join(resolvedDir, sessionId);
       try {
@@ -352,7 +354,12 @@ export class SessionContextResolver {
           watchFile();
         }
       } catch {
-        // Directory doesn't exist yet — retry in 1s
+        // Directory doesn't exist yet — retry in 1s (max 30 retries to prevent leaks)
+        if (watchDirRetries >= 30) {
+          console.warn('[EditLess] Session watcher gave up after 30 retries:', watchKey);
+          return;
+        }
+        watchDirRetries++;
         const retry = setTimeout(() => {
           this._watcherPending.delete(watchKey);
           if (fs.existsSync(eventsPath)) {
