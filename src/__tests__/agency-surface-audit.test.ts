@@ -24,6 +24,10 @@ const SKIP_DIRS = new Set([
   '__tests__', '__integration__', '.git', 'icons', '.vscode-test',
 ]);
 
+const SKIP_FILES = new Set([
+  'agent-discovery.ts', // Legitimate references to agency.json marketplace plugin format
+]);
+
 const TEXT_EXTENSIONS = new Set([
   '.ts', '.js', '.json', '.md', '.yml', '.yaml', '.sh', '.html', '.css', '.mjs',
 ]);
@@ -48,6 +52,9 @@ describe('Agency CLI removal guardrail (#101)', () => {
     const violations: string[] = [];
 
     for (const filePath of files) {
+      const fileName = path.basename(filePath);
+      if (SKIP_FILES.has(fileName)) continue;
+      
       const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];

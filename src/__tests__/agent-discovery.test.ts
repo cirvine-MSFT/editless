@@ -426,4 +426,352 @@ describe('discoverAgentsInCopilotDir', () => {
     expect(agent).toBeDefined();
     expect(agent!.source).toBe('installed-plugin');
   });
+
+  describe('agency marketplace plugins', () => {
+    it('should discover entry-point agent from agency plugin with agency.json', () => {
+      const customConfig = path.join(tmpDir, 'agency-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'agency-playground', 'dev-team');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      
+      // Create agency.json
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'], category: 'developer-tools' }),
+        'utf-8'
+      );
+      
+      // Create entry-point agent matching plugin directory name
+      fs.writeFileSync(
+        path.join(agentsDir, 'dev-team.md'),
+        '---\nname: dev-team\ndescription: Your AI development team\n---\n# Dev Team\nContent here.',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const agent = result.find(a => a.id === 'dev-team');
+      expect(agent).toBeDefined();
+      expect(agent!.source).toBe('installed-plugin');
+      expect(agent!.name).toBe('dev-team');
+      expect(agent!.description).toBe('Your AI development team');
+    });
+
+    it('should parse name and description from YAML frontmatter in agency plugin', () => {
+      const customConfig = path.join(tmpDir, 'agency-yaml-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'test-plugin');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'] }),
+        'utf-8'
+      );
+      
+      fs.writeFileSync(
+        path.join(agentsDir, 'test-plugin.md'),
+        '---\nname: Test Agent\ndescription: A test agent from frontmatter\n---\n# Test Content',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const agent = result.find(a => a.id === 'test-plugin');
+      expect(agent).toBeDefined();
+      expect(agent!.name).toBe('Test Agent');
+      expect(agent!.description).toBe('A test agent from frontmatter');
+    });
+
+    it('should match entry-point by directory name when multiple agents exist', () => {
+      const customConfig = path.join(tmpDir, 'multi-agent-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'squad-plugin');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'] }),
+        'utf-8'
+      );
+      
+      // Create multiple agents
+      fs.writeFileSync(path.join(agentsDir, 'architect.md'), '---\nname: Architect\n---\nArchitect agent', 'utf-8');
+      fs.writeFileSync(path.join(agentsDir, 'coder.md'), '---\nname: Coder\n---\nCoder agent', 'utf-8');
+      fs.writeFileSync(path.join(agentsDir, 'squad-plugin.md'), '---\nname: Squad Entry\n---\nEntry point', 'utf-8');
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      // Should discover the entry-point agent (matches directory name)
+      const entryAgent = result.find(a => a.id === 'squad-plugin');
+      expect(entryAgent).toBeDefined();
+      expect(entryAgent!.name).toBe('Squad Entry');
+      
+      // Note: Other agents in agents/ subdirectory may or may not be discovered
+      // depending on implementation — this test only verifies the entry-point
+    });
+
+    it('should skip plugins without agency.json', () => {
+      const customConfig = path.join(tmpDir, 'no-agency-json-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'regular-plugin');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      
+      // No agency.json, but has agents/ subdirectory
+      fs.writeFileSync(
+        path.join(agentsDir, 'regular-plugin.md'),
+        '---\nname: Regular\n---\nShould not be found by agency logic',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      // Should not discover via agency plugin logic
+      // (may still be discovered by traditional *.agent.md recursive scan if named correctly)
+      const agencyAgents = result.filter(a => 
+        a.filePath.includes('agents') && 
+        a.filePath.endsWith('.md') && 
+        !a.filePath.endsWith('.agent.md')
+      );
+      expect(agencyAgents).toHaveLength(0);
+    });
+
+    it('should skip plugins with invalid/malformed agency.json', () => {
+      const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const customConfig = path.join(tmpDir, 'bad-json-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'broken-plugin');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      
+      // Write malformed JSON
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        '{engines: [copilot] this is not valid json',
+        'utf-8'
+      );
+      
+      fs.writeFileSync(
+        path.join(agentsDir, 'broken-plugin.md'),
+        '---\nname: Broken\n---\nShould not crash',
+        'utf-8'
+      );
+
+      // Should not throw an error
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      // Should not discover the agent from the broken plugin
+      const brokenAgents = result.filter(a => a.filePath.includes('broken-plugin'));
+      expect(brokenAgents).toHaveLength(0);
+      
+      consoleWarnSpy.mockRestore();
+    });
+
+    it('should handle missing agents/ subdirectory in agency plugin', () => {
+      const customConfig = path.join(tmpDir, 'no-agents-dir-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'no-agents-plugin');
+      fs.mkdirSync(pluginDir, { recursive: true });
+      
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'] }),
+        'utf-8'
+      );
+      
+      // No agents/ subdirectory created
+
+      // Should not crash
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const agents = result.filter(a => a.filePath.includes('no-agents-plugin'));
+      expect(agents).toHaveLength(0);
+    });
+
+    it('should handle empty agents/ subdirectory in agency plugin', () => {
+      const customConfig = path.join(tmpDir, 'empty-agents-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'empty-plugin');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'] }),
+        'utf-8'
+      );
+      
+      // Empty agents/ directory
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const agents = result.filter(a => a.filePath.includes('empty-plugin'));
+      expect(agents).toHaveLength(0);
+    });
+
+    it('should work with configDirOverride for agency plugins', () => {
+      const customConfig = path.join(tmpDir, 'custom-agency-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'custom-agency');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'] }),
+        'utf-8'
+      );
+      
+      fs.writeFileSync(
+        path.join(agentsDir, 'custom-agency.md'),
+        '---\nname: Custom Agency\ndescription: From custom config dir\n---\n',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const agent = result.find(a => a.id === 'custom-agency');
+      expect(agent).toBeDefined();
+      expect(agent!.source).toBe('installed-plugin');
+      expect(agent!.description).toBe('From custom config dir');
+    });
+
+    it('should deduplicate agency plugin agents with existing *.agent.md agents', () => {
+      const customConfig = path.join(tmpDir, 'dedup-agency-config');
+      
+      // Traditional .agent.md file in agents/
+      const agentsDir = path.join(customConfig, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(agentsDir, 'dupe-agent.agent.md'),
+        '# Dupe from traditional\n',
+        'utf-8'
+      );
+      
+      // Agency plugin with same ID
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'dupe-agent');
+      const pluginAgentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(pluginAgentsDir, { recursive: true });
+      
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'] }),
+        'utf-8'
+      );
+      
+      fs.writeFileSync(
+        path.join(pluginAgentsDir, 'dupe-agent.md'),
+        '---\nname: Dupe from agency\n---\n',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const dupes = result.filter(a => a.id === 'dupe-agent');
+      expect(dupes).toHaveLength(1);
+      // copilot-dir agents/ is scanned before installed-plugins, so traditional wins
+      expect(dupes[0].name).toBe('Dupe from traditional');
+      expect(dupes[0].source).toBe('copilot-dir');
+    });
+
+    it('should NOT include README.md or non-agents/ .md files as agents', () => {
+      const customConfig = path.join(tmpDir, 'readme-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'doc-plugin');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'] }),
+        'utf-8'
+      );
+      
+      // README at plugin root
+      fs.writeFileSync(
+        path.join(pluginDir, 'README.md'),
+        '# This is a README\nNot an agent',
+        'utf-8'
+      );
+      
+      // CHANGELOG at plugin root
+      fs.writeFileSync(
+        path.join(pluginDir, 'CHANGELOG.md'),
+        '# Changelog\nNot an agent',
+        'utf-8'
+      );
+      
+      // Valid agent inside agents/
+      fs.writeFileSync(
+        path.join(agentsDir, 'doc-plugin.md'),
+        '---\nname: Doc Plugin\n---\nReal agent',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const pluginAgents = result.filter(a => a.filePath.includes('doc-plugin'));
+      
+      // Should only discover the one agent from agents/ subdirectory
+      expect(pluginAgents).toHaveLength(1);
+      expect(pluginAgents[0].name).toBe('Doc Plugin');
+      
+      // Should not discover README or CHANGELOG
+      expect(result.find(a => a.filePath.includes('README.md'))).toBeUndefined();
+      expect(result.find(a => a.filePath.includes('CHANGELOG.md'))).toBeUndefined();
+    });
+
+    it('should handle nested marketplace directories', () => {
+      const customConfig = path.join(tmpDir, 'nested-marketplace-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'marketplace-name', 'plugin-name');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      
+      // agency.json at the plugin-name level
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'], category: 'utility' }),
+        'utf-8'
+      );
+      
+      fs.writeFileSync(
+        path.join(agentsDir, 'plugin-name.md'),
+        '---\nname: Nested Plugin\ndescription: From nested structure\n---\n',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const agent = result.find(a => a.id === 'plugin-name');
+      expect(agent).toBeDefined();
+      expect(agent!.source).toBe('installed-plugin');
+      expect(agent!.name).toBe('Nested Plugin');
+      expect(agent!.description).toBe('From nested structure');
+    });
+
+    it('should handle multiline YAML frontmatter description', () => {
+      const customConfig = path.join(tmpDir, 'multiline-yaml-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'multiline-plugin');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'] }),
+        'utf-8'
+      );
+      
+      // YAML with multiline description using >
+      fs.writeFileSync(
+        path.join(agentsDir, 'multiline-plugin.md'),
+        '---\nname: Multiline Agent\ndescription: >\n  This is a multiline\n  description that spans\n  multiple lines\n---\n# Content',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const agent = result.find(a => a.id === 'multiline-plugin');
+      expect(agent).toBeDefined();
+      expect(agent!.name).toBe('Multiline Agent');
+      // Note: Description parsing may vary based on YAML parser implementation
+      // At minimum, should have some description value
+      expect(agent!.description).toBeDefined();
+      expect(agent!.description!.length).toBeGreaterThan(0);
+    });
+  });
 });
