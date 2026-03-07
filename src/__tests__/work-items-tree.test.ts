@@ -22,7 +22,9 @@ vi.mock('vscode', () => createVscodeMock({
 
 vi.mock('../github-client', () => ({
   isGhAvailable: (...args: unknown[]) => mockIsGhAvailable(...(args as [])),
-  fetchAssignedIssues: (...args: unknown[]) => mockFetchAssignedIssues(...(args as [string])),
+  fetchIssues: (...args: unknown[]) => mockFetchAssignedIssues(...(args as [string])),
+  fetchGitHubMe: vi.fn().mockResolvedValue('testuser'),
+  _resetGitHubMeCache: vi.fn(),
 }));
 
 const mockFetchLocalTasks = vi.fn().mockResolvedValue([]);
@@ -146,7 +148,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
       repos: filter.repos ?? [],
       labels: filter.labels ?? [],
       states: filter.states ?? [],
-      types: filter.types ?? [], projects: [] });
+      types: filter.types ?? [], projects: [], assignedToMe: false });
 
     return provider.getChildren();
   }
@@ -180,7 +182,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: [], assignedToMe: false });
     const items = provider.getChildren();
     expect(items).toHaveLength(2);
   });
@@ -195,7 +197,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: [], labels: ['bug'], states: [], types: [], projects: [] });
+    provider.setFilter({ repos: [], labels: ['bug'], states: [], types: [], projects: [], assignedToMe: false });
     expect(provider.getChildren()).toHaveLength(1);
 
     provider.clearFilter();
@@ -205,7 +207,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
   it('should report isFiltered correctly', () => {
     const provider = new WorkItemsTreeProvider();
     expect(provider.isFiltered).toBe(false);
-    provider.setFilter({ repos: ['test'], labels: [], states: [], types: [], projects: [] });
+    provider.setFilter({ repos: ['test'], labels: [], states: [], types: [], projects: [], assignedToMe: false });
     expect(provider.isFiltered).toBe(true);
     provider.clearFilter();
     expect(provider.isFiltered).toBe(false);
@@ -360,7 +362,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: ['owner/repo'], labels: ['type:bug'], states: ['open'], types: [], projects: [] });
+    provider.setFilter({ repos: ['owner/repo'], labels: ['type:bug'], states: ['open'], types: [], projects: [], assignedToMe: false });
 
     expect(mockTreeView.description).toBe('repo:owner/repo · label:type:bug · state:open');
   });
@@ -378,7 +380,7 @@ describe('WorkItemsTreeProvider — runtime filter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: ['owner/repo'], labels: [], states: [], types: [], projects: [] });
+    provider.setFilter({ repos: ['owner/repo'], labels: [], states: [], types: [], projects: [], assignedToMe: false });
     expect(mockTreeView.description).toBeDefined();
 
     provider.clearFilter();
@@ -570,7 +572,7 @@ describe('WorkItemsTreeProvider — type filter', () => {
       makeAdoItem({ id: 3, type: 'Bug', title: 'Fix typo' }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'], projects: [], assignedToMe: false });
     // Navigate through org→project hierarchy
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -588,7 +590,7 @@ describe('WorkItemsTreeProvider — type filter', () => {
       makeAdoItem({ id: 3, type: 'Feature' }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: [], assignedToMe: false });
     // Navigate through org→project hierarchy
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -605,7 +607,7 @@ describe('WorkItemsTreeProvider — type filter', () => {
       makeAdoItem({ id: 3, type: 'Feature' }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug', 'Feature'], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug', 'Feature'], projects: [], assignedToMe: false });
     // Navigate through org→project hierarchy
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -622,7 +624,7 @@ describe('WorkItemsTreeProvider — type filter', () => {
       makeAdoItem({ id: 12, type: 'Task', title: 'Task B', parentId: 10 }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Task'], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Task'], projects: [], assignedToMe: false });
     // Navigate through org→project hierarchy
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -637,7 +639,7 @@ describe('WorkItemsTreeProvider — type filter', () => {
   it('should report isFiltered when types are set', () => {
     const provider = new WorkItemsTreeProvider();
     expect(provider.isFiltered).toBe(false);
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'], projects: [], assignedToMe: false });
     expect(provider.isFiltered).toBe(true);
     provider.clearFilter();
     expect(provider.isFiltered).toBe(false);
@@ -652,7 +654,7 @@ describe('WorkItemsTreeProvider — type filter', () => {
     ]);
 
     // Filter to only Epic type — parent has children in the map but filter removes them
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Epic'], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Epic'], projects: [], assignedToMe: false });
     // Navigate through org→project hierarchy
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -688,7 +690,7 @@ describe('WorkItemsTreeProvider — unified type filter on GitHub issues', () =>
       repos: filter.repos ?? [],
       labels: filter.labels ?? [],
       states: filter.states ?? [],
-      types: filter.types ?? [], projects: [] });
+      types: filter.types ?? [], projects: [], assignedToMe: false });
 
     return provider.getChildren();
   }
@@ -817,7 +819,7 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
     const mockTreeView = { description: undefined as string | undefined };
     provider.setTreeView(mockTreeView as any);
 
-    provider.setFilter({ repos: [], labels: ['frontend'], states: [], types: [], projects: [] });
+    provider.setFilter({ repos: [], labels: ['frontend'], states: [], types: [], projects: [], assignedToMe: false });
     expect(mockTreeView.description).toContain('label:frontend');
   });
 
@@ -826,7 +828,7 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
     const mockTreeView = { description: undefined as string | undefined };
     provider.setTreeView(mockTreeView as any);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: ['Bug'], projects: [], assignedToMe: false });
     expect(mockTreeView.description).toContain('type:Bug');
   });
 
@@ -835,7 +837,7 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
     const mockTreeView = { description: undefined as string | undefined };
     provider.setTreeView(mockTreeView as any);
 
-    provider.setFilter({ repos: ['owner/repo'], labels: ['urgent'], states: ['open'], types: ['Bug'], projects: [] });
+    provider.setFilter({ repos: ['owner/repo'], labels: ['urgent'], states: ['open'], types: ['Bug'], projects: [], assignedToMe: false });
     expect(mockTreeView.description).toContain('repo:owner/repo');
     expect(mockTreeView.description).toContain('label:urgent');
     expect(mockTreeView.description).toContain('state:open');
@@ -848,7 +850,7 @@ describe('WorkItemsTreeProvider — terminology harmonization', () => {
     const mockTreeView = { description: undefined as string | undefined };
     provider.setTreeView(mockTreeView as any);
 
-    provider.setFilter({ repos: [], labels: ['bug'], states: [], types: ['Bug'], projects: [] });
+    provider.setFilter({ repos: [], labels: ['bug'], states: [], types: ['Bug'], projects: [], assignedToMe: false });
     expect(mockTreeView.description).toBeDefined();
 
     provider.clearFilter();
@@ -899,7 +901,7 @@ describe('WorkItemsTreeProvider — combined type + label/state filters', () => 
       repos: filter.repos ?? [],
       labels: filter.labels ?? [],
       states: filter.states ?? [],
-      types: filter.types ?? [], projects: [] });
+      types: filter.types ?? [], projects: [], assignedToMe: false });
 
     return provider.getChildren();
   }
@@ -1388,7 +1390,7 @@ describe('WorkItemsTreeProvider — level filter edge cases', () => {
     expect(root).toHaveLength(2);
 
     // Apply a filter that excludes all GitHub issues (state filter that only ADO items match)
-    provider.setFilter({ repos: [], labels: [], states: ['active'], types: [], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: ['active'], types: [], projects: [], assignedToMe: false });
     root = provider.getChildren();
     // ADO items with "Active" state map to "active", GitHub issues may or may not match
     // The key assertion: if only ADO items remain, we get org hierarchy not flat items
@@ -1500,7 +1502,7 @@ describe('WorkItemsTreeProvider — local tasks integration', () => {
     ]);
 
     // Show all states including closed
-    provider.setFilter({ repos: [], labels: [], states: ['open', 'active', 'closed'], types: [], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: ['open', 'active', 'closed'], types: [], projects: [], assignedToMe: false });
     const items = provider.getChildren();
     expect(items).toHaveLength(3);
 
@@ -1544,7 +1546,7 @@ describe('WorkItemsTreeProvider — local tasks integration', () => {
       makeLocalTask({ id: 'done-task', title: 'Done', state: 'Done', folderPath: '/tasks', folderName: 'tasks', parentName: '' }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: ['open', 'active', 'closed'], types: [], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: ['open', 'active', 'closed'], types: [], projects: [], assignedToMe: false });
     const items = provider.getChildren();
     expect(items).toHaveLength(2);
   });
@@ -1562,7 +1564,7 @@ describe('WorkItemsTreeProvider — local tasks integration', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
-    provider.setFilter({ repos: ['owner/repo'], labels: [], states: [], types: [], projects: [] });
+    provider.setFilter({ repos: ['owner/repo'], labels: [], states: [], types: [], projects: [], assignedToMe: false });
     const items = provider.getChildren();
     const localGroup = items.find(n => n.label === 'Local Tasks');
     expect(localGroup).toBeUndefined();
@@ -1894,7 +1896,7 @@ describe('WorkItemsTreeProvider — projects filter', () => {
       makeAdoItem({ id: 2, project: 'projB' }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA'] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA'], assignedToMe: false });
 
     // Only projA project node should appear
     const orgNodes = provider.getChildren();
@@ -1915,7 +1917,7 @@ describe('WorkItemsTreeProvider — projects filter', () => {
       makeAdoItem({ id: 2, project: 'projB' }),
     ]);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA', 'projB'] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA', 'projB'], assignedToMe: false });
 
     const orgNodes = provider.getChildren();
     const projectNodes = provider.getChildren(orgNodes[0]);
@@ -1927,13 +1929,13 @@ describe('WorkItemsTreeProvider — projects filter', () => {
     const provider = new WorkItemsTreeProvider();
     expect(provider.isFiltered).toBe(false);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA'] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA'], assignedToMe: false });
     expect(provider.isFiltered).toBe(true);
   });
 
   it('isFiltered returns false when all filter arrays are empty', () => {
     const provider = new WorkItemsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: [] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: [], assignedToMe: false });
     expect(provider.isFiltered).toBe(false);
   });
 
@@ -1942,7 +1944,7 @@ describe('WorkItemsTreeProvider — projects filter', () => {
     const mockTreeView = { description: undefined as string | undefined };
     provider.setTreeView(mockTreeView as any);
 
-    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA', 'projB'] });
+    provider.setFilter({ repos: [], labels: [], states: [], types: [], projects: ['projA', 'projB'], assignedToMe: false });
     expect(mockTreeView.description).toContain('project:projA,projB');
   });
 });

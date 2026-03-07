@@ -22,8 +22,10 @@ vi.mock('vscode', () =>
 
 vi.mock('../github-client', () => ({
   isGhAvailable: (...args: unknown[]) => mockIsGhAvailable(...(args as [])),
-  fetchAssignedIssues: (...args: unknown[]) => mockFetchAssignedIssues(...(args as [string])),
+  fetchIssues: (...args: unknown[]) => mockFetchAssignedIssues(...(args as [string])),
   fetchMyPRs: (...args: unknown[]) => mockFetchMyPRs(...(args as [string])),
+  fetchGitHubMe: vi.fn().mockResolvedValue('testuser'),
+  _resetGitHubMeCache: vi.fn(),
 }));
 
 vi.mock('../scanner', () => ({

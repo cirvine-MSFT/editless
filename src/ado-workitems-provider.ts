@@ -15,6 +15,7 @@ export class AdoWorkItemsProvider implements IWorkItemBackendProvider {
   private _configured = false;
   private _org: string | undefined;
   private _projects: string[] = [];
+  private _currentUser: string | undefined;
 
   get configured(): boolean { return this._configured; }
   set configured(value: boolean) { this._configured = value; }
@@ -33,6 +34,10 @@ export class AdoWorkItemsProvider implements IWorkItemBackendProvider {
     this._items = items;
     this._configured = true;
     this._buildChildMap();
+  }
+  
+  setCurrentUser(user: string): void {
+    this._currentUser = user;
   }
 
   isConfigured(): boolean { return this._configured; }
@@ -54,6 +59,7 @@ export class AdoWorkItemsProvider implements IWorkItemBackendProvider {
       if (filter.states.length > 0 && !filter.states.includes(mapAdoState(wi.state))) return false;
       if (filter.types.length > 0 && !filter.types.includes(wi.type)) return false;
       if (filter.projects.length > 0 && !filter.projects.includes(wi.project)) return false;
+      if (filter.assignedToMe && this._currentUser && wi.assignedTo !== this._currentUser) return false;
       return true;
     });
   }

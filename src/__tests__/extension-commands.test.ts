@@ -417,6 +417,8 @@ vi.mock('../prs-tree', () => ({
 
 vi.mock('../github-client', () => ({
   fetchLinkedPRs: mockFetchLinkedPRs,
+  fetchGitHubMe: vi.fn().mockResolvedValue('testuser'),
+  _resetGitHubMeCache: vi.fn(),
 }));
 
 vi.mock('../vscode-compat', () => ({
@@ -1414,7 +1416,7 @@ describe('extension command handlers', () => {
           expect.objectContaining({ label: 'owner/repo1', description: 'GitHub' }),
           expect.objectContaining({ label: '(ADO)', description: 'Azure DevOps' }),
         ]),
-        expect.objectContaining({ canPickMany: true, title: 'Show/Hide Sources' }),
+        expect.objectContaining({ canPickMany: true, title: 'Filter Work Items' }),
       );
       // State and label options should NOT appear
       const items = mockShowQuickPick.mock.calls[0][0] as { description?: string }[];
@@ -1436,6 +1438,7 @@ describe('extension command handlers', () => {
         states: [],
         types: [],
         projects: [],
+        assignedToMe: false,
       });
     });
 
@@ -1448,7 +1451,7 @@ describe('extension command handlers', () => {
     it('should set empty filter when no items selected', async () => {
       mockShowQuickPick.mockResolvedValue([]);
       await getHandler('editless.filterWorkItems')();
-      expect(mockSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], states: [], types: [], projects: [] });
+      expect(mockSetFilter).toHaveBeenCalledWith({ repos: [], labels: [], states: [], types: [], projects: [], assignedToMe: false });
     });
   });
 

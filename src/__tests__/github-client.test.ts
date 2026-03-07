@@ -16,7 +16,7 @@ vi.mock('util', () => ({
   promisify: () => mockExecFileAsync,
 }));
 
-import { isGhAvailable, fetchAssignedIssues, fetchMyPRs, fetchLinkedPRs } from '../github-client';
+import { isGhAvailable, fetchIssues, fetchMyPRs, fetchLinkedPRs } from '../github-client';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -39,10 +39,10 @@ describe('isGhAvailable', () => {
 });
 
 // ---------------------------------------------------------------------------
-// fetchAssignedIssues
+// fetchIssues
 // ---------------------------------------------------------------------------
 
-describe('fetchAssignedIssues', () => {
+describe('fetchIssues', () => {
   it('should parse valid JSON output', async () => {
     const ghOutput = JSON.stringify([
       {
@@ -57,7 +57,7 @@ describe('fetchAssignedIssues', () => {
     ]);
     mockExecFileAsync.mockResolvedValue({ stdout: ghOutput, stderr: '' });
 
-    const issues = await fetchAssignedIssues('owner/repo');
+    const issues = await fetchIssues('owner/repo');
 
     expect(issues).toHaveLength(1);
     expect(issues[0].number).toBe(42);
@@ -70,12 +70,12 @@ describe('fetchAssignedIssues', () => {
 
   it('should return empty array on failure', async () => {
     mockExecFileAsync.mockRejectedValue(new Error('gh not found'));
-    expect(await fetchAssignedIssues('owner/repo')).toEqual([]);
+    expect(await fetchIssues('owner/repo')).toEqual([]);
   });
 
   it('should return empty array on empty JSON array', async () => {
     mockExecFileAsync.mockResolvedValue({ stdout: '[]', stderr: '' });
-    expect(await fetchAssignedIssues('owner/repo')).toEqual([]);
+    expect(await fetchIssues('owner/repo')).toEqual([]);
   });
 
   it('should handle null milestone', async () => {
@@ -92,13 +92,13 @@ describe('fetchAssignedIssues', () => {
     ]);
     mockExecFileAsync.mockResolvedValue({ stdout: ghOutput, stderr: '' });
 
-    const issues = await fetchAssignedIssues('owner/repo');
+    const issues = await fetchIssues('owner/repo');
     expect(issues[0].milestone).toBe('');
   });
 
   it('should return empty array on malformed JSON', async () => {
     mockExecFileAsync.mockResolvedValue({ stdout: 'not json{{{', stderr: '' });
-    expect(await fetchAssignedIssues('owner/repo')).toEqual([]);
+    expect(await fetchIssues('owner/repo')).toEqual([]);
   });
 });
 
