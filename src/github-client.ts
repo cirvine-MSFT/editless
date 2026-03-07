@@ -33,11 +33,11 @@ export interface GitHubRepo {
   nameWithOwner: string;
 }
 
-export async function fetchAssignedIssues(repo: string): Promise<GitHubIssue[]> {
+export async function fetchIssues(repo: string): Promise<GitHubIssue[]> {
   try {
     const { stdout } = await execFileAsync('gh', [
-      'issue', 'list', '--repo', repo, '--assignee', '@me', '--state', 'open',
-      '--json', 'number,title,state,url,labels,assignees,milestone', '--limit', '50',
+      'issue', 'list', '--repo', repo, '--state', 'all',
+      '--json', 'number,title,state,url,labels,assignees,milestone', '--limit', '200',
     ]);
     const raw: unknown[] = JSON.parse(stdout);
     return raw.map((i) => {
@@ -107,6 +107,24 @@ function parsePR(p: unknown, repo: string): GitHubPR {
       : [],
     autoMergeRequest: (rec.autoMergeRequest as unknown) ?? null,
   };
+}
+
+let cachedGhUser: string | undefined;
+
+export async function fetchGitHubMe(): Promise<string> {
+  if (cachedGhUser !== undefined) return cachedGhUser;
+  
+  try {
+    const { stdout } = await execFileAsync('gh', ['api', 'user', '--jq', '.login']);
+    cachedGhUser = stdout.trim();
+  } catch {
+    cachedGhUser = '';
+  }
+  return cachedGhUser;
+}
+
+export function _resetGitHubMeCache(): void {
+  cachedGhUser = undefined;
 }
 
 export async function fetchLinkedPRs(repo: string, issueNumber: number): Promise<GitHubPR[]> {

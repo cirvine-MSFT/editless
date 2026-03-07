@@ -48,16 +48,20 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
         const desc = repo === '(ADO)' ? 'Azure DevOps' : 'GitHub';
         items.push({ label: repo, description: desc, picked: current.repos.includes(repo) });
       }
+      
+      items.push({ label: 'Filters', kind: vscode.QuickPickItemKind.Separator });
+      items.push({ label: 'Assigned to me', description: 'Show only items assigned to me', picked: current.assignedToMe });
 
       const picks = await vscode.window.showQuickPick(items, {
-        title: 'Show/Hide Sources',
+        title: 'Filter Work Items',
         canPickMany: true,
-        placeHolder: 'Select sources to show (leave empty to show all)',
+        placeHolder: 'Select sources and filters',
       });
       if (picks === undefined) return;
 
-      const repos = picks.map(p => p.label);
-      workItemsProvider.setFilter({ repos, labels: [], states: [], types: [], projects: [] });
+      const repos = picks.filter(p => allRepos.includes(p.label)).map(p => p.label);
+      const assignedToMe = picks.some(p => p.label === 'Assigned to me');
+      workItemsProvider.setFilter({ repos, labels: [], states: [], types: [], projects: [], assignedToMe });
     }),
     vscode.commands.registerCommand('editless.clearWorkItemsFilter', () => {
       workItemsProvider.clearFilter();

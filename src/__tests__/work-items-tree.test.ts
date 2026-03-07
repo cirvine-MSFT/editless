@@ -22,7 +22,7 @@ vi.mock('vscode', () => createVscodeMock({
 
 vi.mock('../github-client', () => ({
   isGhAvailable: (...args: unknown[]) => mockIsGhAvailable(...(args as [])),
-  fetchAssignedIssues: (...args: unknown[]) => mockFetchAssignedIssues(...(args as [string])),
+  fetchIssues: (...args: unknown[]) => mockFetchAssignedIssues(...(args as [string])),
 }));
 
 const mockFetchLocalTasks = vi.fn().mockResolvedValue([]);
