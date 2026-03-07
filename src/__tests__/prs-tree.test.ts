@@ -621,9 +621,28 @@ describe('PRsTreeProvider — getAvailableOptions', () => {
     expect(options.projects).toEqual(['my-project']);
   });
 
-  it('should return statuses for ado-pr-project', () => {
+  it('should return repos for ado-pr-project', () => {
     const provider = new PRsTreeProvider();
+    provider.setAdoConfig('org', ['project']);
+    provider.setAdoPRs([
+      {
+        id: 1, title: 'PR 1', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'feature', targetRef: 'main',
+        repository: 'repo-a', reviewers: [], createdBy: 'user@example.com', project: 'project',
+      },
+      {
+        id: 2, title: 'PR 2', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'fix', targetRef: 'main',
+        repository: 'repo-b', reviewers: [], createdBy: 'user@example.com', project: 'project',
+      },
+    ]);
     const options = provider.getAvailableOptions('ado-pr:org:project', 'ado-pr-project');
+    expect(options.repos).toEqual(['repo-a', 'repo-b']);
+  });
+
+  it('should return statuses for ado-pr-repo', () => {
+    const provider = new PRsTreeProvider();
+    const options = provider.getAvailableOptions('ado-pr:org:project:repo', 'ado-pr-repo');
     expect(options.statuses).toEqual(['draft', 'open', 'merged']);
   });
 
@@ -725,7 +744,7 @@ describe('PRsTreeProvider — hierarchy rendering with level filters', () => {
     expect(filtered[0].label).toContain('#1');
   });
 
-  it('should apply level filter to ADO project node', () => {
+  it('should apply level filter to ADO repo node', () => {
     const provider = new PRsTreeProvider();
     provider.setAdoConfig('org', ['project']);
     provider.setAdoPRs([
@@ -741,12 +760,12 @@ describe('PRsTreeProvider — hierarchy rendering with level filters', () => {
       },
     ]);
 
-    const projectNode = new PRsTreeItem('project', 2);
-    projectNode.id = 'ado-pr:org:project:f1';
-    projectNode.contextValue = 'ado-pr-project';
-    provider.setLevelFilter('ado-pr:org:project:f1', { statuses: ['draft'] });
+    const repoNode = new PRsTreeItem('repo', 2);
+    repoNode.id = 'ado-pr:org:project:repo:f1';
+    repoNode.contextValue = 'ado-pr-repo';
+    provider.setLevelFilter('ado-pr:org:project:repo:f1', { statuses: ['draft'] });
 
-    const filtered = provider.getChildren(projectNode);
+    const filtered = provider.getChildren(repoNode);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].label).toContain('#1');
   });
@@ -812,7 +831,7 @@ describe('PRsTreeProvider — level filter edge cases', () => {
       },
     ]);
 
-    // Single backend, ADO → org→project hierarchy
+    // Single backend, ADO → org → project → repo hierarchy
     const root = provider.getChildren();
     expect(root).toHaveLength(1);
     expect(root[0].contextValue).toBe('ado-pr-org');
@@ -822,7 +841,12 @@ describe('PRsTreeProvider — level filter edge cases', () => {
     expect(projectNodes).toHaveLength(1);
     expect(projectNodes[0].contextValue).toBe('ado-pr-project');
 
-    const prItems = provider.getChildren(projectNodes[0]);
+    const repoNodes = provider.getChildren(projectNodes[0]);
+    expect(repoNodes).toHaveLength(1);
+    expect(repoNodes[0].contextValue).toBe('ado-pr-repo');
+    expect(repoNodes[0].label).toBe('repo');
+
+    const prItems = provider.getChildren(repoNodes[0]);
     expect(prItems).toHaveLength(1);
     expect(prItems[0].contextValue).toBe('ado-pull-request');
   });
@@ -907,6 +931,33 @@ describe('PRsTreeProvider — ADO author filter', () => {
     expect(filtered).toHaveLength(3);
   });
 
+  it('should filter ADO PRs by repository', () => {
+    const provider = new PRsTreeProvider();
+    provider.setFilter({ repos: ['repo-a'], labels: [], statuses: [], author: '', projects: [] });
+
+    const prs = [
+      {
+        id: 1, title: 'PR 1', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'feature', targetRef: 'main',
+        repository: 'repo-a', reviewers: [], createdBy: 'user@example.com', project: 'project',
+      },
+      {
+        id: 2, title: 'PR 2', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'fix', targetRef: 'main',
+        repository: 'repo-b', reviewers: [], createdBy: 'user@example.com', project: 'project',
+      },
+      {
+        id: 3, title: 'PR 3', isDraft: false, status: 'active',
+        url: 'url', sourceRef: 'feature2', targetRef: 'main',
+        repository: 'repo-a', reviewers: [], createdBy: 'user@example.com', project: 'project',
+      },
+    ];
+
+    const filtered = provider.applyAdoRuntimeFilter(prs);
+    expect(filtered).toHaveLength(2);
+    expect(filtered.every(pr => pr.repository === 'repo-a')).toBe(true);
+  });
+
   it('should not filter by author when adoMe is not set', () => {
     const provider = new PRsTreeProvider();
     // No setAdoMe call
@@ -921,11 +972,11 @@ describe('PRsTreeProvider — ADO author filter', () => {
     provider.setAdoConfig('org', ['project']);
     provider.setAdoPRs(makeAdoPRs());
 
-    const projectNode = new PRsTreeItem('project', 2);
-    projectNode.id = 'ado-pr:org:project:f1';
-    projectNode.contextValue = 'ado-pr-project';
+    const repoNode = new PRsTreeItem('repo', 2);
+    repoNode.id = 'ado-pr:org:project:repo:f1';
+    repoNode.contextValue = 'ado-pr-repo';
 
-    const items = provider.getChildren(projectNode);
+    const items = provider.getChildren(repoNode);
     expect(items[0].description).toContain('me@example.com');
   });
 
@@ -936,11 +987,11 @@ describe('PRsTreeProvider — ADO author filter', () => {
     provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me', projects: [] });
     provider.setAdoPRs(makeAdoPRs());
 
-    const projectNode = new PRsTreeItem('project', 2);
-    projectNode.id = 'ado-pr:org:project:f1';
-    projectNode.contextValue = 'ado-pr-project';
+    const repoNode = new PRsTreeItem('repo', 2);
+    repoNode.id = 'ado-pr:org:project:repo:f1';
+    repoNode.contextValue = 'ado-pr-repo';
 
-    const items = provider.getChildren(projectNode);
+    const items = provider.getChildren(repoNode);
     expect(items[0].description).not.toContain('me@example.com');
   });
 

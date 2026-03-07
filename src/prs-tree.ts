@@ -141,6 +141,11 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
       }
       return {
         repos: [...adoRepos].sort(),
+      };
+    }
+
+    if (baseContext === `${this._adoIdPrefix}-repo`) {
+      return {
         statuses: ['draft', 'open', 'merged'],
         reviewStatus: ['approved-by-me', 'not-reviewed-by-me', 'changes-requested-by-me'],
       };
@@ -263,14 +268,47 @@ export class PRsTreeProvider extends BaseTreeProvider<GitHubPR, AdoPR, PRsTreeIt
   }
 
   protected _getChildrenForContext(element: PRsTreeItem, ctx: string): PRsTreeItem[] {
-    // ADO project → PR items (scoped to the specific project)
+    // ADO project → repo nodes
     if (ctx === `${this._adoIdPrefix}-project`) {
       const project = this._extractProjectFromNodeId(element.id ?? '');
       const projectPRs = project ? this._adoPRs.filter(pr => pr.project === project) : this._adoPRs;
+      const filtered = this.applyAdoRuntimeFilter(projectPRs);
+      
+      // Group by repository
+      const repoGroups = new Map<string, AdoPR[]>();
+      for (const pr of filtered) {
+        const existing = repoGroups.get(pr.repository) ?? [];
+        existing.push(pr);
+        repoGroups.set(pr.repository, existing);
+      }
+
+      // Create repo nodes
+      const fseq = this._filterSeq;
+      const repoNodes: PRsTreeItem[] = [];
+      for (const [repo, prs] of repoGroups) {
+        const nodeId = `${element.id?.replace(/:f\d+$/, '')}:${repo}`;
+        const repoItem = this._createTreeItem(repo, vscode.TreeItemCollapsibleState.Expanded);
+        repoItem.iconPath = new vscode.ThemeIcon('repo');
+        repoItem.description = this._getFilterDescription(nodeId, prs.length);
+        repoItem.contextValue = this._contextWithFilter(`${this._adoIdPrefix}-repo`, nodeId);
+        repoItem.id = `${nodeId}:f${fseq}`;
+        repoNodes.push(repoItem);
+      }
+      return repoNodes.sort((a, b) => (a.label as string).localeCompare(b.label as string));
+    }
+
+    // ADO repo → PR items
+    if (ctx === `${this._adoIdPrefix}-repo`) {
+      const cleanId = element.id?.replace(/:f\d+$/, '') ?? '';
+      const parts = cleanId.split(':');
+      const repo = parts[parts.length - 1];
+      const project = this._extractProjectFromNodeId(cleanId);
+      
+      const projectPRs = project ? this._adoPRs.filter(pr => pr.project === project && pr.repository === repo) : [];
       let filtered = this.applyAdoRuntimeFilter(projectPRs);
-      const projectFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
-      if (projectFilter) {
-        filtered = this._applyAdoLevelFilter(filtered, projectFilter);
+      const repoFilter = this._levelFilters.get(this._cleanNodeId(element.id ?? ''));
+      if (repoFilter) {
+        filtered = this._applyAdoLevelFilter(filtered, repoFilter);
       }
       return filtered.map(p => this.buildAdoPRItem(p));
     }
