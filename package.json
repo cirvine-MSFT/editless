@@ -461,17 +461,17 @@
       "view/item/context": [
         {
           "command": "editless.launchSession",
-          "when": "view == editlessTree && viewItem =~ /^squad|^agent-hidden|^agent|^default-agent$/",
+          "when": "view == editlessTree && viewItem =~ /^squad|^agent-hidden|^agent|^default-agent|^worktree$/",
           "group": "inline@0"
         },
         {
           "command": "editless.launchSession",
-          "when": "view == editlessTree && viewItem =~ /^squad|^agent-hidden|^agent|^default-agent$/",
+          "when": "view == editlessTree && viewItem =~ /^squad|^agent-hidden|^agent|^default-agent|^worktree$/",
           "group": "session@0"
         },
         {
           "command": "editless.resumeSession",
-          "when": "view == editlessTree && viewItem =~ /^squad|^agent-hidden|^agent|^default-agent$/",
+          "when": "view == editlessTree && viewItem =~ /^squad|^agent-hidden|^agent|^default-agent|^worktree$/",
           "group": "session@1"
         },
         {
@@ -876,16 +876,16 @@
         "editless.ado.organization": {
           "type": "string",
           "default": "",
-          "description": "Azure DevOps organization URL (e.g., https://dev.azure.com/myorg)",
-          "markdownDescription": "Azure DevOps organization URL for the **Work Items** and **Pull Requests** panes.\n\nExample: `\"https://dev.azure.com/myorg\"`",
+          "description": "(Deprecated — use editless.ado.connections) Azure DevOps organization URL",
+          "markdownDescription": "**Deprecated:** Use `editless.ado.connections` instead.\n\nAzure DevOps organization URL. Kept for backward compatibility when used with `editless.ado.projects`.",
           "scope": "resource",
           "order": 32
         },
         "editless.ado.project": {
           "type": "string",
           "default": "",
-          "description": "(Deprecated — use editless.ado.projects) Azure DevOps project name",
-          "markdownDescription": "**Deprecated:** Use `editless.ado.projects` instead.\n\nSingle Azure DevOps project name. Kept for backward compatibility — if `editless.ado.projects` is empty, this value is used as a fallback.",
+          "description": "(Deprecated — use editless.ado.connections) Azure DevOps project name",
+          "markdownDescription": "**Deprecated:** Use `editless.ado.connections` instead.\n\nSingle Azure DevOps project name. Kept for backward compatibility when used with `editless.ado.organization`.",
           "scope": "resource",
           "order": 33
         },
@@ -907,10 +907,21 @@
             },
             "required": ["name"]
           },
-          "description": "Azure DevOps projects to display in Work Items and Pull Requests panes",
-          "markdownDescription": "List of ADO projects to show in the **Work Items** and **Pull Requests** panes.\n\nExample:\n```json\n[\n  { \"name\": \"ProjectA\", \"enabled\": true },\n  { \"name\": \"ProjectB\", \"enabled\": true }\n]\n```\n\nIf empty, falls back to `editless.ado.project` (singular) for backward compatibility.",
+          "description": "(Deprecated — use editless.ado.connections) Azure DevOps projects list",
+          "markdownDescription": "**Deprecated:** Use `editless.ado.connections` instead.\n\nList of ADO projects to show when used with `editless.ado.organization`. Kept for backward compatibility.",
           "scope": "resource",
           "order": 33.1
+        },
+        "editless.ado.connections": {
+          "type": "array",
+          "default": [],
+          "description": "Azure DevOps connections in the format 'organization-url/project-name'",
+          "markdownDescription": "List of Azure DevOps connections to show in the **Work Items** and **Pull Requests** panes.\n\nFormat: `\"organization-url/project-name\"` where organization-url is the full URL (e.g., `\"https://dev.azure.com/myorg/ProjectA\"`).\n\nExample:\n```json\n[\n  \"https://dev.azure.com/mycompany/ProjectA\",\n  \"https://dev.azure.com/mycompany/ProjectB\"\n]\n```\n\nIf empty, falls back to legacy `editless.ado.organization` + `editless.ado.projects` settings for backward compatibility.",
+          "scope": "resource",
+          "order": 31.5,
+          "items": {
+            "type": "string"
+          }
         },
         "editless.ado.workItemLimit": {
           "type": "number",

@@ -85,7 +85,10 @@ export abstract class BaseTreeProvider<
     const cleanId = this._cleanNodeId(nodeId);
     const prefix = `${this._adoIdPrefix}:${this._adoOrg}:`;
     if (cleanId.startsWith(prefix)) {
-      return cleanId.slice(prefix.length);
+      const remainder = cleanId.slice(prefix.length);
+      // Extract just the project name (first segment after org)
+      const colonIndex = remainder.indexOf(':');
+      return colonIndex > 0 ? remainder.slice(0, colonIndex) : remainder;
     }
     return undefined;
   }

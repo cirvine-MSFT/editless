@@ -41,7 +41,7 @@ export function setupIntegrations(
   let adoDebounceTimer: NodeJS.Timeout | undefined;
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('editless.ado.organization') || e.affectsConfiguration('editless.ado.project') || e.affectsConfiguration('editless.ado.projects')) {
+      if (e.affectsConfiguration('editless.ado.connections') || e.affectsConfiguration('editless.ado.organization') || e.affectsConfiguration('editless.ado.project') || e.affectsConfiguration('editless.ado.projects')) {
         if (adoDebounceTimer) clearTimeout(adoDebounceTimer);
         adoDebounceTimer = setTimeout(() => {
           initAdoIntegration(context, workItemsProvider, prsProvider).catch(err => {
@@ -134,28 +134,65 @@ export async function initAdoIntegration(
   prsProvider: PRsTreeProvider,
 ): Promise<void> {
   const config = vscode.workspace.getConfiguration('editless');
-  const org = String(config.get<string>('ado.organization') ?? '').trim();
 
-  // Read multi-project config, fall back to legacy single project
-  const projectsConfig = config.get<AdoProjectConfig[]>('ado.projects', []);
-  const projects = projectsConfig
-    .filter(p => p.enabled !== false)
-    .map(p => p.name)
-    .filter(name => name.trim() !== '');
+  // Read new unified connections format first
+  const connections = config.get<string[]>('ado.connections', []);
+  const parsedConnections: Array<{ org: string; project: string }> = [];
 
-  if (projects.length === 0) {
-    const legacyProject = String(config.get<string>('ado.project') ?? '').trim();
-    if (legacyProject) projects.push(legacyProject);
+  // Parse new format: "https://dev.azure.com/myorg/ProjectName"
+  for (const conn of connections) {
+    const trimmed = conn.trim();
+    if (!trimmed) continue;
+    
+    // Match "org-url/project" pattern
+    const match = trimmed.match(/^(https?:\/\/[^/]+(?:\/[^/]+)?)\/(.+)$/);
+    if (match) {
+      parsedConnections.push({ org: match[1], project: match[2] });
+    }
   }
 
-  if (!org || projects.length === 0) {
+  // If no new-format connections, fall back to legacy settings
+  if (parsedConnections.length === 0) {
+    const org = String(config.get<string>('ado.organization') ?? '').trim();
+
+    // Read multi-project config, fall back to legacy single project
+    const projectsConfig = config.get<AdoProjectConfig[]>('ado.projects', []);
+    const projects = projectsConfig
+      .filter(p => p.enabled !== false)
+      .map(p => p.name)
+      .filter(name => name.trim() !== '');
+
+    if (projects.length === 0) {
+      const legacyProject = String(config.get<string>('ado.project') ?? '').trim();
+      if (legacyProject) projects.push(legacyProject);
+    }
+
+    if (org && projects.length > 0) {
+      for (const proj of projects) {
+        parsedConnections.push({ org, project: proj });
+      }
+    }
+  }
+
+  if (parsedConnections.length === 0) {
     workItemsProvider.setAdoConfig(undefined, []);
     prsProvider.setAdoConfig(undefined, []);
     return;
   }
 
-  workItemsProvider.setAdoConfig(org, projects);
-  prsProvider.setAdoConfig(org, projects);
+  // Group connections by org (for future multi-org support, though current impl uses first org)
+  const orgMap = new Map<string, string[]>();
+  for (const { org, project } of parsedConnections) {
+    if (!orgMap.has(org)) orgMap.set(org, []);
+    orgMap.get(org)!.push(project);
+  }
+
+  // For now, use the first org for the provider config
+  const firstOrg = parsedConnections[0].org;
+  const allProjects = parsedConnections.map(c => c.project);
+  
+  workItemsProvider.setAdoConfig(firstOrg, allProjects);
+  prsProvider.setAdoConfig(firstOrg, allProjects);
 
   async function fetchAdoData(): Promise<void> {
     let token = await getAdoToken(context.secrets);
@@ -177,21 +214,21 @@ export async function initAdoIntegration(
     try {
       const limit = vscode.workspace.getConfiguration('editless').get<number>('ado.workItemLimit', 200);
 
-      // Fetch from all projects in parallel, gracefully handle per-project failures
+      // Fetch from all connections in parallel
       const workItemResults = await Promise.all(
-        projects.map(proj =>
-          fetchAdoWorkItems(org, proj, token!, limit)
+        parsedConnections.map(({ org, project }) =>
+          fetchAdoWorkItems(org, project, token!, limit)
             .catch(err => {
-              console.error(`[EditLess] ADO fetch failed for project ${proj} (work items):`, err);
+              console.error(`[EditLess] ADO fetch failed for ${org}/${project} (work items):`, err);
               return [] as import('./ado-client').AdoWorkItem[];
             }),
         ),
       );
       const prResults = await Promise.all(
-        projects.map(proj =>
-          fetchAdoPRs(org, proj, token!)
+        parsedConnections.map(({ org, project }) =>
+          fetchAdoPRs(org, project, token!)
             .catch(err => {
-              console.error(`[EditLess] ADO fetch failed for project ${proj} (PRs):`, err);
+              console.error(`[EditLess] ADO fetch failed for ${org}/${project} (PRs):`, err);
               return [] as import('./ado-client').AdoPR[];
             }),
         ),
@@ -199,7 +236,7 @@ export async function initAdoIntegration(
 
       const allWorkItems = workItemResults.flat();
       const allPRs = prResults.flat();
-      const adoMe = await fetchAdoMe(org, token!);
+      const adoMe = await fetchAdoMe(firstOrg, token!);
 
       workItemsProvider.setAdoItems(allWorkItems);
       workItemsProvider.setAdoCurrentUser(adoMe);
@@ -208,7 +245,7 @@ export async function initAdoIntegration(
     } catch (err) {
       console.error('[EditLess] ADO fetch failed:', err);
       vscode.window.showWarningMessage(
-        `Azure DevOps: failed to fetch data — check organization and project settings`,
+        `Azure DevOps: failed to fetch data — check connection settings`,
         'Configure',
       ).then(choice => {
         if (choice === 'Configure') vscode.commands.executeCommand('editless.configureAdo');
