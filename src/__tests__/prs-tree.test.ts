@@ -88,7 +88,7 @@ describe('PRsTreeProvider — derivePRState', () => {
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     // Must include 'merged' in statuses since merged PRs are hidden by default
-    provider.setFilter({ repos: [], labels: [], statuses: ['merged'], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: ['merged'], author: '', projects: [] });
     // Navigate owner→repo→PR hierarchy
     const ownerNodes = provider.getChildren();
     expect(ownerNodes).toHaveLength(1);
@@ -110,7 +110,7 @@ describe('PRsTreeProvider — derivePRState', () => {
     await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
 
     // Must include 'closed' in statuses since closed PRs are hidden by default
-    provider.setFilter({ repos: [], labels: [], statuses: ['closed'], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: ['closed'], author: '', projects: [] });
     // Navigate owner→repo→PR hierarchy
     const ownerNodes = provider.getChildren();
     expect(ownerNodes).toHaveLength(1);
@@ -319,26 +319,26 @@ describe('PRsTreeProvider — filter', () => {
 
   it('isFiltered should return true when repo filter set', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: ['owner/repo'], labels: [], statuses: [], author: '' });
+    provider.setFilter({ repos: ['owner/repo'], labels: [], statuses: [], author: '', projects: [] });
     expect(provider.isFiltered).toBe(true);
   });
 
   it('isFiltered should return true when status filter set', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], statuses: ['draft'], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: ['draft'], author: '', projects: [] });
     expect(provider.isFiltered).toBe(true);
   });
 
   it('isFiltered should return false after clearFilter', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: ['r'], labels: ['l'], statuses: ['s'], author: '' });
+    provider.setFilter({ repos: ['r'], labels: ['l'], statuses: ['s'], author: '', projects: [] });
     provider.clearFilter();
     expect(provider.isFiltered).toBe(false);
   });
 
   it('getFilterDescription should show active filters', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: ['owner/repo'], labels: ['bug'], statuses: ['draft'], author: '' });
+    provider.setFilter({ repos: ['owner/repo'], labels: ['bug'], statuses: ['draft'], author: '', projects: [] });
     const desc = provider.getFilterDescription();
     expect(desc).toContain('repo:owner/repo');
     expect(desc).toContain('status:draft');
@@ -347,7 +347,7 @@ describe('PRsTreeProvider — filter', () => {
 
   it('getFilterDescription should show only set filters', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '', projects: [] });
     expect(provider.getFilterDescription()).toBe('status:open');
   });
 });
@@ -370,7 +370,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
       makePR({ number: 2 }),
       makePR({ number: 3, reviewDecision: 'APPROVED' }),
     ];
-    provider.setFilter({ repos: [], labels: [], statuses: ['draft'], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: ['draft'], author: '', projects: [] });
     const filtered = provider.applyRuntimeFilter(prs);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].number).toBe(1);
@@ -383,7 +383,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
       makePR({ number: 2, labels: ['type:feature'] }),
       makePR({ number: 3, labels: ['release:v1'] }),
     ];
-    provider.setFilter({ repos: [], labels: ['type:bug', 'type:feature'], statuses: [], author: '' });
+    provider.setFilter({ repos: [], labels: ['type:bug', 'type:feature'], statuses: [], author: '', projects: [] });
     const filtered = provider.applyRuntimeFilter(prs);
     expect(filtered).toHaveLength(2);
   });
@@ -395,7 +395,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
       makePR({ number: 2, labels: ['type:bug'] }),
       makePR({ number: 3, labels: ['release:v1'] }),
     ];
-    provider.setFilter({ repos: [], labels: ['type:bug', 'release:v1'], statuses: [], author: '' });
+    provider.setFilter({ repos: [], labels: ['type:bug', 'release:v1'], statuses: [], author: '', projects: [] });
     const filtered = provider.applyRuntimeFilter(prs);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].number).toBe(1);
@@ -407,7 +407,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
       makePR({ number: 1, repository: 'owner/repo1' }),
       makePR({ number: 2, repository: 'owner/repo2' }),
     ];
-    provider.setFilter({ repos: ['owner/repo1'], labels: [], statuses: [], author: '' });
+    provider.setFilter({ repos: ['owner/repo1'], labels: [], statuses: [], author: '', projects: [] });
     const filtered = provider.applyRuntimeFilter(prs);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].repository).toBe('owner/repo1');
@@ -419,7 +419,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
       makePR({ number: 1, autoMergeRequest: { mergeMethod: 'SQUASH' } }),
       makePR({ number: 2 }),
     ];
-    provider.setFilter({ repos: [], labels: [], statuses: ['auto-merge'], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: ['auto-merge'], author: '', projects: [] });
     const filtered = provider.applyRuntimeFilter(prs);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].number).toBe(1);
@@ -435,7 +435,7 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
     provider.setRepos(['owner/repo']);
     await vi.waitFor(() => expect(listener).toHaveBeenCalled());
 
-    provider.setFilter({ repos: [], labels: [], statuses: ['approved'], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: ['approved'], author: '', projects: [] });
     const children = provider.getChildren();
     expect(children).toHaveLength(1);
     expect(children[0].label).toBe('No PRs match current filter');
@@ -449,31 +449,31 @@ describe('PRsTreeProvider — applyRuntimeFilter', () => {
 describe('PRsTreeProvider — author filter', () => {
   it('isFiltered should return true when author is set', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me', projects: [] });
     expect(provider.isFiltered).toBe(true);
   });
 
   it('isFiltered should return false when author is empty string', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], statuses: [], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '', projects: [] });
     expect(provider.isFiltered).toBe(false);
   });
 
   it('getFilterDescription should include author:me when author set', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me', projects: [] });
     expect(provider.getFilterDescription()).toContain('author:me');
   });
 
   it('getFilterDescription should not include author when empty', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '', projects: [] });
     expect(provider.getFilterDescription()).not.toContain('author');
   });
 
   it('clearFilter should reset author to empty', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me', projects: [] });
     expect(provider.isFiltered).toBe(true);
     provider.clearFilter();
     expect(provider.isFiltered).toBe(false);
@@ -494,7 +494,7 @@ describe('PRsTreeProvider — author filter', () => {
     mockFetchMyPRs.mockClear();
 
     // Change author → should trigger a new fetchAll
-    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me', projects: [] });
     await vi.waitFor(() => expect(mockFetchMyPRs).toHaveBeenCalled());
   });
 });
@@ -609,14 +609,14 @@ describe('PRsTreeProvider — getAvailableOptions', () => {
 
   it('should return orgs for ado-pr-backend', () => {
     const provider = new PRsTreeProvider();
-    provider.setAdoConfig('my-org', 'my-project');
+    provider.setAdoConfig('my-org', ['my-project']);
     const options = provider.getAvailableOptions('ado-pr:', 'ado-pr-backend');
     expect(options.orgs).toEqual(['my-org']);
   });
 
   it('should return projects for ado-pr-org', () => {
     const provider = new PRsTreeProvider();
-    provider.setAdoConfig('my-org', 'my-project');
+    provider.setAdoConfig('my-org', ['my-project']);
     const options = provider.getAvailableOptions('ado-pr:my-org', 'ado-pr-org');
     expect(options.projects).toEqual(['my-project']);
   });
@@ -727,17 +727,17 @@ describe('PRsTreeProvider — hierarchy rendering with level filters', () => {
 
   it('should apply level filter to ADO project node', () => {
     const provider = new PRsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoPRs([
       {
         id: 1, title: 'PR 1', isDraft: true, status: 'active',
         url: 'url', sourceRef: 'feature', targetRef: 'main',
-        repository: 'repo', reviewers: [], createdBy: 'user1@example.com',
+        repository: 'repo', reviewers: [], createdBy: 'user1@example.com', project: 'project',
       },
       {
         id: 2, title: 'PR 2', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'fix', targetRef: 'main',
-        repository: 'repo', reviewers: [], createdBy: 'user2@example.com',
+        repository: 'repo', reviewers: [], createdBy: 'user2@example.com', project: 'project',
       },
     ]);
 
@@ -803,12 +803,12 @@ describe('PRsTreeProvider — level filter edge cases', () => {
 
   it('should handle single backend ADO-only configuration', () => {
     const provider = new PRsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoPRs([
       {
         id: 1, title: 'PR', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'feature', targetRef: 'main',
-        repository: 'repo', reviewers: [], createdBy: 'user@example.com',
+        repository: 'repo', reviewers: [], createdBy: 'user@example.com', project: 'project',
       },
     ]);
 
@@ -832,12 +832,12 @@ describe('PRsTreeProvider — level filter edge cases', () => {
     mockFetchMyPRs.mockResolvedValue([makePR()]);
 
     const provider = new PRsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoPRs([
       {
         id: 1, title: 'PR', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'feature', targetRef: 'main',
-        repository: 'repo', reviewers: [], createdBy: 'user@example.com',
+        repository: 'repo', reviewers: [], createdBy: 'user@example.com', project: 'project',
       },
     ]);
     const listener = vi.fn();
@@ -862,17 +862,17 @@ describe('PRsTreeProvider — ADO author filter', () => {
       {
         id: 1, title: 'My PR', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'feature', targetRef: 'main',
-        repository: 'repo', reviewers: [], createdBy: 'me@example.com',
+        repository: 'repo', reviewers: [], createdBy: 'me@example.com', project: 'project',
       },
       {
         id: 2, title: 'Other PR', isDraft: false, status: 'active',
         url: 'url', sourceRef: 'fix', targetRef: 'main',
-        repository: 'repo', reviewers: [], createdBy: 'other@example.com',
+        repository: 'repo', reviewers: [], createdBy: 'other@example.com', project: 'project',
       },
       {
         id: 3, title: 'Draft PR', isDraft: true, status: 'active',
         url: 'url', sourceRef: 'draft-branch', targetRef: 'main',
-        repository: 'repo', reviewers: [], createdBy: 'me@example.com',
+        repository: 'repo', reviewers: [], createdBy: 'me@example.com', project: 'project',
       },
     ];
   }
@@ -880,7 +880,7 @@ describe('PRsTreeProvider — ADO author filter', () => {
   it('should filter ADO PRs by author when author filter is active', () => {
     const provider = new PRsTreeProvider();
     provider.setAdoMe('me@example.com');
-    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me', projects: [] });
 
     const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
     expect(filtered).toHaveLength(2);
@@ -890,7 +890,7 @@ describe('PRsTreeProvider — ADO author filter', () => {
   it('should use case-insensitive matching for ADO author', () => {
     const provider = new PRsTreeProvider();
     provider.setAdoMe('ME@EXAMPLE.COM');
-    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me', projects: [] });
 
     const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
     expect(filtered).toHaveLength(2);
@@ -900,7 +900,7 @@ describe('PRsTreeProvider — ADO author filter', () => {
   it('should show all ADO PRs when author filter is not active', () => {
     const provider = new PRsTreeProvider();
     provider.setAdoMe('me@example.com');
-    provider.setFilter({ repos: [], labels: [], statuses: [], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '', projects: [] });
 
     const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
     // 3 total, but draft/active are kept (merged/closed excluded by default)
@@ -910,7 +910,7 @@ describe('PRsTreeProvider — ADO author filter', () => {
   it('should not filter by author when adoMe is not set', () => {
     const provider = new PRsTreeProvider();
     // No setAdoMe call
-    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me', projects: [] });
 
     const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
     expect(filtered).toHaveLength(3);
@@ -918,7 +918,7 @@ describe('PRsTreeProvider — ADO author filter', () => {
 
   it('should show createdBy in tree item description when not in author mode', () => {
     const provider = new PRsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoPRs(makeAdoPRs());
 
     const projectNode = new PRsTreeItem('project', 2);
@@ -931,9 +931,9 @@ describe('PRsTreeProvider — ADO author filter', () => {
 
   it('should hide createdBy in tree item description when author filter is active', () => {
     const provider = new PRsTreeProvider();
-    provider.setAdoConfig('org', 'project');
+    provider.setAdoConfig('org', ['project']);
     provider.setAdoMe('me@example.com');
-    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me' });
+    provider.setFilter({ repos: [], labels: [], statuses: [], author: '@me', projects: [] });
     provider.setAdoPRs(makeAdoPRs());
 
     const projectNode = new PRsTreeItem('project', 2);
@@ -946,7 +946,7 @@ describe('PRsTreeProvider — ADO author filter', () => {
 
   it('should filter ADO PRs by "open" status (maps from API "active")', () => {
     const provider = new PRsTreeProvider();
-    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '' });
+    provider.setFilter({ repos: [], labels: [], statuses: ['open'], author: '', projects: [] });
 
     const filtered = provider.applyAdoRuntimeFilter(makeAdoPRs());
     // PR 1 and 2 are active (mapped to open); PR 3 is draft — excluded

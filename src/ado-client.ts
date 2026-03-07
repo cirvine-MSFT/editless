@@ -1,6 +1,11 @@
 import * as https from 'https';
 import * as url from 'url';
 
+export interface AdoProjectConfig {
+  name: string;
+  enabled: boolean;
+}
+
 export interface AdoWorkItem {
   id: number;
   title: string;
@@ -11,6 +16,7 @@ export interface AdoWorkItem {
   areaPath: string;
   tags: string[];
   parentId?: number;
+  project: string;
 }
 
 export interface AdoPR {
@@ -25,6 +31,7 @@ export interface AdoPR {
   reviewers: string[];
   createdBy: string;
   reviewerVotes?: Map<string, number>; // uniqueName -> vote (-10=rejected, -5=waiting, 0=no vote, 5=approved with suggestions, 10=approved)
+  project: string;
 }
 
 function adoFetch<T>(apiUrl: string, token: string): Promise<T> {
@@ -168,6 +175,7 @@ export async function fetchAdoWorkItems(
         areaPath: (wi.fields['System.AreaPath'] as string) ?? '',
         tags: ((wi.fields['System.Tags'] as string) ?? '').split(';').map(t => t.trim()).filter(Boolean),
         parentId: (wi.fields['System.Parent'] as number) ?? undefined,
+        project,
       })));
     } catch {
       // Continue with next batch on error
@@ -238,6 +246,7 @@ export async function fetchAdoPRs(
           reviewers: (pr.reviewers ?? []).map(r => r.displayName),
           createdBy: pr.createdBy?.uniqueName ?? '',
           reviewerVotes,
+          project,
         });
       }
     } catch {
