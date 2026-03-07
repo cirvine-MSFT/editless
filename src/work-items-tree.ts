@@ -85,7 +85,7 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
   get isFiltered(): boolean {
     return this._filter.repos.length > 0 || this._filter.labels.length > 0
       || this._filter.states.length > 0 || this._filter.types.length > 0
-      || this._filter.projects.length > 0 || this._filter.assignedToMe;
+      || this._filter.projects.length > 0 || !!this._filter.assignedToMe;
   }
 
   setFilter(filter: WorkItemsFilter): void {

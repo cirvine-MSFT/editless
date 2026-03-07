@@ -110,7 +110,7 @@ vi.mock('../status-bar', () => ({ EditlessStatusBar: class {
 vi.mock('../squad-ui-integration', () => ({ initSquadUiContext: vi.fn() }));
 vi.mock('../work-items-tree', () => ({ WorkItemsTreeProvider: class { setTreeView = vi.fn(); setAdoConfig = vi.fn(); setRepos = vi.fn(); setLocalFolders = vi.fn(); setLocalTasks = vi.fn(); } }));
 vi.mock('../prs-tree', () => ({ PRsTreeProvider: class { setTreeView = vi.fn(); setAdoConfig = vi.fn(); setRepos = vi.fn(); } }));
-vi.mock('../github-client', () => ({}));
+vi.mock('../github-client', () => ({ fetchGitHubMe: vi.fn().mockResolvedValue('testuser'), _resetGitHubMeCache: vi.fn() }));
 vi.mock('../vscode-compat', () => ({ getEdition: () => 'code' }));
 vi.mock('../ado-auth', () => ({ setAdoAuthOutput: vi.fn() }));
 vi.mock('../ado-client', () => ({}));
