@@ -7,6 +7,9 @@ import * as path from 'path';
  * Agency was replaced with a generic CLI provider system in #101.
  * If this test fails, an agency reference was re-introduced — remove it.
  *
+ * Allowed exceptions:
+ *   - agencyResolver / agency.json — legitimate marketplace manifest format (#508)
+ *
  * Scans all text files in the repo EXCEPT:
  *   - .squad/, .ai-team/ (internal squad state — historical references are fine)
  *   - .squad-templates/, .ai-team-templates/
@@ -23,6 +26,8 @@ const SKIP_DIRS = new Set([
   'node_modules', 'dist', 'out',
   '__tests__', '__integration__', '.git', 'icons', '.vscode-test',
 ]);
+
+const SKIP_FILES = new Set<string>([]);
 
 const TEXT_EXTENSIONS = new Set([
   '.ts', '.js', '.json', '.md', '.yml', '.yaml', '.sh', '.html', '.css', '.mjs',
@@ -42,18 +47,35 @@ function collectFiles(dir: string): string[] {
   return results;
 }
 
+// Patterns that are legitimate agency marketplace references, not Agency CLI references
+const ALLOWED_PATTERNS = [
+  /agencyResolver/,    // ManifestResolver for agency marketplace format
+  /agencyJson/,        // local variable for parsed agency.json content
+  /agency\.json/,      // agency marketplace manifest file
+  /agency-resolver/,   // resolver module/file references
+  /'agency'/,          // resolver ID string literal
+  /"agency"/,          // resolver ID string literal
+];
+
+function isAllowedAgencyRef(line: string): boolean {
+  return ALLOWED_PATTERNS.some(p => p.test(line));
+}
+
 describe('Agency CLI removal guardrail (#101)', () => {
   it('should have ZERO agency references in repo files (excluding .ai-team and tests)', () => {
     const files = collectFiles(REPO_ROOT);
     const violations: string[] = [];
 
     for (const filePath of files) {
+      const fileName = path.basename(filePath);
+      if (SKIP_FILES.has(fileName)) continue;
+      
       const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         // Skip comment-only lines in code files
         if (/^\s*(\/\/|\/\*|\*|#)/.test(line)) continue;
-        if (/agency/i.test(line)) {
+        if (/agency/i.test(line) && !isAllowedAgencyRef(line)) {
           const rel = path.relative(REPO_ROOT, filePath);
           violations.push(`${rel}:${i + 1}: ${line.trim()}`);
         }
