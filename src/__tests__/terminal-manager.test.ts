@@ -21,6 +21,7 @@ const {
   mockTerminals,
   mockRandomUUID,
   mockWorkspaceFolders,
+  mockHomedir,
 } = vi.hoisted(() => ({
   mockCreateTerminal: vi.fn(),
   mockOnDidCloseTerminal: vi.fn(),
@@ -30,7 +31,13 @@ const {
   mockTerminals: [] as vscode.Terminal[],
   mockRandomUUID: vi.fn<() => `${string}-${string}-${string}-${string}-${string}`>(),
   mockWorkspaceFolders: { value: undefined as { uri: { fsPath: string } }[] | undefined },
+  mockHomedir: vi.fn(() => '/home/user'),
 }));
+
+vi.mock('os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('os')>();
+  return { ...actual, homedir: mockHomedir };
+});
 
 vi.mock('crypto', async (importOriginal) => {
   const actual = await importOriginal<typeof import('crypto')>();
@@ -2948,20 +2955,64 @@ describe('TerminalManager', () => {
   });
 
   describe('agent CWD resolution (#403)', () => {
-    // -- Personal agents (outside workspace, under ~/.copilot/agents) -------
-    it('resolveTerminalCwd returns workspace root for personal agent path', () => {
-      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
-      expect(resolveTerminalCwd('/home/user/.copilot/agents/my-agent')).toBe('/home/user/project');
+    beforeEach(() => {
+      mockHomedir.mockReturnValue('/home/user');
     });
 
-    it('resolveTerminalCwd returns agent path when no workspace folder is open', () => {
+    // -- Personal agents (outside workspace, under ~/.copilot/agents) -------
+    it('resolveTerminalCwd returns home dir for personal agent path', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/.copilot/agents/my-agent')).toBe('/home/user');
+    });
+
+    it('resolveTerminalCwd returns home dir when no workspace folder is open', () => {
       mockWorkspaceFolders.value = undefined;
-      expect(resolveTerminalCwd('/home/user/.copilot/agents/my-agent')).toBe('/home/user/.copilot/agents/my-agent');
+      expect(resolveTerminalCwd('/home/user/.copilot/agents/my-agent')).toBe('/home/user');
     });
 
     it('resolveTerminalCwd handles backslash paths on Windows for personal agents', () => {
+      mockHomedir.mockReturnValue('C:\\Users\\user');
       mockWorkspaceFolders.value = [{ uri: { fsPath: 'C:\\Users\\user\\project' } }];
-      expect(resolveTerminalCwd('C:\\Users\\user\\.copilot\\agents\\my-agent')).toBe('C:\\Users\\user\\project');
+      expect(resolveTerminalCwd('C:\\Users\\user\\.copilot\\agents\\my-agent')).toBe('C:\\Users\\user');
+    });
+
+    // -- Plugin agents (outside workspace, under ~/.copilot/installed-plugins) --
+    it('resolveTerminalCwd returns home dir for installed-plugin agent path', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/.copilot/installed-plugins/my-plugin/agents/agent.agent.md')).toBe('/home/user');
+    });
+
+    it('resolveTerminalCwd returns home dir for plugin agent when no workspace is open', () => {
+      mockWorkspaceFolders.value = undefined;
+      expect(resolveTerminalCwd('/home/user/.copilot/installed-plugins/my-plugin/agents/agent.agent.md')).toBe('/home/user');
+    });
+
+    it('resolveTerminalCwd handles backslash paths on Windows for plugin agents', () => {
+      mockHomedir.mockReturnValue('C:\\Users\\user');
+      mockWorkspaceFolders.value = [{ uri: { fsPath: 'C:\\Users\\user\\project' } }];
+      expect(resolveTerminalCwd('C:\\Users\\user\\.copilot\\installed-plugins\\my-plugin\\agents\\agent.agent.md')).toBe('C:\\Users\\user');
+    });
+
+    // -- Linux XDG path (~/.config/copilot/agents) ----------------------------
+    it('resolveTerminalCwd returns home dir for .config/copilot/agents path (Linux)', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/.config/copilot/agents/my-agent.agent.md')).toBe('/home/user');
+    });
+
+    it('resolveTerminalCwd returns home dir for .config/copilot/agents when no workspace is open', () => {
+      mockWorkspaceFolders.value = undefined;
+      expect(resolveTerminalCwd('/home/user/.config/copilot/agents/my-agent.agent.md')).toBe('/home/user');
+    });
+
+    // -- Regex boundary: trailing separator prevents false matches -------------
+    it('resolveTerminalCwd does not match .copilot/agents-old (no trailing separator)', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/.copilot/agents-old/backup')).toBe('/home/user/.copilot/agents-old/backup');
+    });
+
+    it('resolveTerminalCwd does not match .copilot/installed-plugins-backup', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/.copilot/installed-plugins-backup/foo')).toBe('/home/user/.copilot/installed-plugins-backup/foo');
     });
 
     // -- Repo agents (inside workspace under .github/agents or .copilot/agents) --
@@ -3006,7 +3057,7 @@ describe('TerminalManager', () => {
     });
 
     // -- Integration: launchTerminal and relaunchSession ----------------------
-    it('launchTerminal uses workspace root for personal agent config', () => {
+    it('launchTerminal uses home dir for personal agent config', () => {
       mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
@@ -3015,7 +3066,7 @@ describe('TerminalManager', () => {
       mgr.launchTerminal(config);
 
       expect(mockCreateTerminal).toHaveBeenCalledWith(
-        expect.objectContaining({ cwd: '/home/user/project' }),
+        expect.objectContaining({ cwd: '/home/user' }),
       );
     });
 
@@ -3045,7 +3096,7 @@ describe('TerminalManager', () => {
       );
     });
 
-    it('relaunchSession uses workspace root for personal agent squadPath', () => {
+    it('relaunchSession uses home dir for personal agent squadPath', () => {
       mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
       const ctx = makeMockContext();
       const mgr = new TerminalManager(ctx);
@@ -3058,7 +3109,7 @@ describe('TerminalManager', () => {
       mgr.relaunchSession(entry);
 
       expect(mockCreateTerminal).toHaveBeenCalledWith(
-        expect.objectContaining({ cwd: '/home/user/project' }),
+        expect.objectContaining({ cwd: '/home/user' }),
       );
     });
 
