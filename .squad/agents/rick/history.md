@@ -699,3 +699,33 @@ Decision document: .squad/decisions/inbox/rick-v013-pr-reviews.md
 4. **No tests** — `session-commands.ts` has no test file. Pre-existing gap, not introduced by this PR.
 
 **No blocking issues found.** The core change is correct and minimal.
+
+---
+
+### 2026-03-07: Plugin Marketplace Architecture — Generic Resolver Pattern (#508)
+
+**Context:** PR #509 implemented agency-specific plugin discovery (`agency.json`, `engines.includes('copilot')`, `agents/` subdirectory). Casey asked if this should be generic to support multiple marketplaces (agency, GitHub, future).
+
+**Decision:** Yes. Proposed ManifestResolver pattern:
+
+1. **Separation of concerns:** Discovery (editless) vs. Installation (marketplace CLIs) are distinct. `installed-plugins/` is the contract boundary.
+2. **`PluginManifest` interface** — generic output all resolvers produce (name, pluginDir, entryAgentPath, source, marketplace, metadata).
+3. **`ManifestResolver` interface** — `canResolve(dir)` + `resolve(dir, marketplace)` pattern. First-match-wins chain.
+4. **`discoverPlugins()`** replaces `discoverAgencyPlugins()` — iterates resolvers instead of hardcoding `agency.json`.
+5. **Agency resolver** is first implementation, extracted from existing `tryLoadAgencyPlugin()` logic.
+6. **Directory layout unchanged** — flat + nested scanning already works as marketplace namespacing.
+7. **No dynamic config needed yet** — resolvers are code modules. Marketplace source registration is an installation concern, deferred.
+
+**Key files:**
+- `src/agent-discovery.ts` — core discovery engine
+- Decision: `.squad/decisions/inbox/rick-generic-plugin-resolver-architecture.md`
+
+**Architecture principles applied:**
+- Strategy pattern (resolvers implement common interface) — consistent with work-items-tree IBackendProvider recommendation from #246
+- One concern per module — resolver per marketplace format
+- Contract boundary at filesystem level — marketplace tools write, editless reads
+
+- **2026-03-08 — Generic Plugin Resolver Architecture Design (#508, PR #509):** Designed the ManifestResolver pattern to eliminate agency-specific coupling in editless plugin discovery. **Problem:** PR #509 hardcoded AgencyPlugin interface, agency.json detection, and agents/ subdirectory layout into core discovery logic. Casey asked: "Is this generic or agency-specific? There's also GitHub marketplace." **Architecture Decision:** Separated concerns: (1) Installation (marketplace tools' job — agency CLI, gh CLI), (2) Discovery (editless's job — read installed plugins on disk). Both coordinate via installed-plugins/ directory contract. **Pattern:** Two new types — PluginManifest (generic output with source, metadata fields) and ManifestResolver interface (id, canResolve(), resolve()). Discovery walks installed-plugins/ flat+nested, tries each resolver via canResolve(), first match wins. Public API (DiscoveredAgent, readAndPushAgent) unchanged — zero test changes. **First implementation:** agencyResolver reads agency.json, checks engines.includes('copilot'), finds entry agent. **Future:** GitHub marketplace = one new resolver file + registerResolver() call. **Scope boundary:** Covers discovery architecture only, not installation UX, marketplace browsing, update mechanisms, permissions. **Key insight:** Adding resolver interface from the start costs 3 new types but saves infinite refactoring when GitHub arrives. Strategy pattern (common interface for different implementations) aligns with #246 modularity principles. Decision file: .squad/decisions.md.
+
+
+- **2026-03-09 — Review PR #509 (ManifestResolver Impl):** Rejected. Critical gaps: gencyResolver untested, legacy recursive scan causes double-discovery warnings for valid plugins. Assigned Jaguar to fix (test new logic, resolve scan precedence). Pattern: 'Refactoring without verifying new logic' is risky.
