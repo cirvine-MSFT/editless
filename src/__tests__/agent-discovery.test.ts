@@ -752,6 +752,125 @@ describe('discoverAgentsInCopilotDir', () => {
       expect(agent!.description).toBe('From nested structure');
     });
 
+    it('resolver-claimed directory is NOT double-discovered by recursive scan', () => {
+      const customConfig = path.join(tmpDir, 'no-double-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'agency-playground', 'my-plugin');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'] }),
+        'utf-8'
+      );
+
+      // The entry-point agent — resolver will find this via agency.json
+      fs.writeFileSync(
+        path.join(agentsDir, 'my-plugin.md'),
+        '---\nname: My Plugin\ndescription: Found by resolver\n---\n',
+        'utf-8'
+      );
+
+      // An *.agent.md in the same plugin dir — would be found by recursive scan
+      fs.writeFileSync(
+        path.join(pluginDir, 'my-plugin.agent.md'),
+        '# My Plugin\n> Would be a dupe if recursive scan ran over claimed dirs\n',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      // There should be exactly ONE agent with id 'my-plugin' — no duplicates
+      const matches = result.filter(a => a.id === 'my-plugin');
+      expect(matches).toHaveLength(1);
+      // The resolver path should be the one that won (it runs first)
+      expect(matches[0].resolverSource).toBe('agency');
+    });
+
+    it('resolver is the PRIMARY discovery path — metadata flows through', () => {
+      const customConfig = path.join(tmpDir, 'primary-resolver-config');
+      const pluginDir = path.join(customConfig, 'installed-plugins', 'test-marketplace', 'meta-plugin');
+      const agentsDir = path.join(pluginDir, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(pluginDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'], category: 'productivity' }),
+        'utf-8'
+      );
+
+      fs.writeFileSync(
+        path.join(agentsDir, 'meta-plugin.md'),
+        '---\nname: Meta Plugin\ndescription: Resolver metadata test\n---\n',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const agent = result.find(a => a.id === 'meta-plugin');
+      expect(agent).toBeDefined();
+      expect(agent!.resolverSource).toBe('agency');
+      expect(agent!.marketplace).toBe('test-marketplace');
+    });
+
+    it('recursive scan still discovers *.agent.md in directories NOT claimed by a resolver', () => {
+      const customConfig = path.join(tmpDir, 'mixed-config');
+      // An agency plugin (has agency.json — resolver claims it)
+      const agencyDir = path.join(customConfig, 'installed-plugins', 'claimed-plugin');
+      const agencyAgentsDir = path.join(agencyDir, 'agents');
+      fs.mkdirSync(agencyAgentsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(agencyDir, 'agency.json'),
+        JSON.stringify({ engines: ['copilot'] }),
+        'utf-8'
+      );
+      fs.writeFileSync(
+        path.join(agencyAgentsDir, 'claimed-plugin.md'),
+        '---\nname: Claimed\n---\n',
+        'utf-8'
+      );
+
+      // A plain *.agent.md plugin (no agency.json — resolver skips, recursive scan finds it)
+      const plainDir = path.join(customConfig, 'installed-plugins', 'plain-plugin');
+      fs.mkdirSync(plainDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(plainDir, 'plain.agent.md'),
+        '# Plain Agent\n> Found by recursive scan\n',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      // Resolver-claimed agent has resolverSource
+      const claimed = result.find(a => a.id === 'claimed-plugin');
+      expect(claimed).toBeDefined();
+      expect(claimed!.resolverSource).toBe('agency');
+
+      // Plain agent discovered by fallback scan — no resolverSource
+      const plain = result.find(a => a.id === 'plain');
+      expect(plain).toBeDefined();
+      expect(plain!.resolverSource).toBeUndefined();
+      expect(plain!.source).toBe('installed-plugin');
+    });
+
+    it('agents without resolverSource or marketplace have undefined for those fields', () => {
+      const customConfig = path.join(tmpDir, 'no-resolver-fields-config');
+      const agentsDir = path.join(customConfig, 'agents');
+      fs.mkdirSync(agentsDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(agentsDir, 'plain.agent.md'),
+        '# Plain\n> Traditional agent\n',
+        'utf-8'
+      );
+
+      const result = discoverAgentsInCopilotDir(customConfig);
+
+      const agent = result.find(a => a.id === 'plain');
+      expect(agent).toBeDefined();
+      expect(agent!.resolverSource).toBeUndefined();
+      expect(agent!.marketplace).toBeUndefined();
+    });
+
     it('should handle multiline YAML frontmatter description', () => {
       const customConfig = path.join(tmpDir, 'multiline-yaml-config');
       const pluginDir = path.join(customConfig, 'installed-plugins', 'multiline-plugin');

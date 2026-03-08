@@ -18,6 +18,10 @@ export interface DiscoveredAgent {
   source: AgentSource;
   /** Brief description parsed from the agent file */
   description?: string;
+  /** Marketplace namespace (e.g. "agency-playground"), set when discovered via resolver */
+  marketplace?: string;
+  /** Resolver ID that found this agent (e.g. "agency"), set when discovered via resolver */
+  resolverSource?: string;
 }
 
 /** Generic plugin manifest — all resolvers produce this. */
@@ -119,12 +123,19 @@ function collectAgentMdFiles(dirPath: string): string[] {
 /**
  * Recursively collect *.agent.md files from a directory and all subdirectories.
  * Used for installed-plugins/ where each plugin lives in its own subdirectory.
- * Includes symlink cycle protection and depth limits.
+ * Includes symlink cycle protection, depth limits, and skip-set for resolver-claimed dirs.
  */
-function collectAgentMdFilesRecursive(dirPath: string, depth = 0, maxDepth = 10, visited = new Set<string>()): string[] {
+function collectAgentMdFilesRecursive(
+  dirPath: string,
+  depth = 0,
+  maxDepth = 10,
+  visited = new Set<string>(),
+  skipDirs = new Set<string>(),
+): string[] {
   if (depth > maxDepth) return [];
   const normalized = path.resolve(dirPath);
   if (visited.has(normalized)) return [];
+  if (skipDirs.has(normalized)) return [];
   visited.add(normalized);
   try {
     const entries = fs.readdirSync(dirPath, { withFileTypes: true });
@@ -133,7 +144,7 @@ function collectAgentMdFilesRecursive(dirPath: string, depth = 0, maxDepth = 10,
       if (entry.isSymbolicLink()) continue;
       const fullPath = path.join(dirPath, entry.name);
       if (entry.isDirectory()) {
-        results.push(...collectAgentMdFilesRecursive(fullPath, depth + 1, maxDepth, visited));
+        results.push(...collectAgentMdFilesRecursive(fullPath, depth + 1, maxDepth, visited, skipDirs));
       } else if (entry.name.endsWith('.agent.md')) {
         results.push(fullPath);
       }
@@ -253,6 +264,7 @@ function readAndPushAgent(
   source: DiscoveredAgent['source'],
   seen: Map<string, string>,
   out: DiscoveredAgent[],
+  manifest?: PluginManifest,
 ): void {
   const id = toKebabId(path.basename(filePath));
   if (seen.has(id)) {
@@ -264,7 +276,12 @@ function readAndPushAgent(
     const content = fs.readFileSync(filePath, 'utf-8');
     const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '').replace(/\.md$/i, '');
     const parsed = parseAgentFile(content, fallback);
-    out.push({ id, name: parsed.name, filePath, source, description: parsed.description });
+    const agent: DiscoveredAgent = { id, name: parsed.name, filePath, source, description: parsed.description };
+    if (manifest) {
+      agent.marketplace = manifest.marketplace;
+      agent.resolverSource = manifest.source;
+    }
+    out.push(agent);
   } catch {
     console.warn('[editless] Skipping unreadable agent file:', filePath);
   }
@@ -310,15 +327,19 @@ export function discoverAgentsInCopilotDir(configDirOverride?: string): Discover
   for (const copilotDir of dirs) {
     for (const fp of collectAgentMdFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
     for (const fp of collectAgentMdFiles(copilotDir)) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
-    // Scan installed-plugins/ recursively for marketplace-installed agents (*.agent.md format)
+
+    // Resolver chain runs FIRST — it's the primary discovery mechanism for manifest-based plugins.
     const installedPluginsDir = path.join(copilotDir, 'installed-plugins');
-    for (const fp of collectAgentMdFilesRecursive(installedPluginsDir)) {
-      readAndPushAgent(fp, 'installed-plugin', seen, agents);
-    }
-    // Scan for marketplace plugins via resolver chain
     const plugins = discoverPlugins(installedPluginsDir);
+    const claimedDirs = new Set<string>();
     for (const plugin of plugins) {
-      readAndPushAgent(plugin.entryAgentPath, 'installed-plugin', seen, agents);
+      claimedDirs.add(path.resolve(plugin.pluginDir));
+      readAndPushAgent(plugin.entryAgentPath, 'installed-plugin', seen, agents, plugin);
+    }
+
+    // Fallback recursive scan for *.agent.md files NOT already claimed by a resolver.
+    for (const fp of collectAgentMdFilesRecursive(installedPluginsDir, 0, 10, new Set(), claimedDirs)) {
+      readAndPushAgent(fp, 'installed-plugin', seen, agents);
     }
   }
   return agents;
