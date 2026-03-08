@@ -104,8 +104,8 @@ export function initSettings(context: vscode.ExtensionContext): SettingsResult {
     migrateFromRegistry(oldRegistryPath, agentSettings);
   }
 
-  // Migrate deprecated ADO settings to unified ado.connections (one-time, async)
-  migrateAdoSettings(context, output).catch(err => {
+  // Migrate deprecated ADO settings to unified ado.connections (idempotent, async)
+  migrateAdoSettings(output).catch(err => {
     output.appendLine(`[EditLess] ADO settings migration error: ${err}`);
   });
 

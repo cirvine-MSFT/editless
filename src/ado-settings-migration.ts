@@ -2,26 +2,127 @@ import * as vscode from 'vscode';
 import type { AdoProjectConfig } from './ado-client';
 
 /**
- * Determine the most specific ConfigurationTarget where a setting is defined.
- * Returns undefined if the setting is not configured at any scope.
+ * Read the scope-specific value from an inspect result.
  */
-function detectScope(
-  inspection: {
-    globalValue?: unknown;
-    workspaceValue?: unknown;
-    workspaceFolderValue?: unknown;
-  } | undefined,
-): vscode.ConfigurationTarget | undefined {
+function scopeValue<T>(
+  inspection: { globalValue?: T; workspaceValue?: T; workspaceFolderValue?: T } | undefined,
+  target: vscode.ConfigurationTarget,
+): T | undefined {
   if (!inspection) return undefined;
-  if (inspection.workspaceFolderValue !== undefined) return vscode.ConfigurationTarget.WorkspaceFolder;
-  if (inspection.workspaceValue !== undefined) return vscode.ConfigurationTarget.Workspace;
-  if (inspection.globalValue !== undefined) return vscode.ConfigurationTarget.Global;
-  return undefined;
+  if (target === vscode.ConfigurationTarget.WorkspaceFolder) return inspection.workspaceFolderValue;
+  if (target === vscode.ConfigurationTarget.Workspace) return inspection.workspaceValue;
+  return inspection.globalValue;
 }
 
 /**
- * Silent, one-time migration of deprecated ADO settings to the unified
- * `editless.ado.connections` format.
+ * Build a connections array from an org URL and project configs at a given scope.
+ * Returns empty array if org or projects are missing/empty.
+ */
+function buildConnections(
+  org: string | undefined,
+  projectsAtScope: AdoProjectConfig[] | undefined,
+  projectAtScope: string | undefined,
+): string[] {
+  const orgStr = String(org ?? '').trim().replace(/\/+$/, '');
+  if (!orgStr) return [];
+
+  const projects: string[] = (projectsAtScope ?? [])
+    .filter((p): p is AdoProjectConfig => p != null && typeof p === 'object' && typeof p.name === 'string')
+    .filter(p => p.enabled !== false)
+    .map(p => p.name.trim())
+    .filter(name => name !== '');
+
+  if (projects.length === 0) {
+    const fallback = String(projectAtScope ?? '').trim();
+    if (fallback) projects.push(fallback);
+  }
+
+  return projects.map(p => `${orgStr}/${p}`);
+}
+
+/**
+ * Migrate deprecated ADO settings at a single scope.
+ *
+ * Follows the vscode-jupyter ConfigMigration pattern:
+ * - Inspect old setting to get scope-specific value
+ * - Only write new setting if it doesn't already exist at that scope
+ * - Remove old settings at that scope after writing
+ * - Naturally idempotent — no external state tracking needed
+ */
+function migrateScope(
+  config: vscode.WorkspaceConfiguration,
+  target: vscode.ConfigurationTarget,
+  orgInspection: ReturnType<typeof config.inspect<string>>,
+  projectsInspection: ReturnType<typeof config.inspect<AdoProjectConfig[]>>,
+  projectInspection: ReturnType<typeof config.inspect<string>>,
+  connectionsInspection: ReturnType<typeof config.inspect<string[]>>,
+): Thenable<void>[] {
+  const promises: Thenable<void>[] = [];
+
+  const orgAtScope = scopeValue(orgInspection, target);
+  if (orgAtScope === undefined) {
+    // No org at this scope — still clean up orphaned project/projects settings
+    if (scopeValue(projectsInspection, target) !== undefined) {
+      promises.push(config.update('ado.projects', undefined, target).then(noop, logMigrationError));
+    }
+    if (scopeValue(projectInspection, target) !== undefined) {
+      promises.push(config.update('ado.project', undefined, target).then(noop, logMigrationError));
+    }
+    return promises;
+  }
+
+  const connections = buildConnections(
+    orgAtScope,
+    scopeValue(projectsInspection, target),
+    scopeValue(projectInspection, target),
+  );
+
+  // Only write new connections if they don't already exist at this scope
+  let writePromise: Thenable<void> = Promise.resolve();
+  if (connections.length > 0 && scopeValue(connectionsInspection, target) === undefined) {
+    writePromise = config.update('ado.connections', connections, target);
+  }
+
+  // Remove old settings at this scope (chained after write)
+  promises.push(
+    writePromise.then(
+      () => config.update('ado.organization', undefined, target),
+      logMigrationError,
+    ),
+  );
+  if (scopeValue(projectsInspection, target) !== undefined) {
+    promises.push(
+      writePromise.then(
+        () => config.update('ado.projects', undefined, target),
+        logMigrationError,
+      ),
+    );
+  }
+  if (scopeValue(projectInspection, target) !== undefined) {
+    promises.push(
+      writePromise.then(
+        () => config.update('ado.project', undefined, target),
+        logMigrationError,
+      ),
+    );
+  }
+
+  return promises;
+}
+
+function noop(): void {}
+
+function logMigrationError(err: unknown): void {
+  console.warn('[EditLess] ADO settings migration error:', err);
+}
+
+/**
+ * Silent migration of deprecated ADO settings to the unified
+ * `editless.ado.connections` format. Runs on every activation but is
+ * naturally idempotent — inspect() checks prevent duplicate writes.
+ *
+ * Modeled after microsoft/vscode-jupyter's ConfigMigration pattern:
+ * each scope (Global, Workspace, WorkspaceFolder) is migrated independently.
  *
  * Old format (3 settings):
  *   ado.organization  = "https://dev.azure.com/myorg"
@@ -32,72 +133,34 @@ function detectScope(
  *   ado.connections   = ["https://dev.azure.com/myorg/A", ...]
  */
 export async function migrateAdoSettings(
-  context: vscode.ExtensionContext,
   output: vscode.OutputChannel,
-): Promise<boolean> {
-  // Idempotency: skip if already migrated for this workspace
-  if (context.workspaceState.get<boolean>('adoSettingsMigrated')) {
-    return false;
-  }
-
+): Promise<void> {
   const config = vscode.workspace.getConfiguration('editless');
 
-  // If new-format connections already exist, mark migrated and skip
-  const existingConnections = config.get<string[]>('ado.connections', []);
-  if (existingConnections.length > 0) {
-    await context.workspaceState.update('adoSettingsMigrated', true);
-    return false;
-  }
-
-  // Read legacy settings
-  const org = String(config.get<string>('ado.organization') ?? '').trim().replace(/\/+$/, '');
-  const projectsConfig = config.get<AdoProjectConfig[]>('ado.projects', []);
-  const legacyProject = String(config.get<string>('ado.project') ?? '').trim();
-
-  // Build list of enabled project names
-  const projects: string[] = (projectsConfig ?? [])
-    .filter((p): p is AdoProjectConfig => p != null && typeof p === 'object' && typeof p.name === 'string')
-    .filter(p => p.enabled !== false)
-    .map(p => p.name.trim())
-    .filter(name => name !== '');
-
-  // Fall back to single legacy project if multi-project list is empty
-  if (projects.length === 0 && legacyProject) {
-    projects.push(legacyProject);
-  }
-
-  // Nothing to migrate if org or projects are empty
-  if (!org || projects.length === 0) {
-    await context.workspaceState.update('adoSettingsMigrated', true);
-    return false;
-  }
-
-  // Build new connections array
-  const newConnections = projects.map(p => `${org}/${p}`);
-
-  // Detect the scope where old settings were defined
   const orgInspection = config.inspect<string>('ado.organization');
-  const target = detectScope(orgInspection) ?? vscode.ConfigurationTarget.Workspace;
+  const projectsInspection = config.inspect<AdoProjectConfig[]>('ado.projects');
+  const projectInspection = config.inspect<string>('ado.project');
+  const connectionsInspection = config.inspect<string[]>('ado.connections');
 
-  try {
-    // Write new format
-    await config.update('ado.connections', newConnections, target);
+  const promises: Thenable<void>[] = [];
 
-    // Remove deprecated settings at the same scope
-    await config.update('ado.organization', undefined, target);
-    await config.update('ado.project', undefined, target);
-    await config.update('ado.projects', undefined, target);
-
-    output.appendLine(
-      `[EditLess] Migrated ADO settings → ado.connections: ${JSON.stringify(newConnections)}`,
+  // Migrate each scope independently
+  for (const target of [
+    vscode.ConfigurationTarget.WorkspaceFolder,
+    vscode.ConfigurationTarget.Workspace,
+    vscode.ConfigurationTarget.Global,
+  ]) {
+    promises.push(
+      ...migrateScope(config, target, orgInspection, projectsInspection, projectInspection, connectionsInspection),
     );
+  }
 
-    await context.workspaceState.update('adoSettingsMigrated', true);
-    return true;
-  } catch (err) {
-    output.appendLine(`[EditLess] ADO settings migration failed: ${err}`);
-    // Do NOT mark as migrated on failure — allow retry on next activation.
-    // The runtime fallback in initAdoIntegration handles legacy settings gracefully.
-    return false;
+  if (promises.length > 0) {
+    try {
+      await Promise.all(promises);
+      output.appendLine('[EditLess] ADO settings migration complete.');
+    } catch (err) {
+      output.appendLine(`[EditLess] ADO settings migration had errors: ${err}`);
+    }
   }
 }

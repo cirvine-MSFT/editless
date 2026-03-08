@@ -5,58 +5,32 @@ import type * as vscode from 'vscode';
 // Mock helpers
 // ---------------------------------------------------------------------------
 
-interface MockConfigData {
-  'ado.connections'?: string[];
-  'ado.organization'?: string;
-  'ado.project'?: string;
-  'ado.projects'?: Array<{ name: string; enabled?: boolean } | null | undefined>;
+interface ScopeValues<T = unknown> {
+  globalValue?: T;
+  workspaceValue?: T;
+  workspaceFolderValue?: T;
+  defaultValue?: T;
 }
 
-interface InspectResult {
-  globalValue?: unknown;
-  workspaceValue?: unknown;
-  workspaceFolderValue?: unknown;
-  defaultValue?: unknown;
-}
+type InspectMap = Record<string, ScopeValues>;
 
-type InspectOverrides = Partial<Record<string, InspectResult>>;
-
-function createMockConfig(data: MockConfigData, inspectOverrides: InspectOverrides = {}) {
+function createMockConfig(inspectData: InspectMap) {
   const updateFn = vi.fn().mockResolvedValue(undefined);
   const config = {
     get: vi.fn((key: string, defaultValue?: unknown) => {
-      const val = data[key as keyof MockConfigData];
-      return val !== undefined ? val : defaultValue;
+      const data = inspectData[key];
+      if (!data) return defaultValue;
+      // Return most specific value (matching VS Code's precedence)
+      return data.workspaceFolderValue ?? data.workspaceValue ?? data.globalValue ?? data.defaultValue ?? defaultValue;
     }),
     update: updateFn,
-    inspect: vi.fn((key: string) => {
-      if (inspectOverrides[key]) return inspectOverrides[key];
-      const val = data[key as keyof MockConfigData];
-      if (val !== undefined) {
-        return { workspaceValue: val, defaultValue: undefined };
-      }
-      return { defaultValue: undefined };
-    }),
+    inspect: vi.fn((key: string) => inspectData[key] ?? { defaultValue: undefined }),
   };
   return { config, updateFn };
 }
 
-function createMockContext(alreadyMigrated = false) {
-  const state = new Map<string, unknown>();
-  if (alreadyMigrated) state.set('adoSettingsMigrated', true);
-
-  return {
-    workspaceState: {
-      get: vi.fn((key: string) => state.get(key)),
-      update: vi.fn(async (key: string, value: unknown) => { state.set(key, value); }),
-    },
-  } as unknown as vscode.ExtensionContext;
-}
-
 function createMockOutput() {
-  return {
-    appendLine: vi.fn(),
-  } as unknown as vscode.OutputChannel;
+  return { appendLine: vi.fn() } as unknown as vscode.OutputChannel;
 }
 
 // ---------------------------------------------------------------------------
@@ -68,14 +42,8 @@ const { mockGetConfiguration } = vi.hoisted(() => ({
 }));
 
 vi.mock('vscode', () => ({
-  workspace: {
-    getConfiguration: mockGetConfiguration,
-  },
-  ConfigurationTarget: {
-    Global: 1,
-    Workspace: 2,
-    WorkspaceFolder: 3,
-  },
+  workspace: { getConfiguration: mockGetConfiguration },
+  ConfigurationTarget: { Global: 1, Workspace: 2, WorkspaceFolder: 3 },
 }));
 
 // ---------------------------------------------------------------------------
@@ -89,12 +57,10 @@ import { migrateAdoSettings } from '../ado-settings-migration';
 // ---------------------------------------------------------------------------
 
 describe('migrateAdoSettings', () => {
-  let mockContext: vscode.ExtensionContext;
   let mockOutput: vscode.OutputChannel;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockContext = createMockContext();
     mockOutput = createMockOutput();
   });
 
@@ -103,35 +69,35 @@ describe('migrateAdoSettings', () => {
   // =========================================================================
 
   describe('conversion correctness', () => {
-    it('migrates org + projects → connections', async () => {
+    it('migrates org + projects → connections at workspace scope', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.projects': [{ name: 'A', enabled: true }, { name: 'B', enabled: true }],
-        'ado.project': '',
+        'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg' },
+        'ado.projects': { workspaceValue: [{ name: 'A', enabled: true }, { name: 'B', enabled: true }] },
+        'ado.project': {},
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      const result = await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
-      expect(result).toBe(true);
       expect(updateFn).toHaveBeenCalledWith(
         'ado.connections',
         ['https://dev.azure.com/myorg/A', 'https://dev.azure.com/myorg/B'],
-        2, // ConfigurationTarget.Workspace
+        2,
       );
     });
 
-    it('migrates org + single project → connections', async () => {
+    it('migrates org + single project fallback', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.project': 'Solo',
-        'ado.projects': [],
+        'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg' },
+        'ado.projects': {},
+        'ado.project': { workspaceValue: 'Solo' },
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      const result = await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
-      expect(result).toBe(true);
       expect(updateFn).toHaveBeenCalledWith(
         'ado.connections',
         ['https://dev.azure.com/myorg/Solo'],
@@ -141,17 +107,20 @@ describe('migrateAdoSettings', () => {
 
     it('filters disabled projects', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.projects': [
-          { name: 'A', enabled: true },
-          { name: 'B', enabled: false },
-          { name: 'C' },  // undefined enabled → defaults to included
-        ],
-        'ado.project': '',
+        'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg' },
+        'ado.projects': {
+          workspaceValue: [
+            { name: 'A', enabled: true },
+            { name: 'B', enabled: false },
+            { name: 'C' }, // undefined enabled → included
+          ],
+        },
+        'ado.project': {},
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
       expect(updateFn).toHaveBeenCalledWith(
         'ado.connections',
@@ -160,15 +129,16 @@ describe('migrateAdoSettings', () => {
       );
     });
 
-    it('org + projects takes priority over single project', async () => {
+    it('projects takes priority over single project', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.projects': [{ name: 'A' }],
-        'ado.project': 'Legacy',
+        'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg' },
+        'ado.projects': { workspaceValue: [{ name: 'A' }] },
+        'ado.project': { workspaceValue: 'Legacy' },
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
       expect(updateFn).toHaveBeenCalledWith(
         'ado.connections',
@@ -179,13 +149,14 @@ describe('migrateAdoSettings', () => {
 
     it('handles trailing slash on org URL', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg/',
-        'ado.project': 'P',
-        'ado.projects': [],
+        'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg/' },
+        'ado.project': { workspaceValue: 'P' },
+        'ado.projects': {},
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
       expect(updateFn).toHaveBeenCalledWith(
         'ado.connections',
@@ -196,106 +167,156 @@ describe('migrateAdoSettings', () => {
 
     it('handles visualstudio.com org URL', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://myorg.visualstudio.com',
-        'ado.project': 'P',
-        'ado.projects': [],
+        'ado.organization': { globalValue: 'https://myorg.visualstudio.com' },
+        'ado.project': { globalValue: 'P' },
+        'ado.projects': {},
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
       expect(updateFn).toHaveBeenCalledWith(
         'ado.connections',
         ['https://myorg.visualstudio.com/P'],
-        2,
+        1, // Global scope
       );
     });
   });
 
   // =========================================================================
-  // Skip conditions
+  // Skip conditions (natural idempotency via inspect)
   // =========================================================================
 
   describe('skip conditions', () => {
-    it('skips when connections already populated', async () => {
+    it('skips when connections already exist at same scope', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.connections': ['https://dev.azure.com/myorg/A'],
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.project': 'A',
+        'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg' },
+        'ado.project': { workspaceValue: 'A' },
+        'ado.projects': {},
+        'ado.connections': { workspaceValue: ['https://dev.azure.com/myorg/A'] },
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      const result = await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
-      expect(result).toBe(false);
-      expect(updateFn).not.toHaveBeenCalled();
-      expect(mockContext.workspaceState.update).toHaveBeenCalledWith('adoSettingsMigrated', true);
+      // Should NOT write connections (already exist), but SHOULD remove old settings
+      expect(updateFn).not.toHaveBeenCalledWith('ado.connections', expect.anything(), expect.anything());
+      expect(updateFn).toHaveBeenCalledWith('ado.organization', undefined, 2);
     });
 
-    it('skips when workspaceState says already migrated', async () => {
-      mockContext = createMockContext(true);
+    it('no-op when no old settings exist at any scope', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.project': 'A',
+        'ado.organization': {},
+        'ado.project': {},
+        'ado.projects': {},
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      const result = await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
-      expect(result).toBe(false);
       expect(updateFn).not.toHaveBeenCalled();
     });
 
-    it('no-op when no old settings exist', async () => {
-      const { config, updateFn } = createMockConfig({});
-      mockGetConfiguration.mockReturnValue(config);
+    it('is naturally idempotent — second run is no-op', async () => {
+      // First run: old settings exist, no connections
+      const { config: config1, updateFn: update1 } = createMockConfig({
+        'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg' },
+        'ado.project': { workspaceValue: 'P' },
+        'ado.projects': {},
+        'ado.connections': {},
+      });
+      mockGetConfiguration.mockReturnValue(config1);
+      await migrateAdoSettings(mockOutput);
+      expect(update1).toHaveBeenCalledWith('ado.connections', expect.any(Array), 2);
 
-      const result = await migrateAdoSettings(mockContext, mockOutput);
-
-      expect(result).toBe(false);
-      expect(updateFn).not.toHaveBeenCalled();
-      expect(mockContext.workspaceState.update).toHaveBeenCalledWith('adoSettingsMigrated', true);
+      // Second run: old settings removed, connections now exist
+      const { config: config2, updateFn: update2 } = createMockConfig({
+        'ado.organization': {},
+        'ado.project': {},
+        'ado.projects': {},
+        'ado.connections': { workspaceValue: ['https://dev.azure.com/myorg/P'] },
+      });
+      mockGetConfiguration.mockReturnValue(config2);
+      await migrateAdoSettings(mockOutput);
+      expect(update2).not.toHaveBeenCalled();
     });
 
-    it('no-op when organization is empty string', async () => {
+    it('skips scope where org is empty string', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': '',
-        'ado.project': 'P',
+        'ado.organization': { workspaceValue: '' },
+        'ado.project': { workspaceValue: 'P' },
+        'ado.projects': {},
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      const result = await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
-      expect(result).toBe(false);
-      expect(updateFn).not.toHaveBeenCalled();
+      // org is empty → no connections written, but orphaned project cleaned up
+      expect(updateFn).not.toHaveBeenCalledWith('ado.connections', expect.anything(), expect.anything());
     });
+  });
 
-    it('no-op when organization set but no projects', async () => {
+  // =========================================================================
+  // Multi-scope migration
+  // =========================================================================
+
+  describe('multi-scope migration', () => {
+    it('migrates user-level (global) settings', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.project': '',
-        'ado.projects': [],
+        'ado.organization': { globalValue: 'https://dev.azure.com/myorg' },
+        'ado.project': { globalValue: 'P' },
+        'ado.projects': {},
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      const result = await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
-      expect(result).toBe(false);
-      expect(updateFn).not.toHaveBeenCalled();
+      expect(updateFn).toHaveBeenCalledWith('ado.connections', ['https://dev.azure.com/myorg/P'], 1);
+      expect(updateFn).toHaveBeenCalledWith('ado.organization', undefined, 1);
+      expect(updateFn).toHaveBeenCalledWith('ado.project', undefined, 1);
     });
 
-    it('no-op when all projects disabled', async () => {
+    it('migrates settings at both global and workspace scopes independently', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.projects': [{ name: 'A', enabled: false }],
-        'ado.project': '',
+        'ado.organization': {
+          globalValue: 'https://dev.azure.com/orgA',
+          workspaceValue: 'https://dev.azure.com/orgB',
+        },
+        'ado.project': {
+          globalValue: 'ProjA',
+          workspaceValue: 'ProjB',
+        },
+        'ado.projects': {},
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      const result = await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
-      expect(result).toBe(false);
-      expect(updateFn).not.toHaveBeenCalled();
+      // Global scope
+      expect(updateFn).toHaveBeenCalledWith('ado.connections', ['https://dev.azure.com/orgA/ProjA'], 1);
+      expect(updateFn).toHaveBeenCalledWith('ado.organization', undefined, 1);
+      // Workspace scope
+      expect(updateFn).toHaveBeenCalledWith('ado.connections', ['https://dev.azure.com/orgB/ProjB'], 2);
+      expect(updateFn).toHaveBeenCalledWith('ado.organization', undefined, 2);
+    });
+
+    it('migrates workspace-folder-level settings', async () => {
+      const { config, updateFn } = createMockConfig({
+        'ado.organization': { workspaceFolderValue: 'https://dev.azure.com/myorg' },
+        'ado.project': { workspaceFolderValue: 'P' },
+        'ado.projects': {},
+        'ado.connections': {},
+      });
+      mockGetConfiguration.mockReturnValue(config);
+
+      await migrateAdoSettings(mockOutput);
+
+      expect(updateFn).toHaveBeenCalledWith('ado.connections', ['https://dev.azure.com/myorg/P'], 3);
     });
   });
 
@@ -304,178 +325,69 @@ describe('migrateAdoSettings', () => {
   // =========================================================================
 
   describe('settings cleanup', () => {
-    it('removes organization after migration', async () => {
+    it('removes all deprecated settings after migration', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.project': 'P',
-        'ado.projects': [],
+        'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg' },
+        'ado.projects': { workspaceValue: [{ name: 'A' }] },
+        'ado.project': { workspaceValue: 'Legacy' },
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
       expect(updateFn).toHaveBeenCalledWith('ado.organization', undefined, 2);
-    });
-
-    it('removes project after migration', async () => {
-      const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.project': 'P',
-        'ado.projects': [],
-      });
-      mockGetConfiguration.mockReturnValue(config);
-
-      await migrateAdoSettings(mockContext, mockOutput);
-
       expect(updateFn).toHaveBeenCalledWith('ado.project', undefined, 2);
-    });
-
-    it('removes projects after migration', async () => {
-      const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.projects': [{ name: 'A' }],
-      });
-      mockGetConfiguration.mockReturnValue(config);
-
-      await migrateAdoSettings(mockContext, mockOutput);
-
       expect(updateFn).toHaveBeenCalledWith('ado.projects', undefined, 2);
     });
 
-    it('removes settings at their original scope', async () => {
-      const { config, updateFn } = createMockConfig(
-        {
-          'ado.organization': 'https://dev.azure.com/myorg',
-          'ado.project': 'P',
-          'ado.projects': [],
-        },
-        {
-          'ado.organization': { globalValue: 'https://dev.azure.com/myorg' },
-        },
-      );
-      mockGetConfiguration.mockReturnValue(config);
-
-      await migrateAdoSettings(mockContext, mockOutput);
-
-      // Should use Global (1) because inspect found globalValue
-      expect(updateFn).toHaveBeenCalledWith('ado.connections', expect.any(Array), 1);
-      expect(updateFn).toHaveBeenCalledWith('ado.organization', undefined, 1);
-    });
-  });
-
-  // =========================================================================
-  // Scope detection
-  // =========================================================================
-
-  describe('scope detection', () => {
-    it('detects workspace-level settings', async () => {
-      const { config, updateFn } = createMockConfig(
-        { 'ado.organization': 'https://dev.azure.com/myorg', 'ado.project': 'P', 'ado.projects': [] },
-        { 'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg' } },
-      );
-      mockGetConfiguration.mockReturnValue(config);
-
-      await migrateAdoSettings(mockContext, mockOutput);
-
-      expect(updateFn).toHaveBeenCalledWith('ado.connections', expect.any(Array), 2);
-    });
-
-    it('detects user-level settings', async () => {
-      const { config, updateFn } = createMockConfig(
-        { 'ado.organization': 'https://dev.azure.com/myorg', 'ado.project': 'P', 'ado.projects': [] },
-        { 'ado.organization': { globalValue: 'https://dev.azure.com/myorg' } },
-      );
-      mockGetConfiguration.mockReturnValue(config);
-
-      await migrateAdoSettings(mockContext, mockOutput);
-
-      expect(updateFn).toHaveBeenCalledWith('ado.connections', expect.any(Array), 1);
-    });
-
-    it('detects workspace-folder-level settings', async () => {
-      const { config, updateFn } = createMockConfig(
-        { 'ado.organization': 'https://dev.azure.com/myorg', 'ado.project': 'P', 'ado.projects': [] },
-        { 'ado.organization': { workspaceFolderValue: 'https://dev.azure.com/myorg' } },
-      );
-      mockGetConfiguration.mockReturnValue(config);
-
-      await migrateAdoSettings(mockContext, mockOutput);
-
-      expect(updateFn).toHaveBeenCalledWith('ado.connections', expect.any(Array), 3);
-    });
-
-    it('prefers most specific scope (workspaceFolder > workspace > global)', async () => {
-      const { config, updateFn } = createMockConfig(
-        { 'ado.organization': 'https://dev.azure.com/myorg', 'ado.project': 'P', 'ado.projects': [] },
-        {
-          'ado.organization': {
-            globalValue: 'https://dev.azure.com/myorg',
-            workspaceValue: 'https://dev.azure.com/myorg',
-            workspaceFolderValue: 'https://dev.azure.com/myorg',
-          },
-        },
-      );
-      mockGetConfiguration.mockReturnValue(config);
-
-      await migrateAdoSettings(mockContext, mockOutput);
-
-      // WorkspaceFolder (3) is most specific
-      expect(updateFn).toHaveBeenCalledWith('ado.connections', expect.any(Array), 3);
-    });
-  });
-
-  // =========================================================================
-  // Idempotency & error handling
-  // =========================================================================
-
-  describe('idempotency & error handling', () => {
-    it('migration is idempotent — second run is no-op', async () => {
+    it('cleans up orphaned project settings when org is missing', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.project': 'P',
-        'ado.projects': [],
+        'ado.organization': {},
+        'ado.projects': { globalValue: [{ name: 'A' }] },
+        'ado.project': { globalValue: 'B' },
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      await migrateAdoSettings(mockContext, mockOutput);
-      expect(updateFn).toHaveBeenCalled();
+      await migrateAdoSettings(mockOutput);
 
-      updateFn.mockClear();
-
-      // Second run: workspaceState now has adoSettingsMigrated=true
-      const result = await migrateAdoSettings(mockContext, mockOutput);
-      expect(result).toBe(false);
-      expect(updateFn).not.toHaveBeenCalled();
+      // No connections written (no org), but orphaned settings cleaned up
+      expect(updateFn).not.toHaveBeenCalledWith('ado.connections', expect.anything(), expect.anything());
+      expect(updateFn).toHaveBeenCalledWith('ado.projects', undefined, 1);
+      expect(updateFn).toHaveBeenCalledWith('ado.project', undefined, 1);
     });
+  });
 
+  // =========================================================================
+  // Error handling
+  // =========================================================================
+
+  describe('error handling', () => {
     it('handles config.update() failure gracefully', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.project': 'P',
-        'ado.projects': [],
+        'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg' },
+        'ado.project': { workspaceValue: 'P' },
+        'ado.projects': {},
+        'ado.connections': {},
       });
       updateFn.mockRejectedValue(new Error('Permission denied'));
       mockGetConfiguration.mockReturnValue(config);
 
-      const result = await migrateAdoSettings(mockContext, mockOutput);
-
-      expect(result).toBe(false);
-      expect(mockOutput.appendLine).toHaveBeenCalledWith(
-        expect.stringContaining('migration failed'),
-      );
-      // Does NOT mark as migrated — allows retry on next activation
-      expect(mockContext.workspaceState.update).not.toHaveBeenCalledWith('adoSettingsMigrated', true);
+      // Should not throw — errors are caught per-operation (Jupyter pattern)
+      await expect(migrateAdoSettings(mockOutput)).resolves.not.toThrow();
     });
 
     it('handles malformed projects array', async () => {
       const { config, updateFn } = createMockConfig({
-        'ado.organization': 'https://dev.azure.com/myorg',
-        'ado.projects': [null, undefined, { name: 'A' }] as any,
-        'ado.project': '',
+        'ado.organization': { workspaceValue: 'https://dev.azure.com/myorg' },
+        'ado.projects': { workspaceValue: [null, undefined, { name: 'A' }] as any },
+        'ado.project': {},
+        'ado.connections': {},
       });
       mockGetConfiguration.mockReturnValue(config);
 
-      await migrateAdoSettings(mockContext, mockOutput);
+      await migrateAdoSettings(mockOutput);
 
       expect(updateFn).toHaveBeenCalledWith(
         'ado.connections',
