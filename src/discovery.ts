@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { AgentTeamConfig } from './types';
 import { resolveTeamMd, TEAM_DIR_NAMES } from './team-dir';
@@ -166,4 +167,100 @@ export function discoverAgentTeams(
   return discovered;
 }
 
+/**
+ * Async version of readUniverseFromRegistry — reads casting/registry.json
+ * without blocking the extension host.
+ */
+export async function readUniverseFromRegistryAsync(squadPath: string): Promise<string | undefined> {
+  for (const dirName of TEAM_DIR_NAMES) {
+    const registryPath = path.join(squadPath, dirName, 'casting', 'registry.json');
+    try {
+      const raw = await fsp.readFile(registryPath, 'utf-8');
+      const data = JSON.parse(raw) as {
+        universe?: string;
+        persistent_names?: Array<{ persistent_name?: string; status?: string; universe?: string }>;
+        agents?: Record<string, { status?: string; universe?: string }>;
+      };
 
+      if (data?.universe) return data.universe;
+
+      if (Array.isArray(data?.persistent_names)) {
+        const active = data.persistent_names.find(
+          a => a.universe && (!a.status || a.status === 'active'),
+        );
+        if (active?.universe) return active.universe;
+      }
+
+      if (data?.agents) {
+        for (const agent of Object.values(data.agents)) {
+          if (agent.status === 'active' && agent.universe) return agent.universe;
+        }
+      }
+    } catch {
+      // File doesn't exist or is malformed — try next directory
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Async version of discoverAgentTeams — scans workspace folders recursively
+ * for squad directories without blocking the extension host.
+ */
+export async function discoverAgentTeamsAsync(
+  dirPath: string,
+  existingSquads: AgentTeamConfig[],
+  maxDepth: number = 4,
+): Promise<AgentTeamConfig[]> {
+  const existingPaths = new Set(
+    existingSquads.map(s => s.path.toLowerCase()),
+  );
+  const discovered: AgentTeamConfig[] = [];
+
+  async function scan(currentPath: string, depth: number): Promise<void> {
+    if (depth > maxDepth) return;
+
+    let entries: fs.Dirent[];
+    try {
+      entries = await fsp.readdir(currentPath, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+
+      const folderPath = path.resolve(currentPath, entry.name);
+      const teamMdPath = resolveTeamMd(folderPath);
+
+      if (teamMdPath) {
+        if (existingPaths.has(folderPath.toLowerCase())) continue;
+
+        const content = await fsp.readFile(teamMdPath, 'utf-8');
+        const parsed = parseTeamMd(content, entry.name);
+        const universe = parsed.universe === 'unknown'
+          ? (await readUniverseFromRegistryAsync(folderPath) ?? 'unknown')
+          : parsed.universe;
+
+        discovered.push({
+          id: toKebabCase(entry.name),
+          name: parsed.name,
+          description: parsed.description,
+          path: folderPath,
+          icon: '🔷',
+          universe,
+        });
+        continue;
+      }
+
+      if (EXCLUDED_DIRS.has(entry.name.toLowerCase()) || entry.name.startsWith('.')) {
+        continue;
+      }
+
+      await scan(folderPath, depth + 1);
+    }
+  }
+
+  await scan(dirPath, 0);
+  return discovered;
+}

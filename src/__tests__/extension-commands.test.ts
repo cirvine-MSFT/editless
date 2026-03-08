@@ -67,6 +67,7 @@ const {
   mockCreateTerminal,
   mockWorkspaceFsCopy,
   mockDiscoverAll,
+  mockDiscoverAllAsync,
   mockOnDidCloseTerminal,
   mockResolveTeamDir,
   mockLaunchAndLabel,
@@ -133,6 +134,7 @@ const {
     mockCreateTerminal: vi.fn(() => ({ sendText: vi.fn(), show: vi.fn(), dispose: vi.fn() })),
     mockWorkspaceFsCopy: vi.fn(),
     mockDiscoverAll: vi.fn().mockReturnValue([]),
+    mockDiscoverAllAsync: vi.fn().mockResolvedValue([]),
     mockOnDidCloseTerminal: vi.fn(() => ({ dispose: vi.fn() })),
     mockResolveTeamDir: vi.fn(),
     mockLaunchAndLabel: vi.fn(),
@@ -325,6 +327,7 @@ vi.mock('../unified-discovery', async (importOriginal) => {
   return {
     ...actual,
     discoverAll: mockDiscoverAll,
+    discoverAllAsync: mockDiscoverAllAsync,
   };
 });
 
@@ -832,13 +835,13 @@ describe('extension command handlers', () => {
       expect(mockTreeRefresh.mock.calls.length).toBe(initialCallCount + 1);
     });
 
-    it('should re-scan discovered items on refresh', () => {
-      mockDiscoverAll.mockClear();
+    it('should re-scan discovered items on refresh', async () => {
+      mockDiscoverAllAsync.mockClear();
       const newAgent = { id: 'new-agent', name: 'New', type: 'squad' as const, source: 'workspace' as const, path: '/a' };
-      mockDiscoverAll.mockReturnValue([newAgent]);
+      mockDiscoverAllAsync.mockResolvedValue([newAgent]);
       getHandler('editless.refresh')();
-      expect(mockDiscoverAll).toHaveBeenCalled();
-      expect(mockTreeSetDiscoveredItems).toHaveBeenCalled();
+      await vi.waitFor(() => expect(mockDiscoverAllAsync).toHaveBeenCalled());
+      await vi.waitFor(() => expect(mockTreeSetDiscoveredItems).toHaveBeenCalled());
       const callArgs = mockTreeSetDiscoveredItems.mock.calls.slice(-1)[0];
       expect(callArgs[0]).toHaveLength(1);
       expect(callArgs[0][0].id).toBe('new-agent');
@@ -1807,9 +1810,8 @@ describe('extension command handlers', () => {
       
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/path/to/squad');
       expect(mockCreateTerminal).not.toHaveBeenCalled();
-      // refreshDiscovery called -> discoverAll is invoked
-      expect(mockDiscoverAll).toHaveBeenCalled();
-      expect(mockTreeRefresh).toHaveBeenCalled();
+      // refreshDiscovery called -> discoverAllAsync is invoked
+      await vi.waitFor(() => expect(mockDiscoverAllAsync).toHaveBeenCalled());
     });
 
     it('should not show toast for new squad (silent add)', async () => {
@@ -1872,8 +1874,7 @@ describe('extension command handlers', () => {
       expect(mockShowOpenDialog).toHaveBeenCalled();
       expect(mockIsSquadInitialized).toHaveBeenCalledWith('/existing-squad');
       expect(mockCreateTerminal).not.toHaveBeenCalled();
-      expect(mockDiscoverAll).toHaveBeenCalled();
-      expect(mockTreeRefresh).toHaveBeenCalled();
+      await vi.waitFor(() => expect(mockDiscoverAllAsync).toHaveBeenCalled());
       expect(mockShowInformationMessage).not.toHaveBeenCalled();
     });
 
@@ -1911,12 +1912,11 @@ describe('extension command handlers', () => {
 
       await getHandler('editless.addSquad')();
 
-      mockDiscoverAll.mockClear();
+      mockDiscoverAllAsync.mockClear();
       mockTreeRefresh.mockClear();
       getLastCloseCallback()(mockTerminal);
 
-      expect(mockDiscoverAll).toHaveBeenCalled();
-      expect(mockTreeRefresh).toHaveBeenCalled();
+      await vi.waitFor(() => expect(mockDiscoverAllAsync).toHaveBeenCalled());
     });
 
     it('should refresh tree after init terminal closes', async () => {

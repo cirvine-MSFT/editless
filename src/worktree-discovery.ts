@@ -1,4 +1,4 @@
-import { execFileSync } from 'child_process';
+import { execFileSync, execFile } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -31,6 +31,20 @@ export function discoverWorktrees(repoPath: string): WorktreeInfo[] {
   }
 
   return parsePorcelainOutput(stdout);
+}
+
+/** Async version of discoverWorktrees — does not block the extension host. */
+export function discoverWorktreesAsync(repoPath: string): Promise<WorktreeInfo[]> {
+  return new Promise(resolve => {
+    execFile('git', ['worktree', 'list', '--porcelain'], {
+      cwd: repoPath,
+      encoding: 'utf-8',
+      timeout: 5000,
+    }, (err, stdout) => {
+      if (err) { resolve([]); return; }
+      resolve(parsePorcelainOutput(stdout));
+    });
+  });
 }
 
 /**

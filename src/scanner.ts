@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import { resolveTeamDir } from './team-dir';
 import type {
@@ -176,5 +177,102 @@ export function scanSquad(config: AgentTeamConfig): SquadState {
       roster: [],
       charter: '',
     };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Async variants — non-blocking squad scanning for the refresh path
+// ---------------------------------------------------------------------------
+
+async function listFilesByMtimeAsync(dir: string): Promise<{ name: string; mtime: Date }[]> {
+  try {
+    const entries = await fsp.readdir(dir, { withFileTypes: true });
+    const results: { name: string; mtime: Date }[] = [];
+    for (const e of entries) {
+      if (!e.isFile()) continue;
+      const stat = await fsp.stat(path.join(dir, e.name));
+      results.push({ name: e.name, mtime: stat.mtime });
+    }
+    return results.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+  } catch {
+    return [];
+  }
+}
+
+async function parseRosterAsync(teamMdPath: string): Promise<AgentInfo[]> {
+  try {
+    const content = await fsp.readFile(teamMdPath, 'utf-8');
+    const agents: AgentInfo[] = [];
+
+    const membersMatch = content.match(/##\s+Members\s*\n+\|[\s\S]*?(?=\n##|\n\n##|$)/i);
+    if (!membersMatch) return [];
+
+    const tableContent = membersMatch[0];
+    const rows = tableContent.split('\n').filter(line => line.includes('|'));
+
+    let foundHeader = false;
+    for (const row of rows) {
+      const cols = row.split('|').map(c => c.trim());
+      if (cols.some(c => c.toLowerCase() === 'name' || c.toLowerCase() === 'role')) { foundHeader = true; continue; }
+      if (cols.some(c => c.match(/^-+$/))) continue;
+      if (!foundHeader || cols.length < 4) continue;
+
+      const name = cols[1];
+      const role = cols[2];
+      const charter = cols[3];
+      const statusRaw = cols[4] || '';
+      if (!name || !role) continue;
+      const status = statusRaw.replace(/[^\w\s-]/g, '').trim().toLowerCase();
+      agents.push({ name, role, charter: charter && !charter.includes('—') ? charter : undefined, status: status || undefined });
+    }
+
+    return agents;
+  } catch {
+    return [];
+  }
+}
+
+async function parseCharterAsync(config: AgentTeamConfig, teamMdPath: string): Promise<string> {
+  if (config.description) return config.description.slice(0, 300);
+
+  try {
+    const content = await fsp.readFile(teamMdPath, 'utf-8');
+    const firstParagraphMatch = content.match(/^#\s+[^\n]+\n\n>\s*(.+?)(?=\n\n|$)/m);
+    if (firstParagraphMatch) return firstParagraphMatch[1].trim().slice(0, 300);
+  } catch { /* fallback failed */ }
+
+  return '';
+}
+
+/** Async version of scanSquad — does not block the extension host. */
+export async function scanSquadAsync(config: AgentTeamConfig): Promise<SquadState> {
+  const aiTeamDir = resolveTeamDir(config.path);
+  const teamMdPath = aiTeamDir ? path.join(aiTeamDir, 'team.md') : null;
+
+  try {
+    if (!aiTeamDir) {
+      return { config, lastActivity: null, error: `.squad/ (or .ai-team/) directory not found at ${config.path}`, roster: [], charter: '' };
+    }
+
+    let teamMdExists = false;
+    if (teamMdPath) {
+      try { await fsp.access(teamMdPath); teamMdExists = true; } catch { /* not found */ }
+    }
+
+    const [roster, charter, logFiles, orchFiles] = await Promise.all([
+      teamMdExists && teamMdPath ? parseRosterAsync(teamMdPath) : Promise.resolve([]),
+      teamMdPath ? parseCharterAsync(config, teamMdPath) : Promise.resolve(''),
+      listFilesByMtimeAsync(path.join(aiTeamDir, 'log')),
+      listFilesByMtimeAsync(path.join(aiTeamDir, 'orchestration-log')),
+    ]);
+
+    let lastMtime: Date | null = null;
+    for (const f of [...logFiles, ...orchFiles]) {
+      if (!lastMtime || f.mtime > lastMtime) lastMtime = f.mtime;
+    }
+
+    return { config, lastActivity: lastMtime?.toISOString() || null, roster, charter };
+  } catch (err) {
+    return { config, lastActivity: null, error: `Scan failed: ${err instanceof Error ? err.message : String(err)}`, roster: [], charter: '' };
   }
 }

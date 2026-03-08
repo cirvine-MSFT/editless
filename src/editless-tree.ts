@@ -39,6 +39,7 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
   private readonly _terminalSub: vscode.Disposable | undefined;
   private readonly _labelSub: vscode.Disposable | undefined;
   private readonly _stateSub: vscode.Disposable | undefined;
+  private _fireTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly stateManager: AgentStateManager,
@@ -47,20 +48,30 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     private readonly labelManager?: SessionLabelManager,
     private readonly sessionContextResolver?: SessionContextResolver,
   ) {
-    this._stateSub = stateManager.onDidChange(() => this._onDidChangeTreeData.fire());
+    this._stateSub = stateManager.onDidChange(() => this._scheduleFire());
     if (terminalManager) {
-      this._terminalSub = terminalManager.onDidChange(() => this._onDidChangeTreeData.fire());
+      this._terminalSub = terminalManager.onDidChange(() => this._scheduleFire());
     }
     if (labelManager) {
-      this._labelSub = labelManager.onDidChange(() => this._onDidChangeTreeData.fire());
+      this._labelSub = labelManager.onDidChange(() => this._scheduleFire());
     }
   }
 
   dispose(): void {
+    clearTimeout(this._fireTimer);
     this._stateSub?.dispose();
     this._terminalSub?.dispose();
     this._labelSub?.dispose();
     this._onDidChangeTreeData.dispose();
+  }
+
+  /** Coalesce rapid-fire change events into a single tree rebuild (~100ms). */
+  private _scheduleFire(): void {
+    if (this._fireTimer !== undefined) return;
+    this._fireTimer = setTimeout(() => {
+      this._fireTimer = undefined;
+      this._onDidChangeTreeData.fire();
+    }, 100);
   }
 
   refresh(): void {

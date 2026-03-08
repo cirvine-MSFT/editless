@@ -19,10 +19,16 @@ vi.mock('../scanner', () => ({
     roster: [{ name: 'Alice', role: 'Dev' }],
     charter: '',
   })),
+  scanSquadAsync: vi.fn(async (cfg: unknown) => ({
+    config: cfg,
+    lastActivity: null,
+    roster: [{ name: 'Alice', role: 'Dev' }],
+    charter: '',
+  })),
 }));
 
 import { AgentStateManager } from '../agent-state-manager';
-import { scanSquad } from '../scanner';
+import { scanSquad, scanSquadAsync } from '../scanner';
 import type { DiscoveredItem } from '../unified-discovery';
 
 function makeItem(id: string, overrides?: Partial<DiscoveredItem>): DiscoveredItem {
@@ -103,32 +109,37 @@ describe('AgentStateManager', () => {
 
   // -- invalidate -------------------------------------------------------------
 
-  it('invalidate clears specific cache entry', () => {
+  it('invalidate clears specific cache entry', async () => {
     mgr.setDiscoveredItems([makeItem('a'), makeItem('b')]);
     mgr.getState('a');
     mgr.getState('b');
     expect(scanSquad).toHaveBeenCalledTimes(2);
 
     mgr.invalidate('a');
+    // Wait for async re-scan to complete
+    await vi.waitFor(() => expect(scanSquadAsync).toHaveBeenCalledTimes(1));
+    // Sync getState should now use refreshed cache — no additional sync call
     mgr.getState('a');
-    expect(scanSquad).toHaveBeenCalledTimes(3);
-    // 'b' still cached
+    // 'b' still cached from original sync scan
     mgr.getState('b');
-    expect(scanSquad).toHaveBeenCalledTimes(3);
+    expect(scanSquad).toHaveBeenCalledTimes(2);
   });
 
   // -- invalidateAll ----------------------------------------------------------
 
-  it('invalidateAll clears all cache entries', () => {
+  it('invalidateAll clears all cache entries', async () => {
     mgr.setDiscoveredItems([makeItem('a'), makeItem('b')]);
     mgr.getState('a');
     mgr.getState('b');
     expect(scanSquad).toHaveBeenCalledTimes(2);
 
     mgr.invalidateAll();
+    // Wait for async re-scans to complete
+    await vi.waitFor(() => expect(scanSquadAsync).toHaveBeenCalledTimes(2));
+    // Both should be re-cached via async scan
     mgr.getState('a');
     mgr.getState('b');
-    expect(scanSquad).toHaveBeenCalledTimes(4);
+    expect(scanSquad).toHaveBeenCalledTimes(2);
   });
 
   // -- onDidChange event ------------------------------------------------------
@@ -140,17 +151,21 @@ describe('AgentStateManager', () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 
-  it('fires onDidChange on invalidate', () => {
+  it('fires onDidChange on invalidate (async)', async () => {
+    mgr.setDiscoveredItems([makeItem('x')]);
     const listener = vi.fn();
     mgr.onDidChange(listener);
     mgr.invalidate('x');
-    expect(listener).toHaveBeenCalledOnce();
+    // Wait for async re-scan to fire onDidChange
+    await vi.waitFor(() => expect(listener).toHaveBeenCalled());
   });
 
-  it('fires onDidChange on invalidateAll', () => {
+  it('fires onDidChange on invalidateAll (async)', async () => {
+    mgr.setDiscoveredItems([makeItem('x')]);
     const listener = vi.fn();
     mgr.onDidChange(listener);
     mgr.invalidateAll();
-    expect(listener).toHaveBeenCalledOnce();
+    // Wait for async re-scan to fire onDidChange
+    await vi.waitFor(() => expect(listener).toHaveBeenCalled());
   });
 });

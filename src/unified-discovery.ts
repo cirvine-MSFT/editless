@@ -1,9 +1,10 @@
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
-import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir, type AgentSource } from './agent-discovery';
-import { discoverAgentTeams, parseTeamMd, toKebabCase, readUniverseFromRegistry } from './discovery';
+import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir, discoverAgentsInWorkspaceAsync, discoverAgentsInCopilotDirAsync, type AgentSource } from './agent-discovery';
+import { discoverAgentTeams, discoverAgentTeamsAsync, parseTeamMd, toKebabCase, readUniverseFromRegistry, readUniverseFromRegistryAsync } from './discovery';
 import { resolveTeamMd, resolveTeamDir } from './team-dir';
-import { isGitRepo, discoverWorktrees } from './worktree-discovery';
+import { isGitRepo, discoverWorktrees, discoverWorktreesAsync } from './worktree-discovery';
 import type { AgentTeamConfig, WorkspaceFolderLike } from './types';
 import type { AgentSettings } from './agent-settings';
 
@@ -257,4 +258,154 @@ function normPath(p: string): string {
 
 function isInsideAny(testPath: string, folderPaths: string[]): boolean {
   return folderPaths.some(fp => testPath === fp || testPath.startsWith(fp + '/'));
+}
+
+// ---------------------------------------------------------------------------
+// Async variants — non-blocking discovery for the refresh path
+// ---------------------------------------------------------------------------
+
+/**
+ * Async version of discoverAll — scans workspace folders for agents and squads
+ * without blocking the extension host event loop.
+ */
+export async function discoverAllAsync(
+  workspaceFolders: readonly WorkspaceFolderLike[],
+): Promise<DiscoveredItem[]> {
+  const items: DiscoveredItem[] = [];
+  const seenIds = new Set<string>();
+
+  // Run agent discovery in parallel
+  const [wsAgents, copilotAgents] = await Promise.all([
+    discoverAgentsInWorkspaceAsync(workspaceFolders),
+    discoverAgentsInCopilotDirAsync(),
+  ]);
+
+  for (const agent of wsAgents) {
+    if (seenIds.has(agent.id)) continue;
+    seenIds.add(agent.id);
+    items.push({
+      id: agent.id, name: agent.name, type: 'agent',
+      source: agent.source, path: agent.filePath, description: agent.description,
+    });
+  }
+  for (const agent of copilotAgents) {
+    if (seenIds.has(agent.id)) continue;
+    seenIds.add(agent.id);
+    items.push({
+      id: agent.id, name: agent.name, type: 'agent',
+      source: agent.source, path: agent.filePath, description: agent.description,
+    });
+  }
+
+  // Squad discovery: workspace folder roots
+  for (const folder of workspaceFolders) {
+    const folderPath = folder.uri.fsPath;
+    const teamMdPath = resolveTeamMd(folderPath);
+    if (teamMdPath) {
+      const folderName = path.basename(folderPath);
+      const id = toKebabCase(folderName);
+      if (!seenIds.has(id)) {
+        const content = await fsp.readFile(teamMdPath, 'utf-8');
+        const parsed = parseTeamMd(content, folderName);
+        const universe = parsed.universe === 'unknown'
+          ? (await readUniverseFromRegistryAsync(folderPath) ?? 'unknown')
+          : parsed.universe;
+        seenIds.add(id);
+        items.push({ id, name: parsed.name, type: 'squad', source: 'workspace', path: folderPath, description: parsed.description, universe });
+      }
+    } else if (resolveTeamDir(folderPath)) {
+      const folderName = path.basename(folderPath);
+      const id = toKebabCase(folderName);
+      if (!seenIds.has(id)) {
+        seenIds.add(id);
+        const universe = await readUniverseFromRegistryAsync(folderPath) ?? 'unknown';
+        items.push({ id, name: folderName, type: 'squad', source: 'workspace', path: folderPath, universe });
+      }
+    }
+  }
+
+  // Squad discovery: recursive scan
+  for (const folder of workspaceFolders) {
+    const discovered = await discoverAgentTeamsAsync(folder.uri.fsPath, []);
+    for (const squad of discovered) {
+      if (seenIds.has(squad.id)) continue;
+      seenIds.add(squad.id);
+      items.push(agentConfigToItem(squad));
+    }
+  }
+
+  // Filter out squad governance agents
+  const squadRoots = new Set(
+    items.filter(i => i.type === 'squad' && i.source === 'workspace').map(i => i.path.toLowerCase()),
+  );
+  return items.filter(item => {
+    if (item.type !== 'agent') return true;
+    const basename = path.basename(item.path).toLowerCase();
+    if (basename !== 'squad.agent.md') return true;
+    const itemDir = path.dirname(item.path);
+    const parentOfItemDir = path.dirname(itemDir);
+    const isInGithubAgents = path.basename(itemDir) === 'agents' && path.basename(parentOfItemDir) === '.github';
+    const root = isInGithubAgents ? path.dirname(parentOfItemDir) : itemDir;
+    return !squadRoots.has(root.toLowerCase()) && !resolveTeamDir(root);
+  });
+}
+
+/**
+ * Async version of enrichWithWorktrees — discovers git worktrees
+ * without blocking the extension host (no execFileSync).
+ */
+export async function enrichWithWorktreesAsync(
+  items: DiscoveredItem[],
+  workspaceFolders: readonly WorkspaceFolderLike[],
+  includeOutsideWorkspace?: boolean,
+): Promise<DiscoveredItem[]> {
+  const result = [...items];
+  const existingPaths = new Map<string, number>();
+  for (let i = 0; i < result.length; i++) {
+    existingPaths.set(normPath(result[i].path), i);
+  }
+
+  const folderPaths = workspaceFolders.map(f => normPath(f.uri.fsPath));
+
+  for (const item of items) {
+    if (item.parentId) continue;
+    if (!isGitRepo(item.path)) continue;
+
+    const worktrees = await discoverWorktreesAsync(item.path);
+    if (worktrees.length <= 1) continue;
+
+    for (const wt of worktrees) {
+      const wtNorm = normPath(wt.path);
+
+      if (wt.isMain) {
+        item.branch = wt.branch;
+        item.isMainWorktree = true;
+        continue;
+      }
+
+      if (!includeOutsideWorkspace && !isInsideAny(wtNorm, folderPaths)) continue;
+
+      const branchSlug = wt.branch || wt.commitHash.slice(0, 8);
+      const childId = `${item.id}:wt:${toKebabCase(branchSlug)}`;
+
+      const existingIdx = existingPaths.get(wtNorm);
+      if (existingIdx !== undefined) {
+        const existing = result[existingIdx];
+        existing.parentId = item.id;
+        existing.branch = wt.branch;
+        existing.isMainWorktree = false;
+        continue;
+      }
+
+      const child: DiscoveredItem = {
+        id: childId, name: shortenBranch(branchSlug), type: item.type,
+        source: item.source, path: wt.path, parentId: item.id,
+        branch: wt.branch, isMainWorktree: false, universe: item.universe,
+      };
+      result.push(child);
+      existingPaths.set(wtNorm, result.length - 1);
+    }
+  }
+
+  return result;
 }

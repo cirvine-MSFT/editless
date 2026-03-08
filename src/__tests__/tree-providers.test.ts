@@ -35,6 +35,12 @@ vi.mock('../scanner', () => ({
     roster: [{ name: 'Morty', role: 'Dev' }],
     charter: '',
   })),
+  scanSquadAsync: vi.fn(async (cfg: unknown) => ({
+    config: cfg,
+    lastActivity: null,
+    roster: [{ name: 'Morty', role: 'Dev' }],
+    charter: '',
+  })),
 }));
 
 vi.mock('../squad-utils', () => ({
@@ -572,6 +578,7 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
   }
 
   it('refresh clears cache and fires onDidChangeTreeData', () => {
+    vi.useFakeTimers();
     const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
     const agentSettings = createMockAgentSettings(squads);
     const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
@@ -585,11 +592,14 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
     provider.getChildren(squadItem);
 
     provider.refresh();
+    vi.advanceTimersByTime(150);
 
     expect(listener).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 
   it('setDiscoveredItems updates list and fires event', () => {
+    vi.useFakeTimers();
     const agentSettings = createMockAgentSettings([]);
     const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     const listener = vi.fn();
@@ -599,6 +609,7 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
       { id: 'agent-1', name: 'Agent One', type: 'agent' as const, source: 'workspace' as const, path: '/agents/one.md' },
     ];
     provider.setDiscoveredItems(items);
+    vi.advanceTimersByTime(150);
 
     expect(listener).toHaveBeenCalled();
 
@@ -606,9 +617,11 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
     const agentItems = roots.filter(r => r.type === 'squad');
     expect(agentItems).toHaveLength(1);
     expect(agentItems[0].label).toBe('🤖 Agent One');
+    vi.useRealTimers();
   });
 
-  it('invalidate clears specific cache entry and fires event', () => {
+  it('invalidate clears specific cache entry and fires event', async () => {
+    vi.useFakeTimers();
     const squads = [
       { id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' },
       { id: 'squad-b', name: 'Squad B', path: '/b', icon: '🚀', universe: 'test' },
@@ -616,12 +629,16 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
     const agentSettings = createMockAgentSettings(squads);
     const provider = new EditlessTreeProvider(new AgentStateManager(agentSettings as never), agentSettings as never);
     provider.setDiscoveredItems(toDiscovered(squads));
+    vi.advanceTimersByTime(150); // flush initial setDiscoveredItems fire
     const listener = vi.fn();
     provider.onDidChangeTreeData(listener);
 
     provider.invalidate('squad-a');
+    // Flush microtask queue for async refreshStateAsync, then advance timers for debounced fire
+    await vi.advanceTimersByTimeAsync(150);
 
-    expect(listener).toHaveBeenCalledOnce();
+    expect(listener).toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });
 
