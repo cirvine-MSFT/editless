@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import * as fsp from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import type { WorkspaceFolderLike } from './types';
@@ -259,6 +260,26 @@ function discoverPlugins(pluginsDir: string): PluginManifest[] {
   return plugins;
 }
 
+/** Parse agent content and push to output — shared logic for sync/async I/O wrappers. */
+function pushParsedAgent(
+  id: string,
+  content: string,
+  filePath: string,
+  source: DiscoveredAgent['source'],
+  seen: Map<string, string>,
+  out: DiscoveredAgent[],
+  manifest?: PluginManifest,
+): void {
+  const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '').replace(/\.md$/i, '');
+  const parsed = parseAgentFile(content, fallback);
+  const agent: DiscoveredAgent = { id, name: parsed.name, filePath, source, description: parsed.description };
+  if (manifest) {
+    agent.marketplace = manifest.marketplace;
+    agent.resolverSource = manifest.source;
+  }
+  out.push(agent);
+}
+
 function readAndPushAgent(
   filePath: string,
   source: DiscoveredAgent['source'],
@@ -274,14 +295,7 @@ function readAndPushAgent(
   seen.set(id, filePath);
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '').replace(/\.md$/i, '');
-    const parsed = parseAgentFile(content, fallback);
-    const agent: DiscoveredAgent = { id, name: parsed.name, filePath, source, description: parsed.description };
-    if (manifest) {
-      agent.marketplace = manifest.marketplace;
-      agent.resolverSource = manifest.source;
-    }
-    out.push(agent);
+    pushParsedAgent(id, content, filePath, source, seen, out, manifest);
   } catch {
     console.warn('[editless] Skipping unreadable agent file:', filePath);
   }
@@ -361,4 +375,144 @@ export function discoverAllAgents(workspaceFolders: readonly WorkspaceFolderLike
   }
 
   return merged;
+}
+
+// ---------------------------------------------------------------------------
+// Async variants — non-blocking discovery for refresh path
+// ---------------------------------------------------------------------------
+
+async function collectAgentMdFilesAsync(dirPath: string): Promise<string[]> {
+  try {
+    const entries = await fsp.readdir(dirPath);
+    return entries
+      .filter(f => f.endsWith('.agent.md'))
+      .map(f => path.join(dirPath, f));
+  } catch {
+    return [];
+  }
+}
+
+async function collectAgentMdFilesRecursiveAsync(
+  dirPath: string,
+  depth = 0,
+  maxDepth = 10,
+  visited = new Set<string>(),
+  skipDirs = new Set<string>(),
+): Promise<string[]> {
+  if (depth > maxDepth) return [];
+  const normalized = path.resolve(dirPath);
+  if (visited.has(normalized)) return [];
+  if (skipDirs.has(normalized)) return [];
+  visited.add(normalized);
+  try {
+    const entries = await fsp.readdir(dirPath, { withFileTypes: true });
+    const results: string[] = [];
+    for (const entry of entries) {
+      if (entry.isSymbolicLink()) continue;
+      const fullPath = path.join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        results.push(...await collectAgentMdFilesRecursiveAsync(fullPath, depth + 1, maxDepth, visited, skipDirs));
+      } else if (entry.name.endsWith('.agent.md')) {
+        results.push(fullPath);
+      }
+    }
+    return results;
+  } catch {
+    return [];
+  }
+}
+
+async function readAndPushAgentAsync(
+  filePath: string,
+  source: DiscoveredAgent['source'],
+  seen: Map<string, string>,
+  out: DiscoveredAgent[],
+  manifest?: PluginManifest,
+): Promise<void> {
+  const id = toKebabId(path.basename(filePath));
+  if (seen.has(id)) return;
+  seen.set(id, filePath);
+  try {
+    const content = await fsp.readFile(filePath, 'utf-8');
+    pushParsedAgent(id, content, filePath, source, seen, out, manifest);
+  } catch {
+    // skip unreadable
+  }
+}
+
+async function discoverPluginsAsync(pluginsDir: string): Promise<PluginManifest[]> {
+  const plugins: PluginManifest[] = [];
+  try {
+    await fsp.access(pluginsDir);
+  } catch {
+    return plugins;
+  }
+
+  try {
+    const entries = (await fsp.readdir(pluginsDir, { withFileTypes: true }))
+      .filter(e => e.isDirectory() && !e.isSymbolicLink());
+
+    for (const entry of entries) {
+      const entryPath = path.join(pluginsDir, entry.name);
+      const directPlugin = tryResolve(entryPath, null);
+      if (directPlugin) {
+        plugins.push(directPlugin);
+      } else {
+        try {
+          const subDirs = (await fsp.readdir(entryPath, { withFileTypes: true }))
+            .filter(e => e.isDirectory() && !e.isSymbolicLink());
+          for (const subDir of subDirs) {
+            const subPath = path.join(entryPath, subDir.name);
+            const plugin = tryResolve(subPath, entry.name);
+            if (plugin) plugins.push(plugin);
+          }
+        } catch {
+          // Not a valid marketplace directory
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('[editless] Error scanning marketplace plugins:', err);
+  }
+
+  return plugins;
+}
+
+/** Async scan of workspace folders for agent files. */
+export async function discoverAgentsInWorkspaceAsync(workspaceFolders: readonly WorkspaceFolderLike[]): Promise<DiscoveredAgent[]> {
+  const agents: DiscoveredAgent[] = [];
+  const seen = new Map<string, string>();
+
+  for (const folder of workspaceFolders) {
+    const root = folder.uri.fsPath;
+    const ghAgentsDir = path.join(root, '.github', 'agents');
+    for (const fp of await collectAgentMdFilesAsync(ghAgentsDir)) { await readAndPushAgentAsync(fp, 'workspace', seen, agents); }
+    for (const fp of await collectAgentMdFilesAsync(root)) { await readAndPushAgentAsync(fp, 'workspace', seen, agents); }
+  }
+
+  return agents;
+}
+
+/** Async scan of Copilot directories for agent configs. */
+export async function discoverAgentsInCopilotDirAsync(configDirOverride?: string): Promise<DiscoveredAgent[]> {
+  const agents: DiscoveredAgent[] = [];
+  const seen = new Map<string, string>();
+  const dirs = configDirOverride ? [configDirOverride] : getCopilotAgentDirs();
+  for (const copilotDir of dirs) {
+    for (const fp of await collectAgentMdFilesAsync(path.join(copilotDir, 'agents'))) { await readAndPushAgentAsync(fp, 'copilot-dir', seen, agents); }
+    for (const fp of await collectAgentMdFilesAsync(copilotDir)) { await readAndPushAgentAsync(fp, 'copilot-dir', seen, agents); }
+
+    const installedPluginsDir = path.join(copilotDir, 'installed-plugins');
+    const plugins = await discoverPluginsAsync(installedPluginsDir);
+    const claimedDirs = new Set<string>();
+    for (const plugin of plugins) {
+      claimedDirs.add(path.resolve(plugin.pluginDir));
+      await readAndPushAgentAsync(plugin.entryAgentPath, 'installed-plugin', seen, agents, plugin);
+    }
+
+    for (const fp of await collectAgentMdFilesRecursiveAsync(installedPluginsDir, 0, 10, new Set(), claimedDirs)) {
+      await readAndPushAgentAsync(fp, 'installed-plugin', seen, agents);
+    }
+  }
+  return agents;
 }

@@ -50,8 +50,6 @@ export function setupWatchers(
       const teamMdWatcher = vscode.workspace.createFileSystemWatcher(pattern);
       teamMdWatcher.onDidCreate(() => {
         debouncedRefreshDiscovery();
-        treeProvider.refresh();
-        statusBar.update();
       });
       context.subscriptions.push(teamMdWatcher);
     }

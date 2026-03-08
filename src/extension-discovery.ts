@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { discoverAll, enrichWithWorktrees, type DiscoveredItem } from './unified-discovery';
+import { discoverAll, enrichWithWorktrees, discoverAllAsync, enrichWithWorktreesAsync, type DiscoveredItem } from './unified-discovery';
 import type { AgentTeamConfig } from './types';
 import type { AgentSettingsManager } from './agent-settings';
 import { SquadWatcher } from './watcher';
@@ -46,23 +46,28 @@ export function setupDiscovery(
   treeProvider.setDiscoveredItems(discoveredItems);
   hydrateSettings(discoveredItems, agentSettings);
 
-  // --- refreshDiscovery ----------------------------------------------------
-  function refreshDiscovery(): void {
-    const folders = vscode.workspace.workspaceFolders ?? [];
-    const outsideWs = vscode.workspace.getConfiguration('editless').get<boolean>('discovery.worktreesOutsideWorkspace', false);
-    discoveredItems = enrichWithWorktrees(discoverAll(folders), folders, outsideWs);
-    treeProvider.setDiscoveredItems(discoveredItems);
-    statusBar?.setDiscoveredItems(discoveredItems);
-    hydrateSettings(discoveredItems, agentSettings);
-    // Update squad watcher with new discovery results
-    const newSquadConfigs = discoveredItems.filter(d => d.type === 'squad').map(d => ({
-      id: d.id,
-      name: d.name,
-      path: d.path,
-      icon: '🔷',
-      universe: d.universe ?? 'unknown',
-    }) as AgentTeamConfig);
-    squadWatcher.updateSquads(newSquadConfigs);
+  // --- refreshDiscovery (async — non-blocking) ------------------------------
+  let refreshInFlight = false;
+  let pendingRefresh = false;
+
+  async function refreshDiscoveryAsync(): Promise<void> {
+    if (refreshInFlight) { pendingRefresh = true; return; }
+    refreshInFlight = true;
+    try {
+      const folders = vscode.workspace.workspaceFolders ?? [];
+      const outsideWs = vscode.workspace.getConfiguration('editless').get<boolean>('discovery.worktreesOutsideWorkspace', false);
+      discoveredItems = await enrichWithWorktreesAsync(await discoverAllAsync(folders), folders, outsideWs);
+      treeProvider.setDiscoveredItems(discoveredItems);
+      statusBar?.setDiscoveredItems(discoveredItems);
+      hydrateSettings(discoveredItems, agentSettings);
+      const newSquadConfigs = discoveredItems.filter(d => d.type === 'squad').map(d => ({
+        id: d.id, name: d.name, path: d.path, icon: '🔷', universe: d.universe ?? 'unknown',
+      }) as AgentTeamConfig);
+      squadWatcher.updateSquads(newSquadConfigs);
+    } finally {
+      refreshInFlight = false;
+      if (pendingRefresh) { pendingRefresh = false; void refreshDiscoveryAsync(); }
+    }
   }
 
   let discoveryTimer: NodeJS.Timeout | undefined;
@@ -72,14 +77,14 @@ export function setupDiscovery(
     discoveryTimer = setTimeout(() => {
       clearTimeout(discoveryMaxTimer);
       discoveryMaxTimer = undefined;
-      refreshDiscovery();
+      void refreshDiscoveryAsync().catch(err => console.warn('[editless]', err));
     }, 300);
     // Force execution after 3s even if events keep firing
     if (!discoveryMaxTimer) {
       discoveryMaxTimer = setTimeout(() => {
         clearTimeout(discoveryTimer);
         discoveryMaxTimer = undefined;
-        refreshDiscovery();
+        void refreshDiscoveryAsync().catch(err => console.warn('[editless]', err));
       }, 3000);
     }
   }
@@ -105,7 +110,6 @@ export function setupDiscovery(
 
   const squadWatcher = new SquadWatcher(squadConfigs, (squadId) => {
     treeProvider.invalidate(squadId);
-    treeProvider.refresh();
     statusBar?.update();
   });
   context.subscriptions.push(squadWatcher);
@@ -113,7 +117,7 @@ export function setupDiscovery(
 
   return {
     getDiscoveredItems: () => discoveredItems,
-    refreshDiscovery,
+    refreshDiscovery: () => { void refreshDiscoveryAsync().catch(err => console.warn('[editless]', err)); },
     debouncedRefreshDiscovery,
     ensureWorkspaceFolder,
     setStatusBar(bar: EditlessStatusBar) { statusBar = bar; },

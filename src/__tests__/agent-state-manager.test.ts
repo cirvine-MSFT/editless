@@ -19,10 +19,16 @@ vi.mock('../scanner', () => ({
     roster: [{ name: 'Alice', role: 'Dev' }],
     charter: '',
   })),
+  scanSquadAsync: vi.fn(async (cfg: unknown) => ({
+    config: cfg,
+    lastActivity: null,
+    roster: [{ name: 'Alice', role: 'Dev' }],
+    charter: '',
+  })),
 }));
 
 import { AgentStateManager } from '../agent-state-manager';
-import { scanSquad } from '../scanner';
+import { scanSquad, scanSquadAsync } from '../scanner';
 import type { DiscoveredItem } from '../unified-discovery';
 
 function makeItem(id: string, overrides?: Partial<DiscoveredItem>): DiscoveredItem {
@@ -103,32 +109,37 @@ describe('AgentStateManager', () => {
 
   // -- invalidate -------------------------------------------------------------
 
-  it('invalidate clears specific cache entry', () => {
+  it('invalidate clears specific cache entry', async () => {
     mgr.setDiscoveredItems([makeItem('a'), makeItem('b')]);
     mgr.getState('a');
     mgr.getState('b');
     expect(scanSquad).toHaveBeenCalledTimes(2);
 
     mgr.invalidate('a');
+    // Wait for async re-scan to complete
+    await vi.waitFor(() => expect(scanSquadAsync).toHaveBeenCalledTimes(1));
+    // Sync getState should now use refreshed cache — no additional sync call
     mgr.getState('a');
-    expect(scanSquad).toHaveBeenCalledTimes(3);
-    // 'b' still cached
+    // 'b' still cached from original sync scan
     mgr.getState('b');
-    expect(scanSquad).toHaveBeenCalledTimes(3);
+    expect(scanSquad).toHaveBeenCalledTimes(2);
   });
 
   // -- invalidateAll ----------------------------------------------------------
 
-  it('invalidateAll clears all cache entries', () => {
+  it('invalidateAll clears all cache entries', async () => {
     mgr.setDiscoveredItems([makeItem('a'), makeItem('b')]);
     mgr.getState('a');
     mgr.getState('b');
     expect(scanSquad).toHaveBeenCalledTimes(2);
 
     mgr.invalidateAll();
+    // Wait for async re-scans to complete
+    await vi.waitFor(() => expect(scanSquadAsync).toHaveBeenCalledTimes(2));
+    // Both should be re-cached via async scan
     mgr.getState('a');
     mgr.getState('b');
-    expect(scanSquad).toHaveBeenCalledTimes(4);
+    expect(scanSquad).toHaveBeenCalledTimes(2);
   });
 
   // -- onDidChange event ------------------------------------------------------
@@ -140,17 +151,52 @@ describe('AgentStateManager', () => {
     expect(listener).toHaveBeenCalledOnce();
   });
 
-  it('fires onDidChange on invalidate', () => {
+  it('fires onDidChange on invalidate (async)', async () => {
+    mgr.setDiscoveredItems([makeItem('x')]);
     const listener = vi.fn();
     mgr.onDidChange(listener);
     mgr.invalidate('x');
-    expect(listener).toHaveBeenCalledOnce();
+    // Wait for async re-scan to fire onDidChange
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
   });
 
-  it('fires onDidChange on invalidateAll', () => {
+  it('fires onDidChange on invalidateAll (async)', async () => {
+    mgr.setDiscoveredItems([makeItem('x')]);
     const listener = vi.fn();
     mgr.onDidChange(listener);
     mgr.invalidateAll();
-    expect(listener).toHaveBeenCalledOnce();
+    // Wait for async re-scan to fire onDidChange
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+  });
+
+  // -- _pending guard: re-scan on concurrent calls ----------------------------
+
+  it('re-scans when invalidate is called twice rapidly (pending rescan)', async () => {
+    mgr.setDiscoveredItems([makeItem('a')]);
+    mgr.invalidate('a');
+    mgr.invalidate('a'); // should set pendingRescan flag
+    // Both calls should result in scanSquadAsync being called twice total
+    await vi.waitFor(() => expect(scanSquadAsync).toHaveBeenCalledTimes(2));
+  });
+
+  // -- error recovery ---------------------------------------------------------
+
+  it('cleans up _pending after scanSquadAsync rejects', async () => {
+    const scanMock = vi.mocked(scanSquadAsync);
+    scanMock.mockRejectedValueOnce(new Error('disk error'));
+
+    mgr.setDiscoveredItems([makeItem('a')]);
+    mgr.invalidate('a');
+    // Wait for rejection to settle
+    await vi.waitFor(() => expect(scanMock).toHaveBeenCalledOnce());
+    // Allow the .catch handler to process
+    await new Promise(r => setTimeout(r, 10));
+
+    // Should NOT be permanently blocked — next invalidation should work
+    scanMock.mockResolvedValueOnce({
+      config: {} as never, lastActivity: null, roster: [], charter: '',
+    });
+    mgr.invalidate('a');
+    await vi.waitFor(() => expect(scanMock).toHaveBeenCalledTimes(2));
   });
 });
