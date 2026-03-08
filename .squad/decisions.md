@@ -27012,3 +27012,230 @@ function tryLoadAgencyPlugin(pluginPath: string, pluginDirName: string, marketpl
 - 12 new test cases for agency marketplace plugins
 - Tests cover: entry-point selection, YAML parsing, flat/nested structures, edge cases
 
+
+---
+
+# Decision: Generic Plugin Resolver Architecture
+
+**Date:** 2026-03-07  
+**Author:** Rick (Lead)  
+**Status:** Implemented  
+**Affects:** agent-discovery.ts, plugin marketplace integration  
+**Context:** Issue #508 / PR #509 — marketplace plugin discovery
+
+## Problem
+
+PR #509 hardcodes agency-specific concepts into editless core:
+- AgencyPlugin interface tied to gency.json schema
+- discoverAgencyPlugins() reads only one manifest format
+- 	ryLoadAgencyPlugin() checks ngines.includes('copilot') — agency's convention
+- Expects gents/ subdirectory with .md files — agency's layout
+
+Casey's question: "Is this agency-specific or generic? There's also a GitHub plugin marketplace."
+
+Answer: It must be generic. Editless should not be coupled to any single marketplace.
+
+## Decision
+
+### Separate Discovery from Installation
+
+Two fundamentally different concerns:
+
+1. **Installation** — downloading plugins from a marketplace (agency CLI, gh CLI, future tools). **Not editless's job.** Each marketplace has its own CLI/tool.
+2. **Discovery** — finding installed plugins on disk and loading their entry-point agents. **This is editless's job.**
+
+Editless owns discovery. Marketplace tools own installation. The installed-plugins/ directory is the contract between them.
+
+### The ManifestResolver Pattern
+
+Replace hardcoded agency logic with a resolver registry:
+
+`	ypescript
+/** Generic plugin manifest — all resolvers produce this. */
+export interface PluginManifest {
+  name: string;
+  pluginDir: string;
+  entryAgentPath: string;
+  source: string;           // resolver ID ("agency", "github", etc.)
+  marketplace?: string;     // namespace within installed-plugins/
+  metadata?: Record<string, unknown>;  // resolver-specific extras
+}
+
+/** A manifest resolver teaches editless how to read one manifest format. */
+export interface ManifestResolver {
+  /** Unique ID (e.g., "agency", "github") */
+  id: string;
+  /** Can this resolver handle the given plugin directory? */
+  canResolve(pluginDir: string): boolean;
+  /** Load the manifest. Returns null if invalid. */
+  resolve(pluginDir: string, marketplace: string | null): PluginManifest | null;
+}
+`
+
+### How Discovery Works
+
+`	ypescript
+const resolvers: ManifestResolver[] = [];
+
+function discoverPlugins(pluginsDir: string): PluginManifest[] {
+  // Walk installed-plugins/ (flat + nested, same logic as today)
+  // For each candidate directory:
+  //   1. Try each resolver via canResolve()
+  //   2. First match wins — call resolve()
+  //   3. Collect results
+}
+`
+
+Same directory walking logic. Same flat + nested support. The only change is: instead of hardcoding gency.json, we ask the resolver chain.
+
+### Agency Resolver (First Implementation)
+
+`	ypescript
+// src/resolvers/agency-resolver.ts (or inline, doesn't matter yet)
+export const agencyResolver: ManifestResolver = {
+  id: 'agency',
+  canResolve: (dir) => fs.existsSync(path.join(dir, 'agency.json')),
+  resolve: (dir, marketplace) => {
+    // Existing tryLoadAgencyPlugin logic, returns PluginManifest
+  },
+};
+`
+
+Registered at startup. When GitHub marketplace arrives, we add a githubResolver that looks for plugin.json or whatever GitHub uses. One file. No changes to core discovery.
+
+### Directory Layout (Unchanged)
+
+`
+~/.copilot/installed-plugins/
+├── agency-playground/         # Marketplace namespace
+│   ├── dev-team/              # Plugin (agency format)
+│   │   ├── agency.json
+│   │   └── agents/dev-team.md
+│   └── designer/
+│       ├── agency.json
+│       └── agents/designer.md
+├── github/                    # Future: GitHub marketplace
+│   └── some-action/
+│       ├── plugin.json        # Different format
+│       └── action.agent.md
+├── my-custom-plugin/          # Direct install (no marketplace)
+│   ├── agency.json
+│   └── agents/custom.md
+└── standalone.agent.md        # Still works (recursive .agent.md scan)
+`
+
+The existing flat + nested scanning is already marketplace-aware by accident. Nested = marketplace namespace. Flat = direct install. No layout changes needed.
+
+### What Does NOT Change
+
+- DiscoveredAgent interface — untouched. This is the output of all discovery.
+- discoverAgentsInCopilotDir() — still the entry point. Still scans installed-plugins/.
+- *.agent.md recursive scanning — still works alongside resolver-based discovery.
+- eadAndPushAgent() — still the final step (resolvers produce a path, this reads it).
+- Test structure — existing tests stay valid.
+
+### What Changes
+
+1. AgencyPlugin → PluginManifest (generic interface, minimal)
+2. New ManifestResolver interface (3 methods)
+3. discoverAgencyPlugins() → discoverPlugins() (iterates resolvers instead of hardcoding)
+4. 	ryLoadAgencyPlugin() → extracted into gencyResolver.resolve() (same logic, different home)
+5. New: egisterResolver() function + resolver array
+
+### Configuration (Future, Not Now)
+
+Dynamic marketplace registration (e.g., "add this marketplace URL as a source") is an installation concern, not discovery. When we need it:
+- A marketplace-sources.json in ~/.copilot/ could list registered marketplace endpoints
+- Each marketplace tool writes to this during setup
+- Editless reads it to show "available marketplaces" in UI
+
+**We don't build this yet.** Discovery doesn't need it — it just reads what's on disk.
+
+## Alternatives Considered
+
+### 1. Keep it agency-specific, refactor later
+Rejected. We're already at the fork. Refactoring a hardcoded implementation is more work than building generic from the start. Casey explicitly asked for this. Ship it right.
+
+### 2. Dynamic resolver loading (plugins for plugins)
+Rejected. Over-engineering. We have one marketplace today, maybe two soon. Code-level resolvers with a clean interface is sufficient. If we ever need 10+ resolvers, revisit.
+
+### 3. Marketplace-specific subdirectories enforced by editless
+Rejected. Editless doesn't install plugins. It can't enforce directory structure. It just scans what's there. Resolvers handle whatever layout they find.
+
+## Migration Path
+
+1. Refactor PR #509 to use PluginManifest + ManifestResolver pattern
+2. Agency resolver is the first (and only) implementation
+3. All existing tests adapt cleanly — same behavior, different abstraction
+4. When GitHub marketplace format is known, add githubResolver — one file, zero changes to core
+
+## Scope
+
+This decision covers discovery architecture only. It does NOT cover:
+- Plugin installation UX
+- Marketplace browsing/search
+- Plugin update mechanisms
+- Plugin permissions/sandboxing
+
+---
+
+# Decision: ManifestResolver Implementation Details
+
+**Date:** 2026-03-07  
+**Author:** Morty (Extension Dev)  
+**Status:** Implemented  
+**Affects:** src/agent-discovery.ts  
+**Context:** Implementing Rick's generic-plugin-resolver-architecture decision for PR #509
+
+## What Was Done
+
+Implemented the ManifestResolver pattern exactly as specified in Rick's architecture decision. Key implementation choices:
+
+1. **Resolver registration is module-level** — gencyResolver is registered via egisterResolver() at module load time (line 195). Future resolvers do the same from their own modules.
+
+2. **	ryResolve() is the internal dispatch** — a simple loop over esolvers[], first canResolve() match wins. This is not exported; it's an implementation detail of discoverPlugins().
+
+3. **category moved to metadata.category** — the agency-specific category field from AgencyPlugin is now stored as metadata: { category: string } in the generic PluginManifest. Consumers that need it can check manifest.metadata?.category.
+
+4. **Resolver array is module-scoped** — const resolvers: ManifestResolver[] is not exported directly. External code uses egisterResolver(). This prevents direct mutation.
+
+## Convention
+
+When adding a new marketplace resolver:
+1. Create the resolver object implementing ManifestResolver
+2. Call egisterResolver() at module load
+3. No changes to discoverPlugins() or any core discovery logic
+
+---
+
+# Decision: Surface Audit Allowlist for Marketplace References
+
+**Date:** 2026-03-07  
+**Author:** Meeseeks (Tester)  
+**Status:** Implemented  
+**Affects:** agency-surface-audit.test.ts, any future files importing agencyResolver
+
+## Problem
+
+The agency-surface-audit guardrail (#101) uses a broad /agency/i regex to catch re-introduction of Agency CLI references. With the ManifestResolver pattern (#508), legitimate marketplace references (gencyResolver, gency.json, 'agency' resolver ID) would trigger false positives in any file that imports or references the agency marketplace format.
+
+## Decision
+
+Added an ALLOWED_PATTERNS array to the surface audit that whitelists specific patterns known to be legitimate agency marketplace references:
+
+- gencyResolver — the ManifestResolver for agency format
+- gency.json — the agency manifest filename
+- gency-resolver — resolver module references
+- 'agency' / "agency" — resolver ID string literals
+
+Lines matching these patterns are not flagged as violations, even if they contain "agency".
+
+## Rationale
+
+The SKIP_FILES set only exempts entire files. As more modules import gencyResolver, we'd need to keep adding filenames. A pattern allowlist is more maintainable and self-documenting — it says *what's allowed* rather than *where it's allowed*.
+
+## Impact
+
+- No existing tests break
+- Future files importing gencyResolver won't trigger false audit failures
+- The guardrail still catches actual Agency CLI re-introductions (e.g., gencyCli, AgencyProvider, checkAgency)
