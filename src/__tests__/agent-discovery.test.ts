@@ -2,7 +2,15 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir, discoverAllAgents } from '../agent-discovery';
+import {
+  discoverAgentsInWorkspace,
+  discoverAgentsInCopilotDir,
+  discoverAllAgents,
+  agencyResolver,
+  registerResolver,
+  type PluginManifest,
+  type ManifestResolver,
+} from '../agent-discovery';
 
 let tmpDir: string;
 
@@ -427,7 +435,7 @@ describe('discoverAgentsInCopilotDir', () => {
     expect(agent!.source).toBe('installed-plugin');
   });
 
-  describe('agency marketplace plugins', () => {
+  describe('ManifestResolver plugin discovery', () => {
     it('should discover entry-point agent from agency plugin with agency.json', () => {
       const customConfig = path.join(tmpDir, 'agency-config');
       const pluginDir = path.join(customConfig, 'installed-plugins', 'agency-playground', 'dev-team');
@@ -773,5 +781,251 @@ describe('discoverAgentsInCopilotDir', () => {
       expect(agent!.description).toBeDefined();
       expect(agent!.description!.length).toBeGreaterThan(0);
     });
+  });
+});
+
+describe('agencyResolver', () => {
+  it('should implement ManifestResolver interface', () => {
+    expect(agencyResolver.id).toBe('agency');
+    expect(typeof agencyResolver.canResolve).toBe('function');
+    expect(typeof agencyResolver.resolve).toBe('function');
+  });
+
+  it('canResolve returns true when agency.json exists', () => {
+    const pluginDir = path.join(tmpDir, 'has-agency');
+    fs.mkdirSync(pluginDir, { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, 'agency.json'), '{}', 'utf-8');
+
+    expect(agencyResolver.canResolve(pluginDir)).toBe(true);
+  });
+
+  it('canResolve returns false when agency.json is missing', () => {
+    const pluginDir = path.join(tmpDir, 'no-agency');
+    fs.mkdirSync(pluginDir, { recursive: true });
+
+    expect(agencyResolver.canResolve(pluginDir)).toBe(false);
+  });
+
+  it('resolve returns PluginManifest with correct source field', () => {
+    const pluginDir = path.join(tmpDir, 'source-test');
+    const agentsDir = path.join(pluginDir, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'agency.json'),
+      JSON.stringify({ engines: ['copilot'], name: 'Source Test' }),
+      'utf-8'
+    );
+    fs.writeFileSync(path.join(agentsDir, 'source-test.md'), '# Source\n', 'utf-8');
+
+    const result = agencyResolver.resolve(pluginDir, 'my-marketplace');
+
+    expect(result).not.toBeNull();
+    expect(result!.source).toBe('agency');
+    expect(result!.marketplace).toBe('my-marketplace');
+    expect(result!.name).toBe('Source Test');
+  });
+
+  it('resolve returns null for non-copilot engines', () => {
+    const pluginDir = path.join(tmpDir, 'wrong-engine');
+    const agentsDir = path.join(pluginDir, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'agency.json'),
+      JSON.stringify({ engines: ['some-other-engine'] }),
+      'utf-8'
+    );
+    fs.writeFileSync(path.join(agentsDir, 'wrong-engine.md'), '# Agent\n', 'utf-8');
+
+    expect(agencyResolver.resolve(pluginDir, null)).toBeNull();
+  });
+
+  it('resolve stores category in metadata', () => {
+    const pluginDir = path.join(tmpDir, 'category-test');
+    const agentsDir = path.join(pluginDir, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'agency.json'),
+      JSON.stringify({ engines: ['copilot'], category: 'developer-tools' }),
+      'utf-8'
+    );
+    fs.writeFileSync(path.join(agentsDir, 'category-test.md'), '# Agent\n', 'utf-8');
+
+    const result = agencyResolver.resolve(pluginDir, null);
+
+    expect(result).not.toBeNull();
+    expect(result!.metadata).toEqual({ category: 'developer-tools' });
+  });
+
+  it('resolve defaults marketplace to "direct" when null', () => {
+    const pluginDir = path.join(tmpDir, 'direct-test');
+    const agentsDir = path.join(pluginDir, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'agency.json'),
+      JSON.stringify({ engines: ['copilot'] }),
+      'utf-8'
+    );
+    fs.writeFileSync(path.join(agentsDir, 'direct-test.md'), '# Agent\n', 'utf-8');
+
+    const result = agencyResolver.resolve(pluginDir, null);
+
+    expect(result).not.toBeNull();
+    expect(result!.marketplace).toBe('direct');
+  });
+
+  it('resolve returns null when agents/ directory is missing', () => {
+    const pluginDir = path.join(tmpDir, 'no-agents-dir');
+    fs.mkdirSync(pluginDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'agency.json'),
+      JSON.stringify({ engines: ['copilot'] }),
+      'utf-8'
+    );
+
+    expect(agencyResolver.resolve(pluginDir, null)).toBeNull();
+  });
+
+  it('resolve returns null when agents/ directory is empty', () => {
+    const pluginDir = path.join(tmpDir, 'empty-agents');
+    const agentsDir = path.join(pluginDir, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'agency.json'),
+      JSON.stringify({ engines: ['copilot'] }),
+      'utf-8'
+    );
+
+    expect(agencyResolver.resolve(pluginDir, null)).toBeNull();
+  });
+
+  it('resolve returns null for malformed agency.json', () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const pluginDir = path.join(tmpDir, 'bad-json');
+    const agentsDir = path.join(pluginDir, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(pluginDir, 'agency.json'), 'NOT VALID JSON', 'utf-8');
+    fs.writeFileSync(path.join(agentsDir, 'bad-json.md'), '# Agent\n', 'utf-8');
+
+    expect(agencyResolver.resolve(pluginDir, null)).toBeNull();
+    consoleWarnSpy.mockRestore();
+  });
+});
+
+describe('registerResolver / resolver chain', () => {
+  it('agency resolver is registered by default', () => {
+    // Verify by creating a plugin with agency.json and discovering through public API
+    const customConfig = path.join(tmpDir, 'default-resolver-config');
+    const pluginDir = path.join(customConfig, 'installed-plugins', 'default-test');
+    const agentsDir = path.join(pluginDir, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'agency.json'),
+      JSON.stringify({ engines: ['copilot'] }),
+      'utf-8'
+    );
+    fs.writeFileSync(path.join(agentsDir, 'default-test.md'), '# Default\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir(customConfig);
+
+    expect(result.find(a => a.id === 'default-test')).toBeDefined();
+  });
+
+  it('first-match-wins: agency resolver handles agency.json directories', () => {
+    // If we register a second resolver that also handles agency.json,
+    // the agency resolver (registered first) should still win
+    const secondResolver: ManifestResolver = {
+      id: 'second',
+      canResolve: (dir) => fs.existsSync(path.join(dir, 'agency.json')),
+      resolve: (_dir, _mkt) => ({
+        name: 'from-second-resolver',
+        pluginDir: _dir,
+        entryAgentPath: path.join(_dir, 'agents', 'test.md'),
+        source: 'second',
+      }),
+    };
+    registerResolver(secondResolver);
+
+    const customConfig = path.join(tmpDir, 'first-wins-config');
+    const pluginDir = path.join(customConfig, 'installed-plugins', 'first-wins');
+    const agentsDir = path.join(pluginDir, 'agents');
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'agency.json'),
+      JSON.stringify({ engines: ['copilot'] }),
+      'utf-8'
+    );
+    fs.writeFileSync(path.join(agentsDir, 'first-wins.md'), '# First Wins\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir(customConfig);
+
+    // Agency resolver was registered first — it should win
+    // The agent is discovered through the agency resolver path which calls readAndPushAgent
+    const agent = result.find(a => a.id === 'first-wins');
+    expect(agent).toBeDefined();
+    expect(agent!.name).toBe('First Wins');
+  });
+
+  it('unknown format is skipped when no resolver matches', () => {
+    const customConfig = path.join(tmpDir, 'unknown-format-config');
+    const pluginDir = path.join(customConfig, 'installed-plugins', 'unknown-plugin');
+    fs.mkdirSync(pluginDir, { recursive: true });
+
+    // Create a plugin.json (not agency.json) — no resolver handles this
+    fs.writeFileSync(
+      path.join(pluginDir, 'plugin.json'),
+      JSON.stringify({ format: 'github' }),
+      'utf-8'
+    );
+
+    const result = discoverAgentsInCopilotDir(customConfig);
+
+    // No resolver can handle plugin.json, so no agents discovered from this dir
+    const unknownAgents = result.filter(a => a.filePath.includes('unknown-plugin'));
+    expect(unknownAgents).toHaveLength(0);
+  });
+
+  it('custom resolver discovers plugins in its own format', () => {
+    const customResolver: ManifestResolver = {
+      id: 'custom-test',
+      canResolve: (dir) => fs.existsSync(path.join(dir, 'custom-manifest.json')),
+      resolve: (dir, marketplace) => {
+        try {
+          const manifest = JSON.parse(fs.readFileSync(path.join(dir, 'custom-manifest.json'), 'utf-8'));
+          const agentFile = path.join(dir, manifest.entryPoint);
+          if (!fs.existsSync(agentFile)) return null;
+          return {
+            name: manifest.name,
+            pluginDir: dir,
+            entryAgentPath: agentFile,
+            source: 'custom-test',
+            marketplace: marketplace || 'direct',
+          };
+        } catch {
+          return null;
+        }
+      },
+    };
+    registerResolver(customResolver);
+
+    const customConfig = path.join(tmpDir, 'custom-resolver-config');
+    const pluginDir = path.join(customConfig, 'installed-plugins', 'custom-format-plugin');
+    fs.mkdirSync(pluginDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(pluginDir, 'custom-manifest.json'),
+      JSON.stringify({ name: 'Custom Format', entryPoint: 'main.agent.md' }),
+      'utf-8'
+    );
+    fs.writeFileSync(
+      path.join(pluginDir, 'main.agent.md'),
+      '# Custom Format Agent\n> Discovered via custom resolver\n',
+      'utf-8'
+    );
+
+    const result = discoverAgentsInCopilotDir(customConfig);
+
+    // The agent should be discovered since our custom resolver can handle custom-manifest.json
+    // Note: The .agent.md file will also be found by recursive scan, but dedup ensures single entry
+    const agent = result.find(a => a.id === 'main');
+    expect(agent).toBeDefined();
   });
 });

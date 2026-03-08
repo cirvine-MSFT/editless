@@ -148,7 +148,7 @@ function collectAgentMdFilesRecursive(dirPath: string, depth = 0, maxDepth = 10,
  * Agency manifest resolver — reads agency.json to discover copilot-compatible plugins.
  * First (and currently only) ManifestResolver implementation.
  */
-const agencyResolver: ManifestResolver = {
+export const agencyResolver: ManifestResolver = {
   id: 'agency',
   canResolve(pluginDir: string): boolean {
     return fs.existsSync(path.join(pluginDir, 'agency.json'));
