@@ -46,7 +46,7 @@ function createMockContext(alreadyMigrated = false) {
   if (alreadyMigrated) state.set('adoSettingsMigrated', true);
 
   return {
-    globalState: {
+    workspaceState: {
       get: vi.fn((key: string) => state.get(key)),
       update: vi.fn(async (key: string, value: unknown) => { state.set(key, value); }),
     },
@@ -229,10 +229,10 @@ describe('migrateAdoSettings', () => {
 
       expect(result).toBe(false);
       expect(updateFn).not.toHaveBeenCalled();
-      expect(mockContext.globalState.update).toHaveBeenCalledWith('adoSettingsMigrated', true);
+      expect(mockContext.workspaceState.update).toHaveBeenCalledWith('adoSettingsMigrated', true);
     });
 
-    it('skips when globalState says already migrated', async () => {
+    it('skips when workspaceState says already migrated', async () => {
       mockContext = createMockContext(true);
       const { config, updateFn } = createMockConfig({
         'ado.organization': 'https://dev.azure.com/myorg',
@@ -254,7 +254,7 @@ describe('migrateAdoSettings', () => {
 
       expect(result).toBe(false);
       expect(updateFn).not.toHaveBeenCalled();
-      expect(mockContext.globalState.update).toHaveBeenCalledWith('adoSettingsMigrated', true);
+      expect(mockContext.workspaceState.update).toHaveBeenCalledWith('adoSettingsMigrated', true);
     });
 
     it('no-op when organization is empty string', async () => {
@@ -442,7 +442,7 @@ describe('migrateAdoSettings', () => {
 
       updateFn.mockClear();
 
-      // Second run: globalState now has adoSettingsMigrated=true
+      // Second run: workspaceState now has adoSettingsMigrated=true
       const result = await migrateAdoSettings(mockContext, mockOutput);
       expect(result).toBe(false);
       expect(updateFn).not.toHaveBeenCalled();
@@ -463,8 +463,8 @@ describe('migrateAdoSettings', () => {
       expect(mockOutput.appendLine).toHaveBeenCalledWith(
         expect.stringContaining('migration failed'),
       );
-      // Still marks as migrated to avoid retry loops
-      expect(mockContext.globalState.update).toHaveBeenCalledWith('adoSettingsMigrated', true);
+      // Does NOT mark as migrated — allows retry on next activation
+      expect(mockContext.workspaceState.update).not.toHaveBeenCalledWith('adoSettingsMigrated', true);
     });
 
     it('handles malformed projects array', async () => {

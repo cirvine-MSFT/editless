@@ -35,8 +35,8 @@ export async function migrateAdoSettings(
   context: vscode.ExtensionContext,
   output: vscode.OutputChannel,
 ): Promise<boolean> {
-  // Idempotency: skip if already migrated
-  if (context.globalState.get<boolean>('adoSettingsMigrated')) {
+  // Idempotency: skip if already migrated for this workspace
+  if (context.workspaceState.get<boolean>('adoSettingsMigrated')) {
     return false;
   }
 
@@ -45,7 +45,7 @@ export async function migrateAdoSettings(
   // If new-format connections already exist, mark migrated and skip
   const existingConnections = config.get<string[]>('ado.connections', []);
   if (existingConnections.length > 0) {
-    await context.globalState.update('adoSettingsMigrated', true);
+    await context.workspaceState.update('adoSettingsMigrated', true);
     return false;
   }
 
@@ -68,7 +68,7 @@ export async function migrateAdoSettings(
 
   // Nothing to migrate if org or projects are empty
   if (!org || projects.length === 0) {
-    await context.globalState.update('adoSettingsMigrated', true);
+    await context.workspaceState.update('adoSettingsMigrated', true);
     return false;
   }
 
@@ -92,12 +92,12 @@ export async function migrateAdoSettings(
       `[EditLess] Migrated ADO settings → ado.connections: ${JSON.stringify(newConnections)}`,
     );
 
-    await context.globalState.update('adoSettingsMigrated', true);
+    await context.workspaceState.update('adoSettingsMigrated', true);
     return true;
   } catch (err) {
     output.appendLine(`[EditLess] ADO settings migration failed: ${err}`);
-    // Still mark as migrated to avoid retry loops — fallback in initAdoIntegration handles it
-    await context.globalState.update('adoSettingsMigrated', true);
+    // Do NOT mark as migrated on failure — allow retry on next activation.
+    // The runtime fallback in initAdoIntegration handles legacy settings gracefully.
     return false;
   }
 }
