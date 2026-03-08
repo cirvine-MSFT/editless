@@ -106,7 +106,7 @@ export async function fetchAdoWorkItems(
         : `Bearer ${token}`;
 
       const body = JSON.stringify({
-        query: `SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @me AND [System.State] IN ('Active', 'New') ORDER BY [System.ChangedDate] DESC`,
+        query: `SELECT [System.Id] FROM WorkItems WHERE [System.State] IN ('Active', 'New', 'Doing', 'Closed', 'Resolved', 'Removed') ORDER BY [System.ChangedDate] DESC`,
       });
 
       const req = https.request(

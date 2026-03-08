@@ -197,7 +197,7 @@ vi.mock('../prs-tree', () => ({
   }),
   PRsTreeItem: class { constructor(public label: string) {} },
 }));
-vi.mock('../github-client', () => ({ fetchLinkedPRs: vi.fn() }));
+vi.mock('../github-client', () => ({ fetchLinkedPRs: vi.fn(), fetchGitHubMe: vi.fn().mockResolvedValue('testuser'), _resetGitHubMeCache: vi.fn() }));
 vi.mock('../vscode-compat', () => ({ getEdition: vi.fn(() => 'VS Code') }));
 vi.mock('../ado-auth', () => ({ getAdoToken: vi.fn(), promptAdoSignIn: vi.fn(), clearAzTokenCache: vi.fn(), setAdoAuthOutput: vi.fn() }));
 vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn(), fetchAdoMe: vi.fn() }));

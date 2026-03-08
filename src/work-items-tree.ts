@@ -21,7 +21,7 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
   protected readonly _itemCountSuffix: [string, string] = ['item', 'items'];
   protected readonly _emptyMessage = 'No assigned issues found';
 
-  private _filter: WorkItemsFilter = { repos: [], labels: [], states: [], types: [], projects: [] };
+  private _filter: WorkItemsFilter = { repos: [], labels: [], states: [], types: [], projects: [], assignedToMe: false };
   private readonly _githubProvider = new GitHubWorkItemsProvider();
   private readonly _adoProvider = new AdoWorkItemsProvider();
   private readonly _localProvider = new LocalTasksProvider();
@@ -53,6 +53,10 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
     this._adoConfigured = true;
     this._onDidChangeTreeData.fire();
   }
+  
+  setAdoCurrentUser(user: string): void {
+    this._adoProvider.setCurrentUser(user);
+  }
 
   override setAdoConfig(org: string | undefined, projects: string[]): void {
     this._adoProvider.setConfig(org, projects);
@@ -81,7 +85,7 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
   get isFiltered(): boolean {
     return this._filter.repos.length > 0 || this._filter.labels.length > 0
       || this._filter.states.length > 0 || this._filter.types.length > 0
-      || this._filter.projects.length > 0;
+      || this._filter.projects.length > 0 || !!this._filter.assignedToMe;
   }
 
   setFilter(filter: WorkItemsFilter): void {
@@ -93,7 +97,7 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
   }
 
   clearFilter(): void {
-    this.setFilter({ repos: [], labels: [], states: [], types: [], projects: [] });
+    this.setFilter({ repos: [], labels: [], states: [], types: [], projects: [], assignedToMe: false });
   }
 
   protected _updateDescription(): void {
@@ -105,6 +109,7 @@ export class WorkItemsTreeProvider extends BaseTreeProvider<GitHubIssue, AdoWork
     if (this._filter.states.length > 0) parts.push(`state:${this._filter.states.join(',')}`);
     if (this._filter.types.length > 0) parts.push(`type:${this._filter.types.join(',')}`);
     if (this._filter.projects.length > 0) parts.push(`project:${this._filter.projects.join(',')}`);
+    if (this._filter.assignedToMe) parts.push('assignee:@me');
     this._treeView.description = parts.join(' · ');
   }
 

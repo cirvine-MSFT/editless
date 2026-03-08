@@ -60,7 +60,7 @@ vi.mock('../session-context', () => ({ SessionContextResolver: vi.fn(function ()
 vi.mock('../scanner', () => ({ scanSquad: vi.fn() }));
 vi.mock('../work-items-tree', () => ({ WorkItemsTreeProvider: vi.fn(function () { return { setRepos: vi.fn(), refresh: vi.fn(), setTreeView: vi.fn(), setFilter: vi.fn(), clearFilter: vi.fn(), filter: {}, isFiltered: false, getAllRepos: vi.fn().mockReturnValue([]), getAllLabels: vi.fn().mockReturnValue([]), setAdoItems: vi.fn(), setAdoConfig: vi.fn(), setAdoRefresh: vi.fn(), getLevelFilter: vi.fn(), setLevelFilter: vi.fn(), clearLevelFilter: vi.fn(), getAvailableOptions: vi.fn().mockReturnValue({}) }; }), WorkItemsTreeItem: class { constructor(public label: string) {} } }));
 vi.mock('../prs-tree', () => ({ PRsTreeProvider: vi.fn(function () { return { setRepos: vi.fn(), refresh: vi.fn(), setAdoPRs: vi.fn(), setAdoRefresh: vi.fn() }; }), PRsTreeItem: class { constructor(public label: string) {} } }));
-vi.mock('../github-client', () => ({ fetchLinkedPRs: vi.fn() }));
+vi.mock('../github-client', () => ({ fetchLinkedPRs: vi.fn(), fetchGitHubMe: vi.fn().mockResolvedValue('testuser'), _resetGitHubMeCache: vi.fn() }));
 vi.mock('../vscode-compat', () => ({ getEdition: vi.fn(() => 'VS Code') }));
 vi.mock('../ado-auth', () => ({ getAdoToken: vi.fn(), promptAdoSignIn: vi.fn(), clearAzTokenCache: vi.fn() }));
 vi.mock('../ado-client', () => ({ fetchAdoWorkItems: vi.fn(), fetchAdoPRs: vi.fn() }));

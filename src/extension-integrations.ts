@@ -239,6 +239,7 @@ export async function initAdoIntegration(
       const adoMe = await fetchAdoMe(firstOrg, token!);
 
       workItemsProvider.setAdoItems(allWorkItems);
+      workItemsProvider.setAdoCurrentUser(adoMe);
       if (adoMe) prsProvider.setAdoMe(adoMe);
       prsProvider.setAdoPRs(allPRs);
     } catch (err) {

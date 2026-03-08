@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { GitHubIssue, fetchAssignedIssues, isGhAvailable } from './github-client';
+import { GitHubIssue, fetchIssues, isGhAvailable, fetchGitHubMe } from './github-client';
 import {
   type IWorkItemBackendProvider, type TreeRenderContext, type LevelFilter,
   type AvailableFilterOptions, WorkItemsTreeItem, mapGitHubState,
@@ -18,6 +18,7 @@ export class GitHubWorkItemsProvider implements IWorkItemBackendProvider {
   private _issues = new Map<string, GitHubIssue[]>();
   private _repos: string[] = [];
   private _allLabels = new Set<string>();
+  private _currentUser: string | undefined;
 
   get repos(): string[] { return this._repos; }
   set repos(value: string[]) { this._repos = value; }
@@ -54,6 +55,7 @@ export class GitHubWorkItemsProvider implements IWorkItemBackendProvider {
       if (filter.labels.length > 0 && !ctx.matchesLabelFilter(issue.labels, filter.labels)) return false;
       if (filter.states.length > 0 && !filter.states.includes(mapGitHubState(issue))) return false;
       if (filter.types.length > 0 && !this._matchesTypeFilter(issue.labels, filter.types)) return false;
+      if (filter.assignedToMe && this._currentUser && !issue.assignees.includes(this._currentUser)) return false;
       return true;
     });
   }
@@ -157,11 +159,15 @@ export class GitHubWorkItemsProvider implements IWorkItemBackendProvider {
   private async _fetchAll(): Promise<void> {
     const ghOk = await isGhAvailable();
     if (!ghOk) return;
+    
+    // Fetch current user in parallel with issues
+    const userPromise = fetchGitHubMe();
+    
     const nextIssues = new Map<string, GitHubIssue[]>();
     const nextLabels = new Set<string>();
     await Promise.all(
       this._repos.map(async (repo) => {
-        const issues = await fetchAssignedIssues(repo);
+        const issues = await fetchIssues(repo);
         for (const issue of issues) {
           for (const label of issue.labels) nextLabels.add(label);
         }
@@ -169,6 +175,8 @@ export class GitHubWorkItemsProvider implements IWorkItemBackendProvider {
         if (filtered.length > 0) nextIssues.set(repo, filtered);
       }),
     );
+    
+    this._currentUser = await userPromise;
     this._issues = nextIssues;
     this._allLabels = nextLabels;
   }
