@@ -10,8 +10,9 @@ function normSep(p: string): string {
 /**
  * Determines the correct CWD for a terminal based on the agent type:
  *
- * 1. **Personal / plugin agents** (`~/.copilot/agents/` or
- *    `~/.copilot/installed-plugins/`) → user home directory
+ * 1. **Personal / plugin agents** (`~/.copilot/agents/`,
+ *    `~/.copilot/installed-plugins/`, or `~/.config/copilot/agents/`)
+ *    → user home directory
  * 2. **Repo agents** (path inside a workspace folder under `.github/agents/`
  *    or `.copilot/agents/`) → that workspace folder root (≈ repo root)
  * 3. **Workspace-dir agents** (path inside any workspace folder) → that
@@ -47,8 +48,10 @@ export function resolveTerminalCwd(agentPath: string | undefined): string | unde
     }
   }
 
-  // 1. Personal agent or plugin agent — outside any workspace folder
-  if (/\.copilot[\\/](agents|installed-plugins)/.test(agentPath)) {
+  // 1. Personal agent or plugin agent — outside any workspace folder.
+  // Matches ~/.copilot/agents/, ~/.copilot/installed-plugins/, and
+  // ~/.config/copilot/agents/ (Linux/macOS XDG path).
+  if (/\.(copilot[\\/](agents|installed-plugins)|config[\\/]copilot[\\/]agents)[\\/]/.test(agentPath)) {
     return os.homedir();
   }
 

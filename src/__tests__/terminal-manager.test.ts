@@ -2993,6 +2993,28 @@ describe('TerminalManager', () => {
       expect(resolveTerminalCwd('C:\\Users\\user\\.copilot\\installed-plugins\\my-plugin\\agents\\agent.agent.md')).toBe('C:\\Users\\user');
     });
 
+    // -- Linux XDG path (~/.config/copilot/agents) ----------------------------
+    it('resolveTerminalCwd returns home dir for .config/copilot/agents path (Linux)', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/.config/copilot/agents/my-agent.agent.md')).toBe('/home/user');
+    });
+
+    it('resolveTerminalCwd returns home dir for .config/copilot/agents when no workspace is open', () => {
+      mockWorkspaceFolders.value = undefined;
+      expect(resolveTerminalCwd('/home/user/.config/copilot/agents/my-agent.agent.md')).toBe('/home/user');
+    });
+
+    // -- Regex boundary: trailing separator prevents false matches -------------
+    it('resolveTerminalCwd does not match .copilot/agents-old (no trailing separator)', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/.copilot/agents-old/backup')).toBe('/home/user/.copilot/agents-old/backup');
+    });
+
+    it('resolveTerminalCwd does not match .copilot/installed-plugins-backup', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
+      expect(resolveTerminalCwd('/home/user/.copilot/installed-plugins-backup/foo')).toBe('/home/user/.copilot/installed-plugins-backup/foo');
+    });
+
     // -- Repo agents (inside workspace under .github/agents or .copilot/agents) --
     it('resolveTerminalCwd returns workspace root for .github/agents repo agent', () => {
       mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
