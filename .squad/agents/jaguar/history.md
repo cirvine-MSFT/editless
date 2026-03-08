@@ -256,3 +256,15 @@ Investigated DebugMCP (v1.0.7, beta) as a potential companion extension for Edit
 
 Full analysis: `.squad/decisions/inbox/jaguar-debugmcp-research.md`
 
+
+## PR #509 Review Fix: Resolver-First Plugin Discovery (2026-03-07)
+
+Fixed three issues from Rick's code review on PR #509 (generic ManifestResolver pattern):
+
+1. **Double-discovery bug (CRITICAL):** Reversed the scan order in discoverAgentsInCopilotDir() so the resolver chain runs BEFORE collectAgentMdFilesRecursive(). Resolver-claimed pluginDir paths are collected into a skipDirs set passed to the recursive scan, preventing it from re-discovering files in those directories.
+
+2. **Dropped metadata:** Extended DiscoveredAgent with optional marketplace and esolverSource fields. eadAndPushAgent() now accepts an optional PluginManifest parameter and flows the resolver metadata through.
+
+3. **Missing test coverage:** Added 4 tests exercising resolver-first semantics: no double-discovery, metadata flow, fallback scan for unclaimed dirs, and undefined resolver fields on traditional agents.
+
+Key insight: The seen map deduplication was masking the bug — both paths produced the same agent ID, so the second path was silently dropped. But the *intent* was wrong: resolver should be authoritative, not a fallback.

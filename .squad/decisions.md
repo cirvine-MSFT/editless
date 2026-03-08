@@ -27239,3 +27239,28 @@ The SKIP_FILES set only exempts entire files. As more modules import gencyResol
 - No existing tests break
 - Future files importing gencyResolver won't trigger false audit failures
 - The guardrail still catches actual Agency CLI re-introductions (e.g., gencyCli, AgencyProvider, checkAgency)
+
+---
+
+### 2026-03-07T01:02:12Z: User directive — contribution philosophy
+**By:** Casey Irvine (via Copilot)
+**What:** Three levels of contribution to EditLess:
+1. **File issues** — feature requests, bug reports. Lowest bar.
+2. **Submit issues with detailed specs** — ideally AI-written specs that Casey's agents can use to implement features. PRs feel redundant because specialized agents will reimplement and verify anyway.
+3. **Dogfood off master** — run the bleeding edge, file issues tagged "dogfood" with the commit hash. Master moves fast and loose, so this is fraught with peril but extremely helpful.
+**Why:** User request — captured for team memory. Casey's agents are specialized for this codebase and will implement all code changes. External PRs just get reimplemented.
+
+
+---
+
+# Decision: Extract pure helpers for testability
+
+**Date:** 2026-03-07
+**Author:** Morty
+**Context:** PR #507 review — regex parsing had zero test coverage because it was inline in `initAdoIntegration()` which requires full VS Code mocking.
+
+**Decision:** When VS Code extension code contains pure logic (no `vscode` API calls), extract it as an exported helper function so it can be unit-tested with minimal mocking. Applied this to `parseAdoConnectionString()` in `extension-integrations.ts`.
+
+**Rationale:** Pure functions are trivially testable. Keeping them inline in functions that depend on `vscode` forces tests to mock the entire VS Code API just to test string parsing. Extraction costs nothing and enables focused tests.
+
+**Impact:** Future ADO or config parsing logic should follow this pattern — extract pure helpers, test them independently.
