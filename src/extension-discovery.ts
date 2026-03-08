@@ -48,8 +48,10 @@ export function setupDiscovery(
 
   // --- refreshDiscovery (async — non-blocking) ------------------------------
   let refreshInFlight = false;
+  let pendingRefresh = false;
+
   async function refreshDiscoveryAsync(): Promise<void> {
-    if (refreshInFlight) return; // skip if already running
+    if (refreshInFlight) { pendingRefresh = true; return; }
     refreshInFlight = true;
     try {
       const folders = vscode.workspace.workspaceFolders ?? [];
@@ -64,21 +66,8 @@ export function setupDiscovery(
       squadWatcher.updateSquads(newSquadConfigs);
     } finally {
       refreshInFlight = false;
+      if (pendingRefresh) { pendingRefresh = false; void refreshDiscoveryAsync(); }
     }
-  }
-
-  // Sync version kept for initial discovery (runs before tree is visible)
-  function refreshDiscovery(): void {
-    const folders = vscode.workspace.workspaceFolders ?? [];
-    const outsideWs = vscode.workspace.getConfiguration('editless').get<boolean>('discovery.worktreesOutsideWorkspace', false);
-    discoveredItems = enrichWithWorktrees(discoverAll(folders), folders, outsideWs);
-    treeProvider.setDiscoveredItems(discoveredItems);
-    statusBar?.setDiscoveredItems(discoveredItems);
-    hydrateSettings(discoveredItems, agentSettings);
-    const newSquadConfigs = discoveredItems.filter(d => d.type === 'squad').map(d => ({
-      id: d.id, name: d.name, path: d.path, icon: '🔷', universe: d.universe ?? 'unknown',
-    }) as AgentTeamConfig);
-    squadWatcher.updateSquads(newSquadConfigs);
   }
 
   let discoveryTimer: NodeJS.Timeout | undefined;
@@ -88,14 +77,14 @@ export function setupDiscovery(
     discoveryTimer = setTimeout(() => {
       clearTimeout(discoveryMaxTimer);
       discoveryMaxTimer = undefined;
-      void refreshDiscoveryAsync();
+      void refreshDiscoveryAsync().catch(err => console.warn('[editless]', err));
     }, 300);
     // Force execution after 3s even if events keep firing
     if (!discoveryMaxTimer) {
       discoveryMaxTimer = setTimeout(() => {
         clearTimeout(discoveryTimer);
         discoveryMaxTimer = undefined;
-        void refreshDiscoveryAsync();
+        void refreshDiscoveryAsync().catch(err => console.warn('[editless]', err));
       }, 3000);
     }
   }
@@ -128,7 +117,7 @@ export function setupDiscovery(
 
   return {
     getDiscoveredItems: () => discoveredItems,
-    refreshDiscovery: () => { void refreshDiscoveryAsync(); },
+    refreshDiscovery: () => { void refreshDiscoveryAsync().catch(err => console.warn('[editless]', err)); },
     debouncedRefreshDiscovery,
     ensureWorkspaceFolder,
     setStatusBar(bar: EditlessStatusBar) { statusBar = bar; },

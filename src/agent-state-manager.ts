@@ -11,6 +11,7 @@ import type { AgentSettingsManager } from './agent-settings';
 export class AgentStateManager implements vscode.Disposable {
   private _cache = new Map<string, SquadState>();
   private _pending = new Set<string>();
+  private _pendingRescan = new Set<string>();
   private _discoveredItems: DiscoveredItem[] = [];
 
   private _onDidChange = new vscode.EventEmitter<void>();
@@ -47,9 +48,14 @@ export class AgentStateManager implements vscode.Disposable {
   /**
    * Async refresh of a squad's cached state.
    * Does not block the extension host — fires onDidChange when complete.
+   * If called while a scan is already in flight for the same squad,
+   * sets a "re-scan needed" flag so the update is not dropped.
    */
   async refreshStateAsync(squadId: string): Promise<void> {
-    if (this._pending.has(squadId)) return;
+    if (this._pending.has(squadId)) {
+      this._pendingRescan.add(squadId);
+      return;
+    }
     const disc = this._discoveredItems.find(d => d.id === squadId);
     if (!disc) return;
 
@@ -62,13 +68,17 @@ export class AgentStateManager implements vscode.Disposable {
       this._onDidChange.fire();
     } finally {
       this._pending.delete(squadId);
+      if (this._pendingRescan.has(squadId)) {
+        this._pendingRescan.delete(squadId);
+        void this.refreshStateAsync(squadId).catch(err => console.warn('[editless]', err));
+      }
     }
   }
 
   invalidate(squadId: string): void {
     this._cache.delete(squadId);
     // Trigger async re-scan so the cache repopulates without blocking
-    this.refreshStateAsync(squadId);
+    void this.refreshStateAsync(squadId).catch(err => console.warn('[editless]', err));
   }
 
   invalidateAll(): void {
@@ -76,7 +86,7 @@ export class AgentStateManager implements vscode.Disposable {
     // Re-scan all known squads asynchronously
     for (const disc of this._discoveredItems) {
       if (disc.type === 'squad') {
-        this.refreshStateAsync(disc.id);
+        void this.refreshStateAsync(disc.id).catch(err => console.warn('[editless]', err));
       }
     }
   }

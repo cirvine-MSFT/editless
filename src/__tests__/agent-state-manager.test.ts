@@ -157,7 +157,7 @@ describe('AgentStateManager', () => {
     mgr.onDidChange(listener);
     mgr.invalidate('x');
     // Wait for async re-scan to fire onDidChange
-    await vi.waitFor(() => expect(listener).toHaveBeenCalled());
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
   });
 
   it('fires onDidChange on invalidateAll (async)', async () => {
@@ -166,6 +166,37 @@ describe('AgentStateManager', () => {
     mgr.onDidChange(listener);
     mgr.invalidateAll();
     // Wait for async re-scan to fire onDidChange
-    await vi.waitFor(() => expect(listener).toHaveBeenCalled());
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+  });
+
+  // -- _pending guard: re-scan on concurrent calls ----------------------------
+
+  it('re-scans when invalidate is called twice rapidly (pending rescan)', async () => {
+    mgr.setDiscoveredItems([makeItem('a')]);
+    mgr.invalidate('a');
+    mgr.invalidate('a'); // should set pendingRescan flag
+    // Both calls should result in scanSquadAsync being called twice total
+    await vi.waitFor(() => expect(scanSquadAsync).toHaveBeenCalledTimes(2));
+  });
+
+  // -- error recovery ---------------------------------------------------------
+
+  it('cleans up _pending after scanSquadAsync rejects', async () => {
+    const scanMock = vi.mocked(scanSquadAsync);
+    scanMock.mockRejectedValueOnce(new Error('disk error'));
+
+    mgr.setDiscoveredItems([makeItem('a')]);
+    mgr.invalidate('a');
+    // Wait for rejection to settle
+    await vi.waitFor(() => expect(scanMock).toHaveBeenCalledOnce());
+    // Allow the .catch handler to process
+    await new Promise(r => setTimeout(r, 10));
+
+    // Should NOT be permanently blocked — next invalidation should work
+    scanMock.mockResolvedValueOnce({
+      config: {} as never, lastActivity: null, roster: [], charter: '',
+    });
+    mgr.invalidate('a');
+    await vi.waitFor(() => expect(scanMock).toHaveBeenCalledTimes(2));
   });
 });

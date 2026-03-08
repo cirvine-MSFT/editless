@@ -260,6 +260,26 @@ function discoverPlugins(pluginsDir: string): PluginManifest[] {
   return plugins;
 }
 
+/** Parse agent content and push to output — shared logic for sync/async I/O wrappers. */
+function pushParsedAgent(
+  id: string,
+  content: string,
+  filePath: string,
+  source: DiscoveredAgent['source'],
+  seen: Map<string, string>,
+  out: DiscoveredAgent[],
+  manifest?: PluginManifest,
+): void {
+  const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '').replace(/\.md$/i, '');
+  const parsed = parseAgentFile(content, fallback);
+  const agent: DiscoveredAgent = { id, name: parsed.name, filePath, source, description: parsed.description };
+  if (manifest) {
+    agent.marketplace = manifest.marketplace;
+    agent.resolverSource = manifest.source;
+  }
+  out.push(agent);
+}
+
 function readAndPushAgent(
   filePath: string,
   source: DiscoveredAgent['source'],
@@ -275,14 +295,7 @@ function readAndPushAgent(
   seen.set(id, filePath);
   try {
     const content = fs.readFileSync(filePath, 'utf-8');
-    const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '').replace(/\.md$/i, '');
-    const parsed = parseAgentFile(content, fallback);
-    const agent: DiscoveredAgent = { id, name: parsed.name, filePath, source, description: parsed.description };
-    if (manifest) {
-      agent.marketplace = manifest.marketplace;
-      agent.resolverSource = manifest.source;
-    }
-    out.push(agent);
+    pushParsedAgent(id, content, filePath, source, seen, out, manifest);
   } catch {
     console.warn('[editless] Skipping unreadable agent file:', filePath);
   }
@@ -421,14 +434,7 @@ async function readAndPushAgentAsync(
   seen.set(id, filePath);
   try {
     const content = await fsp.readFile(filePath, 'utf-8');
-    const fallback = path.basename(filePath).replace(/\.agent\.md$/i, '').replace(/\.md$/i, '');
-    const parsed = parseAgentFile(content, fallback);
-    const agent: DiscoveredAgent = { id, name: parsed.name, filePath, source, description: parsed.description };
-    if (manifest) {
-      agent.marketplace = manifest.marketplace;
-      agent.resolverSource = manifest.source;
-    }
-    out.push(agent);
+    pushParsedAgent(id, content, filePath, source, seen, out, manifest);
   } catch {
     // skip unreadable
   }

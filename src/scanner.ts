@@ -32,51 +32,68 @@ function listFilesByMtime(dir: string): { name: string; mtime: Date }[] {
   }
 }
 
+/** Parse roster content from a team.md markdown string — pure string logic, no I/O. */
+export function parseRosterContent(content: string): AgentInfo[] {
+  const agents: AgentInfo[] = [];
+
+  const membersMatch = content.match(/##\s+Members\s*\n+\|[\s\S]*?(?=\n##|\n\n##|$)/i);
+  if (!membersMatch) return [];
+
+  const tableContent = membersMatch[0];
+  const rows = tableContent.split('\n').filter(line => line.includes('|'));
+
+  let foundHeader = false;
+  for (const row of rows) {
+    const cols = row.split('|').map(c => c.trim());
+
+    if (cols.some(c => c.toLowerCase() === 'name' || c.toLowerCase() === 'role')) {
+      foundHeader = true;
+      continue;
+    }
+
+    if (cols.some(c => c.match(/^-+$/))) continue;
+
+    if (!foundHeader || cols.length < 4) continue;
+
+    const name = cols[1];
+    const role = cols[2];
+    const charter = cols[3];
+    const statusRaw = cols[4] || '';
+
+    if (!name || !role) continue;
+
+    const status = statusRaw.replace(/[^\w\s-]/g, '').trim().toLowerCase();
+
+    agents.push({
+      name,
+      role,
+      charter: charter && !charter.includes('—') ? charter : undefined,
+      status: status || undefined,
+    });
+  }
+
+  return agents;
+}
+
 export function parseRoster(teamMdPath: string): AgentInfo[] {
   try {
     const content = fs.readFileSync(teamMdPath, 'utf-8');
-    const agents: AgentInfo[] = [];
-
-    const membersMatch = content.match(/##\s+Members\s*\n+\|[\s\S]*?(?=\n##|\n\n##|$)/i);
-    if (!membersMatch) return [];
-
-    const tableContent = membersMatch[0];
-    const rows = tableContent.split('\n').filter(line => line.includes('|'));
-
-    let foundHeader = false;
-    for (const row of rows) {
-      const cols = row.split('|').map(c => c.trim());
-
-      if (cols.some(c => c.toLowerCase() === 'name' || c.toLowerCase() === 'role')) {
-        foundHeader = true;
-        continue;
-      }
-
-      if (cols.some(c => c.match(/^-+$/))) continue;
-
-      if (!foundHeader || cols.length < 4) continue;
-
-      const name = cols[1];
-      const role = cols[2];
-      const charter = cols[3];
-      const statusRaw = cols[4] || '';
-
-      if (!name || !role) continue;
-
-      const status = statusRaw.replace(/[^\w\s-]/g, '').trim().toLowerCase();
-
-      agents.push({
-        name,
-        role,
-        charter: charter && !charter.includes('—') ? charter : undefined,
-        status: status || undefined,
-      });
-    }
-
-    return agents;
+    return parseRosterContent(content);
   } catch {
     return [];
   }
+}
+
+/** Parse charter from team.md content — pure string logic, no I/O. */
+function parseCharterContent(config: AgentTeamConfig, content: string): string {
+  if (config.description) {
+    return config.description.slice(0, 300);
+  }
+  const firstParagraphMatch = content.match(/^#\s+[^\n]+\n\n>\s*(.+?)(?=\n\n|$)/m);
+  if (firstParagraphMatch) {
+    return firstParagraphMatch[1].trim().slice(0, 300);
+  }
+  return '';
 }
 
 function parseCharter(config: AgentTeamConfig, teamMdPath: string): string {
@@ -86,10 +103,7 @@ function parseCharter(config: AgentTeamConfig, teamMdPath: string): string {
 
   try {
     const content = fs.readFileSync(teamMdPath, 'utf-8');
-    const firstParagraphMatch = content.match(/^#\s+[^\n]+\n\n>\s*(.+?)(?=\n\n|$)/m);
-    if (firstParagraphMatch) {
-      return firstParagraphMatch[1].trim().slice(0, 300);
-    }
+    return parseCharterContent(config, content);
   } catch { /* fallback failed */ }
 
   return '';
@@ -202,31 +216,7 @@ async function listFilesByMtimeAsync(dir: string): Promise<{ name: string; mtime
 async function parseRosterAsync(teamMdPath: string): Promise<AgentInfo[]> {
   try {
     const content = await fsp.readFile(teamMdPath, 'utf-8');
-    const agents: AgentInfo[] = [];
-
-    const membersMatch = content.match(/##\s+Members\s*\n+\|[\s\S]*?(?=\n##|\n\n##|$)/i);
-    if (!membersMatch) return [];
-
-    const tableContent = membersMatch[0];
-    const rows = tableContent.split('\n').filter(line => line.includes('|'));
-
-    let foundHeader = false;
-    for (const row of rows) {
-      const cols = row.split('|').map(c => c.trim());
-      if (cols.some(c => c.toLowerCase() === 'name' || c.toLowerCase() === 'role')) { foundHeader = true; continue; }
-      if (cols.some(c => c.match(/^-+$/))) continue;
-      if (!foundHeader || cols.length < 4) continue;
-
-      const name = cols[1];
-      const role = cols[2];
-      const charter = cols[3];
-      const statusRaw = cols[4] || '';
-      if (!name || !role) continue;
-      const status = statusRaw.replace(/[^\w\s-]/g, '').trim().toLowerCase();
-      agents.push({ name, role, charter: charter && !charter.includes('—') ? charter : undefined, status: status || undefined });
-    }
-
-    return agents;
+    return parseRosterContent(content);
   } catch {
     return [];
   }
@@ -237,8 +227,7 @@ async function parseCharterAsync(config: AgentTeamConfig, teamMdPath: string): P
 
   try {
     const content = await fsp.readFile(teamMdPath, 'utf-8');
-    const firstParagraphMatch = content.match(/^#\s+[^\n]+\n\n>\s*(.+?)(?=\n\n|$)/m);
-    if (firstParagraphMatch) return firstParagraphMatch[1].trim().slice(0, 300);
+    return parseCharterContent(config, content);
   } catch { /* fallback failed */ }
 
   return '';

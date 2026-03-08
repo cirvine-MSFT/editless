@@ -65,9 +65,12 @@ export class EditlessTreeProvider implements vscode.TreeDataProvider<EditlessTre
     this._onDidChangeTreeData.dispose();
   }
 
-  /** Coalesce rapid-fire change events into a single tree rebuild (~100ms). */
+  /**
+   * Trailing-edge debounce: reset timer on each call so the LAST event
+   * within the 100ms window triggers the fire (cache is always fresh at fire time).
+   */
   private _scheduleFire(): void {
-    if (this._fireTimer !== undefined) return;
+    clearTimeout(this._fireTimer);
     this._fireTimer = setTimeout(() => {
       this._fireTimer = undefined;
       this._onDidChangeTreeData.fire();

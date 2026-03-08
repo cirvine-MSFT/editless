@@ -594,7 +594,7 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
     provider.refresh();
     vi.advanceTimersByTime(150);
 
-    expect(listener).toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledOnce();
     vi.useRealTimers();
   });
 
@@ -611,7 +611,7 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
     provider.setDiscoveredItems(items);
     vi.advanceTimersByTime(150);
 
-    expect(listener).toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledOnce();
 
     const roots = provider.getChildren();
     const agentItems = roots.filter(r => r.type === 'squad');
@@ -637,7 +637,57 @@ describe('EditlessTreeProvider — refresh / setDiscoveredItems / invalidate', (
     // Flush microtask queue for async refreshStateAsync, then advance timers for debounced fire
     await vi.advanceTimersByTimeAsync(150);
 
-    expect(listener).toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it('coalesces 5 rapid stateManager.onDidChange events into a single tree rebuild', () => {
+    vi.useFakeTimers();
+    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
+    const agentSettings = createMockAgentSettings(squads);
+    const stateManager = new AgentStateManager(agentSettings as never);
+    const provider = new EditlessTreeProvider(stateManager, agentSettings as never);
+
+    // Flush the initial setDiscoveredItems fire
+    stateManager.setDiscoveredItems(toDiscovered(squads));
+    vi.advanceTimersByTime(150);
+
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+
+    // Fire stateManager.onDidChange 5 times rapidly
+    for (let i = 0; i < 5; i++) {
+      stateManager.setDiscoveredItems(toDiscovered(squads));
+    }
+
+    // Advance past debounce window
+    vi.advanceTimersByTime(150);
+
+    expect(listener).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+
+  it('does not fire at 99ms, fires at 100ms (boundary timing)', () => {
+    vi.useFakeTimers();
+    const squads = [{ id: 'squad-a', name: 'Squad A', path: '/a', icon: '🤖', universe: 'test' }];
+    const agentSettings = createMockAgentSettings(squads);
+    const stateManager = new AgentStateManager(agentSettings as never);
+    const provider = new EditlessTreeProvider(stateManager, agentSettings as never);
+
+    stateManager.setDiscoveredItems(toDiscovered(squads));
+    vi.advanceTimersByTime(150); // flush initial
+
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+
+    stateManager.setDiscoveredItems(toDiscovered(squads));
+
+    vi.advanceTimersByTime(99);
+    expect(listener).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(listener).toHaveBeenCalledOnce();
+
     vi.useRealTimers();
   });
 });

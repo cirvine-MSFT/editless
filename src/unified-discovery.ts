@@ -4,7 +4,7 @@ import * as path from 'path';
 import { discoverAgentsInWorkspace, discoverAgentsInCopilotDir, discoverAgentsInWorkspaceAsync, discoverAgentsInCopilotDirAsync, type AgentSource } from './agent-discovery';
 import { discoverAgentTeams, discoverAgentTeamsAsync, parseTeamMd, toKebabCase, readUniverseFromRegistry, readUniverseFromRegistryAsync } from './discovery';
 import { resolveTeamMd, resolveTeamDir } from './team-dir';
-import { isGitRepo, discoverWorktrees, discoverWorktreesAsync } from './worktree-discovery';
+import { isGitRepo, discoverWorktrees, discoverWorktreesAsync, type WorktreeInfo } from './worktree-discovery';
 import type { AgentTeamConfig, WorkspaceFolderLike } from './types';
 import type { AgentSettings } from './agent-settings';
 
@@ -181,12 +181,14 @@ function shortenBranch(branch: string): string {
 }
 
 /**
- * Post-discovery enrichment: for each discovered item that is a git repo,
- * discover its worktrees and append children to the items array.
+ * Shared worktree-processing logic: given discovered items and a worktree map
+ * (parent item → worktree list), enrich the items with worktree children.
+ * The only difference between sync/async is HOW worktrees are fetched, not how results are processed.
  */
-export function enrichWithWorktrees(
+function processWorktreeResults(
   items: DiscoveredItem[],
-  workspaceFolders: readonly WorkspaceFolderLike[],
+  worktreeMap: Map<DiscoveredItem, WorktreeInfo[]>,
+  folderPaths: string[],
   includeOutsideWorkspace?: boolean,
 ): DiscoveredItem[] {
   const result = [...items];
@@ -195,35 +197,23 @@ export function enrichWithWorktrees(
     existingPaths.set(normPath(result[i].path), i);
   }
 
-  const folderPaths = workspaceFolders.map(f => normPath(f.uri.fsPath));
-
-  for (const item of items) {
-    // Only enrich items that are at root level (no parentId) and are git repos
-    if (item.parentId) continue;
-    if (!isGitRepo(item.path)) continue;
-
-    const worktrees = discoverWorktrees(item.path);
+  for (const [item, worktrees] of worktreeMap) {
     if (worktrees.length <= 1) continue;
 
     for (const wt of worktrees) {
       const wtNorm = normPath(wt.path);
 
       if (wt.isMain) {
-        // Enrich the parent item with branch info
         item.branch = wt.branch;
         item.isMainWorktree = true;
         continue;
       }
 
-      // Check if worktree is inside any workspace folder
-      if (!includeOutsideWorkspace && !isInsideAny(wtNorm, folderPaths)) {
-        continue;
-      }
+      if (!includeOutsideWorkspace && !isInsideAny(wtNorm, folderPaths)) continue;
 
       const branchSlug = wt.branch || wt.commitHash.slice(0, 8);
       const childId = `${item.id}:wt:${toKebabCase(branchSlug)}`;
 
-      // DEDUP: if worktree path matches an already-discovered item, convert it to a child
       const existingIdx = existingPaths.get(wtNorm);
       if (existingIdx !== undefined) {
         const existing = result[existingIdx];
@@ -234,15 +224,9 @@ export function enrichWithWorktrees(
       }
 
       const child: DiscoveredItem = {
-        id: childId,
-        name: shortenBranch(branchSlug),
-        type: item.type,
-        source: item.source,
-        path: wt.path,
-        parentId: item.id,
-        branch: wt.branch,
-        isMainWorktree: false,
-        universe: item.universe,
+        id: childId, name: shortenBranch(branchSlug), type: item.type,
+        source: item.source, path: wt.path, parentId: item.id,
+        branch: wt.branch, isMainWorktree: false, universe: item.universe,
       };
       result.push(child);
       existingPaths.set(wtNorm, result.length - 1);
@@ -250,6 +234,27 @@ export function enrichWithWorktrees(
   }
 
   return result;
+}
+
+/**
+ * Post-discovery enrichment: for each discovered item that is a git repo,
+ * discover its worktrees and append children to the items array.
+ */
+export function enrichWithWorktrees(
+  items: DiscoveredItem[],
+  workspaceFolders: readonly WorkspaceFolderLike[],
+  includeOutsideWorkspace?: boolean,
+): DiscoveredItem[] {
+  const folderPaths = workspaceFolders.map(f => normPath(f.uri.fsPath));
+  const worktreeMap = new Map<DiscoveredItem, WorktreeInfo[]>();
+
+  for (const item of items) {
+    if (item.parentId) continue;
+    if (!isGitRepo(item.path)) continue;
+    worktreeMap.set(item, discoverWorktrees(item.path));
+  }
+
+  return processWorktreeResults(items, worktreeMap, folderPaths, includeOutsideWorkspace);
 }
 
 function normPath(p: string): string {
@@ -267,6 +272,12 @@ function isInsideAny(testPath: string, folderPaths: string[]): boolean {
 /**
  * Async version of discoverAll — scans workspace folders for agents and squads
  * without blocking the extension host event loop.
+ *
+ * Remaining sync calls (acceptable — sub-millisecond existsSync/statSync on local filesystem):
+ *   - resolveTeamMd() — uses existsSync to locate team.md
+ *   - resolveTeamDir() — uses existsSync to locate .squad/ or .ai-team/
+ *   - isGitRepo() — uses statSync to check for .git
+ *   - tryResolve() — resolver chain uses existsSync/readFileSync on small manifest files
  */
 export async function discoverAllAsync(
   workspaceFolders: readonly WorkspaceFolderLike[],
@@ -359,53 +370,14 @@ export async function enrichWithWorktreesAsync(
   workspaceFolders: readonly WorkspaceFolderLike[],
   includeOutsideWorkspace?: boolean,
 ): Promise<DiscoveredItem[]> {
-  const result = [...items];
-  const existingPaths = new Map<string, number>();
-  for (let i = 0; i < result.length; i++) {
-    existingPaths.set(normPath(result[i].path), i);
-  }
-
   const folderPaths = workspaceFolders.map(f => normPath(f.uri.fsPath));
+  const worktreeMap = new Map<DiscoveredItem, WorktreeInfo[]>();
 
   for (const item of items) {
     if (item.parentId) continue;
     if (!isGitRepo(item.path)) continue;
-
-    const worktrees = await discoverWorktreesAsync(item.path);
-    if (worktrees.length <= 1) continue;
-
-    for (const wt of worktrees) {
-      const wtNorm = normPath(wt.path);
-
-      if (wt.isMain) {
-        item.branch = wt.branch;
-        item.isMainWorktree = true;
-        continue;
-      }
-
-      if (!includeOutsideWorkspace && !isInsideAny(wtNorm, folderPaths)) continue;
-
-      const branchSlug = wt.branch || wt.commitHash.slice(0, 8);
-      const childId = `${item.id}:wt:${toKebabCase(branchSlug)}`;
-
-      const existingIdx = existingPaths.get(wtNorm);
-      if (existingIdx !== undefined) {
-        const existing = result[existingIdx];
-        existing.parentId = item.id;
-        existing.branch = wt.branch;
-        existing.isMainWorktree = false;
-        continue;
-      }
-
-      const child: DiscoveredItem = {
-        id: childId, name: shortenBranch(branchSlug), type: item.type,
-        source: item.source, path: wt.path, parentId: item.id,
-        branch: wt.branch, isMainWorktree: false, universe: item.universe,
-      };
-      result.push(child);
-      existingPaths.set(wtNorm, result.length - 1);
-    }
+    worktreeMap.set(item, await discoverWorktreesAsync(item.path));
   }
 
-  return result;
+  return processWorktreeResults(items, worktreeMap, folderPaths, includeOutsideWorkspace);
 }
