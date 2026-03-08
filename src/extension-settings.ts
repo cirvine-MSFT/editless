@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import { createAgentSettings, migrateFromRegistry, type AgentSettings, type AgentSettingsManager } from './agent-settings';
 import { initSquadUiContext } from './squad-ui-integration';
 import { setAdoAuthOutput } from './ado-auth';
+import { migrateAdoSettings } from './ado-settings-migration';
 import { EDITLESS_INSTRUCTIONS_DIR } from './terminal-manager';
 import type { DiscoveredItem } from './unified-discovery';
 
@@ -102,6 +103,11 @@ export function initSettings(context: vscode.ExtensionContext): SettingsResult {
   if (fs.existsSync(oldRegistryPath)) {
     migrateFromRegistry(oldRegistryPath, agentSettings);
   }
+
+  // Migrate deprecated ADO settings to unified ado.connections (one-time, async)
+  migrateAdoSettings(context, output).catch(err => {
+    output.appendLine(`[EditLess] ADO settings migration error: ${err}`);
+  });
 
   return { agentSettings, output };
 }
