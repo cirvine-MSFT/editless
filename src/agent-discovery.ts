@@ -33,6 +33,8 @@ export interface PluginManifest {
   pluginDir: string;
   /** Path to the entry-point agent file */
   entryAgentPath: string;
+  /** Paths to all agent files in the plugin (including entry-point) */
+  allAgentPaths: string[];
   /** Resolver ID that produced this manifest (e.g. "agency", "github") */
   source: string;
   /** Marketplace namespace within installed-plugins/ (e.g. "agency-playground") */
@@ -192,6 +194,7 @@ export const agencyResolver: ManifestResolver = {
         name: agencyJson.name || pluginDirName,
         pluginDir,
         entryAgentPath,
+        allAgentPaths: agentFiles,
         source: 'agency',
         marketplace: marketplace || 'direct',
         metadata: agencyJson.category ? { category: agencyJson.category as string } : undefined,
@@ -287,7 +290,8 @@ function readAndPushAgent(
   out: DiscoveredAgent[],
   manifest?: PluginManifest,
 ): void {
-  const id = toKebabId(path.basename(filePath));
+  const baseId = toKebabId(path.basename(filePath));
+  const id = manifest ? `${path.basename(manifest.pluginDir)}/${baseId}` : baseId;
   if (seen.has(id)) {
     console.warn('[editless] Agent ID collision — skipping duplicate:', id, 'from', filePath, '(keeping', seen.get(id) + ')');
     return;
@@ -348,7 +352,9 @@ export function discoverAgentsInCopilotDir(configDirOverride?: string): Discover
     const claimedDirs = new Set<string>();
     for (const plugin of plugins) {
       claimedDirs.add(path.resolve(plugin.pluginDir));
-      readAndPushAgent(plugin.entryAgentPath, 'installed-plugin', seen, agents, plugin);
+      for (const agentPath of plugin.allAgentPaths) {
+        readAndPushAgent(agentPath, 'installed-plugin', seen, agents, plugin);
+      }
     }
 
     // Fallback recursive scan for *.agent.md files NOT already claimed by a resolver.
@@ -429,7 +435,8 @@ async function readAndPushAgentAsync(
   out: DiscoveredAgent[],
   manifest?: PluginManifest,
 ): Promise<void> {
-  const id = toKebabId(path.basename(filePath));
+  const baseId = toKebabId(path.basename(filePath));
+  const id = manifest ? `${path.basename(manifest.pluginDir)}/${baseId}` : baseId;
   if (seen.has(id)) return;
   seen.set(id, filePath);
   try {
@@ -507,7 +514,9 @@ export async function discoverAgentsInCopilotDirAsync(configDirOverride?: string
     const claimedDirs = new Set<string>();
     for (const plugin of plugins) {
       claimedDirs.add(path.resolve(plugin.pluginDir));
-      await readAndPushAgentAsync(plugin.entryAgentPath, 'installed-plugin', seen, agents, plugin);
+      for (const agentPath of plugin.allAgentPaths) {
+        await readAndPushAgentAsync(agentPath, 'installed-plugin', seen, agents, plugin);
+      }
     }
 
     for (const fp of await collectAgentMdFilesRecursiveAsync(installedPluginsDir, 0, 10, new Set(), claimedDirs)) {

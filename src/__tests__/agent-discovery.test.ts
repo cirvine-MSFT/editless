@@ -458,7 +458,7 @@ describe('discoverAgentsInCopilotDir', () => {
 
       const result = discoverAgentsInCopilotDir(customConfig);
 
-      const agent = result.find(a => a.id === 'dev-team');
+      const agent = result.find(a => a.id === 'dev-team/dev-team');
       expect(agent).toBeDefined();
       expect(agent!.source).toBe('installed-plugin');
       expect(agent!.name).toBe('dev-team');
@@ -485,7 +485,7 @@ describe('discoverAgentsInCopilotDir', () => {
 
       const result = discoverAgentsInCopilotDir(customConfig);
 
-      const agent = result.find(a => a.id === 'test-plugin');
+      const agent = result.find(a => a.id === 'test-plugin/test-plugin');
       expect(agent).toBeDefined();
       expect(agent!.name).toBe('Test Agent');
       expect(agent!.description).toBe('A test agent from frontmatter');
@@ -511,12 +511,18 @@ describe('discoverAgentsInCopilotDir', () => {
       const result = discoverAgentsInCopilotDir(customConfig);
 
       // Should discover the entry-point agent (matches directory name)
-      const entryAgent = result.find(a => a.id === 'squad-plugin');
+      const entryAgent = result.find(a => a.id === 'squad-plugin/squad-plugin');
       expect(entryAgent).toBeDefined();
       expect(entryAgent!.name).toBe('Squad Entry');
       
-      // Note: Other agents in agents/ subdirectory may or may not be discovered
-      // depending on implementation — this test only verifies the entry-point
+      // ALL agents in agents/ are now discovered with prefixed IDs
+      const architect = result.find(a => a.id === 'squad-plugin/architect');
+      expect(architect).toBeDefined();
+      expect(architect!.name).toBe('Architect');
+
+      const coder = result.find(a => a.id === 'squad-plugin/coder');
+      expect(coder).toBeDefined();
+      expect(coder!.name).toBe('Coder');
     });
 
     it('should skip plugins without agency.json', () => {
@@ -634,7 +640,7 @@ describe('discoverAgentsInCopilotDir', () => {
 
       const result = discoverAgentsInCopilotDir(customConfig);
 
-      const agent = result.find(a => a.id === 'custom-agency');
+      const agent = result.find(a => a.id === 'custom-agency/custom-agency');
       expect(agent).toBeDefined();
       expect(agent!.source).toBe('installed-plugin');
       expect(agent!.description).toBe('From custom config dir');
@@ -745,7 +751,7 @@ describe('discoverAgentsInCopilotDir', () => {
 
       const result = discoverAgentsInCopilotDir(customConfig);
 
-      const agent = result.find(a => a.id === 'plugin-name');
+      const agent = result.find(a => a.id === 'plugin-name/plugin-name');
       expect(agent).toBeDefined();
       expect(agent!.source).toBe('installed-plugin');
       expect(agent!.name).toBe('Nested Plugin');
@@ -780,8 +786,8 @@ describe('discoverAgentsInCopilotDir', () => {
 
       const result = discoverAgentsInCopilotDir(customConfig);
 
-      // There should be exactly ONE agent with id 'my-plugin' — no duplicates
-      const matches = result.filter(a => a.id === 'my-plugin');
+      // There should be exactly ONE agent with id 'my-plugin/my-plugin' — no duplicates
+      const matches = result.filter(a => a.id === 'my-plugin/my-plugin');
       expect(matches).toHaveLength(1);
       // The resolver path should be the one that won (it runs first)
       expect(matches[0].resolverSource).toBe('agency');
@@ -807,7 +813,7 @@ describe('discoverAgentsInCopilotDir', () => {
 
       const result = discoverAgentsInCopilotDir(customConfig);
 
-      const agent = result.find(a => a.id === 'meta-plugin');
+      const agent = result.find(a => a.id === 'meta-plugin/meta-plugin');
       expect(agent).toBeDefined();
       expect(agent!.resolverSource).toBe('agency');
       expect(agent!.marketplace).toBe('test-marketplace');
@@ -842,7 +848,7 @@ describe('discoverAgentsInCopilotDir', () => {
       const result = discoverAgentsInCopilotDir(customConfig);
 
       // Resolver-claimed agent has resolverSource
-      const claimed = result.find(a => a.id === 'claimed-plugin');
+      const claimed = result.find(a => a.id === 'claimed-plugin/claimed-plugin');
       expect(claimed).toBeDefined();
       expect(claimed!.resolverSource).toBe('agency');
 
@@ -892,7 +898,7 @@ describe('discoverAgentsInCopilotDir', () => {
 
       const result = discoverAgentsInCopilotDir(customConfig);
 
-      const agent = result.find(a => a.id === 'multiline-plugin');
+      const agent = result.find(a => a.id === 'multiline-plugin/multiline-plugin');
       expect(agent).toBeDefined();
       expect(agent!.name).toBe('Multiline Agent');
       // Note: Description parsing may vary based on YAML parser implementation
@@ -1046,7 +1052,7 @@ describe('registerResolver / resolver chain', () => {
 
     const result = discoverAgentsInCopilotDir(customConfig);
 
-    expect(result.find(a => a.id === 'default-test')).toBeDefined();
+    expect(result.find(a => a.id === 'default-test/default-test')).toBeDefined();
   });
 
   it('first-match-wins: agency resolver handles agency.json directories', () => {
@@ -1079,7 +1085,7 @@ describe('registerResolver / resolver chain', () => {
 
     // Agency resolver was registered first — it should win
     // The agent is discovered through the agency resolver path which calls readAndPushAgent
-    const agent = result.find(a => a.id === 'first-wins');
+    const agent = result.find(a => a.id === 'first-wins/first-wins');
     expect(agent).toBeDefined();
     expect(agent!.name).toBe('First Wins');
   });
@@ -1116,6 +1122,7 @@ describe('registerResolver / resolver chain', () => {
             name: manifest.name,
             pluginDir: dir,
             entryAgentPath: agentFile,
+            allAgentPaths: [agentFile],
             source: 'custom-test',
             marketplace: marketplace || 'direct',
           };
@@ -1144,7 +1151,7 @@ describe('registerResolver / resolver chain', () => {
 
     // The agent should be discovered since our custom resolver can handle custom-manifest.json
     // Note: The .agent.md file will also be found by recursive scan, but dedup ensures single entry
-    const agent = result.find(a => a.id === 'main');
+    const agent = result.find(a => a.id === 'custom-format-plugin/main');
     expect(agent).toBeDefined();
   });
 });
