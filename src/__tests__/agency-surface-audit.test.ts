@@ -27,9 +27,7 @@ const SKIP_DIRS = new Set([
   '__tests__', '__integration__', '.git', 'icons', '.vscode-test',
 ]);
 
-const SKIP_FILES = new Set([
-  'agent-discovery.ts', // Legitimate references to agency.json marketplace plugin format
-]);
+const SKIP_FILES = new Set<string>([]);
 
 const TEXT_EXTENSIONS = new Set([
   '.ts', '.js', '.json', '.md', '.yml', '.yaml', '.sh', '.html', '.css', '.mjs',
@@ -52,6 +50,7 @@ function collectFiles(dir: string): string[] {
 // Patterns that are legitimate agency marketplace references, not Agency CLI references
 const ALLOWED_PATTERNS = [
   /agencyResolver/,    // ManifestResolver for agency marketplace format
+  /agencyJson/,        // local variable for parsed agency.json content
   /agency\.json/,      // agency marketplace manifest file
   /agency-resolver/,   // resolver module/file references
   /'agency'/,          // resolver ID string literal
