@@ -877,7 +877,8 @@
           "type": "string",
           "default": "",
           "description": "(Deprecated — use editless.ado.connections) Azure DevOps organization URL",
-          "markdownDescription": "**Deprecated:** Use `editless.ado.connections` instead.\n\nAzure DevOps organization URL. Kept for backward compatibility when used with `editless.ado.projects`.",
+          "markdownDescription": "**Deprecated:** Use `editless.ado.connections` instead.\n\nAzure DevOps organization URL. Settings are automatically migrated to `editless.ado.connections` on first use.",
+          "deprecationMessage": "Deprecated: Use editless.ado.connections instead. Your settings will be migrated automatically.",
           "scope": "resource",
           "order": 32
         },
@@ -885,7 +886,8 @@
           "type": "string",
           "default": "",
           "description": "(Deprecated — use editless.ado.connections) Azure DevOps project name",
-          "markdownDescription": "**Deprecated:** Use `editless.ado.connections` instead.\n\nSingle Azure DevOps project name. Kept for backward compatibility when used with `editless.ado.organization`.",
+          "markdownDescription": "**Deprecated:** Use `editless.ado.connections` instead.\n\nSingle Azure DevOps project name. Settings are automatically migrated to `editless.ado.connections` on first use.",
+          "deprecationMessage": "Deprecated: Use editless.ado.connections instead. Your settings will be migrated automatically.",
           "scope": "resource",
           "order": 33
         },
@@ -905,10 +907,13 @@
                 "description": "Whether to include this project"
               }
             },
-            "required": ["name"]
+            "required": [
+              "name"
+            ]
           },
           "description": "(Deprecated — use editless.ado.connections) Azure DevOps projects list",
-          "markdownDescription": "**Deprecated:** Use `editless.ado.connections` instead.\n\nList of ADO projects to show when used with `editless.ado.organization`. Kept for backward compatibility.",
+          "markdownDescription": "**Deprecated:** Use `editless.ado.connections` instead.\n\nList of ADO projects to show when used with `editless.ado.organization`. Settings are automatically migrated to `editless.ado.connections` on first use.",
+          "deprecationMessage": "Deprecated: Use editless.ado.connections instead. Your settings will be migrated automatically.",
           "scope": "resource",
           "order": 33.1
         },
