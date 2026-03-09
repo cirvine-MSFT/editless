@@ -198,6 +198,46 @@ describe('fetchAdoWorkItems', () => {
     const totalIds = idsRequested.join(',').split(',').length;
     expect(totalIds).toBeLessThanOrEqual(200);
   });
+  it('should include project name in work item details URL', async () => {
+    // Setup a successful WIQL response with one ID
+    setupRequestResponse(200, JSON.stringify({ workItems: [{ id: 1 }] }));
+
+    let capturedDetailsPath = '';
+    mockHttpsGet.mockImplementation((opts: { path?: string }, cb: Function) => {
+      capturedDetailsPath = (opts as any).path || '';
+      const body = JSON.stringify({ value: [{
+        id: 1,
+        fields: {
+          'System.Title': 'Test',
+          'System.State': 'Active',
+          'System.WorkItemType': 'Bug',
+          'System.AssignedTo': { displayName: 'Dev' },
+          'System.AreaPath': 'Proj',
+          'System.Tags': '',
+        },
+        _links: { html: { href: 'https://example.com' } },
+      }] });
+      const resListeners = new Map<string, Function>();
+      const res = {
+        statusCode: 200,
+        on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+      };
+      Promise.resolve().then(() => {
+        cb(res);
+        resListeners.get('data')?.(Buffer.from(body));
+        resListeners.get('end')?.();
+      });
+      const req = {
+        on: (event: string, handler: Function) => { return req; },
+        destroy: vi.fn(),
+      };
+      return req;
+    });
+
+    await fetchAdoWorkItems('https://dev.azure.com/myorg', 'MyProject', 'test-pat');
+    // The details URL must include the project name between org and _apis
+    expect(capturedDetailsPath).toContain('/MyProject/_apis/wit/workitems');
+  });
 });
 
 describe('fetchAdoPRs', () => {
