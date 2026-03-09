@@ -1065,6 +1065,7 @@ describe('registerResolver / resolver chain', () => {
         name: 'from-second-resolver',
         pluginDir: _dir,
         entryAgentPath: path.join(_dir, 'agents', 'test.md'),
+        allAgentPaths: [path.join(_dir, 'agents', 'test.md')],
         source: 'second',
       }),
     };
