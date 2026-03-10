@@ -233,6 +233,59 @@ describe('discoverAgentsInWorkspace', () => {
 
     consoleWarnSpy.mockRestore();
   });
+
+  it('should discover agents in subdirectories of workspace folder', () => {
+    writeFixture('ws/alfred/.github/agents/alfred.agent.md', '# Alfred\n> A helpful agent.\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('alfred');
+    expect(result[0].name).toBe('Alfred');
+    expect(result[0].description).toBe('A helpful agent.');
+  });
+
+  it('should discover agents at multiple nesting levels', () => {
+    writeFixture('ws/project-a/.github/agents/alpha.agent.md', '# Alpha\n');
+    writeFixture('ws/project-b/sub/beta.agent.md', '# Beta\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result).toHaveLength(2);
+    expect(result.map(a => a.id)).toContain('alpha');
+    expect(result.map(a => a.id)).toContain('beta');
+  });
+
+  it('should skip node_modules and other excluded directories', () => {
+    writeFixture('ws/node_modules/.github/agents/hidden.agent.md', '# Hidden\n');
+    writeFixture('ws/dist/secret.agent.md', '# Secret\n');
+    writeFixture('ws/real/real.agent.md', '# Real\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('real');
+  });
+
+  it('should skip dot-directories during recursive scan', () => {
+    writeFixture('ws/.hidden-dir/.github/agents/invisible.agent.md', '# Invisible\n');
+    writeFixture('ws/visible/visible.agent.md', '# Visible\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('visible');
+  });
+
+  it('should deduplicate agents found at root and in subdirectories', () => {
+    writeFixture('ws/.github/agents/shared.agent.md', '# Shared Root\n');
+    writeFixture('ws/child/.github/agents/shared.agent.md', '# Shared Child\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Shared Root');
+  });
 });
 
 describe('discoverAllAgents', () => {

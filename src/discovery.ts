@@ -100,7 +100,7 @@ export function toKebabCase(name: string): string {
     .toLowerCase();
 }
 
-const EXCLUDED_DIRS = new Set([
+export const EXCLUDED_DIRS = new Set([
   'node_modules', '.git', '.hg', '.svn', 'dist', 'out', '.next', '.nuxt',
   'build', 'coverage', '__pycache__', '.venv', 'vendor',
   'target', 'bin', 'obj', '.terraform',
