@@ -435,6 +435,55 @@ Final triage session before Monday v0.1 deadline. Analyzed all 25 open issues an
 
 **Blocking issue caught in review:** Original plan missed package.json cleanup. Commands `editless.upgradeSquad` and `editless.upgradeAllSquads` must be removed from package.json (command definitions, menu entries, context checks) or users will see broken commands in Command Palette. This is mandatory for the removal.
 
+---
+
+### 2026-03-05: 3x Code Review — v0.2 PRs #490–493
+
+**Task:** Reviewed 4 PRs for v0.2 release as reviewer 1 of 3.
+
+**PR #490 — Agent Discovery Hardening (#474, #475):** APPROVED ✅  
+- Error handling correctly wraps readFileSync in try-catch to prevent discovery crashes
+- Agent ID collision warning gives enough context for debugging (ID + file path)
+- Tests are comprehensive: covers corrupt files, duplicate IDs, plugin discovery, symlinks, depth limits
+- Missing: doesn't log the actual error object — makes debugging harder if crash is due to permissions vs. encoding vs. disk failure
+- **Suggestion:** Change `console.warn('[editless] Skipping unreadable agent file:', filePath)` to include error: `console.warn('[editless] Skipping unreadable agent file:', filePath, err)`
+
+**PR #491 — Session UX Polish (#479, #480):** APPROVED with minor concern  
+- MAX_SESSION_NAME raised to 250 is reasonable — VS Code does ellipsize natively
+- Inline edit button placement looks correct (`group: "inline@1"`)
+- Missing tests: no test coverage for the inline button, but this is UI config only (package.json)
+- **Edge case:** Should MAX_SESSION_NAME be unlimited? 250 still enforces arbitrary ceiling. Consider removing truncation entirely and relying solely on VS Code's ellipsis handling. Current implementation is safe but slightly over-engineered.
+- **Minor issue:** `when` clause for inline button is `viewItem == terminal` — this will show on ALL terminal items. Should verify this is intended (looks correct based on PR description).
+
+**PR #492 — Work Item Context (#476):** APPROVED with path encoding concern  
+- `file:///` URL construction is correct for Windows (replaces backslashes with forward slashes)
+- Custom instruction text is clear and actionable for the agent
+- **Missing edge case:** Spaces in paths are handled by file:// URI encoding naturally, but special characters (%, #, ?, &) are NOT escaped. If a local task file path contains `task#2.md`, the constructed URI will break: `file:///C:/path/task#2.md` (fragment identifier). Need `encodeURI()` or `encodeURIComponent()` on the path.
+- **Missing edge case:** Unicode filenames may not work correctly on Windows if not properly normalized. Suggest wrapping with `encodeURI(localPath.replace(/\\/g, '/'))`
+- No tests for the file:// path construction logic
+
+**PR #493 — Attention State Icon (#481):** DISCREPANCY FOUND ⚠️  
+- **Actual changes in diff:** Only adds `dispose()` method to SessionContextResolver (cleanup for file watchers and timers)
+- **Expected changes per task description:** Icon change (comment-discussion → bell) + turn boundary fix for hasOpenAskUser
+- **Verdict:** CANNOT REVIEW — The PR description doesn't match the actual code changes. Either:
+  1. The branch is stale/not pushed
+  2. The task description references a different PR
+  3. The changes were committed elsewhere
+- **What I can verify:** The dispose() method implementation looks correct — cleans up watchers, timers, and caches properly. Implements vscode.Disposable pattern correctly.
+
+**Review patterns learned:**
+1. **Error logging completeness:** When catching errors in discovery/scanning code, always log the error object (not just the path). Helps debug permission vs. corruption vs. encoding issues without reproducing locally.
+2. **Path encoding in file:// URIs:** Windows backslash → forward slash conversion is necessary but NOT sufficient. Must also handle URI special characters (%, #, ?, &) with encodeURI() to prevent fragment/query parsing issues.
+3. **Arbitrary limits vs. platform limits:** When a platform (VS Code) handles truncation/ellipsis natively, consider removing artificial limits entirely. MAX_SESSION_NAME=250 is safer than unlimited but adds complexity with minimal benefit.
+4. **UI package.json changes need manual testing:** Inline button placement, when clauses, and icon choices aren't testable via unit tests. Manual verification checklist needed.
+5. **PR description vs. actual code mismatch:** When commit messages and task descriptions don't align with diff output, flag immediately — indicates stale branch, wrong branch, or communication gap.
+
+**Summary:**
+- PR #490: Ready to merge (suggest logging error object)
+- PR #491: Ready to merge (consider removing MAX_SESSION_NAME limit entirely in future)
+- PR #492: Needs fix (add encodeURI for file:// path construction)
+- PR #493: Cannot complete review (code doesn't match description)
+
 **Test strategy:** Delete upgrade test blocks from `squad-upgrader.test.ts`, delete entire "EditlessTreeProvider — upgrade indicator" describe block (lines 737-797) from `tree-providers.test.ts`, update `addSquad` tests in `extension-commands.test.ts` for silent skip behavior. Keep utility tests (`checkNpxAvailable`, `isSquadInitialized`, `getLocalSquadVersion`). Update mocks by removing upgrade-related function mocks, keeping utility mocks.
 
 **Implementation order:** (1) squad-upgrader.ts cleanup, (2) extension.ts + editless-tree.ts + package.json in parallel, (3) test updates, (4) CHANGELOG update, (5) verify with lint/test/build.
