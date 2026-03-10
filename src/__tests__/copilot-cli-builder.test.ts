@@ -345,6 +345,28 @@ describe('copilot-cli-builder', () => {
       expect(cmd).toBe('copilot --agent my-agent');
     });
 
+    it('user --agent overrides builtin:copilot-cli (which normally has no agent flag)', () => {
+      const cmd = buildLaunchCommandForConfig({
+        id: 'builtin:copilot-cli', universe: 'unknown', additionalArgs: '--agent custom-agent',
+      });
+      expect(cmd).toBe('copilot --agent custom-agent');
+    });
+
+    it('does not treat --agent-config as a user --agent override', () => {
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--agent-config foo',
+      });
+      expect(cmd).toBe('copilot --agent squad --agent-config foo');
+    });
+
+    it('user --agent with no value still suppresses derived agent flag', () => {
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--yolo --agent',
+      });
+      expect(cmd).toContain('--agent');
+      expect(cmd).not.toContain('--agent squad');
+    });
+
     it('uses per-agent command override', () => {
       const cmd = buildLaunchCommandForConfig({
         id: 'my-squad', universe: 'rick-and-morty', command: 'my-cli',
