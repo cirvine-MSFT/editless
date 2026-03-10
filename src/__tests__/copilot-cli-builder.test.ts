@@ -236,13 +236,13 @@ describe('copilot-cli-builder', () => {
       warnSpy.mockRestore();
     });
 
-    it('strips --agent from additionalArgs when agentFlag is set', () => {
+    it('user --agent in additionalArgs passes through when agentFlag would be set', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const cmd = buildLaunchCommandForConfig({
         id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--agent other',
       });
-      expect(cmd).toBe('copilot --agent squad');
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('--agent'));
+      expect(cmd).toBe('copilot --agent other');
+      expect(warnSpy).not.toHaveBeenCalled(); // No warning — user override is intentional
       warnSpy.mockRestore();
     });
 
@@ -289,14 +289,60 @@ describe('copilot-cli-builder', () => {
       warnSpy.mockRestore();
     });
 
-    it('strips --agent=value syntax from additionalArgs when agentFlag is set', () => {
+    it('user --agent=value syntax in additionalArgs passes through when agentFlag would be set', () => {
       const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const cmd = buildLaunchCommandForConfig({
         id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--agent=other-agent --yolo',
       });
-      expect(cmd).toBe('copilot --agent squad --yolo');
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('--agent'));
+      expect(cmd).toBe('copilot --agent=other-agent --yolo');
+      expect(warnSpy).not.toHaveBeenCalled(); // No warning — user override is intentional
       warnSpy.mockRestore();
+    });
+
+    it('user --agent in per-config additionalArgs overrides derived flag (standalone agent)', () => {
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-plugin/my-agent', universe: 'standalone', additionalArgs: '--agent plugin:my-plugin/my-agent',
+      });
+      expect(cmd).toBe('copilot --agent plugin:my-plugin/my-agent');
+    });
+
+    it('user --agent in per-config additionalArgs overrides derived flag (squad agent)', () => {
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty', additionalArgs: '--agent dev-team:coder',
+      });
+      expect(cmd).toBe('copilot --agent dev-team:coder');
+    });
+
+    it('user --agent=value syntax overrides derived flag', () => {
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-agent', universe: 'standalone', additionalArgs: '--agent=plugin:my-agent',
+      });
+      expect(cmd).toBe('copilot --agent=plugin:my-agent');
+    });
+
+    it('user --agent in global additionalArgs overrides derived flag', () => {
+      mockGet.mockImplementation((key: string, def?: unknown) => {
+        if (key === 'additionalArgs') return '--agent custom-agent';
+        return def;
+      });
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-squad', universe: 'rick-and-morty',
+      });
+      expect(cmd).toBe('copilot --agent custom-agent');
+    });
+
+    it('user --agent with other flags preserved', () => {
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-agent', universe: 'standalone', additionalArgs: '--agent plugin:my-agent --yolo', model: 'gpt-5',
+      });
+      expect(cmd).toBe('copilot --model gpt-5 --agent plugin:my-agent --yolo');
+    });
+
+    it('no user --agent — existing behavior preserved (regression)', () => {
+      const cmd = buildLaunchCommandForConfig({
+        id: 'my-agent', universe: 'standalone',
+      });
+      expect(cmd).toBe('copilot --agent my-agent');
     });
 
     it('uses per-agent command override', () => {

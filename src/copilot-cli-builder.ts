@@ -96,16 +96,6 @@ export function buildCopilotCommand(options: CopilotCommandOptions = {}): string
  * Merges per-config additionalArgs with global `editless.cli.additionalArgs`.
  */
 export function buildLaunchCommandForConfig(config: Pick<AgentTeamConfig, 'id' | 'universe' | 'model' | 'additionalArgs' | 'command'>): string {
-  // Derive --agent flag value from id/universe
-  let agentFlag: string | undefined;
-  if (config.id === 'builtin:copilot-cli') {
-    agentFlag = undefined;
-  } else if (config.universe === 'standalone') {
-    agentFlag = config.id;
-  } else {
-    agentFlag = 'squad';
-  }
-
   const globalAdditional = vscode.workspace
     .getConfiguration('editless.cli')
     .get<string>('additionalArgs', '');
@@ -117,9 +107,28 @@ export function buildLaunchCommandForConfig(config: Pick<AgentTeamConfig, 'id' |
     .split(/\s+/)
     .filter(Boolean);
 
+  // Check if user provided their own --agent flag in additionalArgs
+  const userProvidedAgent = allExtra.some(arg => {
+    const flag = arg.startsWith('--') ? arg.split(/[= ]/)[0] : null;
+    return flag === '--agent';
+  });
+
+  // Derive --agent flag value from id/universe (but only if user didn't provide one)
+  let agentFlag: string | undefined;
+  if (userProvidedAgent) {
+    agentFlag = undefined; // User override takes precedence
+  } else if (config.id === 'builtin:copilot-cli') {
+    agentFlag = undefined;
+  } else if (config.universe === 'standalone') {
+    agentFlag = config.id;
+  } else {
+    agentFlag = 'squad';
+  }
+
   // Strip --model/--agent from additionalArgs when structured config fields set them
   const configFlags = new Map<string, string>();
   if (config.model) { configFlags.set('--model', 'config.model'); }
+  // Only strip --agent if we're using the derived agentFlag (not user-provided)
   if (agentFlag) { configFlags.set('--agent', 'agentFlag'); }
 
   if (configFlags.size > 0) {
