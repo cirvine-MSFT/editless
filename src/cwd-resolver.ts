@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as os from 'os';
-import * as path from 'path';
 
 /** Normalise path separators to forward-slash for comparison. */
 function normSep(p: string): string {
@@ -18,7 +17,11 @@ function deriveAgentProjectRoot(agentFilePath: string): string {
     }
   }
 
-  return path.dirname(agentFilePath);
+  const lastSlash = norm.lastIndexOf('/');
+  if (lastSlash > 0) {
+    return agentFilePath.substring(0, lastSlash);
+  }
+  return agentFilePath;
 }
 
 /**
