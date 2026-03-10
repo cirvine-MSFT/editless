@@ -27264,3 +27264,472 @@ The SKIP_FILES set only exempts entire files. As more modules import gencyResol
 **Rationale:** Pure functions are trivially testable. Keeping them inline in functions that depend on `vscode` forces tests to mock the entire VS Code API just to test string parsing. Extraction costs nothing and enables focused tests.
 
 **Impact:** Future ADO or config parsing logic should follow this pattern — extract pure helpers, test them independently.
+
+---
+
+### 2026-03-10: PR #513 Tree Refresh Performance — Multi-Stage Review
+
+# Code Review: PR #513 — Tree View Refresh Performance
+
+**Reviewer:** Rick (Lead — design, boundaries, abstractions)
+**PR:** `squad/tree-refresh-perf` — async discovery + debounce
+**Verdict:** Request changes — good idea, over-executed, has bugs
+
+---
+
+## Executive Summary
+
+The PR adds ~500 lines of production code (plus ~150 lines of test changes) to make tree-view refresh non-blocking. The debounce and the removal of redundant refresh calls are solid wins. But the sync→async duplication strategy creates a **~400-line maintenance liability** with near-identical function pairs in 4 files. Worse, the async versions **aren't fully async** — they still call sync filesystem helpers in the hot path, undermining the stated goal.
+
+I'd accept the architectural direction but request significant cuts.
+
+---
+
+## 🔴 Bugs
+
+### 1. Unhandled Promise rejection in `invalidate()` / `invalidateAll()`
+
+**File:** `agent-state-manager.ts:71`
+
+```typescript
+invalidate(squadId: string): void {
+    this._cache.delete(squadId);
+    this.refreshStateAsync(squadId); // ← fire-and-forget Promise
+}
+```
+
+`refreshStateAsync` returns a `Promise<void>` that is never awaited or caught. If the async scan throws, this becomes an unhandled rejection that crashes the extension host. Same pattern in `invalidateAll()` at line 79.
+
+**Fix:** Use `void this.refreshStateAsync(squadId).catch(...)` or at minimum prefix with `void` and add a `.catch(err => console.warn(...))`.
+
+### 2. Dead code: sync `refreshDiscovery` function
+
+**File:** `extension-discovery.ts:71-82`
+
+The local `refreshDiscovery()` function (sync version, lines 71-82) is **never called**. Initial discovery at line 45 calls `discoverAll` directly. The returned `refreshDiscovery` at line 131 calls `refreshDiscoveryAsync`. This 12-line function is dead code.
+
+---
+
+## 🟡 Design Issues
+
+### 3. Async versions are not truly non-blocking
+
+The async functions in `discoverAllAsync` and `discoverPluginsAsync` still call these **sync** helpers in the hot path:
+
+| Sync call | File | Line(s) |
+|-----------|------|---------|
+| `resolveTeamMd()` | `unified-discovery.ts` | 303 |
+| `resolveTeamDir()` | `unified-discovery.ts` | 316, 349 |
+| `isGitRepo()` → `fs.statSync` | `unified-discovery.ts` | 372 |
+| `tryResolve()` → `fs.existsSync`, `fs.readFileSync`, `fs.readdirSync` | `agent-discovery.ts` | 451, 460 |
+
+This means `discoverPluginsAsync` still blocks on the full sync plugin resolution chain. And `discoverAllAsync` still does sync stat checks for every discovered item. **You've paid the duplication cost without getting fully non-blocking behavior.**
+
+**Recommendation:** Either make these helpers async too (more duplication — see below), or acknowledge that the sync calls here are cheap (stat/exists) and only the heavy operations need to be async. If the latter, document this clearly so the next person doesn't assume "Async" means "fully non-blocking."
+
+### 4. ~400 lines of near-identical sync/async duplication
+
+This is the core concern. The PR duplicates:
+
+| Module | Sync functions | Async clones | Duplicated lines |
+|--------|---------------|--------------|-----------------|
+| `agent-discovery.ts` | `collectAgentMdFiles`, `collectAgentMdFilesRecursive`, `readAndPushAgent`, `discoverPlugins`, `discoverAgentsInWorkspace`, `discoverAgentsInCopilotDir` | All 6 have `*Async` clones | ~148 |
+| `discovery.ts` | `readUniverseFromRegistry`, `discoverAgentTeams` | Both have `*Async` clones | ~97 |
+| `scanner.ts` | `listFilesByMtime`, `parseRoster`, `parseCharter`, `scanSquad` | All 4 have `*Async` clones | ~98 |
+| `unified-discovery.ts` | `discoverAll`, `enrichWithWorktrees` | Both have `*Async` clones | ~153 |
+
+**Total: ~496 lines that are 90%+ identical to existing code.** Every bug fix or feature change to the discovery logic must now be applied to BOTH versions. This WILL diverge.
+
+**Recommendation — cut path (saves ~250-300 lines):**
+
+1. **Delete `discoverAllAsync` orchestration duplication.** Instead, write `discoverAllAsync` as a thin async wrapper that calls the existing private async leaf functions but shares the item-assembly and dedup logic via an extracted helper.
+
+2. **Extract shared logic from `enrichWithWorktrees` / `enrichWithWorktreesAsync`.** The only difference is `discoverWorktrees(path)` vs `await discoverWorktreesAsync(path)`. Extract the worktree-processing loop into a `processWorktreeResults(items, worktreeMap)` helper that both versions call after obtaining worktree data.
+
+3. **In `scanner.ts`, extract parse logic from I/O.** `parseRoster` and `parseRosterAsync` both parse the same markdown format. Extract `parseRosterContent(content: string): AgentInfo[]` and call it from both. Same for `parseCharter` → `parseCharterContent`. This saves ~40 lines and eliminates the parsing logic divergence risk.
+
+4. **In `agent-discovery.ts`, extract `pushAgent` from I/O.** `readAndPushAgent` and `readAndPushAgentAsync` both do: read file → parse → push. Extract the parse+push into `pushParsedAgent(id, content, filePath, source, seen, out, manifest?)` and have both wrappers call it. Saves ~15 lines.
+
+### 5. `refreshInFlight` boolean drops requests silently
+
+**File:** `extension-discovery.ts:50-67`
+
+If a refresh is in flight and a second request comes in, the second is silently dropped:
+
+```typescript
+if (refreshInFlight) return; // skip if already running
+```
+
+If the filesystem changed between the start of the first refresh and the second request, those changes are lost until the next event triggers another refresh.
+
+**Better pattern:**
+```typescript
+let refreshInFlight = false;
+let pendingRefresh = false;
+
+async function refreshDiscoveryAsync(): Promise<void> {
+  if (refreshInFlight) { pendingRefresh = true; return; }
+  refreshInFlight = true;
+  try { /* ... */ } finally {
+    refreshInFlight = false;
+    if (pendingRefresh) { pendingRefresh = false; void refreshDiscoveryAsync(); }
+  }
+}
+```
+
+This is not critical (the debounce layer above provides some protection), but it's a correctness gap.
+
+### 6. `_scheduleFire` is a leading-edge throttle, not a debounce
+
+**File:** `editless-tree.ts:69-75`
+
+```typescript
+private _scheduleFire(): void {
+    if (this._fireTimer !== undefined) return; // ← drops subsequent events
+    this._fireTimer = setTimeout(() => { ... }, 100);
+}
+```
+
+If events arrive at t=0, t=50, t=80, only the t=0 event schedules a fire. Events at t=50 and t=80 are dropped. The fire at t=100 WILL see the latest cache state, so this works in practice — but it's fragile. If a future change decouples the cache-write from the event-fire timing, this throttle will silently lose updates.
+
+Consider: is 100ms the right number? The debounce in `extension-discovery.ts` is 300ms. Having two different debounce/throttle layers with different timings makes the effective behavior hard to reason about.
+
+---
+
+## 🟢 Good Parts
+
+### 7. Debounce in tree provider — clear win
+The `_scheduleFire()` pattern, even as a leading-edge throttle, prevents the tree from rebuilding 5× per invalidateAll call. **This alone probably fixes the perceived performance issue.** Consider whether the debounce (15 lines) plus the `refreshInFlight` guard (5 lines) would have been sufficient WITHOUT all the async duplication.
+
+### 8. Removal of redundant `treeProvider.refresh()` calls
+- `extension-watchers.ts`: removed `treeProvider.refresh()` and `statusBar.update()` from the `teamMdWatcher.onDidCreate` handler — these are now handled by the debounced discovery.
+- `extension-discovery.ts`: removed `treeProvider.refresh()` from the SquadWatcher callback — `invalidate()` now triggers async re-scan which fires `onDidChange`.
+
+These are clean simplifications.
+
+### 9. Async worktree discovery — real win
+`discoverWorktreesAsync` (worktree-discovery.ts:37-48) replaces `execFileSync` with `execFile`. This is the single highest-value change: `execFileSync('git', ...)` can block for seconds on cold git operations. This 12-line function alone justified the PR.
+
+### 10. Exports are clean
+All async helpers are private to their modules. Only the 6 entry-point async functions are exported. Module boundaries haven't changed.
+
+---
+
+## 📋 Specific Asks
+
+1. **Fix the unhandled promise** in `invalidate()` / `invalidateAll()` — this is a bug.
+2. **Delete the dead `refreshDiscovery` function** at `extension-discovery.ts:71-82`.
+3. **Extract shared parsing logic** from at least `scanner.ts` (parseRosterContent, parseCharterContent) — low-effort, high-value DRY.
+4. **Add a comment** to `discoverAllAsync` documenting which sync calls remain and why they're acceptable.
+5. **Consider** whether the debounce + refreshInFlight alone (without the full async conversion) would have been sufficient. The debounce prevents rapid tree rebuilds. The async conversion prevents event-loop blocking. Both are valuable, but the debounce alone might have fixed the UX complaint at 1/20th the code cost.
+
+---
+
+## Verdict
+
+The direction is right — the extension host shouldn't block on refresh. But the execution creates ~400 lines of maintenance liability with incomplete async coverage. I'd like to see:
+
+- Bugs fixed (items 1, 2)
+- At minimum the parsing logic DRYed up (item 3)
+- An honest assessment of whether the full async conversion was necessary vs. just the debounce + async worktree discovery
+
+If the answer is "we need full async to prevent >100ms event loop blocks on large workspaces," that's fine — document that measurement and accept the duplication cost. But don't ship ~500 lines of duplicated code without evidence that the simpler approach wasn't enough.
+
+**Could we cut 200+ lines?** Yes. Items 2-4 above save ~60 lines. Extracting the shared orchestration logic from `enrichWithWorktrees` and `discoverAll` into helper functions that both sync/async versions call (passing in their worktree/agent results) could save another ~100-150 lines. If we ALSO scrap the full async conversion in favor of just async-worktree + debounce, we cut ~350 lines.
+
+---
+
+### 2026-03-10: Architecture Review: Tree Refresh Performance (PR #513)
+
+# Architecture Review: Tree Refresh Performance (PR #513)
+
+**Reviewer:** Morty (Extension Dev)
+**Date:** 2025-07-14
+**Status:** 🔴 Changes Requested
+
+## Executive Summary
+
+The PR attempts to improve performance by moving background refreshes to async, but it **retains synchronous file I/O** for the critical `getChildren` path. This defeats the purpose of the performance fix: expanding a tree node still blocks the extension host.
+
+Furthermore, the "dual-mode" (sync + async) architecture introduces significant code duplication and maintenance risk. The `refreshInFlight` guards are implemented incorrectly and will cause the extension to **drop file events** under load.
+
+## Critical Architecture Flaws
+
+### 1. The "Dual-Function" Pattern is a partial measure
+**Problem:** `AgentStateManager.getState()` remains synchronous and falls back to `scanSquad` (sync) on cache miss.
+**Impact:** When a user expands a squad node that isn't cached (or was just invalidated), the extension host **freezes** while `fs.readdir` and `fs.readFile` run synchronously. This is exactly what we are trying to fix.
+**Recommendation:** Delete the sync path entirely. Refactor `getState()` to return `Promise<SquadState>` and update `EditlessTreeProvider.getChildren` to `await` it. VS Code's `TreeDataProvider` supports returning a Promise—we should use it.
+
+### 2. `refreshInFlight` Guards Drop Events
+**Problem:**
+```typescript
+if (refreshInFlight) return; // skip if already running
+```
+**Impact:** If a new file event arrives while a refresh is in progress, it is effectively ignored.
+**Scenario:**
+1. `refreshDiscoveryAsync` starts (takes 2s).
+2. User adds a new agent file (at 0.5s).
+3. Watcher triggers `debouncedRefreshDiscovery`.
+4. Timer fires (at 0.8s), calls `refreshDiscoveryAsync`.
+5. Guard sees `refreshInFlight = true` and returns.
+6. First refresh finishes (at 2s). It *might* have missed the new file if the directory scan happened before 0.5s.
+7. The tree is now stale until the *next* unrelated event.
+**Recommendation:** Implement a "pending refresh" flag. If a refresh is requested while one is running, set the flag. When the current refresh finishes, check the flag and run again if needed.
+
+### 3. Code Duplication
+**Problem:** `scanSquad` and `scanSquadAsync` are nearly identical copies, differing only in `fs` vs `fs.promises`. Same for `discoverAll` / `discoverAllAsync`.
+**Impact:** Double maintenance burden. A bug fixed in one will likely remain in the other.
+**Recommendation:** Once we move to fully async `getState`, delete the synchronous versions.
+
+## Detailed Feedback
+
+### `EditlessTreeProvider`
+-   **Debounce Logic:** The 100ms debounce (coalescing) logic is sound for UI updates, but as noted by Summer, it lacks tests.
+-   **Async Invalidate:** `invalidate` clearing the cache and triggering `refreshStateAsync` is a good pattern *if* `refreshStateAsync` queues correctly. Currently, the `_pending` guard in `AgentStateManager` shares the same "drop event" bug as `extension-discovery.ts`.
+
+### `AgentStateManager`
+-   **Race Condition:** If `invalidate` is called, `refreshStateAsync` starts. If `getState` is called immediately after (e.g., by the user expanding the node), it hits the cache miss and triggers a **concurrent synchronous scan**. We end up scanning the same directory twice (once async, once sync).
+-   **Fix:** If `getState` is async and sees a pending refresh, it should just `await` that existing promise instead of starting a new scan.
+
+## Action Plan
+
+1.  **Refactor `AgentStateManager`:**
+    *   Change `getState(id)` to `getStateAsync(id): Promise<SquadState>`.
+    *   If a request is in flight for `id`, return the existing promise.
+    *   Remove `scanSquad` (sync).
+
+2.  **Refactor `EditlessTreeProvider`:**
+    *   Update `getChildren` to be `async` and await state.
+    *   This naturally shows the VS Code loading spinner for uncached items—better UX than freezing.
+
+3.  **Fix Concurrency Guards:**
+    *   Replace `if (running) return` with a `queued` flag pattern in `extension-discovery` and `AgentStateManager`.
+
+4.  **Consolidate Discovery:**
+    *   Remove `discoverAll` (sync) and `refreshDiscovery` (sync) unless absolutely required for activation blocking (unlikely).
+
+**Do not merge in current state.**
+
+---
+
+### 2026-03-10: Adversarial Test Review: PR #513 — Tree Refresh Performance
+
+# Adversarial Test Review: PR #513 — Tree Refresh Performance
+
+**Reviewer:** Summer (Product Designer, acting as QA)
+**Date:** 2025-07-14
+**Verdict:** ⚠️ Tests pass, but several critical async/debounce edge cases are untested.
+
+---
+
+## Summary
+
+The test changes mechanically adapt existing tests to the new async flow. They replace sync assertions (`expect(scanSquad).toHaveBeenCalledTimes(3)`) with async waits (`await vi.waitFor(…)`), and add `vi.useFakeTimers()` + `vi.advanceTimersByTime(150)` to account for the 100ms debounce in `_scheduleFire()`. This is necessary, but it's the minimum — the tests prove the refactored code *doesn't crash*, not that the new async/debounce behavior is *correct*.
+
+---
+
+## Findings
+
+### 🔴 CRITICAL: No test for `_scheduleFire()` coalescing behavior
+
+The core value proposition of this PR is that rapid-fire change events get coalesced into a single tree rebuild. **There is zero test coverage for this.** The `_scheduleFire()` method uses a "fire once, ignore until fired" pattern:
+
+```ts
+private _scheduleFire(): void {
+  if (this._fireTimer !== undefined) return;  // ← second+ calls are no-ops
+  this._fireTimer = setTimeout(() => { ... }, 100);
+}
+```
+
+**Missing test:** Call `_scheduleFire()` (indirectly via `stateManager.onDidChange`) 5 times in rapid succession. Assert `onDidChangeTreeData` fires exactly once after 100ms, not 5 times.
+
+**Risk:** Without this test, a future refactor could remove the `if` guard or change the timer semantics and nothing would catch it.
+
+### 🔴 CRITICAL: No test for `refreshInFlight` guard in `extension-discovery.ts`
+
+The `refreshDiscoveryAsync()` function has a critical guard:
+
+```ts
+let refreshInFlight = false;
+async function refreshDiscoveryAsync(): Promise<void> {
+  if (refreshInFlight) return; // skip if already running
+  refreshInFlight = true;
+  try { ... } finally { refreshInFlight = false; }
+}
+```
+
+**Missing tests:**
+1. **Guard blocks concurrent calls:** Start `refreshDiscoveryAsync()`, call it again before the first completes, assert only one `discoverAllAsync` call happens.
+2. **Guard resets after error:** Make `discoverAllAsync` throw, then call `refreshDiscoveryAsync()` again — it should NOT be permanently blocked. The `finally` block handles this, but there's no test proving it.
+
+**Risk:** If the `finally` block is accidentally removed, `refreshInFlight` stays `true` forever and the tree never refreshes again. This is a production-killing bug with no test safety net.
+
+### 🔴 CRITICAL: No test for `_pending` guard in `AgentStateManager.refreshStateAsync()`
+
+Same pattern, same problem:
+
+```ts
+async refreshStateAsync(squadId: string): Promise<void> {
+  if (this._pending.has(squadId)) return;
+  ...
+  this._pending.add(squadId);
+  try { ... } finally { this._pending.delete(squadId); }
+}
+```
+
+**Missing tests:**
+1. Call `invalidate('a')` twice rapidly — second call should be a no-op while the first is pending.
+2. Make `scanSquadAsync` reject — assert the squad ID is cleaned from `_pending` so future invalidations aren't blocked.
+
+### 🟡 HIGH: `invalidate()` returns `void` but fires an unhandled promise
+
+```ts
+invalidate(squadId: string): void {
+  this._cache.delete(squadId);
+  this.refreshStateAsync(squadId); // ← no `void`, no `.catch()`
+}
+```
+
+If `scanSquadAsync` rejects, this creates an unhandled promise rejection. The test mocks never reject, so this path is untested. The production code should either `void this.refreshStateAsync(…)` or add `.catch()`, and there should be a test for the rejection case.
+
+### 🟡 HIGH: Dispose-during-async-scan is untested
+
+**Scenario:** `invalidateAll()` kicks off async scans for all squads. Before they complete, `dispose()` is called on `AgentStateManager`. The async callbacks then try to call `this._cache.set()` and `this._onDidChange.fire()` on a disposed emitter.
+
+In `editless-tree.ts`, `dispose()` correctly calls `clearTimeout(this._fireTimer)`, but `AgentStateManager.dispose()` only disposes the emitter — it doesn't cancel in-flight async scans. If `scanSquadAsync` resolves after dispose, `this._onDidChange.fire()` will throw on a disposed emitter.
+
+**Missing test:** Dispose the manager while async scans are pending. Assert no crash.
+
+### 🟡 MEDIUM: Timer tests use 150ms — magic number without rationale
+
+All the debounce tests use `vi.advanceTimersByTime(150)` to flush the 100ms timer. There's no test that 99ms is *too early* (event hasn't fired yet). A proper debounce test should:
+
+1. Advance 99ms → assert listener NOT called
+2. Advance 1ms more → assert listener called
+
+This ensures the timer value hasn't been accidentally changed.
+
+### 🟡 MEDIUM: `invalidateAll()` only re-scans `type === 'squad'` items
+
+```ts
+invalidateAll(): void {
+  this._cache.clear();  // clears ALL cache entries
+  for (const disc of this._discoveredItems) {
+    if (disc.type === 'squad') {  // only re-scans squads
+      this.refreshStateAsync(disc.id);
+    }
+  }
+}
+```
+
+If a non-squad item was cached (via `getState()`), `invalidateAll()` clears it but doesn't re-scan it. The next `getState()` call will fall through to the sync path. This may be intentional, but there's no test documenting this behavior.
+
+### 🟢 LOW: `vi.waitFor()` assertions are weaker than `toHaveBeenCalledOnce()`
+
+Several tests changed from `expect(listener).toHaveBeenCalledOnce()` to `expect(listener).toHaveBeenCalled()`. For example:
+
+```ts
+// Before:
+expect(listener).toHaveBeenCalledOnce();
+// After:
+expect(listener).toHaveBeenCalled();
+```
+
+This is less precise. In the debounced world, the test should assert the listener was called **exactly once** (proving coalescing worked), not just "at least once."
+
+### 🟢 LOW: `extension-commands.test.ts` removed `mockTreeRefresh` assertions
+
+Multiple tests changed from asserting both `mockDiscoverAll` and `mockTreeRefresh` to only asserting `mockDiscoverAllAsync`. This makes sense because the squad watcher callback no longer calls `treeProvider.refresh()`, but the tests don't verify that `treeProvider.invalidate(squadId)` was called instead — which is the new behavior.
+
+---
+
+## Recommended Test Additions
+
+| Priority | Test | File |
+|----------|------|------|
+| 🔴 P0 | `_scheduleFire` coalesces N events into 1 fire | `tree-providers.test.ts` |
+| 🔴 P0 | `refreshInFlight` blocks concurrent calls | `extension-discovery` or new test |
+| 🔴 P0 | `refreshInFlight` resets after async rejection | same |
+| 🔴 P0 | `_pending` guard blocks duplicate `refreshStateAsync` | `agent-state-manager.test.ts` |
+| 🔴 P0 | `_pending` cleans up after `scanSquadAsync` rejects | same |
+| 🟡 P1 | dispose mid-scan doesn't crash | `agent-state-manager.test.ts` |
+| 🟡 P1 | 99ms is too early / 100ms fires (boundary test) | `tree-providers.test.ts` |
+| 🟡 P1 | Restore `toHaveBeenCalledOnce()` where coalescing is the point | all three files |
+| 🟢 P2 | `invalidateAll` for mixed squad+agent items | `agent-state-manager.test.ts` |
+
+---
+
+## Conclusion
+
+The tests are **functional but not adversarial**. They prove the happy path works with the new async/debounce plumbing. They do NOT prove the guards (`refreshInFlight`, `_pending`, `_scheduleFire` dedup) actually work, and they do NOT cover error/dispose edge cases. The debounce coalescing — the entire *point* of this PR — has zero dedicated test coverage.
+
+Recommendation: **Do not merge without at least the P0 tests.**
+
+
+
+---
+
+# Decision: User-Specified Flags Override Derived Flags in CLI Builder
+
+**Date:** 2026-03-08  
+**Author:** Morty (Extension Dev)  
+**Context:** Issue #519 — Allow user-specified --agent flag in additionalArgs for plugin agents
+
+## Problem
+
+Plugin agents require `plugin:namespace/agent-name` syntax for the `--agent` CLI flag, but the extension was:
+1. Deriving agent flag from `config.id` without the `plugin:` prefix
+2. Stripping any user-specified `--agent` from `additionalArgs` when the config derives an agent flag
+
+This prevented users from specifying the correct agent syntax for plugin agents.
+
+## Decision
+
+User-specified flags in `additionalArgs` now **take precedence** over derived flags:
+
+1. After merging per-config and global `additionalArgs`, we check if user provided `--agent` (either `--agent value` or `--agent=value`)
+2. If found: skip deriving `agentFlag`, do NOT strip user's `--agent`, let it pass through naturally
+3. If not found: derive `agentFlag` as before (existing behavior unchanged)
+
+## Implementation Pattern
+
+```typescript
+// Early detection of user-provided flag
+const userProvidedAgent = allExtra.some(arg => {
+  const flag = arg.startsWith('--') ? arg.split(/[= ]/)[0] : null;
+  return flag === '--agent';
+});
+
+// Conditional derivation
+let agentFlag: string | undefined;
+if (userProvidedAgent) {
+  agentFlag = undefined; // User override takes precedence
+} else {
+  // Normal derivation logic
+}
+
+// Only strip if using derived flag (not user-provided)
+if (agentFlag) { 
+  configFlags.set('--agent', 'agentFlag'); 
+}
+```
+
+## Rationale
+
+- Plugin agent paths can change frequently (e.g., `plugin:my-plugin/agent`, `dev-team:coder`)
+- Users need flexibility to specify the exact agent syntax required
+- Derived flags are conveniences; user intent should always win
+- This pattern is extensible to other flags if needed in the future
+
+## Impact
+
+- ✅ Enables plugin agents with custom syntax
+- ✅ Maintains backward compatibility (existing behavior when no user override)
+- ✅ No breaking changes to API or config schema
+- ✅ All 76 tests pass, including 6 new tests for override behavior
+
+## Related
+
+- Issue #519
+- Commit: 79509a6
+
