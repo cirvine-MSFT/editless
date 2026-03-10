@@ -312,7 +312,9 @@ function scanDirForAgents(
   out: DiscoveredAgent[],
 ): void {
   const ghAgentsDir = path.join(dirPath, '.github', 'agents');
+  const copilotAgentsDir = path.join(dirPath, '.copilot', 'agents');
   for (const fp of collectAgentMdFiles(ghAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, out); }
+  for (const fp of collectAgentMdFiles(copilotAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, out); }
   for (const fp of collectAgentMdFiles(dirPath)) { readAndPushAgent(fp, 'workspace', seen, out); }
 }
 
@@ -342,7 +344,7 @@ function discoverAgentsRecursive(
   }
 }
 
-/** Scan workspace folders for agent files. Returns discovered agents. */
+/** Scan workspace folders for agent files (shallow — root level only for fast activation). */
 export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFolderLike[]): DiscoveredAgent[] {
   const agents: DiscoveredAgent[] = [];
   const seen = new Map<string, string>();
@@ -350,7 +352,6 @@ export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFo
   for (const folder of workspaceFolders) {
     const root = folder.uri.fsPath;
     scanDirForAgents(root, seen, agents);
-    discoverAgentsRecursive(root, seen, agents);
   }
 
   return agents;
@@ -527,7 +528,9 @@ async function scanDirForAgentsAsync(
   out: DiscoveredAgent[],
 ): Promise<void> {
   const ghAgentsDir = path.join(dirPath, '.github', 'agents');
+  const copilotAgentsDir = path.join(dirPath, '.copilot', 'agents');
   for (const fp of await collectAgentMdFilesAsync(ghAgentsDir)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
+  for (const fp of await collectAgentMdFilesAsync(copilotAgentsDir)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
   for (const fp of await collectAgentMdFilesAsync(dirPath)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
 }
 

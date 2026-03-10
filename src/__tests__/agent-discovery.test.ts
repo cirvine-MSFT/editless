@@ -4,6 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import {
   discoverAgentsInWorkspace,
+  discoverAgentsInWorkspaceAsync,
   discoverAgentsInCopilotDir,
   discoverAllAgents,
   agencyResolver,
@@ -234,10 +235,10 @@ describe('discoverAgentsInWorkspace', () => {
     consoleWarnSpy.mockRestore();
   });
 
-  it('should discover agents in subdirectories of workspace folder', () => {
+  it('should discover agents in subdirectories of workspace folder (async)', async () => {
     writeFixture('ws/alfred/.github/agents/alfred.agent.md', '# Alfred\n> A helpful agent.\n');
 
-    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+    const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('alfred');
@@ -245,46 +246,55 @@ describe('discoverAgentsInWorkspace', () => {
     expect(result[0].description).toBe('A helpful agent.');
   });
 
-  it('should discover agents at multiple nesting levels', () => {
+  it('should discover agents at multiple nesting levels (async)', async () => {
     writeFixture('ws/project-a/.github/agents/alpha.agent.md', '# Alpha\n');
     writeFixture('ws/project-b/sub/beta.agent.md', '# Beta\n');
 
-    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+    const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
 
     expect(result).toHaveLength(2);
     expect(result.map(a => a.id)).toContain('alpha');
     expect(result.map(a => a.id)).toContain('beta');
   });
 
-  it('should skip node_modules and other excluded directories', () => {
+  it('should skip node_modules and other excluded directories (async)', async () => {
     writeFixture('ws/node_modules/.github/agents/hidden.agent.md', '# Hidden\n');
     writeFixture('ws/dist/secret.agent.md', '# Secret\n');
     writeFixture('ws/real/real.agent.md', '# Real\n');
 
-    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+    const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('real');
   });
 
-  it('should skip dot-directories during recursive scan', () => {
+  it('should skip dot-directories during recursive scan (async)', async () => {
     writeFixture('ws/.hidden-dir/.github/agents/invisible.agent.md', '# Invisible\n');
     writeFixture('ws/visible/visible.agent.md', '# Visible\n');
 
-    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+    const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
 
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('visible');
   });
 
-  it('should deduplicate agents found at root and in subdirectories', () => {
+  it('should deduplicate agents found at root and in subdirectories (async)', async () => {
     writeFixture('ws/.github/agents/shared.agent.md', '# Shared Root\n');
     writeFixture('ws/child/.github/agents/shared.agent.md', '# Shared Child\n');
 
-    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+    const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
 
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('Shared Root');
+  });
+
+  it('should discover repo-local agents in .copilot/agents within workspace subdirectories (async)', async () => {
+    writeFixture('ws/proj/.copilot/agents/foo.agent.md', '# Foo\n');
+
+    const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    const fooAgent = result.find(a => a.id === 'foo');
+    expect(fooAgent).toBeDefined();
   });
 });
 
