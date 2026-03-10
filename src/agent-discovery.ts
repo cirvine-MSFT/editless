@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as fsp from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { EXCLUDED_DIRS } from './discovery';
 import type { WorkspaceFolderLike } from './types';
 
 /** Source of agent discovery. */
@@ -305,16 +306,52 @@ function readAndPushAgent(
   }
 }
 
-/** Scan workspace folders for agent files. Returns discovered agents. */
+function scanDirForAgents(
+  dirPath: string,
+  seen: Map<string, string>,
+  out: DiscoveredAgent[],
+): void {
+  const ghAgentsDir = path.join(dirPath, '.github', 'agents');
+  const copilotAgentsDir = path.join(dirPath, '.copilot', 'agents');
+  for (const fp of collectAgentMdFiles(ghAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, out); }
+  for (const fp of collectAgentMdFiles(copilotAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, out); }
+  for (const fp of collectAgentMdFiles(dirPath)) { readAndPushAgent(fp, 'workspace', seen, out); }
+}
+
+function discoverAgentsRecursive(
+  dirPath: string,
+  seen: Map<string, string>,
+  out: DiscoveredAgent[],
+  depth: number = 0,
+  maxDepth: number = 4,
+): void {
+  if (depth > maxDepth) { return; }
+
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) { continue; }
+    if (EXCLUDED_DIRS.has(entry.name.toLowerCase()) || entry.name.startsWith('.')) { continue; }
+
+    const childPath = path.resolve(dirPath, entry.name);
+    scanDirForAgents(childPath, seen, out);
+    discoverAgentsRecursive(childPath, seen, out, depth + 1, maxDepth);
+  }
+}
+
+/** Scan workspace folders for agent files (shallow — root level only for fast activation). */
 export function discoverAgentsInWorkspace(workspaceFolders: readonly WorkspaceFolderLike[]): DiscoveredAgent[] {
   const agents: DiscoveredAgent[] = [];
   const seen = new Map<string, string>();
 
   for (const folder of workspaceFolders) {
     const root = folder.uri.fsPath;
-    const ghAgentsDir = path.join(root, '.github', 'agents');
-    for (const fp of collectAgentMdFiles(ghAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, agents); }
-    for (const fp of collectAgentMdFiles(root)) { readAndPushAgent(fp, 'workspace', seen, agents); }
+    scanDirForAgents(root, seen, agents);
   }
 
   return agents;
@@ -485,6 +522,44 @@ async function discoverPluginsAsync(pluginsDir: string): Promise<PluginManifest[
   return plugins;
 }
 
+async function scanDirForAgentsAsync(
+  dirPath: string,
+  seen: Map<string, string>,
+  out: DiscoveredAgent[],
+): Promise<void> {
+  const ghAgentsDir = path.join(dirPath, '.github', 'agents');
+  const copilotAgentsDir = path.join(dirPath, '.copilot', 'agents');
+  for (const fp of await collectAgentMdFilesAsync(ghAgentsDir)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
+  for (const fp of await collectAgentMdFilesAsync(copilotAgentsDir)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
+  for (const fp of await collectAgentMdFilesAsync(dirPath)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
+}
+
+async function discoverAgentsRecursiveAsync(
+  dirPath: string,
+  seen: Map<string, string>,
+  out: DiscoveredAgent[],
+  depth: number = 0,
+  maxDepth: number = 4,
+): Promise<void> {
+  if (depth > maxDepth) { return; }
+
+  let entries: fs.Dirent[];
+  try {
+    entries = await fsp.readdir(dirPath, { withFileTypes: true });
+  } catch {
+    return;
+  }
+
+  for (const entry of entries) {
+    if (!entry.isDirectory()) { continue; }
+    if (EXCLUDED_DIRS.has(entry.name.toLowerCase()) || entry.name.startsWith('.')) { continue; }
+
+    const childPath = path.resolve(dirPath, entry.name);
+    await scanDirForAgentsAsync(childPath, seen, out);
+    await discoverAgentsRecursiveAsync(childPath, seen, out, depth + 1, maxDepth);
+  }
+}
+
 /** Async scan of workspace folders for agent files. */
 export async function discoverAgentsInWorkspaceAsync(workspaceFolders: readonly WorkspaceFolderLike[]): Promise<DiscoveredAgent[]> {
   const agents: DiscoveredAgent[] = [];
@@ -492,9 +567,8 @@ export async function discoverAgentsInWorkspaceAsync(workspaceFolders: readonly 
 
   for (const folder of workspaceFolders) {
     const root = folder.uri.fsPath;
-    const ghAgentsDir = path.join(root, '.github', 'agents');
-    for (const fp of await collectAgentMdFilesAsync(ghAgentsDir)) { await readAndPushAgentAsync(fp, 'workspace', seen, agents); }
-    for (const fp of await collectAgentMdFilesAsync(root)) { await readAndPushAgentAsync(fp, 'workspace', seen, agents); }
+    await scanDirForAgentsAsync(root, seen, agents);
+    await discoverAgentsRecursiveAsync(root, seen, agents);
   }
 
   return agents;

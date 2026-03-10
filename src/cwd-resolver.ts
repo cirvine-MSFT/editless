@@ -7,6 +7,23 @@ function normSep(p: string): string {
   return p.replace(/\\/g, '/');
 }
 
+function deriveAgentProjectRoot(agentFilePath: string): string {
+  const norm = normSep(agentFilePath);
+
+  for (const marker of ['/.github/agents/', '/.copilot/agents/']) {
+    const idx = norm.indexOf(marker);
+    if (idx > 0) {
+      return agentFilePath.substring(0, idx);
+    }
+  }
+
+  const lastSlash = norm.lastIndexOf('/');
+  if (lastSlash > 0) {
+    return agentFilePath.substring(0, lastSlash);
+  }
+  return agentFilePath;
+}
+
 /**
  * Determines the correct CWD for a terminal based on the agent type:
  *
@@ -14,9 +31,9 @@ function normSep(p: string): string {
  *    `~/.copilot/installed-plugins/`, or `~/.config/copilot/agents/`)
  *    → user home directory
  * 2. **Repo agents** (path inside a workspace folder under `.github/agents/`
- *    or `.copilot/agents/`) → that workspace folder root (≈ repo root)
- * 3. **Workspace-dir agents** (path inside any workspace folder) → that
- *    workspace folder root
+ *    or `.copilot/agents/`) → the project root derived from the agent path
+ * 3. **Workspace-dir agents** (path inside any workspace folder) → the
+ *    agent file's parent directory
  * 4. Otherwise → return the original path unchanged.
  */
 export function resolveTerminalCwd(agentPath: string | undefined): string | undefined {
@@ -37,13 +54,13 @@ export function resolveTerminalCwd(agentPath: string | undefined): string | unde
       if (norm.startsWith(folderPath + '/') || norm === folderPath) {
         // Squad directories should use their own path as CWD so the
         // Copilot CLI can discover .squad/ or squad.agent.md at the root.
-        // Agent files use the workspace folder root.
+        // Agent files derive their project root from the file path.
         try {
           if (fs.statSync(agentPath).isDirectory()) {
             return agentPath;
           }
-        } catch { /* path doesn't exist — fall through to workspace root */ }
-        return folder.uri.fsPath;
+        } catch { /* path doesn't exist — fall through */ }
+        return deriveAgentProjectRoot(agentPath);
       }
     }
   }

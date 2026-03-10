@@ -3032,9 +3032,9 @@ describe('TerminalManager', () => {
     });
 
     // -- Workspace-dir agents (inside workspace but not under known agent dirs) --
-    it('resolveTerminalCwd returns workspace root for agent inside workspace folder', () => {
+    it('resolveTerminalCwd returns parent directory for agent inside workspace subfolder', () => {
       mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/project' } }];
-      expect(resolveTerminalCwd('/home/user/project/tools/my-agent')).toBe('/home/user/project');
+      expect(resolveTerminalCwd('/home/user/project/tools/my-agent')).toBe('/home/user/project/tools');
     });
 
     it('resolveTerminalCwd returns correct workspace root in multi-root workspace', () => {
@@ -3045,9 +3045,25 @@ describe('TerminalManager', () => {
       expect(resolveTerminalCwd('/home/user/project-b/.github/agents/bot')).toBe('/home/user/project-b');
     });
 
-    it('resolveTerminalCwd returns workspace root for workspace-dir agent on Windows', () => {
+    it('resolveTerminalCwd returns parent directory for workspace-dir agent on Windows', () => {
       mockWorkspaceFolders.value = [{ uri: { fsPath: 'C:\\Users\\user\\project' } }];
-      expect(resolveTerminalCwd('C:\\Users\\user\\project\\tools\\agent')).toBe('C:\\Users\\user\\project');
+      expect(resolveTerminalCwd('C:\\Users\\user\\project\\tools\\agent')).toBe('C:\\Users\\user\\project\\tools');
+    });
+
+    // -- Subdirectory agents (discovered in workspace subdirectories) ----------
+    it('resolveTerminalCwd returns subdirectory project root for .github/agents agent', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/workspace' } }];
+      expect(resolveTerminalCwd('/home/user/workspace/alfred/.github/agents/alfred.agent.md')).toBe('/home/user/workspace/alfred');
+    });
+
+    it('resolveTerminalCwd returns subdirectory project root on Windows', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: 'C:\\workspace' } }];
+      expect(resolveTerminalCwd('C:\\workspace\\alfred\\.github\\agents\\alfred.agent.md')).toBe('C:\\workspace\\alfred');
+    });
+
+    it('resolveTerminalCwd returns subdirectory project root for .copilot/agents agent', () => {
+      mockWorkspaceFolders.value = [{ uri: { fsPath: '/home/user/workspace' } }];
+      expect(resolveTerminalCwd('/home/user/workspace/myproject/.copilot/agents/helper.agent.md')).toBe('/home/user/workspace/myproject');
     });
 
     // -- Fallback: non-matching path returns as-is ----------------------------
