@@ -154,7 +154,7 @@ export async function fetchAdoWorkItems(
   
   for (let i = 0; i < ids.length && i < limit; i += batchSize) {
     const batchIds = ids.slice(i, Math.min(i + batchSize, limit));
-    const detailsUrl = `https://dev.azure.com/${orgName}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Id,System.Title,System.State,System.WorkItemType,System.AssignedTo,System.AreaPath,System.Tags,System.Parent&api-version=7.1`;
+    const detailsUrl = `https://dev.azure.com/${orgName}/${encodeURIComponent(project)}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Id,System.Title,System.State,System.WorkItemType,System.AssignedTo,System.AreaPath,System.Tags,System.Parent&api-version=7.1`;
 
     interface WorkItemDetail {
       id: number;
