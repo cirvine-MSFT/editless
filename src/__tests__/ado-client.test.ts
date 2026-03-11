@@ -11,7 +11,7 @@ vi.mock('https', () => ({
   request: mockHttpsRequest,
 }));
 
-import { fetchAdoWorkItems, fetchAdoPRs } from '../ado-client';
+import { fetchAdoWorkItems, fetchAdoPRs, fetchAdoMe, _resetAdoMeCache } from '../ado-client';
 
 /**
  * Creates a mock HTTP response that immediately fires data+end events
@@ -154,25 +154,95 @@ describe('fetchAdoWorkItems', () => {
     });
 
     await fetchAdoWorkItems('myorg', 'proj', 'test-pat', 50);
-    // The limit is used to cap the number of work items fetched
-    expect(capturedPath).toBeTruthy();
+    expect(capturedPath).toContain('$top=50');
   });
 
-  it('should respect default limit of 200', async () => {
-    // Setup a successful WIQL response with 250 IDs
-    const ids = Array.from({ length: 250 }, (_, i) => ({ id: i + 1 }));
-    setupRequestResponse(200, JSON.stringify({ workItems: ids }));
-    
-    let getCallCount = 0;
-    const idsRequested: string[] = [];
+  it('should include $top in WIQL POST URL with default limit', async () => {
+    let capturedPath = '';
+    mockHttpsRequest.mockImplementation((opts: { path?: string }, _cb: Function) => {
+      capturedPath = opts.path ?? '';
+      const reqListeners = new Map<string, Function>();
+      const req = {
+        on: (event: string, handler: Function) => { reqListeners.set(event, handler); return req; },
+        write: vi.fn(),
+        end: vi.fn(() => {
+          Promise.resolve().then(() => reqListeners.get('error')?.(new Error('stop')));
+        }),
+        destroy: vi.fn(),
+      };
+      return req;
+    });
+
+    await fetchAdoWorkItems('myorg', 'proj', 'test-pat');
+    expect(capturedPath).toContain('$top=200');
+  });
+
+  it('should send both recent and @me WIQL queries', async () => {
+    const capturedBodies: string[] = [];
+    mockHttpsRequest.mockImplementation((_opts: unknown, cb: Function) => {
+      const resListeners = new Map<string, Function>();
+      const res = {
+        statusCode: 200,
+        on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+        resume: vi.fn(),
+      };
+      const reqListeners = new Map<string, Function>();
+      const req = {
+        on: (event: string, handler: Function) => { reqListeners.set(event, handler); return req; },
+        write: vi.fn((data: string) => { capturedBodies.push(data); }),
+        end: vi.fn(() => {
+          Promise.resolve().then(() => {
+            cb(res);
+            resListeners.get('data')?.(Buffer.from(JSON.stringify({ workItems: [] })));
+            resListeners.get('end')?.();
+          });
+        }),
+        destroy: vi.fn(),
+      };
+      return req;
+    });
+
+    await fetchAdoWorkItems('myorg', 'proj', 'test-pat');
+    expect(capturedBodies).toHaveLength(2);
+    const queries = capturedBodies.map(b => JSON.parse(b).query as string);
+    expect(queries.find(q => q.includes('ORDER BY'))).toBeTruthy();
+    expect(queries.find(q => q.includes('@me'))).toBeTruthy();
+  });
+
+  it('should deduplicate IDs from both WIQL queries', async () => {
+    let callIndex = 0;
+    mockHttpsRequest.mockImplementation((_opts: unknown, cb: Function) => {
+      callIndex++;
+      const ids = callIndex === 1
+        ? [{ id: 1 }, { id: 2 }, { id: 3 }]
+        : [{ id: 2 }, { id: 3 }, { id: 4 }];
+      const resListeners = new Map<string, Function>();
+      const res = {
+        statusCode: 200,
+        on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+        resume: vi.fn(),
+      };
+      const reqListeners = new Map<string, Function>();
+      const req = {
+        on: (event: string, handler: Function) => { reqListeners.set(event, handler); return req; },
+        write: vi.fn(),
+        end: vi.fn(() => {
+          Promise.resolve().then(() => {
+            cb(res);
+            resListeners.get('data')?.(Buffer.from(JSON.stringify({ workItems: ids })));
+            resListeners.get('end')?.();
+          });
+        }),
+        destroy: vi.fn(),
+      };
+      return req;
+    });
+
+    const idsRequested: number[] = [];
     mockHttpsGet.mockImplementation((opts: { path?: string }, cb: Function) => {
-      getCallCount++;
-      // Capture the ids parameter to see how many are being fetched
       const path = (opts as any).path || '';
-      const idsMatch = path.match(/ids=([^&]+)/);
-      if (idsMatch) {
-        idsRequested.push(idsMatch[1]);
-      }
+      const match = path.match(/ids=([^&]+)/);
+      if (match) idsRequested.push(...match[1].split(',').map(Number));
       const body = JSON.stringify({ value: [] });
       const resListeners = new Map<string, Function>();
       const res = {
@@ -184,19 +254,15 @@ describe('fetchAdoWorkItems', () => {
         resListeners.get('data')?.(Buffer.from(body));
         resListeners.get('end')?.();
       });
-      const reqListeners = new Map<string, Function>();
       const req = {
-        on: (event: string, handler: Function) => { reqListeners.set(event, handler); return req; },
+        on: (event: string, handler: Function) => { return req; },
         destroy: vi.fn(),
       };
       return req;
     });
 
     await fetchAdoWorkItems('myorg', 'proj', 'test-pat');
-    // With default limit of 200, only 200 IDs should be requested (not all 250)
-    expect(idsRequested.length).toBeGreaterThan(0);
-    const totalIds = idsRequested.join(',').split(',').length;
-    expect(totalIds).toBeLessThanOrEqual(200);
+    expect(idsRequested.sort()).toEqual([1, 2, 3, 4]);
   });
   it('should include project name in work item details URL', async () => {
     // Setup a successful WIQL response with one ID
@@ -352,5 +418,31 @@ describe('fetchAdoPRs', () => {
     // Verify votes are stored with lowercase keys
     expect(result[0]!.reviewerVotes!.get('alice@company.com')).toBe(10);
     expect(result[0]!.reviewerVotes!.get('bob@company.com')).toBe(-5);
+  });
+});
+
+describe('fetchAdoMe', () => {
+  beforeEach(() => {
+    _resetAdoMeCache();
+    mockHttpsGet.mockReset();
+  });
+
+  it('should return providerDisplayName, not email', async () => {
+    setupGetResponse(200, JSON.stringify({
+      authenticatedUser: {
+        providerDisplayName: 'Russell Parry',
+        properties: { Account: { $value: 'russellparry@microsoft.com' } },
+      },
+    }));
+
+    const result = await fetchAdoMe('myorg', 'test-pat');
+    expect(result).toBe('Russell Parry');
+  });
+
+  it('should return empty string on failure', async () => {
+    setupGetResponse(401, 'Unauthorized');
+
+    const result = await fetchAdoMe('myorg', 'test-pat');
+    expect(result).toBe('');
   });
 });
