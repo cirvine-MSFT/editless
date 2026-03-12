@@ -34,6 +34,11 @@ export interface AdoPR {
   project: string;
 }
 
+export interface AdoIdentity {
+  displayName: string;
+  uniqueName: string;
+}
+
 function adoFetch<T>(apiUrl: string, token: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const parsed = new url.URL(apiUrl);
@@ -75,6 +80,53 @@ function normalizeOrg(org: string): string {
   return org.replace(/^https?:\/\//, '').replace(/\/$/, '').replace(/^dev\.azure\.com\//, '');
 }
 
+function postWiql(apiUrl: string, token: string, wiql: string): Promise<number[]> {
+  return new Promise<number[]>((resolve, reject) => {
+    const parsed = new url.URL(apiUrl);
+    const isPat = !token.startsWith('eyJ');
+    const authHeader = isPat
+      ? `Basic ${Buffer.from(':' + token).toString('base64')}`
+      : `Bearer ${token}`;
+
+    const body = JSON.stringify({ query: wiql });
+
+    const req = https.request(
+      {
+        hostname: parsed.hostname,
+        path: parsed.pathname + parsed.search,
+        method: 'POST',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Content-Length': Buffer.byteLength(body),
+        },
+        timeout: 15000,
+      },
+      res => {
+        if (res.statusCode !== 200) {
+          res.resume();
+          reject(new Error(`WIQL returned ${res.statusCode}`));
+          return;
+        }
+        let data = '';
+        res.on('data', (chunk: Buffer) => { data += chunk; });
+        res.on('end', () => {
+          try {
+            interface WiqlResult { workItems: Array<{ id: number }> }
+            const result: WiqlResult = JSON.parse(data);
+            resolve(result.workItems?.map(wi => wi.id) ?? []);
+          } catch (err) { reject(err); }
+        });
+      },
+    );
+    req.on('error', reject);
+    req.on('timeout', () => { req.destroy(); reject(new Error('WIQL timeout')); });
+    req.write(body);
+    req.end();
+  });
+}
+
 export async function fetchAdoWorkItems(
   org: string,
   project: string,
@@ -82,67 +134,31 @@ export async function fetchAdoWorkItems(
   limit: number = 200,
 ): Promise<AdoWorkItem[]> {
   const orgName = normalizeOrg(org);
-  const wiqlUrl = `https://dev.azure.com/${orgName}/${encodeURIComponent(project)}/_apis/wit/wiql?api-version=7.1`;
+  const wiqlUrl = `https://dev.azure.com/${orgName}/${encodeURIComponent(project)}/_apis/wit/wiql?api-version=7.1&$top=${limit}`;
 
-  interface WiqlResponse { workItems: Array<{ id: number; url: string }> }
-  const wiql = await adoFetch<WiqlResponse>(
-    wiqlUrl + `&$top=${limit}`,
-    token,
-  ).catch(() => null);
+  const recentQuery = `SELECT [System.Id] FROM WorkItems WHERE [System.State] IN ('Active', 'New', 'Doing', 'Closed', 'Resolved', 'Removed') ORDER BY [System.ChangedDate] DESC`;
+  const myQuery = `SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @me ORDER BY [System.ChangedDate] DESC`;
 
-  // WIQL requires POST, but for simplicity use a query endpoint
-  // Fall back to a simple assigned-to-me query
-  const queryUrl = `https://dev.azure.com/${orgName}/${encodeURIComponent(project)}/_apis/wit/wiql?api-version=7.1`;
-
-  interface WiqlResult { workItems: Array<{ id: number }> }
   let ids: number[];
   try {
-    // Use POST for WIQL
-    ids = await new Promise<number[]>((resolve, reject) => {
-      const parsed = new url.URL(queryUrl);
-      const isPat = !token.startsWith('eyJ');
-      const authHeader = isPat
-        ? `Basic ${Buffer.from(':' + token).toString('base64')}`
-        : `Bearer ${token}`;
+    const [recentIds, myIds] = await Promise.all([
+      postWiql(wiqlUrl, token, recentQuery).catch(err => {
+        console.error(`[EditLess] Recent WIQL query failed for ${orgName}/${project}:`, err);
+        return null;
+      }),
+      postWiql(wiqlUrl, token, myQuery).catch(err => {
+        console.error(`[EditLess] Assigned-to-me WIQL query failed for ${orgName}/${project}:`, err);
+        return null;
+      }),
+    ]);
+    if (recentIds === null && myIds === null) return [];
 
-      const body = JSON.stringify({
-        query: `SELECT [System.Id] FROM WorkItems WHERE [System.State] IN ('Active', 'New', 'Doing', 'Closed', 'Resolved', 'Removed') ORDER BY [System.ChangedDate] DESC`,
-      });
-
-      const req = https.request(
-        {
-          hostname: parsed.hostname,
-          path: parsed.pathname + parsed.search,
-          method: 'POST',
-          headers: {
-            'Authorization': authHeader,
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Content-Length': Buffer.byteLength(body),
-          },
-          timeout: 15000,
-        },
-        res => {
-          if (res.statusCode !== 200) {
-            reject(new Error(`WIQL returned ${res.statusCode}`));
-            return;
-          }
-          let data = '';
-          res.on('data', (chunk: Buffer) => { data += chunk; });
-          res.on('end', () => {
-            try {
-              const result: WiqlResult = JSON.parse(data);
-              resolve(result.workItems?.map(wi => wi.id) ?? []);
-            } catch (err) { reject(err); }
-          });
-        },
-      );
-      req.on('error', reject);
-      req.on('timeout', () => { req.destroy(); reject(new Error('WIQL timeout')); });
-      req.write(body);
-      req.end();
-    });
-  } catch {
+    const seen = new Set<number>();
+    for (const id of recentIds ?? []) seen.add(id);
+    for (const id of myIds ?? []) seen.add(id);
+    ids = [...seen].slice(0, limit);
+  } catch (err) {
+    console.error(`[EditLess] WIQL processing failed for ${orgName}/${project}:`, err);
     return [];
   }
 
@@ -152,8 +168,8 @@ export async function fetchAdoWorkItems(
   const batchSize = 200;
   const allWorkItems: AdoWorkItem[] = [];
   
-  for (let i = 0; i < ids.length && i < limit; i += batchSize) {
-    const batchIds = ids.slice(i, Math.min(i + batchSize, limit));
+  for (let i = 0; i < ids.length; i += batchSize) {
+    const batchIds = ids.slice(i, i + batchSize);
     const detailsUrl = `https://dev.azure.com/${orgName}/${encodeURIComponent(project)}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Id,System.Title,System.State,System.WorkItemType,System.AssignedTo,System.AreaPath,System.Tags,System.Parent&api-version=7.1`;
 
     interface WorkItemDetail {
@@ -177,8 +193,8 @@ export async function fetchAdoWorkItems(
         parentId: (wi.fields['System.Parent'] as number) ?? undefined,
         project,
       })));
-    } catch {
-      // Continue with next batch on error
+    } catch (err) {
+      console.error(`[EditLess] Batch fetch failed for IDs ${batchIds[0]}–${batchIds[batchIds.length - 1]}:`, err);
     }
   }
   
@@ -201,11 +217,10 @@ export async function fetchAdoPRs(
     const reposUrl = `https://dev.azure.com/${orgName}/${encodeURIComponent(project)}/_apis/git/repositories?api-version=7.1`;
     const result = await adoFetch<ReposResponse>(reposUrl, token);
     repos = result.value ?? [];
-  } catch {
+  } catch (err) {
+    console.error(`[EditLess] Failed to list repos for ${orgName}/${project}:`, err);
     return [];
   }
-
-  // Fetch PRs from each repo (created by me)
   const allPRs: AdoPR[] = [];
   for (const repo of repos) {
     try {
@@ -249,42 +264,55 @@ export async function fetchAdoPRs(
           project,
         });
       }
-    } catch {
-      // Skip repo on error
+    } catch (err) {
+      console.error(`[EditLess] Failed to fetch PRs from repo ${repo.name}:`, err);
     }
   }
 
   return allPRs;
 }
 
-let cachedAdoMe: string | undefined;
+const cachedAdoMe = new Map<string, AdoIdentity>();
 
 export async function fetchAdoMe(
   org: string,
   token: string,
-): Promise<string> {
-  if (cachedAdoMe !== undefined) return cachedAdoMe;
-
+): Promise<AdoIdentity> {
   const orgName = normalizeOrg(org);
+  const cacheKey = `${orgName}\n${token}`;
+  const cached = cachedAdoMe.get(cacheKey);
+  if (cached) return cached;
+
   const apiUrl = `https://dev.azure.com/${orgName}/_apis/connectionData`;
 
   interface ConnectionData {
     authenticatedUser: {
-      providerDisplayName: string;
-      properties: { Account: { $value: string } };
+      providerDisplayName?: string;
+      properties?: {
+        Account?: { $value?: string };
+      };
     };
   }
 
   try {
     const data = await adoFetch<ConnectionData>(apiUrl, token);
-    cachedAdoMe = data.authenticatedUser?.properties?.Account?.$value ?? '';
-  } catch {
-    cachedAdoMe = '';
+    const identity = {
+      displayName: data.authenticatedUser?.providerDisplayName
+        ?? data.authenticatedUser?.properties?.Account?.$value
+        ?? '',
+      uniqueName: data.authenticatedUser?.properties?.Account?.$value
+        ?? data.authenticatedUser?.providerDisplayName
+        ?? '',
+    };
+    cachedAdoMe.set(cacheKey, identity);
+    return identity;
+  } catch (err) {
+    console.error('[EditLess] fetchAdoMe failed:', err);
+    return { displayName: '', uniqueName: '' };
   }
-  return cachedAdoMe;
 }
 
 /** Reset cached identity (for testing). */
 export function _resetAdoMeCache(): void {
-  cachedAdoMe = undefined;
+  cachedAdoMe.clear();
 }
