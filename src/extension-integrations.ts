@@ -237,10 +237,12 @@ export async function initAdoIntegration(
       const allWorkItems = workItemResults.flat();
       const allPRs = prResults.flat();
       const adoMe = await fetchAdoMe(firstOrg, token!);
+      const adoWorkItemsUser = adoMe.displayName || adoMe.uniqueName;
+      const adoPrUser = adoMe.uniqueName || adoMe.displayName;
 
       workItemsProvider.setAdoItems(allWorkItems);
-      workItemsProvider.setAdoCurrentUser(adoMe);
-      if (adoMe) prsProvider.setAdoMe(adoMe);
+      workItemsProvider.setAdoCurrentUser(adoWorkItemsUser);
+      prsProvider.setAdoMe(adoPrUser);
       prsProvider.setAdoPRs(allPRs);
     } catch (err) {
       console.error('[EditLess] ADO fetch failed:', err);

@@ -34,6 +34,11 @@ export interface AdoPR {
   project: string;
 }
 
+export interface AdoIdentity {
+  displayName: string;
+  uniqueName: string;
+}
+
 function adoFetch<T>(apiUrl: string, token: string): Promise<T> {
   return new Promise((resolve, reject) => {
     const parsed = new url.URL(apiUrl);
@@ -137,16 +142,27 @@ export async function fetchAdoWorkItems(
   let ids: number[];
   try {
     const [recentIds, myIds] = await Promise.all([
-      postWiql(wiqlUrl, token, recentQuery).catch(() => [] as number[]),
-      postWiql(wiqlUrl, token, myQuery).catch(() => [] as number[]),
+      postWiql(wiqlUrl, token, recentQuery).catch(err => {
+        console.error(`[EditLess] Recent WIQL query failed for ${orgName}/${project}:`, err);
+        return null;
+      }),
+      postWiql(wiqlUrl, token, myQuery).catch(err => {
+        console.error(`[EditLess] Assigned-to-me WIQL query failed for ${orgName}/${project}:`, err);
+        return null;
+      }),
     ]);
-    const seen = new Set(recentIds);
-    for (const id of myIds) seen.add(id);
-    ids = [...seen];
+    if (recentIds === null && myIds === null) return [];
+
+    const seen = new Set<number>();
+    for (const id of recentIds ?? []) seen.add(id);
+    for (const id of myIds ?? []) seen.add(id);
+    ids = [...seen].slice(0, limit);
   } catch (err) {
-    console.error(`[EditLess] WIQL query failed for ${orgName}/${project}:`, err);
+    console.error(`[EditLess] WIQL processing failed for ${orgName}/${project}:`, err);
     return [];
   }
+
+  if (ids.length === 0) return [];
 
   // Fetch work item details in batches (ADO API supports max 200 per batch)
   const batchSize = 200;
@@ -256,35 +272,47 @@ export async function fetchAdoPRs(
   return allPRs;
 }
 
-let cachedAdoMe: string | undefined;
+const cachedAdoMe = new Map<string, AdoIdentity>();
 
 export async function fetchAdoMe(
   org: string,
   token: string,
-): Promise<string> {
-  if (cachedAdoMe !== undefined) return cachedAdoMe;
-
+): Promise<AdoIdentity> {
   const orgName = normalizeOrg(org);
+  const cacheKey = `${orgName}\n${token}`;
+  const cached = cachedAdoMe.get(cacheKey);
+  if (cached) return cached;
+
   const apiUrl = `https://dev.azure.com/${orgName}/_apis/connectionData`;
 
   interface ConnectionData {
     authenticatedUser: {
-      providerDisplayName: string;
-      properties: { Account: { $value: string } };
+      providerDisplayName?: string;
+      properties?: {
+        Account?: { $value?: string };
+      };
     };
   }
 
   try {
     const data = await adoFetch<ConnectionData>(apiUrl, token);
-    cachedAdoMe = data.authenticatedUser?.providerDisplayName ?? '';
+    const identity = {
+      displayName: data.authenticatedUser?.providerDisplayName
+        ?? data.authenticatedUser?.properties?.Account?.$value
+        ?? '',
+      uniqueName: data.authenticatedUser?.properties?.Account?.$value
+        ?? data.authenticatedUser?.providerDisplayName
+        ?? '',
+    };
+    cachedAdoMe.set(cacheKey, identity);
+    return identity;
   } catch (err) {
     console.error('[EditLess] fetchAdoMe failed:', err);
-    cachedAdoMe = '';
+    return { displayName: '', uniqueName: '' };
   }
-  return cachedAdoMe;
 }
 
 /** Reset cached identity (for testing). */
 export function _resetAdoMeCache(): void {
-  cachedAdoMe = undefined;
+  cachedAdoMe.clear();
 }

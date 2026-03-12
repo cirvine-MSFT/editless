@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Mock the https module for all ADO API calls
 const { mockHttpsGet, mockHttpsRequest } = vi.hoisted(() => ({
@@ -83,12 +83,18 @@ function setupRequestError() {
 describe('fetchAdoWorkItems', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
-  it('should return empty array when WIQL query fails', async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should return empty array and log when both WIQL queries fail', async () => {
     setupRequestError();
     const result = await fetchAdoWorkItems('myorg', 'myproject', 'test-pat');
     expect(result).toEqual([]);
+    expect(console.error).toHaveBeenCalledTimes(2);
   });
 
   it('should return empty array when WIQL returns no work items', async () => {
@@ -205,8 +211,8 @@ describe('fetchAdoWorkItems', () => {
     await fetchAdoWorkItems('myorg', 'proj', 'test-pat');
     expect(capturedBodies).toHaveLength(2);
     const queries = capturedBodies.map(b => JSON.parse(b).query as string);
-    expect(queries.find(q => q.includes('ORDER BY'))).toBeTruthy();
-    expect(queries.find(q => q.includes('@me'))).toBeTruthy();
+    expect(queries.some(q => q.includes("[System.State] IN ('Active', 'New', 'Doing', 'Closed', 'Resolved', 'Removed')"))).toBe(true);
+    expect(queries.some(q => q.includes('[System.AssignedTo] = @me'))).toBe(true);
   });
 
   it('should deduplicate IDs from both WIQL queries', async () => {
@@ -264,6 +270,134 @@ describe('fetchAdoWorkItems', () => {
     await fetchAdoWorkItems('myorg', 'proj', 'test-pat');
     expect(idsRequested.sort()).toEqual([1, 2, 3, 4]);
   });
+
+  it('should cap merged WIQL results to the configured limit', async () => {
+    let callIndex = 0;
+    mockHttpsRequest.mockImplementation((_opts: unknown, cb: Function) => {
+      callIndex++;
+      const currentCall = callIndex;
+      const ids = currentCall === 1
+        ? Array.from({ length: 50 }, (_, i) => ({ id: i + 1 }))
+        : Array.from({ length: 50 }, (_, i) => ({ id: i + 51 }));
+      const resListeners = new Map<string, Function>();
+      const res = {
+        statusCode: 200,
+        on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+        resume: vi.fn(),
+      };
+      const reqListeners = new Map<string, Function>();
+      const req = {
+        on: (event: string, handler: Function) => { reqListeners.set(event, handler); return req; },
+        write: vi.fn(),
+        end: vi.fn(() => {
+          Promise.resolve().then(() => {
+            cb(res);
+            resListeners.get('data')?.(Buffer.from(JSON.stringify({ workItems: ids })));
+            resListeners.get('end')?.();
+          });
+        }),
+        destroy: vi.fn(),
+      };
+      return req;
+    });
+
+    const idsRequested: number[] = [];
+    mockHttpsGet.mockImplementation((opts: { path?: string }, cb: Function) => {
+      const path = (opts as any).path || '';
+      const match = path.match(/ids=([^&]+)/);
+      if (match) idsRequested.push(...match[1].split(',').map(Number));
+      const body = JSON.stringify({ value: [] });
+      const resListeners = new Map<string, Function>();
+      const res = {
+        statusCode: 200,
+        on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+      };
+      Promise.resolve().then(() => {
+        cb(res);
+        resListeners.get('data')?.(Buffer.from(body));
+        resListeners.get('end')?.();
+      });
+      const req = {
+        on: (_event: string, _handler: Function) => req,
+        destroy: vi.fn(),
+      };
+      return req;
+    });
+
+    await fetchAdoWorkItems('myorg', 'proj', 'test-pat', 50);
+    expect(idsRequested).toHaveLength(50);
+    expect(new Set(idsRequested).size).toBe(50);
+  });
+
+  it('should return results from the WIQL query that succeeds', async () => {
+    let callIndex = 0;
+    mockHttpsRequest.mockImplementation((_opts: unknown, cb: Function) => {
+      callIndex++;
+      const currentCall = callIndex;
+      const resListeners = new Map<string, Function>();
+      const res = {
+        statusCode: 200,
+        on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+        resume: vi.fn(),
+      };
+      const reqListeners = new Map<string, Function>();
+      const req = {
+        on: (event: string, handler: Function) => { reqListeners.set(event, handler); return req; },
+        write: vi.fn(),
+        end: vi.fn(() => {
+          Promise.resolve().then(() => {
+            if (currentCall === 1) {
+              reqListeners.get('error')?.(new Error('network fail'));
+              return;
+            }
+            cb(res);
+            resListeners.get('data')?.(Buffer.from(JSON.stringify({ workItems: [{ id: 4 }] })));
+            resListeners.get('end')?.();
+          });
+        }),
+        destroy: vi.fn(),
+      };
+      return req;
+    });
+
+    mockHttpsGet.mockImplementation((_opts: unknown, cb: Function) => {
+      const body = JSON.stringify({ value: [{
+        id: 4,
+        fields: {
+          'System.Title': 'Assigned to me',
+          'System.State': 'Active',
+          'System.WorkItemType': 'Task',
+          'System.AssignedTo': { displayName: 'Dev' },
+          'System.AreaPath': 'Proj',
+          'System.Tags': '',
+        },
+        _links: { html: { href: 'https://example.com/4' } },
+      }] });
+      const resListeners = new Map<string, Function>();
+      const res = {
+        statusCode: 200,
+        on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+      };
+      Promise.resolve().then(() => {
+        cb(res);
+        resListeners.get('data')?.(Buffer.from(body));
+        resListeners.get('end')?.();
+      });
+      const req = {
+        on: (_event: string, _handler: Function) => req,
+        destroy: vi.fn(),
+      };
+      return req;
+    });
+
+    const result = await fetchAdoWorkItems('myorg', 'proj', 'test-pat');
+    expect(result.map(item => item.id)).toEqual([4]);
+    expect(console.error).toHaveBeenCalledWith(
+      '[EditLess] Recent WIQL query failed for myorg/proj:',
+      expect.any(Error),
+    );
+  });
+
   it('should include project name in work item details URL', async () => {
     // Setup a successful WIQL response with one ID
     setupRequestResponse(200, JSON.stringify({ workItems: [{ id: 1 }] }));
@@ -425,9 +559,14 @@ describe('fetchAdoMe', () => {
   beforeEach(() => {
     _resetAdoMeCache();
     mockHttpsGet.mockReset();
+    vi.spyOn(console, 'error').mockImplementation(() => undefined);
   });
 
-  it('should return providerDisplayName, not email', async () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('should return displayName and uniqueName', async () => {
     setupGetResponse(200, JSON.stringify({
       authenticatedUser: {
         providerDisplayName: 'Russell Parry',
@@ -436,13 +575,104 @@ describe('fetchAdoMe', () => {
     }));
 
     const result = await fetchAdoMe('myorg', 'test-pat');
-    expect(result).toBe('Russell Parry');
+    expect(result).toEqual({
+      displayName: 'Russell Parry',
+      uniqueName: 'russellparry@microsoft.com',
+    });
   });
 
-  it('should return empty string on failure', async () => {
+  it('should cache identities per org and token combination', async () => {
+    mockHttpsGet.mockImplementation((opts: { path?: string; headers?: Record<string, string> }, cb: Function) => {
+      const authHeader = opts.headers?.Authorization ?? '';
+      const token = Buffer.from(authHeader.replace(/^Basic /, ''), 'base64').toString('utf8').slice(1);
+      const org = (opts.path ?? '').includes('/otherorg/') ? 'otherorg' : 'myorg';
+      const body = JSON.stringify({
+        authenticatedUser: {
+          providerDisplayName: `${org}-${token}-display`,
+          properties: { Account: { $value: `${org}-${token}@example.com` } },
+        },
+      });
+      const resListeners = new Map<string, Function>();
+      const res = {
+        statusCode: 200,
+        on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+        resume: vi.fn(),
+      };
+      Promise.resolve().then(() => {
+        cb(res);
+        resListeners.get('data')?.(Buffer.from(body));
+        resListeners.get('end')?.();
+      });
+      const req = {
+        on: (_event: string, _handler: Function) => req,
+        destroy: vi.fn(),
+      };
+      return req;
+    });
+
+    const first = await fetchAdoMe('myorg', 'token-a');
+    const cached = await fetchAdoMe('myorg', 'token-a');
+    const secondToken = await fetchAdoMe('myorg', 'token-b');
+    const secondOrg = await fetchAdoMe('otherorg', 'token-b');
+
+    expect(first).toEqual(cached);
+    expect(secondToken).toEqual({
+      displayName: 'myorg-token-b-display',
+      uniqueName: 'myorg-token-b@example.com',
+    });
+    expect(secondOrg).toEqual({
+      displayName: 'otherorg-token-b-display',
+      uniqueName: 'otherorg-token-b@example.com',
+    });
+    expect(mockHttpsGet).toHaveBeenCalledTimes(3);
+  });
+
+  it('should not cache failed identity fetches', async () => {
+    let callIndex = 0;
+    mockHttpsGet.mockImplementation((_opts: unknown, cb: Function) => {
+      callIndex++;
+      const statusCode = callIndex === 1 ? 401 : 200;
+      const body = callIndex === 1
+        ? 'Unauthorized'
+        : JSON.stringify({
+          authenticatedUser: {
+            providerDisplayName: 'Russell Parry',
+            properties: { Account: { $value: 'russellparry@microsoft.com' } },
+          },
+        });
+      const resListeners = new Map<string, Function>();
+      const res = {
+        statusCode,
+        on: (event: string, handler: Function) => { resListeners.set(event, handler); return res; },
+        resume: vi.fn(),
+      };
+      Promise.resolve().then(() => {
+        cb(res);
+        resListeners.get('data')?.(Buffer.from(body));
+        resListeners.get('end')?.();
+      });
+      const req = {
+        on: (_event: string, _handler: Function) => req,
+        destroy: vi.fn(),
+      };
+      return req;
+    });
+
+    const failed = await fetchAdoMe('myorg', 'test-pat');
+    const recovered = await fetchAdoMe('myorg', 'test-pat');
+
+    expect(failed).toEqual({ displayName: '', uniqueName: '' });
+    expect(recovered).toEqual({
+      displayName: 'Russell Parry',
+      uniqueName: 'russellparry@microsoft.com',
+    });
+    expect(mockHttpsGet).toHaveBeenCalledTimes(2);
+  });
+
+  it('should return an empty identity on failure', async () => {
     setupGetResponse(401, 'Unauthorized');
 
     const result = await fetchAdoMe('myorg', 'test-pat');
-    expect(result).toBe('');
+    expect(result).toEqual({ displayName: '', uniqueName: '' });
   });
 });
