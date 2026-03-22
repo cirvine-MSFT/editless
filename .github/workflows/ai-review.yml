@@ -5,10 +5,8 @@ on:
     branches: [master]
     types: [opened, synchronize, reopened, ready_for_review]
   pull_request_review:
-    branches: [master]
     types: [submitted, edited, dismissed]
   pull_request_review_comment:
-    branches: [master]
     types: [created, edited, deleted]
 
 permissions:
@@ -18,7 +16,7 @@ permissions:
 jobs:
   ai-review:
     name: AI Review
-    if: ${{ !github.event.pull_request.draft }}
+    if: ${{ github.event.pull_request.base.ref == 'master' && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
