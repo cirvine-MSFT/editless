@@ -55,7 +55,7 @@ For a single agent, right-click the agent in the EditLess sidebar and choose **G
 Per-agent `command` overrides the global `editless.cli.command`. See [Settings Reference](docs/SETTINGS.md) for more examples.
 
 > [!NOTE]
-> Microsoft FTEs: there are also a couple internal first-party options in this space that I cannot announce publicly yet. If you want to hear about those or want help making them work for your scenario, please reach out to Casey Irvine.
+> Microsoft FTEs: there are also a couple of internal first-party options in this space that are not yet publicly announced. If you want to hear about those or want help making them work for your scenario, please contact Casey Irvine.
 
 ![EditLess sidebar showing agents, work items, and terminal sessions](docs/images/hero-screenshot.png)
 

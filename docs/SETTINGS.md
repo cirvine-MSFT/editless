@@ -47,7 +47,7 @@ Settings for configuring how EditLess launches Copilot CLI sessions.
 ```
 
 > [!NOTE]
-> Microsoft FTEs: there are also a couple internal first-party options in this space that we cannot announce publicly yet. If you want to hear about those or want help mapping them to your scenario, please reach out to Casey Irvine.
+> Microsoft FTEs: there are also a couple of internal first-party options in this space that are not yet publicly announced. If you want to hear about those or want help mapping them to your scenario, please contact Casey Irvine.
 
 ---
 
@@ -246,7 +246,7 @@ User preferences for discovered agents are stored in **`agent-settings.json`** i
 ### Managing Agent Settings
 
 - **Hide/show agents** — Right-click an agent → "Hide Agent". Hidden agents appear under a collapsible "Hidden (N)" group.
-- **Per-agent model** — Right-click an agent → "Set Model" (planned feature).
+- **Per-agent model** — Right-click an agent → "Change Model".
 - **Per-agent CLI settings** — Right-click an agent → "Go to Settings" to open `agent-settings.json`, then edit that agent's entry.
 
 ### Migration from agent-registry.json
