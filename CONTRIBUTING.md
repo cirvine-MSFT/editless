@@ -140,8 +140,8 @@ Press **F5** to launch the Extension Development Host with your local build.
 
 In this repository, the `master` branch is protected: pull requests to `master` must pass the standard CI checks plus an `AI Review` check before they can merge.
 
-- When GitHub Copilot code review is enabled for the repo, non-draft PRs should receive a Copilot review request automatically. If a Copilot review does not appear, use the GitHub PR sidebar to manually request Copilot review.
-- `AI Review` passes once Copilot leaves a review or review comment on the current PR head.
+- When GitHub Copilot code review is enabled for the repo, GitHub should request Copilot review automatically when a non-draft PR opens. If Copilot does not review automatically on the initial PR or a later push, use the GitHub PR sidebar to manually request another Copilot review.
+- `AI Review` stays in progress until Copilot leaves a review or review comment on the current PR head. Each new push creates a new head SHA, so follow-up commits may need a fresh Copilot review before the check turns green again.
 - Human approvals are not required, but unresolved conversations and failing required checks still block merge.
 - Draft PRs skip the AI review gate until you mark them ready for review.
 

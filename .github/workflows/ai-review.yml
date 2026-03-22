@@ -10,23 +10,25 @@ on:
     types: [created, edited, deleted]
 
 permissions:
+  checks: write
   contents: read
   pull-requests: read
 
 jobs:
   ai-review:
-    name: AI Review
+    name: Sync AI Review status
     if: ${{ github.event.pull_request.base.ref == 'master' && !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 6
     steps:
-      - name: Require Copilot review on current head
+      - name: Sync AI Review check on current head
         uses: actions/github-script@v7
         with:
           script: |
             const owner = context.repo.owner;
             const repo = context.repo.repo;
             const prNumber = context.payload.pull_request?.number;
+            const checkName = 'AI Review';
 
             if (!prNumber) {
               core.setFailed('This workflow requires a pull request payload.');
@@ -60,7 +62,7 @@ jobs:
               return data;
             }
 
-            async function findCopilotSignal(headSha) {
+            async function findCopilotSignal(headSha, pullRequestUrl) {
               const reviews = await github.paginate(github.rest.pulls.listReviews, {
                 owner,
                 repo,
@@ -76,7 +78,7 @@ jobs:
                 return {
                   kind: 'review',
                   login: review.user.login,
-                  url: review.html_url ?? `${context.payload.pull_request.html_url}#pullrequestreview-${review.id}`,
+                  url: review.html_url ?? `${pullRequestUrl}#pullrequestreview-${review.id}`,
                 };
               }
 
@@ -102,26 +104,100 @@ jobs:
               return null;
             }
 
-            const shouldPoll = context.eventName === 'pull_request';
-            const timeoutAt = Date.now() + 4 * 60 * 1000;
-            let pullRequest = await getPullRequest();
-            let signal = await findCopilotSignal(pullRequest.head.sha);
+            async function findExistingCheckRun(headSha) {
+              const { data } = await github.rest.checks.listForRef({
+                owner,
+                repo,
+                ref: headSha,
+                check_name: checkName,
+                per_page: 100,
+              });
 
-            while (!signal && shouldPoll && Date.now() < timeoutAt) {
-              core.info(`No Copilot review for ${pullRequest.head.sha} yet; waiting 15 seconds...`);
-              await new Promise(resolve => setTimeout(resolve, 15_000));
-              pullRequest = await getPullRequest();
-              signal = await findCopilotSignal(pullRequest.head.sha);
+              const [latestRun] = [...(data.check_runs ?? [])].sort((left, right) => right.id - left.id);
+              return latestRun ?? null;
             }
 
+            async function createCheckRun(headSha, payload) {
+              return github.rest.checks.create({
+                owner,
+                repo,
+                name: checkName,
+                head_sha: headSha,
+                details_url: `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+                ...payload,
+              });
+            }
+
+            async function updateCheckRun(checkRunId, payload) {
+              return github.rest.checks.update({
+                owner,
+                repo,
+                check_run_id: checkRunId,
+                details_url: `${process.env.GITHUB_SERVER_URL}/${owner}/${repo}/actions/runs/${process.env.GITHUB_RUN_ID}`,
+                ...payload,
+              });
+            }
+
+            async function setWaitingForReview(headSha) {
+              const existingCheckRun = await findExistingCheckRun(headSha);
+              const payload = {
+                status: 'in_progress',
+                started_at: new Date().toISOString(),
+                output: {
+                  title: 'Waiting for Copilot review',
+                  summary:
+                    `PR #${prNumber} is waiting for GitHub Copilot to review head ${headSha}. ` +
+                    'The required AI Review check will turn green after Copilot leaves a review or review comment on this commit.',
+                },
+              };
+
+              if (existingCheckRun?.status !== 'completed') {
+                if (existingCheckRun) {
+                  await updateCheckRun(existingCheckRun.id, payload);
+                } else {
+                  await createCheckRun(headSha, payload);
+                }
+                return;
+              }
+
+              await createCheckRun(headSha, payload);
+            }
+
+            async function setReviewSatisfied(headSha, signal) {
+              const existingCheckRun = await findExistingCheckRun(headSha);
+              const payload = {
+                status: 'completed',
+                conclusion: 'success',
+                completed_at: new Date().toISOString(),
+                output: {
+                  title: 'Copilot review found',
+                  summary:
+                    `Found a Copilot ${signal.kind} from ${signal.login} for head ${headSha}: ${signal.url}`,
+                },
+              };
+
+              if (existingCheckRun?.status === 'completed') {
+                await createCheckRun(headSha, payload);
+                return;
+              }
+
+              if (existingCheckRun) {
+                await updateCheckRun(existingCheckRun.id, payload);
+                return;
+              }
+
+              await createCheckRun(headSha, payload);
+            }
+
+            const pullRequest = await getPullRequest();
+            const { head, html_url: pullRequestUrl } = pullRequest;
+            const signal = await findCopilotSignal(head.sha, pullRequestUrl);
+
             if (!signal) {
-              core.setFailed(
-                `No Copilot review found for PR #${prNumber} on head ${pullRequest.head.sha}. ` +
-                'This gate requires an automated Copilot review before merge.'
-              );
+              await setWaitingForReview(head.sha);
+              core.info(`No Copilot review found for ${head.sha}; leaving ${checkName} in progress.`);
               return;
             }
 
-            core.info(
-              `Found Copilot ${signal.kind} from ${signal.login} for ${pullRequest.head.sha}: ${signal.url}`
-            );
+            await setReviewSatisfied(head.sha, signal);
+            core.info(`Found Copilot ${signal.kind} from ${signal.login} for ${head.sha}: ${signal.url}`);
