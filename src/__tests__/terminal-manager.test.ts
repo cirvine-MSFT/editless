@@ -83,7 +83,7 @@ vi.mock('vscode', () => ({
   },
 }));
 
-import { TerminalManager, type PersistedTerminalInfo, type SessionState, stripEmoji, resolveTerminalCwd } from '../terminal-manager';
+import { buildEditlessCustomInstructionsDirs, EDITLESS_INSTRUCTIONS_DIR, TerminalManager, type PersistedTerminalInfo, type SessionState, stripEmoji, resolveTerminalCwd } from '../terminal-manager';
 import * as vscodeModule from 'vscode';
 
 function makeMockTerminal(name: string): vscode.Terminal {
@@ -151,6 +151,10 @@ function getLastPersistedState(ctx: vscode.ExtensionContext): PersistedTerminalI
   const persistCalls = calls.filter(c => c[0] === 'editless.terminalSessions');
   const lastCall = persistCalls.at(-1);
   return lastCall ? lastCall[1] as PersistedTerminalInfo[] : undefined;
+}
+
+function getLastCreateTerminalOptions(): vscode.TerminalOptions {
+  return mockCreateTerminal.mock.calls.at(-1)?.[0] as vscode.TerminalOptions;
 }
 
 let capturedCloseListener: CloseListener;
@@ -2129,29 +2133,42 @@ describe('TerminalManager', () => {
     });
 
     it('should pass EDITLESS env vars via TerminalOptions.env', () => {
+      const previousCustomInstructionsDirs = process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS;
+      process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = '/custom/one,/custom/two';
+
       const orphanEntry = makePersistedEntry({
         id: 'resume-env-1',
         terminalName: '🧪 No Match',
         launchCommand: 'copilot --agent squad',
         agentSessionId: 'env-session',
       });
-      const ctx = makeMockContext([orphanEntry]);
-      const mgr = new TerminalManager(ctx);
-      mgr.reconcile();
 
-      mgr.relaunchSession(orphanEntry);
+      try {
+        const ctx = makeMockContext([orphanEntry]);
+        const mgr = new TerminalManager(ctx);
+        mgr.reconcile();
 
-      expect(mockCreateTerminal).toHaveBeenCalledWith(
-        expect.objectContaining({
-          env: expect.objectContaining({
-            EDITLESS_SESSION_ID: 'resume-env-1',
-            EDITLESS_AGENT_SESSION_ID: 'env-session',
-            EDITLESS_TERMINAL_ID: 'resume-env-1',
-            EDITLESS_SQUAD_ID: 'test-squad',
-            EDITLESS_SQUAD_NAME: 'Test Squad',
+        mgr.relaunchSession(orphanEntry);
+
+        expect(mockCreateTerminal).toHaveBeenCalledWith(
+          expect.objectContaining({
+            env: expect.objectContaining({
+              EDITLESS_SESSION_ID: 'resume-env-1',
+              EDITLESS_AGENT_SESSION_ID: 'env-session',
+              COPILOT_CUSTOM_INSTRUCTIONS_DIRS: `/custom/one,/custom/two,${EDITLESS_INSTRUCTIONS_DIR}`,
+              EDITLESS_TERMINAL_ID: 'resume-env-1',
+              EDITLESS_SQUAD_ID: 'test-squad',
+              EDITLESS_SQUAD_NAME: 'Test Squad',
+            }),
           }),
-        }),
-      );
+        );
+      } finally {
+        if (previousCustomInstructionsDirs === undefined) {
+          delete process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS;
+        } else {
+          process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = previousCustomInstructionsDirs;
+        }
+      }
     });
 
     it('should still pass terminal/squad env vars when no agentSessionId', () => {
@@ -2204,6 +2221,18 @@ describe('TerminalManager', () => {
   // Phase 2: Terminal integration with --resume UUID
   // -------------------------------------------------------------------------
 
+  describe('buildEditlessCustomInstructionsDirs', () => {
+    it('should append the Editless instructions dir using commas', () => {
+      expect(buildEditlessCustomInstructionsDirs('/custom/one,/custom/two')).toBe(
+        `/custom/one,/custom/two,${EDITLESS_INSTRUCTIONS_DIR}`,
+      );
+      expect(buildEditlessCustomInstructionsDirs('/custom/one;/custom/two')).toBe(
+        `/custom/one,/custom/two,${EDITLESS_INSTRUCTIONS_DIR}`,
+      );
+      expect(buildEditlessCustomInstructionsDirs(undefined)).toBe(EDITLESS_INSTRUCTIONS_DIR);
+    });
+  });
+
   describe('launchTerminal with --resume UUID', () => {
     it('should set agentSessionId immediately on launch', () => {
       const mockUuid = 'test-uuid-12345';
@@ -2254,6 +2283,30 @@ describe('TerminalManager', () => {
       const createOpts = mockCreateTerminal.mock.calls[0][0] as vscode.TerminalOptions;
       expect(createOpts.env?.EDITLESS_SQUAD_ID).toBe('my-squad');
       expect(createOpts.env?.EDITLESS_SQUAD_NAME).toBe('My Squad');
+    });
+
+    it('should preserve comma-separated COPILOT_CUSTOM_INSTRUCTIONS_DIRS when launching', () => {
+      const previousCustomInstructionsDirs = process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS;
+      process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = '/custom/one,/custom/two';
+
+      try {
+        const ctx = makeMockContext();
+        const mgr = new TerminalManager(ctx);
+        const config = makeSquadConfig();
+
+        mgr.launchTerminal(config);
+
+        const createOpts = getLastCreateTerminalOptions();
+        expect(createOpts.env?.COPILOT_CUSTOM_INSTRUCTIONS_DIRS).toBe(
+          `/custom/one,/custom/two,${EDITLESS_INSTRUCTIONS_DIR}`,
+        );
+      } finally {
+        if (previousCustomInstructionsDirs === undefined) {
+          delete process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS;
+        } else {
+          process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS = previousCustomInstructionsDirs;
+        }
+      }
     });
 
     it('should set isTransient: true on created terminal', () => {

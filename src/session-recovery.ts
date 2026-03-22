@@ -4,7 +4,7 @@ import type { TerminalInfo, PersistedTerminalInfo } from './terminal-types';
 import type { SessionContextResolver, SessionEvent } from './session-context';
 import { resolveTerminalCwd } from './cwd-resolver';
 import { resolveShellPath } from './copilot-cli-builder';
-import { EDITLESS_INSTRUCTIONS_DIR } from './terminal-manager';
+import { buildEditlessCustomInstructionsDirs } from './terminal-manager';
 
 export interface SessionRecoveryContext {
   terminals: Map<vscode.Terminal, TerminalInfo>;
@@ -124,7 +124,9 @@ export class SessionRecovery {
       iconPath: new vscode.ThemeIcon('terminal'),
       env: {
         ...env,
-        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: [process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS, EDITLESS_INSTRUCTIONS_DIR].filter(Boolean).join(path.delimiter),
+        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: buildEditlessCustomInstructionsDirs(
+          process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS,
+        ),
         EDITLESS_TERMINAL_ID: entry.id,
         EDITLESS_SQUAD_ID: entry.agentId,
         EDITLESS_SQUAD_NAME: entry.agentName,

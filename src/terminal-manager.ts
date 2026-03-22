@@ -16,6 +16,16 @@ import type { TerminalInfo, PersistedTerminalInfo } from './terminal-types';
 
 export const EDITLESS_INSTRUCTIONS_DIR = path.join(os.homedir(), '.copilot', 'editless');
 
+function joinCopilotCustomInstructionsDirs(...dirs: Array<string | undefined>): string {
+  return dirs.filter((dir): dir is string => Boolean(dir)).join(',');
+}
+
+// Copilot CLI expects this env var to be a comma-separated list of directories.
+export function buildEditlessCustomInstructionsDirs(existingDirs: string | undefined): string {
+  const normalizedExistingDirs = existingDirs?.replace(/;/g, ',');
+  return joinCopilotCustomInstructionsDirs(normalizedExistingDirs, EDITLESS_INSTRUCTIONS_DIR);
+}
+
 // Re-exports for backward compatibility
 export type { SessionState } from './terminal-state';
 export { getStateIcon, getStateDescription } from './terminal-state';
@@ -150,7 +160,9 @@ export class TerminalManager implements vscode.Disposable {
       iconPath: new vscode.ThemeIcon('terminal'),
       env: {
         ...extraEnv,
-        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: [process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS, EDITLESS_INSTRUCTIONS_DIR].filter(Boolean).join(path.delimiter),
+        COPILOT_CUSTOM_INSTRUCTIONS_DIRS: buildEditlessCustomInstructionsDirs(
+          process.env.COPILOT_CUSTOM_INSTRUCTIONS_DIRS,
+        ),
         EDITLESS_TERMINAL_ID: id,
         EDITLESS_SQUAD_ID: config.id,
         EDITLESS_SQUAD_NAME: config.name,
