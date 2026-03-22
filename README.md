@@ -29,6 +29,34 @@ EditLess integrates with GitHub Copilot CLI and includes native support for [Squ
 
 New to agentic development? Start here — install EditLess, add a squad, and let the AI do the heavy lifting. You'll wonder how you ever worked without it.
 
+## Use your own CLI command
+
+EditLess is not locked to the default `copilot` command. If your preferred entry point is something else — for example `agency copilot` — you can point EditLess at that command globally or per agent.
+
+```jsonc
+// VS Code settings.json
+{
+  "editless.cli.command": "agency copilot"
+}
+```
+
+For a single agent, right-click the agent in the EditLess sidebar and choose **Go to Settings**, then set a per-agent override in `agent-settings.json`:
+
+```jsonc
+{
+  "agents": {
+    "my-agent-id": {
+      "command": "agency copilot"
+    }
+  }
+}
+```
+
+Per-agent `command` overrides the global `editless.cli.command`. See [Settings Reference](docs/SETTINGS.md) for more examples.
+
+> [!NOTE]
+> Microsoft FTEs: there are also a couple of internal first-party options in this space that are not yet publicly announced. If you want to hear about those or want help making them work for your scenario, please contact Casey Irvine.
+
 ![EditLess sidebar showing agents, work items, and terminal sessions](docs/images/hero-screenshot.png)
 
 ## Installation

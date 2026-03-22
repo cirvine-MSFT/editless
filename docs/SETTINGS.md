@@ -37,14 +37,17 @@ Settings for configuring how EditLess launches Copilot CLI sessions.
 | `editless.cli.command` | `string` | `"copilot"` | window | Override the default `copilot` binary with a custom command or wrapper script. Supports multi-word commands (e.g., `"my-wrapper copilot"`). Can be overridden per-agent in agent settings. |
 | `editless.cli.additionalArgs` | `string` | `""` | window | Additional command-line arguments appended to the Copilot CLI when launching sessions. Use this to pass flags like `--yolo` to every session. |
 
-**Example:**
+**Example — use Agency as the launch command:**
 
 ```jsonc
 {
-  "editless.cli.command": "copilot",
-  "editless.cli.additionalArgs": "--yolo"
+  "editless.cli.command": "agency copilot",
+  "editless.cli.additionalArgs": ""
 }
 ```
+
+> [!NOTE]
+> Microsoft FTEs: there are also a couple of internal first-party options in this space that are not yet publicly announced. If you want to hear about those or want help mapping them to your scenario, please contact Casey Irvine.
 
 ---
 
@@ -218,15 +221,17 @@ User preferences for discovered agents are stored in **`agent-settings.json`** i
 
 ```jsonc
 {
-  "my-squad": {
-    "hidden": false,
-    "model": "gpt-4",
-    "additionalArgs": "--yolo"
-  },
-  "code-reviewer": {
-    "hidden": false,
-    "command": "custom-copilot",
-    "additionalArgs": "--no-cache"
+  "agents": {
+    "my-squad": {
+      "hidden": false,
+      "model": "gpt-4",
+      "additionalArgs": "--yolo"
+    },
+    "code-reviewer": {
+      "hidden": false,
+      "command": "custom-copilot",
+      "additionalArgs": "--no-cache"
+    }
   }
 }
 ```
@@ -241,8 +246,8 @@ User preferences for discovered agents are stored in **`agent-settings.json`** i
 ### Managing Agent Settings
 
 - **Hide/show agents** — Right-click an agent → "Hide Agent". Hidden agents appear under a collapsible "Hidden (N)" group.
-- **Per-agent model** — Right-click an agent → "Set Model" (planned feature).
-- **Per-agent CLI flags** — Edit `agent-settings.json` in VS Code settings storage (or wait for UI support in future releases).
+- **Per-agent model** — Right-click an agent → "Change Model".
+- **Per-agent CLI settings** — Right-click an agent → "Go to Settings" to open `agent-settings.json`, then edit that agent's entry.
 
 ### Migration from agent-registry.json
 
@@ -253,6 +258,30 @@ If you're upgrading from v0.1.2 or earlier, your existing `agent-registry.json` 
 ## Per-Agent CLI Settings
 
 When launching an agent, EditLess builds a command line by combining global CLI settings with per-agent config overrides.
+
+### Command Override
+
+The `command` field in `agent-settings.json` overrides `editless.cli.command` **for that agent only**. This is useful when you want one agent to launch through a different entry point, such as `agency copilot`:
+
+```jsonc
+// VS Code settings.json
+{
+  "editless.cli.command": "copilot"
+}
+```
+
+```jsonc
+// agent-settings.json (in global storage)
+{
+  "agents": {
+    "my-agent": {
+      "command": "agency copilot"
+    }
+  }
+}
+```
+
+When this agent launches, EditLess uses `agency copilot` for that agent while other agents still use the global `copilot` command.
 
 ### Model Override
 
@@ -268,8 +297,10 @@ The `model` field in `agent-settings.json` sets the Copilot CLI `--model` flag *
 ```jsonc
 // agent-settings.json (in global storage)
 {
-  "my-squad": {
-    "model": "gpt-4"  // This agent always uses gpt-4
+  "agents": {
+    "my-squad": {
+      "model": "gpt-4"  // This agent always uses gpt-4
+    }
   }
 }
 ```
@@ -295,8 +326,10 @@ Flags are concatenated and split on whitespace.
 
 // agent-settings.json
 {
-  "my-agent": {
-    "additionalArgs": "--no-telemetry"
+  "agents": {
+    "my-agent": {
+      "additionalArgs": "--no-telemetry"
+    }
   }
 }
 ```

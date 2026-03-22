@@ -9,6 +9,8 @@ import * as path from 'path';
  *
  * Allowed exceptions:
  *   - agencyResolver / agency.json — legitimate marketplace manifest format (#508)
+ *   - specific README.md and docs/SETTINGS.md lines may mention `agency copilot`
+ *     as an example for the generic CLI override flow (#526)
  *
  * Scans all text files in the repo EXCEPT:
  *   - .squad/, .ai-team/ (internal squad state — historical references are fine)
@@ -57,8 +59,23 @@ const ALLOWED_PATTERNS = [
   /"agency"/,          // resolver ID string literal
 ];
 
-function isAllowedAgencyRef(line: string): boolean {
-  return ALLOWED_PATTERNS.some(p => p.test(line));
+const FILE_SPECIFIC_ALLOWED_PATTERNS = new Map<string, RegExp[]>([
+  ['README.md', [
+    /agency copilot/i,
+  ]],
+  [path.join('docs', 'SETTINGS.md'), [
+    /agency copilot/i,
+    /use agency as the launch command/i,
+  ]],
+]);
+
+function isAllowedAgencyRef(relPath: string, line: string): boolean {
+  if (ALLOWED_PATTERNS.some(p => p.test(line))) {
+    return true;
+  }
+
+  const filePatterns = FILE_SPECIFIC_ALLOWED_PATTERNS.get(relPath);
+  return filePatterns?.some(p => p.test(line)) ?? false;
 }
 
 describe('Agency CLI removal guardrail (#101)', () => {
@@ -69,14 +86,14 @@ describe('Agency CLI removal guardrail (#101)', () => {
     for (const filePath of files) {
       const fileName = path.basename(filePath);
       if (SKIP_FILES.has(fileName)) continue;
+      const rel = path.relative(REPO_ROOT, filePath);
       
       const lines = fs.readFileSync(filePath, 'utf-8').split('\n');
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i];
         // Skip comment-only lines in code files
         if (/^\s*(\/\/|\/\*|\*|#)/.test(line)) continue;
-        if (/agency/i.test(line) && !isAllowedAgencyRef(line)) {
-          const rel = path.relative(REPO_ROOT, filePath);
+        if (/agency/i.test(line) && !isAllowedAgencyRef(rel, line)) {
           violations.push(`${rel}:${i + 1}: ${line.trim()}`);
         }
       }
