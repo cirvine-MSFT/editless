@@ -136,6 +136,15 @@ npm run watch
 **Debug in VS Code** (with watch mode running):
 Press **F5** to launch the Extension Development Host with your local build.
 
+### Pull Request Requirements
+
+When you open a PR against `master`, GitHub requires the standard CI checks plus an `AI Review` check.
+
+- Non-draft PRs automatically request GitHub Copilot review.
+- `AI Review` passes once Copilot leaves a review or review comment on the current PR head.
+- Human approvals are not required, but unresolved conversations and failing required checks still block merge.
+- Draft PRs skip the AI review gate until you mark them ready for review.
+
 ## Development Commands
 
 | Command | Purpose |
