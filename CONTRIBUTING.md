@@ -138,12 +138,12 @@ Press **F5** to launch the Extension Development Host with your local build.
 
 ### Pull Request Requirements
 
-In this repository, the `master` branch is protected: pull requests to `master` must pass the standard CI checks plus an `AI Review` check before they can merge.
+In this repository, the `master` branch is protected: pull requests to `master` must pass the standard CI checks and receive at least one human approving review before they can merge.
 
-- When GitHub Copilot code review is enabled for the repo, GitHub should request Copilot review automatically when a non-draft PR opens. If Copilot does not review automatically on the initial PR or a later push, use the GitHub PR sidebar to manually request another Copilot review.
-- `AI Review` stays in progress until Copilot leaves a review or review comment on the current PR head. Each new push creates a new head SHA, so follow-up commits may need a fresh Copilot review before the check turns green again.
-- Human approvals are not required, but unresolved conversations and failing required checks still block merge.
-- Draft PRs skip the AI review gate until you mark them ready for review.
+- GitHub does not count the pull request author's own approval toward the required review count.
+- Unresolved conversations and failing required checks still block merge.
+- Draft pull requests cannot merge until they are marked ready for review.
+- Repository owners and admins can still bypass these protections while admin enforcement remains off.
 
 ## Development Commands
 
