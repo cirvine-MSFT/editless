@@ -1,6 +1,8 @@
 # Agent Markdown File Format
 
-EditLess discovers and displays standalone agents by scanning for `.agent.md` files in your workspace and the Copilot local directory (`~/.copilot/`). This document describes the format and conventions for these files.
+> This page documents EditLess discovery behavior for standalone agent files. It describes what EditLess supports today, which may differ from other Copilot surfaces.
+
+EditLess discovers and displays standalone agents by scanning for agent markdown files in your workspace and the Copilot local directory (`~/.copilot/`). In dedicated `agents/` folders, both `.md` and `.agent.md` files are supported. Outside those folders, fallback discovery remains `.agent.md`-only.
 
 ---
 
@@ -18,37 +20,35 @@ These agents appear in the **Agents** sidebar view and can be launched just like
 
 ## File Location & Naming
 
-Agent files must follow this naming convention:
+EditLess currently supports two filename rules:
 
-```
-<name>.agent.md
-```
-
-EditLess scans for `.agent.md` files in these locations:
-
-| Location | Scope | Priority |
-|----------|-------|----------|
-| `<workspace-root>/.github/agents/` | workspace | 1 (highest) |
-| `<workspace-root>/` | workspace | 2 |
-| `~/.copilot/` | system-wide | 3 (lowest) |
+| Location | Accepted filenames | Scope | Priority |
+|----------|--------------------|-------|----------|
+| `<workspace-root>/.github/agents/` | `*.md`, `*.agent.md` | workspace | 1 (highest) |
+| `<workspace-root>/.copilot/agents/` | `*.md`, `*.agent.md` | workspace | 1 (highest) |
+| `~/.copilot/agents/`, `~/.config/copilot/agents/` | `*.md`, `*.agent.md` | system-wide | 2 |
+| `<workspace-root>/`, `~/.copilot/`, `~/.config/copilot/` | `*.agent.md` | fallback | 3 (lowest) |
 
 **Example file paths:**
 
+- `my-project/.github/agents/code-reviewer.md`
 - `my-project/.github/agents/code-reviewer.agent.md`
 - `my-project/my-agent.agent.md`
+- `~/.copilot/agents/claude-sonnet.md`
 - `~/.copilot/claude-sonnet.agent.md`
 
 ### ID Generation
 
 The agent ID is derived from the filename by:
 
-1. Remove `.agent.md` suffix
+1. Remove `.agent.md` or `.md` suffix
 2. Convert camelCase to kebab-case
 3. Convert spaces and underscores to hyphens
 4. Lowercase all characters
 
 | Filename | ID |
 |----------|-----|
+| `CodeReviewer.md` | `code-reviewer` |
 | `CodeReviewer.agent.md` | `code-reviewer` |
 | `my_agent.agent.md` | `my-agent` |
 | `claude sonnet.agent.md` | `claude-sonnet` |
@@ -85,7 +85,7 @@ The agent name is extracted from the **first H1 heading** in the file:
 
 **Display name:** "Code Reviewer"
 
-If no H1 heading is found, the filename (without `.agent.md`) is used as the display name.
+If no H1 heading is found, the filename (without `.agent.md` or `.md`) is used as the display name.
 
 ### Description Extraction
 
@@ -309,8 +309,8 @@ This keeps agents organized and discoverable by all team members who clone the r
 
 ### Agent Not Appearing in Sidebar
 
-- **Check filename:** Must end with `.agent.md`
-- **Check location:** File should be in workspace root, `.github/agents/`, or `~/.copilot/`
+- **Check filename:** In `.github/agents/`, `.copilot/agents/`, and personal Copilot `agents/` directories, the file can end with `.md` or `.agent.md`. In fallback locations such as the workspace root or `~/.copilot/`, use `.agent.md`.
+- **Check location:** File should be in a supported workspace or Copilot agent discovery location
 - **Trigger discovery:** Run **EditLess: Discover Squads** command (keyboard shortcut: or command palette)
 - **Check settings:** Verify `editless.discovery.scanPaths` includes the directory
 
@@ -333,7 +333,7 @@ This keeps agents organized and discoverable by all team members who clone the r
 
 ## Integration with Squads
 
-Agent files are separate from squad rosters. Squads define agents in `.ai-team/team.md` (or `.squad/team.md`). Standalone agents discovered from `.agent.md` files appear alongside squad agents in the Agents view but are not part of any team.
+Agent files are separate from squad rosters. Squads define agents in `.ai-team/team.md` (or `.squad/team.md`). Standalone agents discovered from agent markdown files appear alongside squad agents in the Agents view but are not part of any team.
 
 ---
 

@@ -42,7 +42,7 @@ EditLess auto-discovers Squad teams by scanning for `.squad/` (or `.ai-team/`) d
 
 ### Don't Need Squad?
 
-**Squad is optional.** EditLess natively supports markdown agent files and agent configs in `.github/agents/` or anywhere in your project. If you prefer working with standalone agents or simple instruction files (like `.github/copilot-instructions.md`), EditLess discovers and manages those too.
+**Squad is optional.** EditLess also supports standalone agent files. Out of the box, it auto-discovers agents from workspace `.github/agents/`, workspace `.copilot/agents/`, personal `~/.copilot/agents/`, and fallback `.agent.md` files in supported root locations. See `docs/agent-file-format.md` for the exact support matrix.
 
 Not every project needs a full team framework — start simple and adopt Squad when it makes sense for your workflow.
 
