@@ -245,6 +245,18 @@
         "icon": "$(link-external)"
       },
       {
+        "command": "editless.copyDescription",
+        "title": "Copy Description",
+        "category": "EditLess",
+        "icon": "$(copy)"
+      },
+      {
+        "command": "editless.copyUrl",
+        "title": "Copy URL",
+        "category": "EditLess",
+        "icon": "$(link)"
+      },
+      {
         "command": "editless.launchFromWorkItem",
         "title": "Launch with Agent",
         "category": "EditLess",
@@ -547,6 +559,16 @@
           "group": "work-item@1"
         },
         {
+          "command": "editless.copyDescription",
+          "when": "viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
+          "group": "work-item@2"
+        },
+        {
+          "command": "editless.copyUrl",
+          "when": "viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
+          "group": "work-item@3"
+        },
+        {
           "command": "editless.openTaskFile",
           "when": "viewItem == local-task",
           "group": "work-item@2"
@@ -554,7 +576,7 @@
         {
           "command": "editless.openInBrowser",
           "when": "viewItem =~ /^(work-item|ado-work-item|ado-parent-item)$/",
-          "group": "work-item@3"
+          "group": "work-item@4"
         },
         {
           "command": "editless.launchFromPR",
@@ -572,9 +594,19 @@
           "group": "pull-request@1"
         },
         {
-          "command": "editless.openInBrowser",
+          "command": "editless.copyDescription",
           "when": "viewItem =~ /^(pull-request|ado-pull-request)$/",
           "group": "pull-request@2"
+        },
+        {
+          "command": "editless.copyUrl",
+          "when": "viewItem =~ /^(pull-request|ado-pull-request)$/",
+          "group": "pull-request@3"
+        },
+        {
+          "command": "editless.openInBrowser",
+          "when": "viewItem =~ /^(pull-request|ado-pull-request)$/",
+          "group": "pull-request@4"
         },
         {
           "command": "editless.relaunchSession",
@@ -713,6 +745,14 @@
         },
         {
           "command": "editless.openInBrowser",
+          "when": "false"
+        },
+        {
+          "command": "editless.copyDescription",
+          "when": "false"
+        },
+        {
+          "command": "editless.copyUrl",
           "when": "false"
         },
         {

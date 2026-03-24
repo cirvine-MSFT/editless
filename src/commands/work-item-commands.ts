@@ -10,7 +10,14 @@ import { fetchLinkedPRs } from '../github-client';
 import type { DiscoveredItem } from '../unified-discovery';
 import { promptAdoSignIn } from '../ado-auth';
 import { buildLevelFilterPicker, buildPRLevelFilterPicker } from './level-filter-picker';
-import { launchFromWorkItem, launchFromPR } from './work-item-launcher';
+import {
+  buildPrDescriptionText,
+  buildWorkItemDescriptionText,
+  getPrUrl,
+  getWorkItemUrl,
+  launchFromPR,
+  launchFromWorkItem,
+} from './work-item-launcher';
 
 export interface WorkItemCommandDeps {
   agentSettings: AgentSettingsManager;
@@ -231,10 +238,36 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
     vscode.commands.registerCommand('editless.openInBrowser', async (arg: WorkItemsTreeItem | PRsTreeItem) => {
       const wiItem = arg as WorkItemsTreeItem;
       const prItem = arg as PRsTreeItem;
-      const url = wiItem.issue?.url ?? wiItem.adoWorkItem?.url ?? prItem.pr?.url ?? prItem.adoPR?.url;
+      const url = getWorkItemUrl(wiItem) ?? getPrUrl(prItem);
       if (url) {
         await vscode.env.openExternal(vscode.Uri.parse(url));
       }
+    }),
+  );
+
+  // Copy item description text (context menu for work items and PRs)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.copyDescription', async (arg: WorkItemsTreeItem | PRsTreeItem) => {
+      const wiItem = arg as WorkItemsTreeItem;
+      const prItem = arg as PRsTreeItem;
+      const text = buildWorkItemDescriptionText(wiItem) ?? buildPrDescriptionText(prItem);
+      if (!text) return;
+
+      await vscode.env.clipboard.writeText(text);
+      vscode.window.showInformationMessage('Copied description to clipboard');
+    }),
+  );
+
+  // Copy item URL (context menu for work items and PRs)
+  context.subscriptions.push(
+    vscode.commands.registerCommand('editless.copyUrl', async (arg: WorkItemsTreeItem | PRsTreeItem) => {
+      const wiItem = arg as WorkItemsTreeItem;
+      const prItem = arg as PRsTreeItem;
+      const url = getWorkItemUrl(wiItem) ?? getPrUrl(prItem);
+      if (!url) return;
+
+      await vscode.env.clipboard.writeText(url);
+      vscode.window.showInformationMessage('Copied URL to clipboard');
     }),
   );
 
