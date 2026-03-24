@@ -254,7 +254,7 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       if (!text) return;
 
       await vscode.env.clipboard.writeText(text);
-      vscode.window.showInformationMessage(`Copied ${text} to clipboard`);
+      vscode.window.showInformationMessage('Copied description to clipboard');
     }),
   );
 
@@ -267,7 +267,7 @@ export function register(context: vscode.ExtensionContext, deps: WorkItemCommand
       if (!url) return;
 
       await vscode.env.clipboard.writeText(url);
-      vscode.window.showInformationMessage(`Copied ${url} to clipboard`);
+      vscode.window.showInformationMessage('Copied URL to clipboard');
     }),
   );
 

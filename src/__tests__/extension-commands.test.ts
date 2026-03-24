@@ -1568,21 +1568,21 @@ describe('extension command handlers', () => {
       const item = { issue: { number: 42, title: 'Fix bug' } };
       await getHandler('editless.copyDescription')(item);
       expect(mockClipboardWriteText).toHaveBeenCalledWith('Issue#42: Fix bug');
-      expect(mockShowInformationMessage).toHaveBeenCalledWith('Copied Issue#42: Fix bug to clipboard');
+      expect(mockShowInformationMessage).toHaveBeenCalledWith('Copied description to clipboard');
     });
 
     it('should copy ADO work item description text with type abbreviation', async () => {
       const item = { adoWorkItem: { id: 1234, title: 'Ship onboarding flow', type: 'User Story' } };
       await getHandler('editless.copyDescription')(item);
       expect(mockClipboardWriteText).toHaveBeenCalledWith('US#1234: Ship onboarding flow');
-      expect(mockShowInformationMessage).toHaveBeenCalledWith('Copied US#1234: Ship onboarding flow to clipboard');
+      expect(mockShowInformationMessage).toHaveBeenCalledWith('Copied description to clipboard');
     });
 
     it('should copy PR description text', async () => {
       const item = { pr: { number: 100, title: 'Add feature' } };
       await getHandler('editless.copyDescription')(item);
       expect(mockClipboardWriteText).toHaveBeenCalledWith('PR#100: Add feature');
-      expect(mockShowInformationMessage).toHaveBeenCalledWith('Copied PR#100: Add feature to clipboard');
+      expect(mockShowInformationMessage).toHaveBeenCalledWith('Copied description to clipboard');
     });
 
     it('should no-op when the item has no description text', async () => {
@@ -1599,14 +1599,14 @@ describe('extension command handlers', () => {
       const item = { issue: { url: 'https://github.com/owner/repo/issues/42' } };
       await getHandler('editless.copyUrl')(item);
       expect(mockClipboardWriteText).toHaveBeenCalledWith('https://github.com/owner/repo/issues/42');
-      expect(mockShowInformationMessage).toHaveBeenCalledWith('Copied https://github.com/owner/repo/issues/42 to clipboard');
+      expect(mockShowInformationMessage).toHaveBeenCalledWith('Copied URL to clipboard');
     });
 
     it('should copy a PR URL', async () => {
       const item = { adoPR: { url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/200' } };
       await getHandler('editless.copyUrl')(item);
       expect(mockClipboardWriteText).toHaveBeenCalledWith('https://dev.azure.com/org/project/_git/repo/pullrequest/200');
-      expect(mockShowInformationMessage).toHaveBeenCalledWith('Copied https://dev.azure.com/org/project/_git/repo/pullrequest/200 to clipboard');
+      expect(mockShowInformationMessage).toHaveBeenCalledWith('Copied URL to clipboard');
     });
 
     it('should no-op when the item has no URL', async () => {
