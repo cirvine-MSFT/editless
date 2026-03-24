@@ -37,7 +37,7 @@ describe('launch-utils', () => {
       
       launchAndLabel(mockTerminalManager, mockLabelManager, mockConfig, rawName);
 
-      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, rawName, undefined);
+      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, rawName, undefined, undefined);
       expect(mockTerminalManager.getLabelKey).toHaveBeenCalledWith(mockTerminal);
       expect(mockLabelManager.setLabel).toHaveBeenCalledWith('terminal:test-key', rawName);
     });
@@ -47,7 +47,7 @@ describe('launch-utils', () => {
       
       launchAndLabel(mockTerminalManager, mockLabelManager, mockConfig, longName);
 
-      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, longName, undefined);
+      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, longName, undefined, undefined);
       expect(mockLabelManager.setLabel).toHaveBeenCalledWith('terminal:test-key', longName);
     });
 
@@ -64,7 +64,7 @@ describe('launch-utils', () => {
       
       launchAndLabel(mockTerminalManager, mockLabelManager, mockConfig, rawName);
 
-      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, rawName, undefined);
+      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, rawName, undefined, undefined);
     });
 
     it('should handle PR format (PR #number title)', () => {
@@ -72,7 +72,7 @@ describe('launch-utils', () => {
       
       launchAndLabel(mockTerminalManager, mockLabelManager, mockConfig, rawName);
 
-      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, rawName, undefined);
+      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, rawName, undefined, undefined);
     });
 
     it('should pass extraEnv to launchTerminal', () => {
@@ -81,7 +81,23 @@ describe('launch-utils', () => {
 
       launchAndLabel(mockTerminalManager, mockLabelManager, mockConfig, rawName, extraEnv);
 
-      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, rawName, extraEnv);
+      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, rawName, extraEnv, undefined);
+    });
+
+    it('should pass initialPrompt to launchTerminal when provided', () => {
+      const rawName = '#99 Prompted item';
+      const extraEnv = { EDITLESS_WORK_ITEM_URI: 'https://github.com/tasks/99' };
+      const initialPrompt = 'Issue#99: Prompted item';
+
+      launchAndLabel(mockTerminalManager, mockLabelManager, mockConfig, rawName, extraEnv, initialPrompt);
+
+      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(
+        mockConfig,
+        rawName,
+        extraEnv,
+        initialPrompt,
+      );
+      expect(mockLabelManager.setLabel).toHaveBeenCalledWith('terminal:test-key', rawName);
     });
   });
 });

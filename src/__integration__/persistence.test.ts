@@ -8,7 +8,12 @@ import * as vscode from 'vscode';
 
 interface EditlessTestApi {
   terminalManager: {
-    launchTerminal(config: TestSquadConfig, customName?: string): vscode.Terminal;
+    launchTerminal(
+      config: TestSquadConfig,
+      customName?: string,
+      extraEnv?: Record<string, string>,
+      initialPrompt?: string,
+    ): vscode.Terminal;
     getAllTerminals(): Array<{ terminal: vscode.Terminal; info: Record<string, unknown> }>;
   };
   context: vscode.ExtensionContext;

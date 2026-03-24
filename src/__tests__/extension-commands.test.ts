@@ -1584,7 +1584,14 @@ describe('extension command handlers', () => {
 
       await getHandler('editless.launchFromWorkItem')(item);
 
-      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), '#42 Fix bug', { EDITLESS_WORK_ITEM_URI: 'https://example.com/42' });
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ id: 'squad-1' }),
+        '#42 Fix bug',
+        { EDITLESS_WORK_ITEM_URI: 'https://example.com/42' },
+        'Issue#42: Fix bug',
+      );
     });
 
     it('should no-op when item has no issue', async () => {
@@ -1620,7 +1627,35 @@ describe('extension command handlers', () => {
 
       await getHandler('editless.launchFromWorkItem')(item);
 
-      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'Local fix', { EDITLESS_WORK_ITEM_URI: 'file:///tasks/task-1.md' });
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ id: 'squad-1' }),
+        'Local fix',
+        { EDITLESS_WORK_ITEM_URI: 'file:///tasks/task-1.md' },
+        'Task#task-1: Local fix',
+      );
+    });
+
+    it('should format ADO work item prompt text with type-aware prefix', async () => {
+      const disc = { id: 'squad-1', name: 'Alpha Squad', type: 'squad' as const, source: 'workspace' as const, path: '/squads/alpha', universe: 'test' };
+      mockDiscoverAll.mockReturnValue([disc]);
+      commandHandlers.clear();
+      activate(makeContext());
+
+      const item = { adoWorkItem: { id: 1234, title: 'Ship onboarding flow', type: 'User Story', url: 'https://dev.azure.com/org/project/_workitems/edit/1234' } };
+      mockShowQuickPick.mockResolvedValue({ label: '🔷 Alpha Squad', description: 'test', disc });
+
+      await getHandler('editless.launchFromWorkItem')(item);
+
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ id: 'squad-1' }),
+        '#1234 Ship onboarding flow',
+        { EDITLESS_WORK_ITEM_URI: 'https://dev.azure.com/org/project/_workitems/edit/1234' },
+        'US#1234: Ship onboarding flow',
+      );
     });
   });
 
@@ -2033,7 +2068,14 @@ describe('additional extension command handlers', () => {
 
       await getHandler('editless.launchFromPR')(item);
 
-      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'PR #100 Add feature', { EDITLESS_WORK_ITEM_URI: 'https://github.com/owner/repo/pull/100' });
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ id: 'squad-1' }),
+        'PR #100 Add feature',
+        { EDITLESS_WORK_ITEM_URI: 'https://github.com/owner/repo/pull/100' },
+        'PR#100: Add feature',
+      );
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('https://github.com/owner/repo/pull/100'),
       );
@@ -2050,7 +2092,14 @@ describe('additional extension command handlers', () => {
 
       await getHandler('editless.launchFromPR')(item);
 
-      expect(mockLaunchAndLabel).toHaveBeenCalledWith(expect.anything(), expect.anything(), expect.objectContaining({ id: 'squad-1' }), 'PR #200 Fix bug', { EDITLESS_WORK_ITEM_URI: 'https://dev.azure.com/org/project/_git/repo/pullrequest/200' });
+      expect(mockLaunchAndLabel).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.anything(),
+        expect.objectContaining({ id: 'squad-1' }),
+        'PR #200 Fix bug',
+        { EDITLESS_WORK_ITEM_URI: 'https://dev.azure.com/org/project/_git/repo/pullrequest/200' },
+        'PR#200: Fix bug',
+      );
       expect(mockShowInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('https://dev.azure.com/org/project/_git/repo/pullrequest/200'),
       );
