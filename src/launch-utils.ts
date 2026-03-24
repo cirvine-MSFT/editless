@@ -20,9 +20,7 @@ export function launchAndLabel(
   extraEnv?: Record<string, string>,
   initialPrompt?: string,
 ): vscode.Terminal {
-  const terminal = initialPrompt === undefined
-    ? terminalManager.launchTerminal(cfg, rawName, extraEnv)
-    : terminalManager.launchTerminal(cfg, rawName, extraEnv, initialPrompt);
+  const terminal = terminalManager.launchTerminal(cfg, rawName, extraEnv, initialPrompt);
   labelManager.setLabel(terminalManager.getLabelKey(terminal), rawName);
   return terminal;
 }
