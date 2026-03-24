@@ -76,6 +76,22 @@ function buildPrInitialPrompt(item: PRsTreeItem | undefined): string | undefined
   return formatInitialPrompt('PR', number, title);
 }
 
+export function buildWorkItemDescriptionText(item?: WorkItemsTreeItem): string | undefined {
+  return buildWorkItemInitialPrompt(item);
+}
+
+export function buildPrDescriptionText(item?: PRsTreeItem): string | undefined {
+  return buildPrInitialPrompt(item);
+}
+
+export function getWorkItemUrl(item?: WorkItemsTreeItem): string | undefined {
+  return item?.issue?.url ?? item?.adoWorkItem?.url;
+}
+
+export function getPrUrl(item?: PRsTreeItem): string | undefined {
+  return item?.pr?.url ?? item?.adoPR?.url;
+}
+
 /** Launch a Copilot session from a work item (issue, ADO item, or local task). */
 export async function launchFromWorkItem(deps: LauncherDeps, item?: WorkItemsTreeItem): Promise<void> {
   const issue = item?.issue;
@@ -90,7 +106,7 @@ export async function launchFromWorkItem(deps: LauncherDeps, item?: WorkItemsTre
   const number = issue?.number ?? adoItem?.id;
   const title = issue?.title ?? adoItem?.title ?? localTask?.title ?? '';
   const localPath = localTask?.filePath;
-  const url = issue?.url ?? adoItem?.url ?? (localPath ? vscode.Uri.file(localPath).toString() : '');
+  const url = getWorkItemUrl(item) ?? (localPath ? vscode.Uri.file(localPath).toString() : '');
   const displayLabel = localTask ? localTask.title : `#${number} ${title}`;
 
   const cliItem = {
@@ -145,7 +161,7 @@ export async function launchFromPR(deps: LauncherDeps, item?: PRsTreeItem): Prom
 
   const number = pr?.number ?? adoPR?.id;
   const title = pr?.title ?? adoPR?.title ?? '';
-  const url = pr?.url ?? adoPR?.url ?? '';
+  const url = getPrUrl(item) ?? '';
 
   const cliItem = {
     label: '$(terminal) Copilot CLI',
