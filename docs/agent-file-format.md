@@ -24,10 +24,13 @@ EditLess currently supports two filename rules:
 
 | Location | Accepted filenames | Scope | Priority |
 |----------|--------------------|-------|----------|
-| `<workspace-root>/.github/agents/` | `*.md`, `*.agent.md` | workspace | 1 (highest) |
-| `<workspace-root>/.copilot/agents/` | `*.md`, `*.agent.md` | workspace | 1 (highest) |
-| `~/.copilot/agents/`, `~/.config/copilot/agents/` | `*.md`, `*.agent.md` | system-wide | 2 |
+| `<workspace-root>/.github/agents/` | `*.md` (except `README.md`), `*.agent.md` | workspace | 1 (highest; scanned before `.copilot/agents/`) |
+| `<workspace-root>/.copilot/agents/` | `*.md` (except `README.md`), `*.agent.md` | workspace | 1 (highest) |
+| `~/.copilot/agents/` | `*.md` (except `README.md`), `*.agent.md` | system-wide | 2 (scanned before `~/.config/copilot/agents/`) |
+| `~/.config/copilot/agents/` | `*.md` (except `README.md`), `*.agent.md` | system-wide | 2 |
 | `<workspace-root>/`, `~/.copilot/`, `~/.config/copilot/` | `*.agent.md` | fallback | 3 (lowest) |
+
+When multiple locations share the same numeric priority, EditLess resolves collisions by scanning in the order shown above (top to bottom).
 
 **Example file paths:**
 

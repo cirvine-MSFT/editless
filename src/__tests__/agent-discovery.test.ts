@@ -187,6 +187,17 @@ describe('discoverAgentsInWorkspace', () => {
     expect(result[0].name).toBe('Real Agent');
   });
 
+  it('should ignore README.md in standard agent directories', () => {
+    writeFixture('ws/.github/agents/README.md', '# Readme\nNot an agent.\n');
+    writeFixture('ws/.github/agents/helper.md', '# Helper\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('helper');
+    expect(result.find(a => a.filePath.endsWith('README.md'))).toBeUndefined();
+  });
+
   it('should prefer .agent.md over .md when both filenames map to the same id', () => {
     const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     writeFixture('ws/.github/agents/helper.md', '# Helper From Markdown\n');
@@ -341,6 +352,31 @@ describe('discoverAgentsInWorkspace', () => {
     const helper = result.find(a => a.id === 'helper');
     expect(helper).toBeDefined();
     expect(helper?.name).toBe('Helper From Agent Md');
+  });
+
+  it('should ignore README.md and warn on async duplicate collisions in agents directories', async () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    writeFixture('ws/proj/.copilot/agents/README.md', '# Readme\nNot an agent.\n');
+    const keptPath = writeFixture('ws/proj/.copilot/agents/helper.agent.md', '# Helper From Agent Md\n');
+    const skippedPath = writeFixture('ws/proj/.copilot/agents/helper.md', '# Helper From Markdown\n');
+
+    const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result.find(a => a.filePath.endsWith('README.md'))).toBeUndefined();
+
+    const helper = result.find(a => a.id === 'helper');
+    expect(helper).toBeDefined();
+    expect(helper?.name).toBe('Helper From Agent Md');
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[editless] Agent ID collision — skipping duplicate:',
+      'helper',
+      'from',
+      skippedPath,
+      '(keeping',
+      keptPath + ')'
+    );
+
+    consoleWarnSpy.mockRestore();
   });
 });
 

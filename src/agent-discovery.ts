@@ -122,6 +122,28 @@ function isMarkdownFile(filename: string): boolean {
   return filename.toLowerCase().endsWith('.md');
 }
 
+function isAgentDirMarkdownFile(filename: string): boolean {
+  return isMarkdownFile(filename) && filename.toLowerCase() !== 'readme.md';
+}
+
+function compareCaseInsensitiveNames(left: string, right: string): number {
+  const leftKey = left.toLowerCase();
+  const rightKey = right.toLowerCase();
+  if (leftKey < rightKey) {
+    return -1;
+  }
+  if (leftKey > rightKey) {
+    return 1;
+  }
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
+}
+
 function compareAgentCandidateNames(left: string, right: string): number {
   const leftIsExplicitAgent = isAgentMdFile(left);
   const rightIsExplicitAgent = isAgentMdFile(right);
@@ -129,7 +151,7 @@ function compareAgentCandidateNames(left: string, right: string): number {
     return leftIsExplicitAgent ? -1 : 1;
   }
 
-  return left.localeCompare(right, undefined, { sensitivity: 'base' });
+  return compareCaseInsensitiveNames(left, right);
 }
 
 function collectMatchingFiles(
@@ -151,7 +173,7 @@ function collectAgentMdFiles(dirPath: string): string[] {
 }
 
 function collectAgentDirMarkdownFiles(dirPath: string): string[] {
-  return collectMatchingFiles(dirPath, isMarkdownFile);
+  return collectMatchingFiles(dirPath, isAgentDirMarkdownFile);
 }
 
 /**
@@ -210,7 +232,7 @@ export const agencyResolver: ManifestResolver = {
       if (!fs.existsSync(agentsDir)) return null;
 
       const agentFiles = fs.readdirSync(agentsDir)
-        .filter((f: string) => f.endsWith('.md') && f !== 'README.md')
+        .filter(isAgentDirMarkdownFile)
         .map((f: string) => path.join(agentsDir, f));
 
       if (agentFiles.length === 0) return null;
@@ -459,7 +481,7 @@ async function collectAgentMdFilesAsync(dirPath: string): Promise<string[]> {
 }
 
 async function collectAgentDirMarkdownFilesAsync(dirPath: string): Promise<string[]> {
-  return collectMatchingFilesAsync(dirPath, isMarkdownFile);
+  return collectMatchingFilesAsync(dirPath, isAgentDirMarkdownFile);
 }
 
 async function collectMatchingFilesAsync(
@@ -516,7 +538,10 @@ async function readAndPushAgentAsync(
 ): Promise<void> {
   const baseId = toKebabId(path.basename(filePath));
   const id = manifest ? `${path.basename(manifest.pluginDir)}/${baseId}` : baseId;
-  if (seen.has(id)) return;
+  if (seen.has(id)) {
+    console.warn('[editless] Agent ID collision — skipping duplicate:', id, 'from', filePath, '(keeping', seen.get(id) + ')');
+    return;
+  }
   seen.set(id, filePath);
   try {
     const content = await fsp.readFile(filePath, 'utf-8');
