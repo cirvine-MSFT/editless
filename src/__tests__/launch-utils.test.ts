@@ -83,5 +83,21 @@ describe('launch-utils', () => {
 
       expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(mockConfig, rawName, extraEnv);
     });
+
+    it('should pass initialPrompt to launchTerminal when provided', () => {
+      const rawName = '#99 Prompted item';
+      const extraEnv = { EDITLESS_WORK_ITEM_URI: 'https://github.com/tasks/99' };
+      const initialPrompt = 'Issue#99: Prompted item';
+
+      launchAndLabel(mockTerminalManager, mockLabelManager, mockConfig, rawName, extraEnv, initialPrompt);
+
+      expect(mockTerminalManager.launchTerminal).toHaveBeenCalledWith(
+        mockConfig,
+        rawName,
+        extraEnv,
+        initialPrompt,
+      );
+      expect(mockLabelManager.setLabel).toHaveBeenCalledWith('terminal:test-key', rawName);
+    });
   });
 });

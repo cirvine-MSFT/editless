@@ -18,8 +18,11 @@ export function launchAndLabel(
   cfg: AgentTeamConfig,
   rawName: string,
   extraEnv?: Record<string, string>,
+  initialPrompt?: string,
 ): vscode.Terminal {
-  const terminal = terminalManager.launchTerminal(cfg, rawName, extraEnv);
+  const terminal = initialPrompt === undefined
+    ? terminalManager.launchTerminal(cfg, rawName, extraEnv)
+    : terminalManager.launchTerminal(cfg, rawName, extraEnv, initialPrompt);
   labelManager.setLabel(terminalManager.getLabelKey(terminal), rawName);
   return terminal;
 }

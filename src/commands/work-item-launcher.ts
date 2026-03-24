@@ -16,6 +16,66 @@ export interface LauncherDeps {
   getDiscoveredItems: () => DiscoveredItem[];
 }
 
+function normalizePromptTitle(title: string | undefined): string {
+  return title?.replace(/\s+/g, ' ').trim() ?? '';
+}
+
+function formatInitialPrompt(prefix: string, id: string | number | undefined, title: string | undefined): string | undefined {
+  const normalizedId = id === undefined ? '' : String(id).trim();
+  const normalizedTitle = normalizePromptTitle(title);
+
+  if (normalizedId && normalizedTitle) {
+    return `${prefix}#${normalizedId}: ${normalizedTitle}`;
+  }
+  if (normalizedTitle) {
+    return normalizedTitle;
+  }
+  return normalizedId ? `${prefix}#${normalizedId}` : undefined;
+}
+
+function abbreviateAdoWorkItemType(type: string | undefined): string {
+  const normalizedType = type?.trim();
+  if (!normalizedType) return 'WI';
+
+  switch (normalizedType.toLowerCase()) {
+    case 'user story':
+      return 'US';
+    case 'product backlog item':
+      return 'PBI';
+    default: {
+      const parts = normalizedType.split(/\s+/).filter(Boolean);
+      return parts.length > 1
+        ? parts.map(part => part[0]?.toUpperCase() ?? '').join('')
+        : normalizedType;
+    }
+  }
+}
+
+function buildWorkItemInitialPrompt(item: WorkItemsTreeItem | undefined): string | undefined {
+  const issue = item?.issue;
+  const adoItem = item?.adoWorkItem;
+  const localTask = item?.localTask;
+
+  if (issue) {
+    return formatInitialPrompt('Issue', issue.number, issue.title);
+  }
+  if (adoItem) {
+    return formatInitialPrompt(abbreviateAdoWorkItemType(adoItem.type), adoItem.id, adoItem.title);
+  }
+  if (localTask) {
+    return formatInitialPrompt('Task', localTask.id, localTask.title);
+  }
+  return undefined;
+}
+
+function buildPrInitialPrompt(item: PRsTreeItem | undefined): string | undefined {
+  const pr = item?.pr;
+  const adoPR = item?.adoPR;
+  const number = pr?.number ?? adoPR?.id;
+  const title = pr?.title ?? adoPR?.title;
+  return formatInitialPrompt('PR', number, title);
+}
+
 /** Launch a Copilot session from a work item (issue, ADO item, or local task). */
 export async function launchFromWorkItem(deps: LauncherDeps, item?: WorkItemsTreeItem): Promise<void> {
   const issue = item?.issue;
@@ -54,13 +114,14 @@ export async function launchFromWorkItem(deps: LauncherDeps, item?: WorkItemsTre
 
   const rawName = localTask ? localTask.title : `#${number} ${title}`;
   const env = url ? { EDITLESS_WORK_ITEM_URI: url } : undefined;
+  const initialPrompt = buildWorkItemInitialPrompt(item);
   if (!pick.disc) {
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName, env);
+    launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName, env, initialPrompt);
   } else {
     const settings = agentSettings.get(pick.disc.id);
     const cfg = toAgentTeamConfig(pick.disc, settings);
-    launchAndLabel(terminalManager, labelManager, cfg, rawName, env);
+    launchAndLabel(terminalManager, labelManager, cfg, rawName, env, initialPrompt);
   }
 
   if (localTask?.filePath) {
@@ -107,13 +168,14 @@ export async function launchFromPR(deps: LauncherDeps, item?: PRsTreeItem): Prom
 
   const rawName = `PR #${number} ${title}`;
   const env = url ? { EDITLESS_WORK_ITEM_URI: url } : undefined;
+  const initialPrompt = buildPrInitialPrompt(item);
   if (!pick.disc) {
     const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
-    launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName, env);
+    launchAndLabel(terminalManager, labelManager, buildCopilotCLIConfig(cwd), rawName, env, initialPrompt);
   } else {
     const settings = agentSettings.get(pick.disc.id);
     const cfg = toAgentTeamConfig(pick.disc, settings);
-    launchAndLabel(terminalManager, labelManager, cfg, rawName, env);
+    launchAndLabel(terminalManager, labelManager, cfg, rawName, env, initialPrompt);
   }
 
   if (url) {

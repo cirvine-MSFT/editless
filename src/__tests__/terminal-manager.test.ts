@@ -2352,6 +2352,62 @@ describe('TerminalManager', () => {
       );
     });
 
+    it('launchTerminal injects the initial prompt on the first session event only once', () => {
+      const mockUuid = 'prompt-uuid-value' as `${string}-${string}-${string}-${string}-${string}`;
+      mockRandomUUID.mockReturnValue(mockUuid);
+
+      let capturedCallback: ((event: any) => void) | undefined;
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const mockResolver = makeMockResolver();
+      mockResolver.watchSession.mockImplementation((_id: string, cb: (event: any) => void) => {
+        capturedCallback = cb;
+        return { dispose: vi.fn() };
+      });
+      mgr.setSessionResolver(mockResolver as any);
+
+      const terminal = mgr.launchTerminal(
+        makeSquadConfig(),
+        'Prompted Session',
+        undefined,
+        'Issue#42: Fix bug',
+      );
+
+      expect(terminal.sendText).toHaveBeenCalledTimes(1);
+      expect(terminal.sendText).toHaveBeenNthCalledWith(1, expect.stringContaining(`--resume ${mockUuid}`));
+
+      capturedCallback!({ type: 'session.start', timestamp: new Date().toISOString() });
+      capturedCallback!({ type: 'session.idle', timestamp: new Date().toISOString() });
+
+      expect(terminal.sendText).toHaveBeenCalledTimes(2);
+      expect(terminal.sendText).toHaveBeenNthCalledWith(2, 'Issue#42: Fix bug', false);
+    });
+
+    it('launchTerminal drops the initial prompt after a session error', () => {
+      let capturedCallback: ((event: any) => void) | undefined;
+      const ctx = makeMockContext();
+      const mgr = new TerminalManager(ctx);
+      const mockResolver = makeMockResolver();
+      mockResolver.watchSession.mockImplementation((_id: string, cb: (event: any) => void) => {
+        capturedCallback = cb;
+        return { dispose: vi.fn() };
+      });
+      mgr.setSessionResolver(mockResolver as any);
+
+      const terminal = mgr.launchTerminal(
+        makeSquadConfig(),
+        'Prompted Session',
+        undefined,
+        'Issue#42: Fix bug',
+      );
+
+      capturedCallback!({ type: 'session.error', timestamp: new Date().toISOString() });
+      capturedCallback!({ type: 'session.idle', timestamp: new Date().toISOString() });
+
+      expect(terminal.sendText).toHaveBeenCalledTimes(1);
+      expect(terminal.sendText).toHaveBeenNthCalledWith(1, expect.stringContaining('--resume'));
+    });
+
     it('watcher is disposed when terminal closes', () => {
       const mockUuid = 'close-uuid' as `${string}-${string}-${string}-${string}-${string}`;
       mockRandomUUID.mockReturnValue(mockUuid);

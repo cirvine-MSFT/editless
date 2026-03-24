@@ -48,6 +48,7 @@ export class TerminalManager implements vscode.Disposable {
   private readonly _lastSessionEvent = new Map<vscode.Terminal, SessionEvent>();
   private readonly _launchingTerminals = new Set<vscode.Terminal>();
   private readonly _launchTimers = new Map<vscode.Terminal, ReturnType<typeof setTimeout>>();
+  private readonly _pendingInitialPrompts = new Map<vscode.Terminal, string>();
   private _changeTimer: ReturnType<typeof setTimeout> | undefined;
   private _persistTimer: ReturnType<typeof setInterval> | undefined;
   private _sessionResolver?: SessionContextResolver;
@@ -75,6 +76,7 @@ export class TerminalManager implements vscode.Disposable {
         this._shellExecutionActive.delete(terminal);
         this._lastActivityAt.delete(terminal);
         this._lastSessionEvent.delete(terminal);
+        this._pendingInitialPrompts.delete(terminal);
         const watcher = this._sessionWatchers.get(terminal);
         if (watcher) {
           watcher.dispose();
@@ -133,9 +135,33 @@ export class TerminalManager implements vscode.Disposable {
     }
   }
 
+  private _trackInitialPrompt(terminal: vscode.Terminal, initialPrompt?: string): void {
+    const trimmedPrompt = initialPrompt?.trim();
+    if (!trimmedPrompt) return;
+    this._pendingInitialPrompts.set(terminal, trimmedPrompt);
+  }
+
+  private _injectInitialPrompt(terminal: vscode.Terminal, event: SessionEvent): void {
+    const initialPrompt = this._pendingInitialPrompts.get(terminal);
+    if (!initialPrompt) return;
+    if (event.type === 'session.shutdown' || event.type === 'session.error') {
+      this._pendingInitialPrompts.delete(terminal);
+      return;
+    }
+
+    // Wait until Copilot emits a session event so the prompt lands in the active session input.
+    terminal.sendText(initialPrompt, false);
+    this._pendingInitialPrompts.delete(terminal);
+  }
+
   // -- Public API -----------------------------------------------------------
 
-  launchTerminal(config: AgentTeamConfig, customName?: string, extraEnv?: Record<string, string>): vscode.Terminal {
+  launchTerminal(
+    config: AgentTeamConfig,
+    customName?: string,
+    extraEnv?: Record<string, string>,
+    initialPrompt?: string,
+  ): vscode.Terminal {
     const index = this._counters.get(config.id) || 1;
     const displayName = customName ?? `${config.icon} ${config.name} #${index}`;
     const id = `${config.id}-${Date.now()}-${index}`;
@@ -187,6 +213,7 @@ export class TerminalManager implements vscode.Disposable {
 
     this._terminals.set(terminal, info);
     this._setLaunching(terminal);
+    this._trackInitialPrompt(terminal, initialPrompt);
 
     // Register custom config dir with the session resolver (#432)
     if (configDir && this._sessionResolver) {
@@ -200,6 +227,7 @@ export class TerminalManager implements vscode.Disposable {
         this._clearLaunching(terminal);
         this._lastSessionEvent.set(terminal, event);
         this._lastActivityAt.set(terminal, Date.now());
+        this._injectInitialPrompt(terminal, event);
         this._scheduleChange();
       });
       this._sessionWatchers.set(terminal, watcher);
@@ -533,6 +561,7 @@ export class TerminalManager implements vscode.Disposable {
     }
     this._launchTimers.clear();
     this._launchingTerminals.clear();
+    this._pendingInitialPrompts.clear();
     for (const w of this._sessionWatchers.values()) {
       w.dispose();
     }
