@@ -114,14 +114,66 @@ function parseAgentFile(content: string, fallbackName: string): { name: string; 
   return { name };
 }
 
-function collectAgentMdFiles(dirPath: string): string[] {
+function isAgentMdFile(filename: string): boolean {
+  return filename.toLowerCase().endsWith('.agent.md');
+}
+
+function isMarkdownFile(filename: string): boolean {
+  return filename.toLowerCase().endsWith('.md');
+}
+
+function isAgentDirMarkdownFile(filename: string): boolean {
+  return isMarkdownFile(filename) && filename.toLowerCase() !== 'readme.md';
+}
+
+function compareCaseInsensitiveNames(left: string, right: string): number {
+  const leftKey = left.toLowerCase();
+  const rightKey = right.toLowerCase();
+  if (leftKey < rightKey) {
+    return -1;
+  }
+  if (leftKey > rightKey) {
+    return 1;
+  }
+  if (left < right) {
+    return -1;
+  }
+  if (left > right) {
+    return 1;
+  }
+  return 0;
+}
+
+function compareAgentCandidateNames(left: string, right: string): number {
+  const leftIsExplicitAgent = isAgentMdFile(left);
+  const rightIsExplicitAgent = isAgentMdFile(right);
+  if (leftIsExplicitAgent !== rightIsExplicitAgent) {
+    return leftIsExplicitAgent ? -1 : 1;
+  }
+
+  return compareCaseInsensitiveNames(left, right);
+}
+
+function collectMatchingFiles(
+  dirPath: string,
+  matcher: (filename: string) => boolean,
+): string[] {
   try {
     return fs.readdirSync(dirPath)
-      .filter(f => f.endsWith('.agent.md'))
-      .map(f => path.join(dirPath, f));
+      .filter(matcher)
+      .sort(compareAgentCandidateNames)
+      .map(entry => path.join(dirPath, entry));
   } catch {
     return [];
   }
+}
+
+function collectAgentMdFiles(dirPath: string): string[] {
+  return collectMatchingFiles(dirPath, isAgentMdFile);
+}
+
+function collectAgentDirMarkdownFiles(dirPath: string): string[] {
+  return collectMatchingFiles(dirPath, isAgentDirMarkdownFile);
 }
 
 /**
@@ -149,7 +201,7 @@ function collectAgentMdFilesRecursive(
       const fullPath = path.join(dirPath, entry.name);
       if (entry.isDirectory()) {
         results.push(...collectAgentMdFilesRecursive(fullPath, depth + 1, maxDepth, visited, skipDirs));
-      } else if (entry.name.endsWith('.agent.md')) {
+      } else if (isAgentMdFile(entry.name)) {
         results.push(fullPath);
       }
     }
@@ -180,7 +232,7 @@ export const agencyResolver: ManifestResolver = {
       if (!fs.existsSync(agentsDir)) return null;
 
       const agentFiles = fs.readdirSync(agentsDir)
-        .filter((f: string) => f.endsWith('.md') && f !== 'README.md')
+        .filter(isAgentDirMarkdownFile)
         .map((f: string) => path.join(agentsDir, f));
 
       if (agentFiles.length === 0) return null;
@@ -313,8 +365,8 @@ function scanDirForAgents(
 ): void {
   const ghAgentsDir = path.join(dirPath, '.github', 'agents');
   const copilotAgentsDir = path.join(dirPath, '.copilot', 'agents');
-  for (const fp of collectAgentMdFiles(ghAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, out); }
-  for (const fp of collectAgentMdFiles(copilotAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, out); }
+  for (const fp of collectAgentDirMarkdownFiles(ghAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, out); }
+  for (const fp of collectAgentDirMarkdownFiles(copilotAgentsDir)) { readAndPushAgent(fp, 'workspace', seen, out); }
   for (const fp of collectAgentMdFiles(dirPath)) { readAndPushAgent(fp, 'workspace', seen, out); }
 }
 
@@ -380,7 +432,7 @@ export function discoverAgentsInCopilotDir(configDirOverride?: string): Discover
   const seen = new Map<string, string>();
   const dirs = configDirOverride ? [configDirOverride] : getCopilotAgentDirs();
   for (const copilotDir of dirs) {
-    for (const fp of collectAgentMdFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
+    for (const fp of collectAgentDirMarkdownFiles(path.join(copilotDir, 'agents'))) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
     for (const fp of collectAgentMdFiles(copilotDir)) { readAndPushAgent(fp, 'copilot-dir', seen, agents); }
 
     // Resolver chain runs FIRST — it's the primary discovery mechanism for manifest-based plugins.
@@ -425,11 +477,23 @@ export function discoverAllAgents(workspaceFolders: readonly WorkspaceFolderLike
 // ---------------------------------------------------------------------------
 
 async function collectAgentMdFilesAsync(dirPath: string): Promise<string[]> {
+  return collectMatchingFilesAsync(dirPath, isAgentMdFile);
+}
+
+async function collectAgentDirMarkdownFilesAsync(dirPath: string): Promise<string[]> {
+  return collectMatchingFilesAsync(dirPath, isAgentDirMarkdownFile);
+}
+
+async function collectMatchingFilesAsync(
+  dirPath: string,
+  matcher: (filename: string) => boolean,
+): Promise<string[]> {
   try {
     const entries = await fsp.readdir(dirPath);
     return entries
-      .filter(f => f.endsWith('.agent.md'))
-      .map(f => path.join(dirPath, f));
+      .filter(matcher)
+      .sort(compareAgentCandidateNames)
+      .map(entry => path.join(dirPath, entry));
   } catch {
     return [];
   }
@@ -455,7 +519,7 @@ async function collectAgentMdFilesRecursiveAsync(
       const fullPath = path.join(dirPath, entry.name);
       if (entry.isDirectory()) {
         results.push(...await collectAgentMdFilesRecursiveAsync(fullPath, depth + 1, maxDepth, visited, skipDirs));
-      } else if (entry.name.endsWith('.agent.md')) {
+      } else if (isAgentMdFile(entry.name)) {
         results.push(fullPath);
       }
     }
@@ -474,7 +538,10 @@ async function readAndPushAgentAsync(
 ): Promise<void> {
   const baseId = toKebabId(path.basename(filePath));
   const id = manifest ? `${path.basename(manifest.pluginDir)}/${baseId}` : baseId;
-  if (seen.has(id)) return;
+  if (seen.has(id)) {
+    console.warn('[editless] Agent ID collision — skipping duplicate:', id, 'from', filePath, '(keeping', seen.get(id) + ')');
+    return;
+  }
   seen.set(id, filePath);
   try {
     const content = await fsp.readFile(filePath, 'utf-8');
@@ -529,8 +596,8 @@ async function scanDirForAgentsAsync(
 ): Promise<void> {
   const ghAgentsDir = path.join(dirPath, '.github', 'agents');
   const copilotAgentsDir = path.join(dirPath, '.copilot', 'agents');
-  for (const fp of await collectAgentMdFilesAsync(ghAgentsDir)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
-  for (const fp of await collectAgentMdFilesAsync(copilotAgentsDir)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
+  for (const fp of await collectAgentDirMarkdownFilesAsync(ghAgentsDir)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
+  for (const fp of await collectAgentDirMarkdownFilesAsync(copilotAgentsDir)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
   for (const fp of await collectAgentMdFilesAsync(dirPath)) { await readAndPushAgentAsync(fp, 'workspace', seen, out); }
 }
 
@@ -580,7 +647,7 @@ export async function discoverAgentsInCopilotDirAsync(configDirOverride?: string
   const seen = new Map<string, string>();
   const dirs = configDirOverride ? [configDirOverride] : getCopilotAgentDirs();
   for (const copilotDir of dirs) {
-    for (const fp of await collectAgentMdFilesAsync(path.join(copilotDir, 'agents'))) { await readAndPushAgentAsync(fp, 'copilot-dir', seen, agents); }
+    for (const fp of await collectAgentDirMarkdownFilesAsync(path.join(copilotDir, 'agents'))) { await readAndPushAgentAsync(fp, 'copilot-dir', seen, agents); }
     for (const fp of await collectAgentMdFilesAsync(copilotDir)) { await readAndPushAgentAsync(fp, 'copilot-dir', seen, agents); }
 
     const installedPluginsDir = path.join(copilotDir, 'installed-plugins');

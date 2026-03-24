@@ -154,15 +154,61 @@ describe('discoverAgentsInWorkspace', () => {
     expect(result).toEqual([]);
   });
 
-  it('should ignore non-.agent.md files', () => {
-    writeFixture('ws/.github/agents/readme.md', '# Not an agent\n');
-    writeFixture('ws/.github/agents/test.agent.md', '# Real Agent\n');
+  it('should discover plain .md files in .github/agents/', () => {
+    writeFixture('ws/.github/agents/reviewer.md', '# Reviewer\n> Reviews PRs.\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('reviewer');
+    expect(result[0].name).toBe('Reviewer');
+    expect(result[0].description).toBe('Reviews PRs.');
+  });
+
+  it('should discover plain .md files in .copilot/agents/', () => {
+    writeFixture('ws/.copilot/agents/repo-helper.md', '# Repo Helper\n> Repo scoped helper.\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    const agent = result.find(a => a.id === 'repo-helper');
+    expect(agent).toBeDefined();
+    expect(agent?.name).toBe('Repo Helper');
+    expect(agent?.description).toBe('Repo scoped helper.');
+  });
+
+  it('should ignore non-markdown files and plain .md files outside agent directories', () => {
+    writeFixture('ws/.github/agents/test.md', '# Real Agent\n');
+    writeFixture('ws/notes.md', '# Notes\n');
     writeFixture('ws/.github/agents/config.json', '{}');
 
     const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
 
     expect(result).toHaveLength(1);
     expect(result[0].name).toBe('Real Agent');
+  });
+
+  it('should ignore README.md in standard agent directories', () => {
+    writeFixture('ws/.github/agents/README.md', '# Readme\nNot an agent.\n');
+    writeFixture('ws/.github/agents/helper.md', '# Helper\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('helper');
+    expect(result.find(a => a.filePath.endsWith('README.md'))).toBeUndefined();
+  });
+
+  it('should prefer .agent.md over .md when both filenames map to the same id', () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    writeFixture('ws/.github/agents/helper.md', '# Helper From Markdown\n');
+    writeFixture('ws/.github/agents/helper.agent.md', '# Helper From Agent Md\n');
+
+    const result = discoverAgentsInWorkspace([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('helper');
+    expect(result[0].name).toBe('Helper From Agent Md');
+    consoleWarnSpy.mockRestore();
   });
 
   it('should store the correct filePath', () => {
@@ -184,7 +230,7 @@ describe('discoverAgentsInWorkspace', () => {
     
     // Another valid agent file to verify discovery continues
     writeFixture('ws/.github/agents/another.agent.md', '# Another Agent\n> Also works.\n');
-    
+
     // Make the file unreadable by deleting it and creating a directory with the same name
     // This will cause fs.readFileSync to throw EISDIR error
     fs.unlinkSync(badFile);
@@ -236,7 +282,7 @@ describe('discoverAgentsInWorkspace', () => {
   });
 
   it('should discover agents in subdirectories of workspace folder (async)', async () => {
-    writeFixture('ws/alfred/.github/agents/alfred.agent.md', '# Alfred\n> A helpful agent.\n');
+    writeFixture('ws/alfred/.github/agents/alfred.md', '# Alfred\n> A helpful agent.\n');
 
     const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
 
@@ -289,12 +335,48 @@ describe('discoverAgentsInWorkspace', () => {
   });
 
   it('should discover repo-local agents in .copilot/agents within workspace subdirectories (async)', async () => {
-    writeFixture('ws/proj/.copilot/agents/foo.agent.md', '# Foo\n');
+    writeFixture('ws/proj/.copilot/agents/foo.md', '# Foo\n');
 
     const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
 
     const fooAgent = result.find(a => a.id === 'foo');
     expect(fooAgent).toBeDefined();
+  });
+
+  it('should prefer .agent.md over .md duplicates in async agents directory scans', async () => {
+    writeFixture('ws/proj/.copilot/agents/helper.md', '# Helper From Markdown\n');
+    writeFixture('ws/proj/.copilot/agents/helper.agent.md', '# Helper From Agent Md\n');
+
+    const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    const helper = result.find(a => a.id === 'helper');
+    expect(helper).toBeDefined();
+    expect(helper?.name).toBe('Helper From Agent Md');
+  });
+
+  it('should ignore README.md and warn on async duplicate collisions in agents directories', async () => {
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    writeFixture('ws/proj/.copilot/agents/README.md', '# Readme\nNot an agent.\n');
+    const keptPath = writeFixture('ws/proj/.copilot/agents/helper.agent.md', '# Helper From Agent Md\n');
+    const skippedPath = writeFixture('ws/proj/.copilot/agents/helper.md', '# Helper From Markdown\n');
+
+    const result = await discoverAgentsInWorkspaceAsync([wsFolder(path.join(tmpDir, 'ws'))]);
+
+    expect(result.find(a => a.filePath.endsWith('README.md'))).toBeUndefined();
+
+    const helper = result.find(a => a.id === 'helper');
+    expect(helper).toBeDefined();
+    expect(helper?.name).toBe('Helper From Agent Md');
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      '[editless] Agent ID collision — skipping duplicate:',
+      'helper',
+      'from',
+      skippedPath,
+      '(keeping',
+      keptPath + ')'
+    );
+
+    consoleWarnSpy.mockRestore();
   });
 });
 
@@ -333,7 +415,7 @@ describe('discoverAgentsInCopilotDir', () => {
     const fakeHome = process.env.HOME!;
     const agentsDir = path.join(fakeHome, '.copilot', 'agents');
     fs.mkdirSync(agentsDir, { recursive: true });
-    fs.writeFileSync(path.join(agentsDir, 'foo.agent.md'), '# Foo Agent\n> Foo description\n', 'utf-8');
+    fs.writeFileSync(path.join(agentsDir, 'foo.md'), '# Foo Agent\n> Foo description\n', 'utf-8');
 
     const result = discoverAgentsInCopilotDir();
 
@@ -349,6 +431,17 @@ describe('discoverAgentsInCopilotDir', () => {
     const result = discoverAgentsInCopilotDir();
 
     expect(result.find(a => a.id === 'bar')).toBeDefined();
+  });
+
+  it('should ignore plain .md files at the copilot dir root', () => {
+    const fakeHome = process.env.HOME!;
+    const copilotDir = path.join(fakeHome, '.copilot');
+    fs.mkdirSync(copilotDir, { recursive: true });
+    fs.writeFileSync(path.join(copilotDir, 'notes.md'), '# Notes\n', 'utf-8');
+
+    const result = discoverAgentsInCopilotDir();
+
+    expect(result.find(a => a.id === 'notes')).toBeUndefined();
   });
 
   it('should discover agents in ~/.copilot/installed-plugins/ subdirectories', () => {
@@ -927,7 +1020,7 @@ describe('discoverAgentsInCopilotDir', () => {
       const agentsDir = path.join(customConfig, 'agents');
       fs.mkdirSync(agentsDir, { recursive: true });
       fs.writeFileSync(
-        path.join(agentsDir, 'plain.agent.md'),
+        path.join(agentsDir, 'plain.md'),
         '# Plain\n> Traditional agent\n',
         'utf-8'
       );

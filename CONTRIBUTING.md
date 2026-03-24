@@ -136,6 +136,15 @@ npm run watch
 **Debug in VS Code** (with watch mode running):
 Press **F5** to launch the Extension Development Host with your local build.
 
+### Pull Request Requirements
+
+In this repository, the `master` branch is protected: pull requests to `master` must pass the standard CI checks and receive at least one human approving review before they can merge.
+
+- GitHub does not count the pull request author's own approval toward the required review count.
+- Unresolved conversations and failing required checks still block merge.
+- Draft pull requests cannot merge until they are marked ready for review.
+- Repository owners and admins can still bypass these protections while admin enforcement remains off.
+
 ## Development Commands
 
 | Command | Purpose |

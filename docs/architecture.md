@@ -40,7 +40,7 @@ extension.ts (activate)
     │   └── Stores active provider in settings
     ├── Discovery Engine (discovery.ts & agent-discovery.ts)
     │   ├── Discovers squads in scanPaths
-    │   ├── Discovers standalone agents (.agent.md files)
+    │   ├── Discovers standalone agents from supported markdown agent locations
     │   └── Watches filesystem for changes
     ├── Session Context Resolver (session-context.ts)
     │   ├── Queries Copilot CLI for active session info
