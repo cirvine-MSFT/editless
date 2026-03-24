@@ -201,8 +201,9 @@ Settings for controlling desktop toasts and notifications.
 ## Agent Settings
 
 As of v0.1.3, agents are **auto-discovered** from your workspace and personal directories. EditLess scans:
-- Personal agents: `~/.copilot/agents/`
-- Workspace agents: `.squad/` or `.ai-team/` directories in your workspace folders
+- Personal agents: `~/.copilot/agents/` and `~/.config/copilot/agents/` (supports `.md` and `.agent.md`)
+- Workspace agents: `.github/agents/`, repo-local `.copilot/agents/`, and `.agent.md` files in the workspace root
+- Squad teams: `.squad/` or `.ai-team/` directories in your workspace folders
 
 No registration file needed — just drop agent files in these locations and they appear in the sidebar.
 
@@ -239,7 +240,7 @@ User preferences for discovered agents are stored in **`agent-settings.json`** i
 ### How Auto-Discovery Works
 
 1. **Workspace scan** — EditLess watches your workspace folders for `.squad/` or `.ai-team/` directories. Any folder containing a `team.md` file is treated as a squad.
-2. **Personal agent scan** — EditLess scans `~/.copilot/agents/` for `.agent.md` files.
+2. **Personal agent scan** — EditLess scans personal Copilot `agents/` directories for agent markdown files (`.md` or `.agent.md`).
 3. **Additional scan paths** — You can configure `editless.discovery.scanPaths` to add extra directories.
 4. **Automatic updates** — When you add, remove, or modify agent files, the tree view updates automatically (debounced by `editless.scanDebounceMs`).
 

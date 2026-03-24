@@ -6,7 +6,7 @@ Add an AI agent or squad to your EditLess workspace so you can launch sessions, 
 
 ## Before You Start
 
-EditLess **auto-discovers** agents in your workspace. If you've already set up a [Squad](https://github.com/bradygaster/squad) or placed agent files in `.squad/`, `.ai-team/`, `.github/agents/`, `.copilot/agents/`, or `~/.copilot/agents/`, they'll appear in the sidebar automatically — no manual steps needed.
+EditLess **auto-discovers** agents in standard locations. If you've already set up a [Squad](https://github.com/bradygaster/squad) or placed agent files in `.squad/`, `.ai-team/`, workspace `.github/agents/`, workspace `.copilot/agents/`, or `~/.copilot/agents/`, they'll appear in the sidebar automatically — no manual steps needed.
 
 This guide covers what happens when you click the **Add...** button to point EditLess at an agent or squad that isn't in a standard discovery location.
 
@@ -24,7 +24,9 @@ This guide covers what happens when you click the **Add...** button to point Edi
 
 5. **Your agent or squad appears** in the sidebar tree, ready to launch sessions.
 
-**Note:** If you're adding an agent to a standard discovery location (like `~/.copilot/agents/` or your workspace's `.squad/` folder), you don't need to use the Add button — it will appear automatically.
+**Note:** If you're adding an agent to a standard discovery location (like `~/.copilot/agents/`, workspace `.github/agents/`, workspace `.copilot/agents/`, or your workspace's `.squad/` folder), you don't need to use the Add button — it will appear automatically.
+
+For the exact filename rules that EditLess supports in each location, see [`docs/agent-file-format.md`](../agent-file-format.md).
 
 ## 📖 See Also
 
